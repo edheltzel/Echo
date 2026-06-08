@@ -169,3 +169,17 @@ printf '{"tool_name":"Bash","tool_input":{"command":"echo ok"}}' \
 printf '{"source":"resume"}' \
   | bun run claudecode/.claude/PAI/USER/Voice/hooks/VoiceGreeting.hook.ts
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Hybrid: draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`) as the canonical shared tracker. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
