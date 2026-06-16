@@ -24,4 +24,16 @@ describe("core server route contract source", () => {
     expect(server).not.toContain("/tmp/voice");
     expect(server).not.toContain("/tmp/voiceserver");
   });
+
+  test("voice resolver honors per-agent edgetts mapping in both tiers", () => {
+    // Tier 1 (caller-supplied settings) and Tier 2 (config-resolved) both
+    // populate providerVoice from the edgetts mapping.
+    expect(server).toContain("providerName === 'edgetts' && voiceMapping?.edgetts");
+    expect(server).toContain("providerName === 'edgetts' && voiceMapping.edgetts");
+    expect(server).toContain("voiceMapping.edgetts.voice");
+  });
+
+  test("edge provider derives its rate from the resolved speed via edgeRateFromSpeed", () => {
+    expect(server).toContain("edgeRateFromSpeed(settings?.speed, voicesConfig.providers.edgetts?.rate)");
+  });
 });

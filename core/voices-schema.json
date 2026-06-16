@@ -65,6 +65,15 @@
             "speed": { "type": "number" }
           },
           "additionalProperties": true
+        },
+        "edgetts": {
+          "type": "object",
+          "required": ["voice"],
+          "properties": {
+            "voice": { "type": "string" },
+            "speed": { "type": "number" }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true

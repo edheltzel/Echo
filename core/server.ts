@@ -23,6 +23,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { edgeRateFromSpeed } from "./edge-rate";
 
 // =============================================================================
 // Types and Interfaces
@@ -72,6 +73,10 @@ interface VoiceMapping {
     use_speaker_boost?: boolean;
   };
   kokoro?: {
+    voice: string;
+    speed?: number;
+  };
+  edgetts?: {
     voice: string;
     speed?: number;
   };
@@ -602,9 +607,9 @@ class EdgeTTSProvider implements TTSProvider {
     }
   }
 
-  async speak(text: string, voice?: string): Promise<boolean> {
+  async speak(text: string, voice?: string, settings?: VoiceSettings): Promise<boolean> {
     const edgettsVoice = voice || voicesConfig.providers.edgetts?.defaultVoice || 'en-US-AvaNeural';
-    const rate = voicesConfig.providers.edgetts?.rate || '+0%';
+    const rate = edgeRateFromSpeed(settings?.speed, voicesConfig.providers.edgetts?.rate);
     let tmp: { dir: string; file: string } | undefined;
 
     // Apply pronunciations
@@ -958,6 +963,8 @@ async function speakWithFallback(
         providerVoice = voiceMapping.kokoro.voice;
       } else if (providerName === 'elevenlabs' && voiceMapping?.elevenlabs) {
         providerVoice = voiceMapping.elevenlabs.voice_id;
+      } else if (providerName === 'edgetts' && voiceMapping?.edgetts) {
+        providerVoice = voiceMapping.edgetts.voice;
       }
       console.log(`🔗 Voice settings: pass-through from caller`);
     } else if (voiceMapping) {
@@ -974,6 +981,9 @@ async function speakWithFallback(
           speed: DEFAULT_VOICE_SETTINGS.speed,
           use_speaker_boost: voiceMapping.elevenlabs.use_speaker_boost ?? DEFAULT_VOICE_SETTINGS.use_speaker_boost,
         };
+      } else if (providerName === 'edgetts' && voiceMapping.edgetts) {
+        providerVoice = voiceMapping.edgetts.voice;
+        providerSettings = { ...DEFAULT_VOICE_SETTINGS, speed: voiceMapping.edgetts.speed ?? 1.0 };
       } else {
         providerSettings = { ...DEFAULT_VOICE_SETTINGS };
       }
