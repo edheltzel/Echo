@@ -42,6 +42,18 @@ PORT=8889 bun --watch run core/server.ts
 
 If a provider subprocess hangs, stop the watch process and clear the dev port.
 
+## Auditioning edge voices
+
+Per-agent edge-tts voices live in `core/voices.json` (each agent's `edgetts: { voice, speed }`). To choose voices by ear before editing that file, sample them with:
+
+```bash
+bun scripts/preview-voices.ts --list            # list English voices, no audio
+bun scripts/preview-voices.ts --locale en-GB    # play every en-GB voice
+bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
+```
+
+`--list`/`--dry-run` are audio-free (CI-safe). See the **Voices** section of `README.md` for the full flag table. The script calls `edge-tts` directly and is not on the runtime request path.
+
 ## Tests
 
 ```bash

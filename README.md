@@ -118,6 +118,38 @@ Compatibility endpoint for callers that only provide a `message`.
 
 Returns provider status, fallback order, circuit-breaker state, pronunciation rule count, and emotional preset count.
 
+## Voices
+
+Voices are configured per agent in `core/voices.json`. The `identity` mapping is the default ("Atlas") voice; named agents — `kai`, `researcher`, `engineer`, `architect`, `designer`, `writer`, `qa-tester` — each carry their own voice. Select one by sending `"voice_id": "<agent>"`; agents without a mapping for the active provider fall back to that provider's default voice.
+
+For the default `edge-tts` provider, each agent maps to a Microsoft neural voice with an optional `speed` (a multiplier converted to edge-tts's `--rate`, e.g. `1.08 → +8%`, `0.94 → -6%`). A `speed` of `1.0` (or no `edgetts` block) uses the global `providers.edgetts.rate`.
+
+```json
+"engineer": {
+  "edgetts": { "voice": "en-GB-ThomasNeural", "speed": 0.94 }
+}
+```
+
+### Auditioning edge voices
+
+`scripts/preview-voices.ts` plays short samples so you can choose voices by ear before editing `voices.json`. It calls `edge-tts` directly and is dev tooling — not part of the runtime request path.
+
+```bash
+bun scripts/preview-voices.ts --list                                # list English voices, no audio
+bun scripts/preview-voices.ts --locale en-GB                        # audition all en-GB voices
+bun scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
+bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
+bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synth command, no audio
+```
+
+| Flag | Purpose | Default |
+|---|---|---|
+| `--locale` | Comma-separated locale prefixes to audition | `en-US,en-GB,en-AU,en-IE` |
+| `--voices` | Explicit voice ids (overrides `--locale`) | — |
+| `--text` | Sample line spoken (`{voice}` is substituted) | `Hi, I'm {voice}. This is how I sound for Atlas.` |
+| `--rate` | edge-tts rate applied to every sample | `+0%` |
+| `--list` / `--dry-run` | Print matched voices (and synth command) without playing audio | off |
+
 ## Development
 
 See `docs/development.md`.
