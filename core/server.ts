@@ -1221,7 +1221,7 @@ const server = serve({
         JSON.stringify({
           status: "healthy",
           port: PORT,
-          voice_system: "Multi-provider TTS (Kokoro, ElevenLabs, macOS say)",
+          voice_system: `Multi-provider TTS (${voicesConfig.fallbackOrder.join(" → ")})`,
           config_source: "voices.json",
           activeProvider: voicesConfig.defaultProvider,
           providers: providerStatus,
