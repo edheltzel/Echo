@@ -167,6 +167,18 @@
         "voice": "en-IE-ConnorNeural",
         "speed": 0.96
       }
+    },
+    "themis": {
+      "description": "Authoritative, measured delegating project manager",
+      "catchphrase": "Themis here. Let's coordinate.",
+      "kokoro": {
+        "voice": "bf_isabella",
+        "speed": 0.97
+      },
+      "edgetts": {
+        "voice": "en-US-MichelleNeural",
+        "speed": 0.97
+      }
     }
   }
 }
