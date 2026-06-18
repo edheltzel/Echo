@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>atlas-voicesystem — CodeGraph Knowledge Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+    --bg: #0b1220;
+    --surface: #111a2c;
+    --surface-2: #16213a;
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #dbe4f3;
+    --text-dim: #7e8ca3;
+
+    --gold: #d4a73a;
+    --gold-dim: rgba(212, 167, 58, 0.12);
+    --blue: #5b8dd6;
+    --blue-dim: rgba(91, 141, 214, 0.12);
+    --green: #4ca580;
+    --green-dim: rgba(76, 165, 128, 0.12);
+    --rust: #c96f4a;
+    --rust-dim: rgba(201, 111, 74, 0.12);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f3ec;
+      --surface: #fdfcf8;
+      --surface-2: #f0ede2;
+      --border: rgba(30, 58, 95, 0.12);
+      --text: #1e3a5f;
+      --text-dim: #5e7291;
+
+      --gold: #a87c14;
+      --gold-dim: rgba(168, 124, 20, 0.10);
+      --blue: #2f6cb8;
+      --blue-dim: rgba(47, 108, 184, 0.10);
+      --green: #2e7d5b;
+      --green-dim: rgba(46, 125, 91, 0.10);
+      --rust: #b1502a;
+      --rust-dim: rgba(177, 80, 42, 0.10);
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    color: var(--text);
+    font-family: var(--font-body);
+    padding: 48px 32px;
+    min-height: 100vh;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate { animation: fadeUp 0.45s ease-out both; animation-delay: calc(var(--i, 0) * 0.07s); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  .container { max-width: 1080px; margin: 0 auto; }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+  h1 { font-size: 40px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-family: var(--font-mono); font-size: 12px; margin-bottom: 36px; }
+
+  .section-label {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text-dim);
+    margin: 44px 0 16px;
+  }
+  .section-label::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--gold); }
+  .section-label.blue::before { background: var(--blue); }
+  .section-label.green::before { background: var(--green); }
+  .section-label.rust::before { background: var(--rust); }
+
+  /* KPI strip */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 16px 14px;
+  }
+  .kpi--hero { border-color: var(--gold); background: linear-gradient(180deg, var(--gold-dim), var(--surface)); }
+  .kpi__num { font-size: 32px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+  .kpi--hero .kpi__num { color: var(--gold); }
+  .kpi__label { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); margin-top: 4px; letter-spacing: 0.5px; }
+
+  /* Mermaid shell */
+  .diagram-shell { position: relative; }
+  .diagram-shell__hint { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 8px; opacity: 0.7; }
+  .mermaid-wrap {
+    position: relative; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px 24px; overflow: auto; margin-bottom: 16px;
+    display: flex; justify-content: center; align-items: center; min-height: 400px;
+    cursor: grab;
+  }
+  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+  .zoom-controls {
+    position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; z-index: 10;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px;
+    align-items: center;
+  }
+  .zoom-controls button {
+    width: 28px; height: 28px; border: none; background: transparent; color: var(--text-dim);
+    font-family: var(--font-mono); font-size: 14px; cursor: pointer; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .zoom-controls button:hover { background: var(--border); color: var(--text); }
+  .zoom-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); padding: 0 6px; white-space: nowrap; }
+  .mermaid-viewport { position: relative; overflow: hidden; width: 100%; height: 100%; min-height: 300px; }
+  .mermaid-canvas { position: absolute; top: 0; left: 0; }
+  .mermaid .nodeLabel { font-family: var(--font-body) !important; font-size: 17px !important; }
+  .mermaid .edgeLabel { font-family: var(--font-mono) !important; font-size: 12px !important; }
+  .mermaid .node rect, .mermaid .node circle, .mermaid .node polygon { stroke-width: 1.5px !important; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
+  .legend-line { width: 22px; height: 0; border-top: 2px solid var(--text-dim); }
+  .legend-line.dashed { border-top-style: dashed; }
+
+  /* Bars */
+  .bars-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .bars-grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; min-width: 0; }
+  .panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .panel h3 small { font-family: var(--font-mono); font-weight: 400; color: var(--text-dim); font-size: 11px; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 10px; margin-bottom: 9px; min-width: 0; }
+  .bar-row__label { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); overflow-wrap: break-word; }
+  .bar-row__track { height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .bar-row__fill { height: 100%; border-radius: 4px; }
+  .bar-row__num { font-family: var(--font-mono); font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-2); text-align: left;
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim); padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+  td code { font-family: var(--font-mono); font-size: 12px; background: var(--blue-dim); color: var(--blue); padding: 1px 6px; border-radius: 3px; }
+  td .path { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; border-radius: 999px; letter-spacing: 0.5px; }
+  .pill--core { background: var(--gold-dim); color: var(--gold); }
+  .pill--pai { background: var(--blue-dim); color: var(--blue); }
+  .pill--pi { background: var(--green-dim); color: var(--green); }
+  .pill--legacy { background: var(--rust-dim); color: var(--rust); }
+
+  /* Callouts */
+  .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .callouts { grid-template-columns: 1fr; } }
+  .callout {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--gold); border-radius: 0 10px 10px 0;
+    padding: 18px 20px; font-size: 13px; line-height: 1.65; color: var(--text-dim); min-width: 0;
+    overflow-wrap: break-word;
+  }
+  .callout strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 13.5px; }
+  .callout code { font-family: var(--font-mono); font-size: 11px; background: var(--gold-dim); color: var(--gold); padding: 1px 5px; border-radius: 3px; }
+  .callout--green { border-left-color: var(--green); }
+  .callout--green code { background: var(--green-dim); color: var(--green); }
+  .callout--rust { border-left-color: var(--rust); }
+  .callout--rust code { background: var(--rust-dim); color: var(--rust); }
+  .callout--blue { border-left-color: var(--blue); }
+  .callout--blue code { background: var(--blue-dim); color: var(--blue); }
+
+  footer { margin-top: 48px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); opacity: 0.7; }
+
+  @media (max-width: 768px) {
+    body { padding: 20px 14px; }
+    h1 { font-size: 26px; }
+    .mermaid-wrap { padding: 16px 12px; }
+    .bar-row { grid-template-columns: 90px 1fr 38px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <p class="kicker animate" style="--i:0">CodeGraph Index · sqlite knowledge graph</p>
+  <h1 class="animate" style="--i:0">atlas-voicesystem</h1>
+  <p class="subtitle animate" style="--i:1">codegraph init · 36 TypeScript files parsed in 221ms · host-neutral TTS core + host adapters</p>
+
+  <div class="kpis animate" style="--i:2">
+    <div class="kpi kpi--hero"><div class="kpi__num">453</div><div class="kpi__label">SYMBOL NODES</div></div>
+    <div class="kpi kpi--hero"><div class="kpi__num">801</div><div class="kpi__label">EDGES</div></div>
+    <div class="kpi"><div class="kpi__num">36</div><div class="kpi__label">FILES · 100% TS</div></div>
+    <div class="kpi"><div class="kpi__num">216</div><div class="kpi__label">CALL EDGES</div></div>
+    <div class="kpi"><div class="kpi__num">1.03<small style="font-size:16px">MB</small></div><div class="kpi__label">INDEX DB · WAL</div></div>
+  </div>
+
+  <p class="section-label animate" style="--i:3">Module topology — from real graph edges</p>
+  <section class="diagram-shell animate" style="--i:3">
+    <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom · drag to pan · double-click to fit · ⛶ opens full size</p>
+    <div class="mermaid-wrap">
+      <div class="zoom-controls">
+        <button type="button" data-action="zoom-in" title="Zoom in">+</button>
+        <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
+        <button type="button" data-action="zoom-fit" title="Smart fit">&#8634;</button>
+        <button type="button" data-action="zoom-one" title="1:1 zoom">1:1</button>
+        <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
+        <span class="zoom-label">Loading...</span>
+      </div>
+      <div class="mermaid-viewport">
+        <div class="mermaid mermaid-canvas"></div>
+      </div>
+    </div>
+    <script type="text/plain" class="diagram-source">
+      flowchart TD
+        subgraph LEGACY["claudecode/.claude/PAI — legacy compat tree"]
+          WRAP["server.ts wrapper<br/>env shims, legacy paths"]
+          LDUP["hooks/lib duplicates<br/>identity · validators · logger"]
+        end
+
+        subgraph PAI["adapters/pai — Claude Code hooks"]
+          GREET["VoiceGreeting.hook<br/>41 symbols"]
+          NOTIF["VoiceNotification<br/>handler"]
+          PLIBS["lib/<br/>paths · identity · validators<br/>logger · time"]
+          RESTORE["restore-hooks.ts<br/>36 symbols"]
+        end
+
+        subgraph PI["adapters/pi — Pi extension package"]
+          PIIDX["index.ts<br/>extension entry"]
+          PICFG["config.ts"]
+          PIVL["voice-line.ts<br/>🗣 extraction + dedupe"]
+          PINC["notify-client.ts"]
+        end
+
+        subgraph CORE["core — host-neutral daemon :8888"]
+          SERVER["server.ts<br/>95 symbols · /notify · /health<br/>provider chain + breakers"]
+          TYPES["types.ts<br/>NotifyPayload · NotifyResult"]
+          CNC["notify-client.ts"]
+        end
+
+        CNC -->|"6 refs"| TYPES
+        GREET -->|"5"| PLIBS
+        NOTIF -->|"8"| PLIBS
+        PIIDX -->|"3"| PICFG
+        PIIDX -->|"3"| PIVL
+        PIIDX --> PINC
+        PINC -->|"3"| PICFG
+        WRAP -.->|"import core"| SERVER
+        LDUP -.->|"drifted copies"| PLIBS
+        GREET ==>|"POST /notify"| SERVER
+        NOTIF ==>|"POST /notify"| SERVER
+        PIIDX ==>|"POST /notify"| SERVER
+
+        classDef coreStyle stroke-width:2px;
+        class SERVER,TYPES,CNC coreStyle;
+    </script>
+  </section>
+
+  <div class="legend animate" style="--i:4">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--gold)"></div> core (host-neutral)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--blue)"></div> adapters/pai</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> adapters/pi</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rust)"></div> legacy compat</div>
+    <div class="legend-item"><div class="legend-line"></div> static import/call</div>
+    <div class="legend-item"><div class="legend-line dashed"></div> compat / runtime HTTP</div>
+  </div>
+
+  <p class="section-label blue animate" style="--i:5">Graph composition</p>
+  <div class="bars-grid animate" style="--i:5">
+    <div class="panel">
+      <h3>Nodes by kind <small>· 453 total</small></h3>
+      <div class="bar-row"><span class="bar-row__label">function</span><div class="bar-row__track"><div class="bar-row__fill" style="width:100%;background:var(--gold)"></div></div><span class="bar-row__num">154</span></div>
+      <div class="bar-row"><span class="bar-row__label">constant</span><div class="bar-row__track"><div class="bar-row__fill" style="width:75%;background:var(--gold)"></div></div><span class="bar-row__num">115</span></div>
+      <div class="bar-row"><span class="bar-row__label">import</span><div class="bar-row__track"><div class="bar-row__fill" style="width:44%;background:var(--blue)"></div></div><span class="bar-row__num">67</span></div>
+      <div class="bar-row"><span class="bar-row__label">file</span><div class="bar-row__track"><div class="bar-row__fill" style="width:23%;background:var(--blue)"></div></div><span class="bar-row__num">36</span></div>
+      <div class="bar-row"><span class="bar-row__label">interface</span><div class="bar-row__track"><div class="bar-row__fill" style="width:23%;background:var(--blue)"></div></div><span class="bar-row__num">35</span></div>
+      <div class="bar-row"><span class="bar-row__label">method</span><div class="bar-row__track"><div class="bar-row__fill" style="width:12%;background:var(--green)"></div></div><span class="bar-row__num">18</span></div>
+      <div class="bar-row"><span class="bar-row__label">variable</span><div class="bar-row__track"><div class="bar-row__fill" style="width:8%;background:var(--green)"></div></div><span class="bar-row__num">12</span></div>
+      <div class="bar-row"><span class="bar-row__label">other</span><div class="bar-row__track"><div class="bar-row__fill" style="width:10%;background:var(--green)"></div></div><span class="bar-row__num">16</span></div>
+    </div>
+    <div class="panel">
+      <h3>Edges by kind <small>· 801 total</small></h3>
+      <div class="bar-row"><span class="bar-row__label">contains</span><div class="bar-row__track"><div class="bar-row__fill" style="width:100%;background:var(--blue)"></div></div><span class="bar-row__num">417</span></div>
+      <div class="bar-row"><span class="bar-row__label">calls</span><div class="bar-row__track"><div class="bar-row__fill" style="width:52%;background:var(--gold)"></div></div><span class="bar-row__num">216</span></div>
+      <div class="bar-row"><span class="bar-row__label">references</span><div class="bar-row__track"><div class="bar-row__fill" style="width:23%;background:var(--gold)"></div></div><span class="bar-row__num">97</span></div>
+      <div class="bar-row"><span class="bar-row__label">imports</span><div class="bar-row__track"><div class="bar-row__fill" style="width:16%;background:var(--green)"></div></div><span class="bar-row__num">67</span></div>
+      <div class="bar-row"><span class="bar-row__label">implements</span><div class="bar-row__track"><div class="bar-row__fill" style="width:2%;background:var(--green)"></div></div><span class="bar-row__num">4</span></div>
+      <h3 style="margin-top:22px">Heaviest files <small>· symbols per file</small></h3>
+      <div class="bar-row"><span class="bar-row__label">core/server.ts</span><div class="bar-row__track"><div class="bar-row__fill" style="width:100%;background:var(--gold)"></div></div><span class="bar-row__num">95</span></div>
+      <div class="bar-row"><span class="bar-row__label">VoiceGreeting</span><div class="bar-row__track"><div class="bar-row__fill" style="width:43%;background:var(--blue)"></div></div><span class="bar-row__num">41</span></div>
+      <div class="bar-row"><span class="bar-row__label">restore-hooks</span><div class="bar-row__track"><div class="bar-row__fill" style="width:38%;background:var(--blue)"></div></div><span class="bar-row__num">36</span></div>
+      <div class="bar-row"><span class="bar-row__label">identity ×2</span><div class="bar-row__track"><div class="bar-row__fill" style="width:26%;background:var(--rust)"></div></div><span class="bar-row__num">25</span></div>
+    </div>
+  </div>
+
+  <p class="section-label green animate" style="--i:6">Cross-file symbol hotspots — highest in-degree</p>
+  <div class="table-wrap animate" style="--i:6">
+    <table>
+      <thead>
+        <tr><th>Symbol</th><th>Defined in</th><th>Cluster</th><th style="text-align:right">Inbound refs</th><th>Role</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>paiPath</code></td><td><span class="path">adapters/pai/hooks/lib/paths.ts</span></td><td><span class="pill pill--pai">pai</span></td><td class="num">6</td><td>Single source for every PAI filesystem path</td></tr>
+        <tr><td><code>hookLog</code></td><td><span class="path">adapters/pai/hooks/lib/hook-logger.ts</span></td><td><span class="pill pill--pai">pai</span></td><td class="num">5</td><td>Shared hook decision logging</td></tr>
+        <tr><td><code>NotifyPayload</code></td><td><span class="path">core/types.ts</span></td><td><span class="pill pill--core">core</span></td><td class="num">4</td><td>The /notify contract type — shared client shape</td></tr>
+        <tr><td><code>PiVoiceConfig</code></td><td><span class="path">adapters/pi/config.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">3</td><td>Pi adapter config — PAI-independent by design</td></tr>
+        <tr><td><code>NotifyResult</code></td><td><span class="path">core/types.ts</span></td><td><span class="pill pill--core">core</span></td><td class="num">2</td><td>Notify response shape for adapter clients</td></tr>
+        <tr><td><code>paiPath</code> <small style="color:var(--text-dim)">(copy)</small></td><td><span class="path">claudecode/…/hooks/lib/paths.ts</span></td><td><span class="pill pill--legacy">legacy</span></td><td class="num">2</td><td>Duplicate of the adapter version — drift surface</td></tr>
+        <tr><td><code>shouldSuppressVoice</code></td><td><span class="path">adapters/pi/config.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">1</td><td>Subagent audio-flood suppression gate</td></tr>
+        <tr><td><code>stableMessageKey</code></td><td><span class="path">adapters/pi/voice-line.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">1</td><td>Dedupe hash for double-fired lifecycle events</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="section-label rust animate" style="--i:7">What the graph reveals</p>
+  <div class="callouts animate" style="--i:7">
+    <div class="callout callout--green">
+      <strong>✓ Core isolation invariant holds</strong>
+      The graph initially showed one <code>core → adapters</code> edge. Verified by hand: it's a resolver
+      artifact — a local <code>const text</code> in <code>server.ts</code> name-collided with
+      <code>text()</code> in <code>adapters/pi/voice-line.ts</code>. Core imports nothing from any adapter;
+      its only "adapters" mention is a comment.
+    </div>
+    <div class="callout callout--rust">
+      <strong>Legacy tree is a drifting mirror</strong>
+      <code>claudecode/.claude/PAI/USER/Voice/hooks/lib/</code> carries byte-for-byte symbol twins of the
+      adapter libs (identity: 25 = 25, validators: 17 = 17). Two copies of the same graph cluster — every
+      edit to one silently strands the other.
+    </div>
+    <div class="callout">
+      <strong>core/server.ts is the gravity well</strong>
+      95 symbols in one file — 21% of the entire graph — with zero exports. Everything reaches it over
+      HTTP (<code>POST /notify</code>), never by import. Good for decoupling; bad for unit-testing the
+      provider chain and circuit breakers locked inside.
+    </div>
+    <div class="callout callout--blue">
+      <strong>Adapters never touch each other</strong>
+      Zero static edges between <code>adapters/pai</code> and <code>adapters/pi</code>. Each cluster is
+      internally cohesive (pi: index → config/voice-line/notify-client; pai: hooks → lib/) and converges
+      only at the core's HTTP boundary — the architecture's promise, confirmed by the data.
+    </div>
+  </div>
+
+  <footer>
+    generated 2026-06-10 · codegraph v-init · .codegraph/codegraph.db (node:sqlite, WAL) ·
+    36 files / 453 nodes / 801 edges in 221ms · diagram: .agents/diagrams/atlas-voicesystem-codegraph.html
+  </footer>
+
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs';
+
+  const config = {
+    fitPadding: 28, minHeight: 360, maxHeightPx: 960, maxHeightVh: 0.84,
+    maxInitialZoom: 1.6, minZoom: 0.08, maxZoom: 6.5, zoomStep: 0.14, readabilityFloor: 0.58
+  };
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  let activeDrag = null;
+  addEventListener('mousemove', (e) => activeDrag?.onMove(e));
+  addEventListener('mouseup', () => { activeDrag?.onEnd(); activeDrag = null; });
+
+  const isDark = !matchMedia('(prefers-color-scheme: light)').matches;
+
+  mermaid.registerLayoutLoaders(elkLayouts);
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    look: 'classic',
+    layout: 'elk',
+    themeVariables: {
+      fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+      fontSize: '17px',
+      primaryColor: isDark ? '#1c2a47' : '#fdfcf8',
+      primaryBorderColor: isDark ? '#d4a73a' : '#a87c14',
+      primaryTextColor: isDark ? '#dbe4f3' : '#1e3a5f',
+      secondaryColor: isDark ? '#16243d' : '#eef2f9',
+      secondaryBorderColor: isDark ? '#5b8dd6' : '#2f6cb8',
+      secondaryTextColor: isDark ? '#dbe4f3' : '#1e3a5f',
+      tertiaryColor: isDark ? '#152b24' : '#edf5f0',
+      tertiaryBorderColor: isDark ? '#4ca580' : '#2e7d5b',
+      tertiaryTextColor: isDark ? '#dbe4f3' : '#1e3a5f',
+      lineColor: isDark ? '#7e8ca3' : '#5e7291',
+      clusterBkg: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(30,58,95,0.03)',
+      clusterBorder: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(30,58,95,0.2)',
+      edgeLabelBackground: isDark ? '#111a2c' : '#fdfcf8',
+    }
+  });
+
+  function initDiagram(shell) {
+    const wrap = shell.querySelector('.mermaid-wrap');
+    const viewport = shell.querySelector('.mermaid-viewport');
+    const canvas = shell.querySelector('.mermaid-canvas');
+    const source = shell.querySelector('.diagram-source');
+    const label = shell.querySelector('.zoom-label');
+    if (!wrap || !viewport || !canvas || !source || !label) return;
+
+    let zoom = 1, fitMode = 'contain', panX = 0, panY = 0, svgW = 0, svgH = 0;
+    let sx = 0, sy = 0, spx = 0, spy = 0;
+    let touchDist = 0, touchCx = 0, touchCy = 0;
+
+    function constrainPan() {
+      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
+      const rW = svgW * zoom, rH = svgH * zoom, pad = config.fitPadding;
+      panX = (rW + pad * 2 <= vpW) ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
+      panY = (rH + pad * 2 <= vpH) ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
+    }
+    function applyTransform() {
+      const svg = canvas.querySelector('svg');
+      if (!svg || !svgW) return;
+      constrainPan();
+      svg.style.width = (svgW * zoom) + 'px';
+      svg.style.height = (svgH * zoom) + 'px';
+      canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+      label.textContent = Math.round(zoom * 100) + '% — ' + fitMode;
+    }
+    function canPan() {
+      return svgW * zoom + config.fitPadding * 2 > viewport.clientWidth
+          || svgH * zoom + config.fitPadding * 2 > viewport.clientHeight;
+    }
+    function computeSmartFit() {
+      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
+      const aW = Math.max(80, vpW - config.fitPadding * 2);
+      const aH = Math.max(80, vpH - config.fitPadding * 2);
+      const contain = Math.min(aW / svgW, aH / svgH);
+      let z = contain, mode = 'contain';
+      if (contain < config.readabilityFloor) {
+        const chartR = svgH / svgW, vpR = vpH / Math.max(vpW, 1);
+        if (chartR >= vpR) { z = aW / svgW; mode = 'width-priority'; }
+        else { z = aH / svgH; mode = 'height-priority'; }
+      }
+      return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
+    }
+    function fitDiagram() {
+      if (!svgW) return;
+      const fit = computeSmartFit();
+      zoom = fit.zoom; fitMode = fit.mode;
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+    function setOneToOne() {
+      zoom = clamp(1, config.minZoom, config.maxZoom);
+      fitMode = '1:1';
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+    function zoomAround(factor, cx, cy) {
+      const next = clamp(zoom * factor, config.minZoom, config.maxZoom);
+      const ratio = next / zoom;
+      panX = cx - ratio * (cx - panX);
+      panY = cy - ratio * (cy - panY);
+      zoom = next; fitMode = 'custom';
+      applyTransform();
+    }
+    function readSvgNaturalSize(svg) {
+      let w = 0, h = 0;
+      if (svg.viewBox?.baseVal?.width > 0) { w = svg.viewBox.baseVal.width; h = svg.viewBox.baseVal.height; }
+      if (!w) { w = parseFloat(svg.getAttribute('width')) || 0; h = parseFloat(svg.getAttribute('height')) || 0; }
+      if (!w) { const b = svg.getBBox(); w = b.width; h = b.height; }
+      if (!w) { const r = svg.getBoundingClientRect(); w = r.width || 1000; h = r.height || 700; }
+      if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      return { w, h };
+    }
+    function setAdaptiveHeight() {
+      if (!svgW) return;
+      const usableW = Math.max(280, wrap.getBoundingClientRect().width - 2);
+      const idealH = (svgH / svgW) * usableW + config.fitPadding * 2;
+      const maxVp = Math.floor(innerHeight * config.maxHeightVh);
+      const hardMax = Math.min(config.maxHeightPx, Math.max(config.minHeight + 40, maxVp));
+      wrap.style.height = Math.round(clamp(idealH, config.minHeight, hardMax)) + 'px';
+    }
+    function openInNewTab() {
+      const svg = canvas.querySelector('svg');
+      if (!svg) return;
+      const clone = svg.cloneNode(true);
+      clone.style.width = ''; clone.style.height = '';
+      const bg = isDark ? '#0b1220' : '#f5f3ec';
+      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>atlas-voicesystem topology</title><style>
+      body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:${bg};padding:40px;box-sizing:border-box}
+      svg{max-width:100%;max-height:90vh;height:auto}
+      </style></head><body>${clone.outerHTML}</body></html>`;
+      open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
+    }
+
+    async function render() {
+      try {
+        const code = source.textContent.trim();
+        if (!code) { label.textContent = 'Error: Empty source'; return; }
+        const id = 'diagram-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const { svg } = await mermaid.render(id, code);
+        canvas.innerHTML = svg;
+        const svgNode = canvas.querySelector('svg');
+        if (!svgNode) { label.textContent = 'Error: No SVG'; return; }
+        const size = readSvgNaturalSize(svgNode);
+        svgW = size.w; svgH = size.h;
+        svgNode.removeAttribute('width');
+        svgNode.removeAttribute('height');
+        svgNode.style.maxWidth = 'none';
+        svgNode.style.display = 'block';
+        setAdaptiveHeight();
+        fitDiagram();
+      } catch (err) {
+        console.error('Mermaid render failed:', err);
+        label.textContent = 'Error: ' + (err.message || 'Render failed');
+      }
+    }
+
+    const actions = {
+      'zoom-in': () => zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-out': () => zoomAround(1 / (1 + config.zoomStep), viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-fit': fitDiagram,
+      'zoom-one': setOneToOne,
+      'zoom-expand': openInNewTab
+    };
+    Object.entries(actions).forEach(([action, handler]) => {
+      wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler);
+    });
+    viewport.addEventListener('dblclick', fitDiagram);
+    viewport.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const factor = e.deltaY < 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep);
+        zoomAround(factor, e.clientX - rect.left, e.clientY - rect.top);
+        return;
+      }
+      if (canPan()) { e.preventDefault(); panX -= e.deltaX; panY -= e.deltaY; applyTransform(); }
+    }, { passive: false });
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.zoom-controls') || !canPan()) return;
+      wrap.classList.add('is-panning');
+      sx = e.clientX; sy = e.clientY; spx = panX; spy = panY;
+      e.preventDefault();
+      activeDrag = {
+        onMove: (ev) => { panX = spx + (ev.clientX - sx); panY = spy + (ev.clientY - sy); applyTransform(); },
+        onEnd: () => { wrap.classList.remove('is-panning'); }
+      };
+    });
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY; }
+      else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        touchDist = Math.sqrt(dx * dx + dy * dy);
+        const r = viewport.getBoundingClientRect();
+        touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+        touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      }
+    }, { passive: true });
+    viewport.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && canPan()) {
+        if (touchDist > 0) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY; touchDist = 0; }
+        e.preventDefault();
+        panX = spx + (e.touches[0].clientX - sx);
+        panY = spy + (e.touches[0].clientY - sy);
+        applyTransform();
+      } else if (e.touches.length === 2 && touchDist > 0) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        zoomAround(d / touchDist, touchCx, touchCy);
+        touchDist = d;
+      }
+    }, { passive: false });
+    new ResizeObserver(() => { if (svgW) { setAdaptiveHeight(); fitDiagram(); } }).observe(wrap);
+    render();
+  }
+
+  document.querySelectorAll('.diagram-shell').forEach(initDiagram);
+</script>
+
+</body>
+</html>
