@@ -95,6 +95,14 @@ Per-persona voices live in `core/voices.json` under `agents`, keyed by a short l
 
 `tests/core/voices-config.test.ts` iterates every `agents` entry, so new voices are validated by `bun test`.
 
+### Per-turn persona voice (Stop hook)
+
+Every turn, the PAI Stop hook `adapters/pai/hooks/VoiceCompletion.hook.ts` speaks the response's voice line. It is **persona-aware**: `handleVoice` (`adapters/pai/hooks/handlers/VoiceNotification.ts`) calls `selectVoice`/`resolvePersonaKey`, which read the active speaker from the response's trailing `🗣️ <Name>:` tag. When `<Name>` is a non-DA persona (e.g. `🗣️ Themis:`), the hook sends that lowercase **name key** as `voice_id` and the daemon resolves it (`themis` → `en-US-MichelleNeural`). When the speaker is the DA (Atlas) or there is no tag, it falls back to the DA voice (`mainDAVoiceID` + prosody) — the unchanged Atlas path.
+
+This is DRY and self-cleaning: the signal is the response the hook already parses (no marker files, env vars, or registries), so dropping a persona reverts to Atlas on the next turn automatically. For a **main-session** persona to be voiced, its turns must carry the `🗣️ <Persona>:` tag (the global response format already does this). `resolvePersonaKey`/`selectVoice` are covered by `tests/adapters/pai/voice-persona-resolution.test.ts`.
+
+The Stop hook is repo-owned and registered into `settings.json` by `restore-hooks.ts` (replacing any unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`), alongside VoiceGate and VoiceGreeting. Its transcript parsing lives in `adapters/pai/hooks/lib/{hook-io,TranscriptParser}.ts` (PAI-specific — never in `core/`).
+
 ## Development workflow
 
 ```bash
@@ -122,6 +130,9 @@ Use Bun only. Do not introduce npm/npx/node-based workflows.
 | Pronunciation config | `core/pronunciations.json` |
 | Shared notify client | `core/notify-client.ts` |
 | PAI hooks | `adapters/pai/hooks/` |
+| Per-turn voice (Stop hook) | `adapters/pai/hooks/VoiceCompletion.hook.ts` |
+| Per-turn voice handler | `adapters/pai/hooks/handlers/VoiceNotification.ts` |
+| Transcript parsing (PAI) | `adapters/pai/hooks/lib/{hook-io,TranscriptParser}.ts` |
 | PAI hook registration | `adapters/pai/restore-hooks.ts` |
 | Pi extension package | `adapters/pi/` |
 | Neutral install/lifecycle | `scripts/` |

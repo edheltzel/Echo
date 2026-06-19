@@ -37,6 +37,19 @@ const DUPLICATE_VOICE_GREETING_CMDS = new Set([
   join(HISTORICAL_LEGACY_HOOKS_DIR, "VoiceGreeting.hook.ts"),
 ]);
 
+const VOICE_COMPLETION_CMD = join(REPO_HOOKS_DIR, "VoiceCompletion.hook.ts");
+// The standalone PAI install wired the Stop hook at ~/.claude/hooks/VoiceCompletion.hook.ts.
+// Treat it (and the legacy/historical paths) as the same registration so we replace it
+// in place with the repo copy rather than stacking a duplicate Stop hook.
+const UNMANAGED_VOICE_COMPLETION_CMD = join(homedir(), ".claude/hooks/VoiceCompletion.hook.ts");
+const DUPLICATE_VOICE_COMPLETION_CMDS = new Set([
+  VOICE_COMPLETION_CMD,
+  UNMANAGED_VOICE_COMPLETION_CMD,
+  join(LEGACY_HOOKS_DIR, "VoiceCompletion.hook.ts"),
+  join(HISTORICAL_ADAPTER_HOOKS_DIR, "VoiceCompletion.hook.ts"),
+  join(HISTORICAL_LEGACY_HOOKS_DIR, "VoiceCompletion.hook.ts"),
+]);
+
 const CHECK_ONLY = process.argv.includes("--check");
 
 type HookEntry = { type?: string; command: string };
@@ -56,6 +69,7 @@ const settings = loadSettings();
 settings.hooks ??= {};
 settings.hooks.PreToolUse ??= [];
 settings.hooks.SessionStart ??= [];
+settings.hooks.Stop ??= [];
 
 let changed = false;
 const log: string[] = [];
@@ -90,6 +104,37 @@ if (!hookExists(startupEntry, DUPLICATE_VOICE_GREETING_CMDS)) {
   log.push("+ SessionStart[matcher=startup] += VoiceGreeting.hook.ts");
 } else {
   log.push("= SessionStart[matcher=startup] already has VoiceGreeting.hook.ts");
+}
+
+// 3) Point the Stop hook at the repo's VoiceCompletion, replacing the unmanaged
+//    ~/.claude/hooks/VoiceCompletion.hook.ts the standalone PAI install wired.
+let voiceCompletionHandled = false;
+for (const entry of settings.hooks.Stop) {
+  const hook = entry.hooks.find((h) => DUPLICATE_VOICE_COMPLETION_CMDS.has(h.command));
+  if (hook) {
+    if (hook.command !== VOICE_COMPLETION_CMD) {
+      hook.command = VOICE_COMPLETION_CMD;
+      changed = true;
+      log.push("~ Stop: VoiceCompletion.hook.ts → repo copy");
+    } else {
+      log.push("= Stop already points VoiceCompletion.hook.ts at repo copy");
+    }
+    voiceCompletionHandled = true;
+    break;
+  }
+}
+
+if (!voiceCompletionHandled) {
+  // No existing registration — add to a default (matcher-less) Stop entry, creating one if needed.
+  let defaultStop = settings.hooks.Stop.find((entry) => entry.matcher === undefined || entry.matcher === "");
+  if (!defaultStop) {
+    defaultStop = { hooks: [] };
+    settings.hooks.Stop.push(defaultStop);
+    log.push("+ Stop += { hooks: [] }");
+  }
+  defaultStop.hooks.push({ type: "command", command: VOICE_COMPLETION_CMD });
+  changed = true;
+  log.push("+ Stop += VoiceCompletion.hook.ts");
 }
 
 if (CHECK_ONLY) {

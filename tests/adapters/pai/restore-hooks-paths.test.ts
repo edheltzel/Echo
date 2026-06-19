@@ -87,4 +87,74 @@ describe("PAI restore-hooks migration", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("replaces the unmanaged Stop VoiceCompletion hook with the repo copy and is idempotent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-stop-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const unmanaged = join(process.env.HOME ?? "", ".claude/hooks/VoiceCompletion.hook.ts");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [{ matcher: "Bash", hooks: [] }],
+              Stop: [
+                {
+                  hooks: [
+                    { type: "command", command: "/some/LastResponseCache.hook.ts" },
+                    { type: "command", command: unmanaged },
+                    { type: "command", command: "/some/DocIntegrity.hook.ts" },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        { mode: 0o644 },
+      );
+
+      const first = await runRestore(settingsPath);
+      const second = await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const repoCmd = join(resolve("adapters/pai/hooks"), "VoiceCompletion.hook.ts");
+
+      expect(first.exitCode).toBe(0);
+      // Replaced in place — same position, no duplicate added.
+      expect(settings.hooks.Stop[0].hooks).toEqual([
+        { type: "command", command: "/some/LastResponseCache.hook.ts" },
+        { type: "command", command: repoCmd },
+        { type: "command", command: "/some/DocIntegrity.hook.ts" },
+      ]);
+      expect(first.stdout).toContain("VoiceCompletion.hook.ts → repo copy");
+      expect(second.stdout).toContain("already points VoiceCompletion.hook.ts at repo copy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("registers the Stop VoiceCompletion hook when none exists", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-stop-fresh-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }, null, 2) + "\n",
+        { mode: 0o644 },
+      );
+
+      await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const repoCmd = join(resolve("adapters/pai/hooks"), "VoiceCompletion.hook.ts");
+
+      const stopCommands = settings.hooks.Stop.flatMap((entry: { hooks: { command: string }[] }) =>
+        entry.hooks.map((h) => h.command),
+      );
+      expect(stopCommands).toContain(repoCmd);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

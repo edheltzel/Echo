@@ -151,6 +151,12 @@ For the default `edge-tts` provider, each agent maps to a Microsoft neural voice
 
    Gotchas that cause silence: an agent's frontmatter is **not** visible in its own prompt, so the self-voice instruction must live in the brief **body**; sending a raw ElevenLabs id (instead of the name key) won't resolve while ElevenLabs is disabled; and port `31337` is wrong — voice traffic is `:8888`.
 
+### Per-turn persona voice (PAI Stop hook)
+
+Beyond explicit self-voice `curl`s, the PAI adapter speaks the response's voice line automatically at the end of every turn via the Stop hook `adapters/pai/hooks/VoiceCompletion.hook.ts`. This hook is **persona-aware**: it reads the active speaker from the response's trailing `🗣️ <Name>:` line and sends that lowercase name as the `voice_id`. So when you adopt a main-session persona (e.g. `/Themis`), each turn is spoken in the persona's voice (`themis` → Michelle), not the default Atlas voice. When the speaker is Atlas, or there is no `🗣️` line, it uses the default voice — the Atlas path is unchanged.
+
+The signal is the response itself — no marker files, env vars, or registries — so the moment you stop using a persona, the voice reverts to Atlas on the next turn. For a persona to be voiced this way, its turns must include a `🗣️ <Persona>:` line (the standard response format already does). The hook is registered into `~/.claude/settings.json` by `bash scripts/install.sh --adapter pai` (which runs `restore-hooks.ts`); it replaces any older unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`.
+
 ### Auditioning edge voices
 
 `scripts/preview-voices.ts` plays short samples so you can choose voices by ear before editing `voices.json`. It calls `edge-tts` directly and is dev tooling — not part of the runtime request path.

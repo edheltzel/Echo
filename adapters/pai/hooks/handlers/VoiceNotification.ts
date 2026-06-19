@@ -12,15 +12,10 @@
 import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { paiPath } from '../lib/paths';
-import { getIdentity, type VoicePersonality } from '../lib/identity';
+import { getIdentity, type Identity, type VoiceProsody, type VoicePersonality } from '../lib/identity';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
-// Inlined 2026-05-15: was `import type { ParsedTranscript } from '../../skills/PAI/Tools/TranscriptParser';`
-// Source path no longer exists in current PAI; the type is small enough to inline.
-interface ParsedTranscript {
-  voiceCompletion: string;
-  [key: string]: unknown;
-}
+import type { ParsedTranscript } from '../lib/TranscriptParser';
 
 const DA_IDENTITY = getIdentity();
 
@@ -171,6 +166,51 @@ async function sendNotification(payload: ElevenLabsNotificationPayload, sessionI
 }
 
 /**
+ * Detect the active main-session persona from the response's 🗣️ speaker tag.
+ *
+ * A main-session persona (e.g. adopting `/Themis`) is NOT a Task subagent, so
+ * no env var signals it. The reliable per-turn signal is the response itself:
+ * every turn ends with a `🗣️ <Name>:` line. We take the LAST such tag (the
+ * voice line sits at the end) and return its lowercase name as the persona key.
+ * Returns null when the speaker is the DA (Atlas) or no tag is present — those
+ * keep the unchanged DA voice path.
+ *
+ * Self-cleaning: the moment the model stops emitting `🗣️ Themis:`, the next
+ * turn resolves to null and reverts to the DA voice. No marker/registry state.
+ */
+export function resolvePersonaKey(text: string, daName: string): string | null {
+  if (!text) return null;
+  const matches = [...text.matchAll(/🗣️\s*\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}\s*:/g)];
+  if (matches.length === 0) return null;
+  const name = matches[matches.length - 1][1].toLowerCase();
+  if (!name || name === daName.toLowerCase()) return null;
+  return name;
+}
+
+interface VoiceSelection {
+  voiceId: string;
+  /** ElevenLabs prosody for the DA path; omitted for personas so the daemon applies the persona's own config. */
+  voiceSettings?: VoiceProsody;
+  /** Speaker label for the notification title. */
+  speaker: string;
+}
+
+/**
+ * Choose the voice for this turn. A main-session persona (signalled by its
+ * `🗣️ <Name>:` tag) speaks in its own voice — we send the name key and let the
+ * daemon resolve it (e.g. `themis` → en-US-MichelleNeural). Otherwise the DA
+ * voice (mainDAVoiceID + prosody) — byte-for-byte the previous behavior.
+ */
+export function selectVoice(parsed: ParsedTranscript, identity: Identity): VoiceSelection {
+  const text = parsed.currentResponseText || parsed.lastMessage || '';
+  const personaKey = resolvePersonaKey(text, identity.name);
+  if (personaKey) {
+    return { voiceId: personaKey, speaker: personaKey };
+  }
+  return { voiceId: identity.mainDAVoiceID, voiceSettings: identity.voice, speaker: identity.name };
+}
+
+/**
  * Handle voice notification with pre-parsed transcript data.
  * Uses ElevenLabs TTS via the voice server.
  */
@@ -206,13 +246,14 @@ export async function handleVoice(parsed: ParsedTranscript, sessionId: string): 
     // Settings read failed — continue with voice notification
   }
 
-  // Get voice settings from DA identity in settings.json
-  const voiceId = DA_IDENTITY.mainDAVoiceID;
-  const voiceSettings = DA_IDENTITY.voice;
+  // Resolve the speaker for this turn: an active main-session persona speaks in
+  // its own voice (name key → daemon resolves); otherwise the DA voice path is
+  // byte-for-byte unchanged (mainDAVoiceID + prosody).
+  const { voiceId, voiceSettings, speaker } = selectVoice(parsed, DA_IDENTITY);
 
   const payload: ElevenLabsNotificationPayload = {
     message: voiceCompletion,
-    title: `${DA_IDENTITY.name} says`,
+    title: `${speaker} says`,
     voice_enabled: true,
     voice_id: voiceId,
     session_id: sessionId,
