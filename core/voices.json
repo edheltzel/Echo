@@ -179,6 +179,102 @@
         "voice": "en-US-MichelleNeural",
         "speed": 0.97
       }
+    },
+    "clauderesearcher": {
+      "description": "Academic researcher — rigorous, scholarly, multi-query",
+      "catchphrase": "Researcher online. Let me investigate.",
+      "kokoro": {
+        "voice": "bf_lily",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-GB-LibbyNeural",
+        "speed": 1.0
+      }
+    },
+    "perplexityresearcher": {
+      "description": "Investigative analyst — evidence-based, source-checking",
+      "catchphrase": "On the case. Verifying sources.",
+      "kokoro": {
+        "voice": "af_sarah",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-JennyNeural",
+        "speed": 1.0
+      }
+    },
+    "geminiresearcher": {
+      "description": "Multi-perspective researcher — parallel, comprehensive",
+      "catchphrase": "Exploring every angle.",
+      "kokoro": {
+        "voice": "af_bella",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-GB-MaisieNeural",
+        "speed": 1.0
+      }
+    },
+    "grokresearcher": {
+      "description": "Contrarian, fact-based researcher — unbiased, long-term truth",
+      "catchphrase": "Johannes here. Let's find the truth.",
+      "kokoro": {
+        "voice": "am_echo",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-EricNeural",
+        "speed": 1.0
+      }
+    },
+    "codexresearcher": {
+      "description": "Eccentric technical archaeologist — curiosity-driven",
+      "catchphrase": "Remy here. Let's dig.",
+      "kokoro": {
+        "voice": "bm_lewis",
+        "speed": 1.05
+      },
+      "edgetts": {
+        "voice": "en-AU-WilliamMultilingualNeural",
+        "speed": 1.05
+      }
+    },
+    "artist": {
+      "description": "Visual content creator — editorial, expressive",
+      "catchphrase": "Artist here. Let's make something.",
+      "kokoro": {
+        "voice": "af_sky",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-EmmaNeural",
+        "speed": 1.0
+      }
+    },
+    "silas": {
+      "description": "Offensive security specialist — methodical, quiet operator",
+      "catchphrase": "Silas. Watching the perimeter.",
+      "kokoro": {
+        "voice": "am_onyx",
+        "speed": 0.95
+      },
+      "edgetts": {
+        "voice": "en-US-ChristopherNeural",
+        "speed": 0.95
+      }
+    },
+    "algorithm": {
+      "description": "ISC specialist — precise, systematic, verification-driven",
+      "catchphrase": "Algorithm engaged.",
+      "kokoro": {
+        "voice": "am_liam",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-AndrewNeural",
+        "speed": 1.0
+      }
     }
   }
 }
