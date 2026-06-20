@@ -52,6 +52,8 @@ bash scripts/install.sh --adapter pai
 
 Expected: restore-hooks output reports existing or added PAI hook registrations.
 
+This wires the repo-owned per-turn voice **Stop** hook (`adapters/pai/hooks/VoiceCompletion.hook.ts`) into `settings.json`. Registration is idempotent: re-running the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates), so an uninstall→reinstall cycle always converges to exactly one Stop entry.
+
 If FAIL: confirm PAI/Claude settings file exists and is writable.
 
 ## 6. Install Pi adapter when needed
