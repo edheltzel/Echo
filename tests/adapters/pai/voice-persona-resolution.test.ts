@@ -148,6 +148,22 @@ describe("resolvePersonaKey — final-line anchoring (code fences / demos must n
     const text = `inline ${FENCE}code${FENCE} and ${FENCE} stray\n🗣️ Themis: real`;
     expect(resolvePersonaKey(text, "Atlas")).toBe("themis");
   });
+
+  test("CRLF voice line resolves cleanly with no carriage return in the key", () => {
+    const key = resolvePersonaKey("Working on it.\r\n🗣️ Themis: x\r\n", "Atlas");
+    expect(key).toBe("themis");
+    expect(key).not.toContain("\r");
+  });
+
+  test("nested/mixed fences: real line after a closed outer ~~~ wins; a line inside it stays DA", () => {
+    const TILDE = "~~~";
+    // Inner ``` fence nested in an outer ~~~ fence, then a real persona line after close.
+    const real = `Reference:\n${TILDE}\n${FENCE}\n🗣️ Engineer: demo\n${FENCE}\n${TILDE}\n🗣️ Themis: real`;
+    expect(resolvePersonaKey(real, "Atlas")).toBe("themis");
+    // Same nesting but the only voice line is inside the outer fence → DA.
+    const inside = `Demo:\n${TILDE}\n${FENCE}\n🗣️ Engineer: demo\n${FENCE}\n${TILDE}`;
+    expect(resolvePersonaKey(inside, "Atlas")).toBeNull();
+  });
 });
 
 describe("selectVoice — what the Stop-hook path sends to the voice server", () => {
