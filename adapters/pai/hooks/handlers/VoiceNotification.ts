@@ -15,7 +15,7 @@ import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody, type VoicePersonality } from '../lib/identity';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
-import type { ParsedTranscript } from '../lib/TranscriptParser';
+import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
 
 const DA_IDENTITY = getIdentity();
 
@@ -187,33 +187,14 @@ async function sendNotification(payload: ElevenLabsNotificationPayload, sessionI
  * NOTE: this only extracts the name — caller must still validate it against the
  * configured agents (see selectVoice) so an unknown name never becomes an
  * unresolvable voice_id (which would degrade to the daemon default, Ava).
+ *
+ * Line selection and name grammar are owned by parseFinalVoiceLine (shared with
+ * the words extractor, so the voice and the spoken words always agree).
  */
 export function resolvePersonaKey(text: string, daName: string): string | null {
-  if (!text) return null;
-
-  let fenceChar: string | null = null; // '`' or '~' while inside a fenced block
-  let lastContentLine: string | null = null;
-
-  for (const line of text.split('\n')) {
-    // A fence delimiter line: up to 3 leading spaces then ≥3 ` or ~ (CommonMark).
-    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (fence) {
-      const ch = fence[1][0];
-      if (fenceChar === null) fenceChar = ch;        // open
-      else if (fenceChar === ch) fenceChar = null;   // close (same delimiter type)
-      continue;                                       // delimiter lines are never content
-    }
-    if (fenceChar !== null) continue;                 // inside a fenced block → code
-    if (/^(?: {4,}|\t)/.test(line)) continue;         // indented code block → code
-    if (!line.trim()) continue;                       // blank
-    lastContentLine = line;
-  }
-
-  if (lastContentLine === null) return null;
-  // Column 0 only — no leading-whitespace allowance.
-  const match = lastContentLine.match(/^🗣️[ \t]*\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}[ \t]*:/);
-  if (!match) return null;
-  const name = match[1].toLowerCase();
+  const voiceLine = parseFinalVoiceLine(text);
+  if (!voiceLine) return null;
+  const name = voiceLine.name.toLowerCase();
   if (!name || name === daName.toLowerCase()) return null;
   return name;
 }

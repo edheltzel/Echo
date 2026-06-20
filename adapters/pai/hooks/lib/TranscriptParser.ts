@@ -189,33 +189,86 @@ export function getLastAssistantMessage(transcriptPath: string): string {
 // Extraction Functions
 // ============================================================================
 
+/** Speaker name and spoken words parsed from a single 🗣️ voice line. */
+export interface VoiceLine {
+  /** Speaker name exactly as written (original case, markdown stripped). */
+  name: string;
+  /** Spoken words after the colon (trimmed; a closing bold marker removed). */
+  words: string;
+}
+
 /**
- * Extract voice completion line for TTS.
- * Uses LAST match to avoid capturing mentions in analysis text.
+ * Parse the FINAL real 🗣️ voice line of a response into its speaker name and
+ * spoken words. Single source of truth for "who spoke and what they said": both
+ * the voice resolver (resolvePersonaKey) and the words extractor
+ * (extractVoiceCompletion) consume it, so the chosen voice and the spoken words
+ * can never disagree.
+ *
+ * Line selection matches the locked voice contract: fenced code (``` / ~~~) and
+ * indented code blocks are skipped, and only a tag at column 0 of the last
+ * non-blank content line counts (a demoed/quoted line never wins). CRLF
+ * tolerant. The name grammar is identical to resolvePersonaKey's; the words are
+ * everything after the colon, with an optional closing `**` and surrounding
+ * whitespace removed.
+ *
+ * Returns null when the last content line is not a 🗣️ <Name>: voice line.
+ * Callers control preprocessing (e.g. stripping <system-reminder> tags).
+ */
+export function parseFinalVoiceLine(text: string): VoiceLine | null {
+  if (!text) return null;
+
+  let fenceChar: string | null = null; // '`' or '~' while inside a fenced block
+  let lastContentLine: string | null = null;
+
+  for (const line of text.split('\n')) {
+    // A fence delimiter line: up to 3 leading spaces then ≥3 ` or ~ (CommonMark).
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      const ch = fence[1][0];
+      if (fenceChar === null) fenceChar = ch;        // open
+      else if (fenceChar === ch) fenceChar = null;   // close (same delimiter type)
+      continue;                                       // delimiter lines are never content
+    }
+    if (fenceChar !== null) continue;                 // inside a fenced block → code
+    if (/^(?: {4,}|\t)/.test(line)) continue;         // indented code block → code
+    if (!line.trim()) continue;                       // blank
+    lastContentLine = line;
+  }
+
+  if (lastContentLine === null) return null;
+  // Column 0 only. The portion up to the colon is byte-identical to the original
+  // resolvePersonaKey regex (no end anchor — `.` excludes `\r`, so `(.*)` stops
+  // before a CRLF carriage return and a trailing `$` would break CRLF lines).
+  const match = lastContentLine.match(
+    /^🗣️[ \t]*\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)/,
+  );
+  if (!match) return null;
+  return { name: match[1], words: match[2].trim() };
+}
+
+/**
+ * Extract voice completion line for TTS — the spoken words of the FINAL 🗣️
+ * voice line for ANY speaker (a persona speaks its own words; the DA path is
+ * unchanged). Shares parseFinalVoiceLine with the voice resolver so words and
+ * voice always agree. Falls back to a 🎯 COMPLETED: marker when no voice line.
  */
 export function extractVoiceCompletion(text: string): string {
   // Remove system-reminder tags
   text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '');
 
-  // Use global flag and find LAST match (voice line is at end of response)
-  const completedPatterns = [
-    new RegExp(`🗣️\\s*\\*{0,2}${DA_IDENTITY.name}:?\\*{0,2}\\s*(.+?)(?:\\n|$)`, 'gi'),
-    /🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+?)(?:\n|$)/gi,
-  ];
+  // Primary: the final real 🗣️ voice line (same canonical parse as the voice
+  // resolver). Clean up agent tags; voice server handles sanitization.
+  const voiceLine = parseFinalVoiceLine(text);
+  if (voiceLine) {
+    const words = voiceLine.words.replace(/^\[AGENT:\w+\]\s*/i, '').trim();
+    if (words) return words;
+  }
 
-  for (const pattern of completedPatterns) {
-    const matches = [...text.matchAll(pattern)];
-    if (matches.length > 0) {
-      // Use LAST match - the actual voice line at end of response
-      const lastMatch = matches[matches.length - 1];
-      if (lastMatch && lastMatch[1]) {
-        let completed = lastMatch[1].trim();
-        // Clean up agent tags
-        completed = completed.replace(/^\[AGENT:\w+\]\s*/i, '');
-        // Voice server handles sanitization
-        return completed.trim();
-      }
-    }
+  // Fallback: a 🎯 COMPLETED: marker (LAST match) when there is no voice line.
+  const matches = [...text.matchAll(/🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+?)(?:\n|$)/gi)];
+  const lastMatch = matches[matches.length - 1];
+  if (lastMatch && lastMatch[1]) {
+    return lastMatch[1].trim().replace(/^\[AGENT:\w+\]\s*/i, '').trim();
   }
 
   // Don't say anything if no voice line found
