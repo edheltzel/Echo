@@ -24,6 +24,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
+import {
+  CIRCUIT_BREAKER_RESET_MS,
+  CIRCUIT_BREAKER_THRESHOLD,
+  circuitBreakers,
+  recordProviderFailure,
+  recordProviderSuccess,
+  setCircuitBreakerLogger,
+  shouldSkipProvider,
+} from "./circuit-breaker";
 
 // =============================================================================
 // Types and Interfaces
@@ -34,12 +43,6 @@ interface TTSProvider {
   isEnabled(): boolean;
   isHealthy(): Promise<boolean>;
   speak(text: string, voice?: string, settings?: VoiceSettings): Promise<boolean>;
-}
-
-interface CircuitBreakerState {
-  failures: number;
-  lastFailure: number;
-  isOpen: boolean;
 }
 
 interface VoiceSettings {
@@ -387,51 +390,10 @@ function extractEmotionalMarker(message: string): { cleaned: string; emotion?: s
 // =============================================================================
 // Circuit Breakers - Per-Provider Fast Fallback
 // =============================================================================
+// Breaker state + record/skip logic lives in ./circuit-breaker (host-neutral,
+// unit-tested). Wire it to the server's structured logger here.
 
-const circuitBreakers: Record<string, CircuitBreakerState> = {
-  edgetts: { failures: 0, lastFailure: 0, isOpen: false },
-  elevenlabs: { failures: 0, lastFailure: 0, isOpen: false },
-  kokoro: { failures: 0, lastFailure: 0, isOpen: false },
-};
-
-const CIRCUIT_BREAKER_THRESHOLD = 1;
-const CIRCUIT_BREAKER_RESET_MS = 60_000;
-
-function recordProviderSuccess(provider: string): void {
-  const breaker = circuitBreakers[provider];
-  if (!breaker) return;
-
-  breaker.failures = 0;
-  if (breaker.isOpen) {
-    log('info', `🟢 Circuit CLOSED - ${provider} recovered`);
-    breaker.isOpen = false;
-  }
-}
-
-function recordProviderFailure(provider: string): void {
-  const breaker = circuitBreakers[provider];
-  if (!breaker) return;
-
-  breaker.failures++;
-  breaker.lastFailure = Date.now();
-
-  if (breaker.failures >= CIRCUIT_BREAKER_THRESHOLD && !breaker.isOpen) {
-    breaker.isOpen = true;
-    log('warn', `🔴 Circuit OPEN - ${provider} disabled, using fallback`);
-  }
-}
-
-function shouldSkipProvider(provider: string): boolean {
-  const breaker = circuitBreakers[provider];
-  if (!breaker || !breaker.isOpen) return false;
-
-  if (Date.now() - breaker.lastFailure > CIRCUIT_BREAKER_RESET_MS) {
-    log('info', `🟡 Circuit HALF-OPEN - testing ${provider}`);
-    return false;
-  }
-
-  return true;
-}
+setCircuitBreakerLogger((level, message) => log(level, message));
 
 // =============================================================================
 // Voice Configuration Lookup
@@ -580,7 +542,14 @@ function spawnSafe(command: string, args: string[], timeoutMs = NOTIFICATION_PRO
 // =============================================================================
 
 // --- Edge TTS Provider ---
-const EDGETTS_TIMEOUT_MS = 15_000;
+// edge-tts is Microsoft's ONLINE WebSocket TTS, so transient synthesis blips
+// happen. Retry the synth step a bounded number of times before counting a
+// provider failure, and keep the synth timeout env-tunable (mirrors the other
+// VOICESYSTEM_*_TIMEOUT_MS knobs). Worst-case added latency is bounded by
+// EDGETTS_SYNTH_RETRIES × (timeout + backoff).
+const EDGETTS_TIMEOUT_MS = parseInt(process.env.VOICESYSTEM_EDGETTS_TIMEOUT_MS || "15000");
+const EDGETTS_SYNTH_RETRIES = parseInt(process.env.VOICESYSTEM_EDGETTS_SYNTH_RETRIES || "1");
+const EDGETTS_SYNTH_BACKOFF_MS = parseInt(process.env.VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS || "250");
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
 
 class EdgeTTSProvider implements TTSProvider {
@@ -607,55 +576,83 @@ class EdgeTTSProvider implements TTSProvider {
     }
   }
 
+  // Synthesize one attempt to outFile. Resolves on success, rejects on a
+  // non-zero exit, spawn error, or timeout — i.e. a genuine PROVIDER failure.
+  private synthesizeOnce(processedText: string, voice: string, rate: string, outFile: string): Promise<void> {
+    const synth = spawn(PYTHON3_PATH, [
+      '-m', 'edge_tts',
+      '--text', processedText,
+      '--voice', voice,
+      '--rate', rate,
+      '--write-media', outFile,
+    ]);
+
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => { synth.kill(); reject(new Error('Edge TTS synthesis timeout')); }, EDGETTS_TIMEOUT_MS);
+      synth.on('exit', (code) => {
+        clearTimeout(timeout);
+        if ((code ?? 1) === 0) resolve();
+        else reject(new Error(`edge-tts exited with code ${code}`));
+      });
+      synth.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    });
+  }
+
   async speak(text: string, voice?: string, settings?: VoiceSettings): Promise<boolean> {
     const edgettsVoice = voice || voicesConfig.providers.edgetts?.defaultVoice || 'en-US-AvaNeural';
     const rate = edgeRateFromSpeed(settings?.speed, voicesConfig.providers.edgetts?.rate);
+    const processedText = applyPronunciations(text);
     let tmp: { dir: string; file: string } | undefined;
 
-    // Apply pronunciations
-    const processedText = applyPronunciations(text);
-
     try {
-      tmp = createAudioTempFile('edgetts', 'mp3');
-      const tmpFile = tmp.file;
-      console.log(`🌐 Edge TTS speaking (voice: ${edgettsVoice})...`);
-
-      // Synthesize via edge-tts CLI
-      const synth = spawn(PYTHON3_PATH, [
-        '-m', 'edge_tts',
-        '--text', processedText,
-        '--voice', edgettsVoice,
-        '--rate', rate,
-        '--write-media', tmpFile,
-      ]);
-
-      const synthExit = await new Promise<number>((resolve, reject) => {
-        const timeout = setTimeout(() => { synth.kill(); reject(new Error('Edge TTS synthesis timeout')); }, EDGETTS_TIMEOUT_MS);
-        synth.on('exit', (code) => { clearTimeout(timeout); resolve(code ?? 1); });
-        synth.on('error', (err) => { clearTimeout(timeout); reject(err); });
-      });
-
-      if (synthExit !== 0) {
-        throw new Error(`edge-tts exited with code ${synthExit}`);
+      // --- Synthesis (the provider's responsibility → governed by the breaker).
+      //     Retry transient blips with backoff before recording a failure. ---
+      let synthError: any;
+      for (let attempt = 0; attempt <= EDGETTS_SYNTH_RETRIES; attempt++) {
+        if (attempt > 0) {
+          console.warn(`🔁 Edge TTS synth retry ${attempt}/${EDGETTS_SYNTH_RETRIES}...`);
+          await Bun.sleep(EDGETTS_SYNTH_BACKOFF_MS * attempt);
+        }
+        if (tmp) cleanupAudioTempDir(tmp.dir);
+        tmp = createAudioTempFile('edgetts', 'mp3');
+        console.log(`🌐 Edge TTS speaking (voice: ${edgettsVoice})...`);
+        try {
+          await this.synthesizeOnce(processedText, edgettsVoice, rate, tmp.file);
+          synthError = undefined;
+          break;
+        } catch (err) {
+          synthError = err;
+        }
       }
 
-      // Play via afplay (macOS) or mpv/ffplay (Linux)
-      const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
-      const play = spawn(player, [tmpFile]);
+      if (synthError) {
+        // Synthesis failed after all retries → a genuine provider failure.
+        recordProviderFailure('edgetts');
+        if (synthError.message?.includes('timeout')) {
+          console.warn(`⏱️  Edge TTS timeout after ${EDGETTS_TIMEOUT_MS}ms (${EDGETTS_SYNTH_RETRIES} retries exhausted)`);
+        } else {
+          console.error('❌ Edge TTS synthesis error:', synthError.message || synthError);
+        }
+        return false;
+      }
 
-      await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
-
+      // The online provider did its job — mark it healthy regardless of what
+      // happens during local playback below.
       recordProviderSuccess('edgetts');
+
+      // --- Playback (a LOCAL concern: afplay/mpv). A playback failure must NOT
+      //     open the edge-tts breaker — the provider already succeeded. ---
+      const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
+      try {
+        const play = spawn(player, [tmp!.file]);
+        await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
+      } catch (playError: any) {
+        console.error(`🔇 Edge TTS playback failed via ${player} (local issue, provider unaffected):`, playError.message || playError);
+        return false;
+      }
+
       console.log('✅ Edge TTS completed');
       return true;
-    } catch (error: any) {
-      recordProviderFailure('edgetts');
-      if (error.message?.includes('timeout')) {
-        console.warn(`⏱️  Edge TTS timeout after ${EDGETTS_TIMEOUT_MS}ms`);
-      } else {
-        console.error('❌ Edge TTS error:', error.message || error);
-      }
-      return false;
     } finally {
       if (tmp) cleanupAudioTempDir(tmp.dir);
     }
@@ -1230,6 +1227,10 @@ const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           circuit_breakers: {
+            edgetts: {
+              open: circuitBreakers.edgetts.isOpen,
+              failures: circuitBreakers.edgetts.failures,
+            },
             elevenlabs: {
               open: circuitBreakers.elevenlabs.isOpen,
               failures: circuitBreakers.elevenlabs.failures,
