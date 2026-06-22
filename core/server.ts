@@ -257,7 +257,7 @@ function loadVoicesConfig(): VoicesConfig {
 }
 
 // Global config (loaded once at startup)
-const voicesConfig = loadVoicesConfig();
+export const voicesConfig = loadVoicesConfig();
 
 function getMacOSFallbackVoice(): string {
   return voicesConfig.providers.say.voice || DEFAULT_MACOS_VOICE;
@@ -881,23 +881,45 @@ class KokoroProvider implements TTSProvider {
 // Provider Management
 // =============================================================================
 
-const providers: Record<string, TTSProvider> = {
+export const providers: Record<string, TTSProvider> = {
   edgetts: new EdgeTTSProvider(),
   elevenlabs: new ElevenLabsProvider(),
   kokoro: new KokoroProvider(),
   say: new MacOSSayProvider(),
 };
 
-async function getProviderStatus(): Promise<Record<string, { enabled: boolean; healthy: boolean; endpoint?: string }>> {
-  const status: Record<string, { enabled: boolean; healthy: boolean; endpoint?: string }> = {};
+// Per-provider egress destination for the /health audit (issue #26). A provider
+// makes an outbound network request only when ENABLED: edge-tts and ElevenLabs
+// always leave the host; Kokoro contacts its configured endpoint (local by
+// default — the returned value makes locality visible); macOS `say` is fully
+// local and never returns a target. The disabled-provider no-egress guarantee
+// is therefore auditable: wouldEgress is false whenever a provider is disabled.
+function egressTargetFor(name: string): string | undefined {
+  switch (name) {
+    case 'edgetts': return 'Microsoft Edge TTS (online)';
+    case 'elevenlabs': return 'api.elevenlabs.io';
+    case 'kokoro': return voicesConfig.providers.kokoro.endpoint || 'http://127.0.0.1:8880/v1';
+    default: return undefined; // 'say' and any other local-only provider
+  }
+}
+
+export async function getProviderStatus(): Promise<Record<string, { enabled: boolean; healthy: boolean; wouldEgress: boolean; egressTarget?: string; endpoint?: string }>> {
+  const status: Record<string, { enabled: boolean; healthy: boolean; wouldEgress: boolean; egressTarget?: string; endpoint?: string }> = {};
 
   for (const [name, provider] of Object.entries(providers)) {
     const enabled = provider.isEnabled();
     const healthy = enabled ? await provider.isHealthy() : false;
+    const egressTarget = egressTargetFor(name);
+    // "Would egress" = currently configured such that using/probing this
+    // provider makes an outbound network request. Gated on enabled, so a
+    // disabled provider always reports false.
+    const wouldEgress = enabled && egressTarget !== undefined;
 
     status[name] = {
       enabled,
       healthy,
+      wouldEgress,
+      ...(wouldEgress && { egressTarget }),
       ...(name === 'kokoro' && { endpoint: voicesConfig.providers.kokoro.endpoint }),
       ...(name === 'elevenlabs' && { apiKeyConfigured: !!resolveEnvVar(voicesConfig.providers.elevenlabs.apiKey) })
     };
@@ -926,7 +948,7 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   use_speaker_boost: true,
 };
 
-async function speakWithFallback(
+export async function speakWithFallback(
   text: string,
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
@@ -1125,7 +1147,7 @@ function checkRateLimit(ip: string): boolean {
 // HTTP Server
 // =============================================================================
 
-const server = serve({
+export const server = serve({
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);

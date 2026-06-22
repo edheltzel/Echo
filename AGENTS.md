@@ -83,7 +83,22 @@ Compatibility endpoint for callers that only provide a `message`.
 
 Returns provider status, fallback order, circuit-breaker state, pronunciation rule count, and emotional preset count.
 
+Each provider entry carries an **egress audit** (`getProviderStatus` in `core/server.ts`): `enabled`, `healthy`, and `wouldEgress` (true only when the provider is *both* enabled and makes an outbound network request when used), plus `egressTarget` when `wouldEgress` is true. This makes the gating guarantee auditable at a glance — a disabled provider always reports `wouldEgress: false` and omits `egressTarget`.
+
 Unsupported POST paths now return explicit JSON `404`; the universal core does not expose a PAI-named route.
+
+### Provider egress gating
+
+A **disabled** provider makes **zero** outbound network calls — no synthesis request and no auth/health probe. The guarantee is structural, not best-effort:
+
+- `speakWithFallback` (`core/server.ts`) checks `provider.isEnabled()` and `continue`s **before** ever calling `isHealthy()` or `speak()`, so a disabled provider's network paths are unreachable.
+- `getProviderStatus` only runs `isHealthy()` `if (enabled)`, so the `/health` probe never reaches a disabled provider either.
+- `ElevenLabsProvider.isEnabled()` requires `enabled:true` **and** an API key; `isHealthy()` makes no network call (the key is read in the constructor). With ElevenLabs disabled, nothing ever reaches `api.elevenlabs.io`.
+- `KokoroProvider` is contacted **only when enabled** — `isHealthy()` short-circuits on `!isEnabled()` before probing its endpoint, and `speak()` is gated by the same `isEnabled()` check upstream.
+
+Proven by `tests/core/egress-gating.test.ts` (spies `fetch`; asserts zero calls for a disabled provider across both `speakWithFallback` and `getProviderStatus`, and that enabling a provider is the only thing that flips egress on).
+
+**edge-tts egresses by default.** The default provider (`edgetts`) is Microsoft's **online** TTS service, so "no external calls" is not the out-of-the-box state — edge-tts leaves the host to Microsoft (see #1). For a fully-local setup, run a local provider (`kokoro` against a local endpoint, or `say`) and disable `edgetts`/`elevenlabs`; `/health` `wouldEgress` flags then read `false`/local for every enabled provider.
 
 ## Voices
 
