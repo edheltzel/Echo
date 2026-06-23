@@ -122,6 +122,40 @@ Returns provider status, fallback order, circuit-breaker state, pronunciation ru
 
 Each provider entry includes an egress audit — `enabled`, `healthy`, and `wouldEgress` (with `egressTarget` when it's true). A **disabled provider makes zero outbound calls** (no synthesis request, no auth/health probe) and always reports `wouldEgress: false`. Note that the default provider, `edge-tts`, is an **online** Microsoft service, so it *does* egress when enabled — for a fully-local setup, run `kokoro` (local endpoint) or `say` and disable `edgetts`/`elevenlabs`.
 
+### Voice-resolution drop-off log
+
+To make it observable *why* a `/notify` used the voice it did, the daemon appends **one structured JSONL event per voice-enabled `/notify`** to a machine-readable log — separate from the human-readable daemon log (`~/Library/Logs/atlas-voicesystem.log`).
+
+- **Path:** `~/Library/Logs/atlas-voicesystem/voice-resolution.jsonl` on macOS (else `$XDG_STATE_HOME` or `~/.local/state` under `atlas-voicesystem/`). Override with `VOICESYSTEM_RESOLUTION_LOG`.
+- **Retention:** single size-capped file (`~1MB`, override `VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES`). On each write, oldest whole lines are pruned to stay under the cap (newest always kept) — no logrotate, no time-based rotation.
+- **Best-effort:** a write failure is swallowed and never breaks a notification.
+
+Each line:
+
+```json
+{
+  "ts": "2026-06-23T13:16:16.822Z",
+  "requested_voice_id": "themis",
+  "resolution": "agent-key",
+  "provider": "edgetts",
+  "voice": "en-US-MichelleNeural",
+  "hops": 0,
+  "attempts": [{ "provider": "edgetts", "outcome": "success" }],
+  "success": true
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `requested_voice_id` | The `voice_id` the caller sent (`null` if omitted). |
+| `resolution` | How it resolved: `identity-default` (none requested), `identity`, `agent-key`, `elevenlabs-id`, or `fallback`. |
+| `resolution_reason` | Present only when `resolution` is `fallback` — why the id didn't resolve. |
+| `provider` | Provider that actually spoke, or `none` if all failed. |
+| `voice` | Actual provider voice used (`null` on total failure). |
+| `hops` | Providers skipped/failed before the chosen one (`0` = primary spoke first try). |
+| `attempts` | Per-provider outcome trail: `success` \| `failed` \| `unhealthy` \| `circuit-open` \| `disabled`. |
+| `success` | Whether any provider spoke. |
+
 ## Voices
 
 Voices are configured per agent in `core/voices.json`. The `identity` mapping is the default ("Atlas") voice; every entry under `agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`, `themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
