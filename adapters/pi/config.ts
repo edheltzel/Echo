@@ -2,6 +2,7 @@ export interface PiVoiceConfig {
   endpoint: string;
   title: string;
   catchphrase: string;
+  personaName: string;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -22,6 +23,7 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = proc
     endpoint: env.ATLAS_VOICE_NOTIFY_URL || env.VOICESYSTEM_NOTIFY_URL || "http://localhost:8888/notify",
     title: env.ATLAS_VOICE_TITLE || "Pi Notification",
     catchphrase: env.ATLAS_VOICE_CATCHPHRASE || "Pi session ready.",
+    personaName: env.ATLAS_VOICE_PERSONA_NAME || "Atlas",
     voiceId: env.ATLAS_VOICE_ID || env.VOICESYSTEM_VOICE_ID || undefined,
     voiceEnabled: booleanEnv(env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ATLAS_VOICE_GREET_ON_START, true),

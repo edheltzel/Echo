@@ -55,6 +55,10 @@ export function extractVoiceLineFromText(text: string): string | null {
 
   const cleaned = last
     .replace(/^🗣️?\s*/, "")
+    // Optional persona prefix ("Atlas:" / "Themis:") so the name isn't spoken aloud.
+    // Single name token, mirroring PAI's parseFinalVoiceLine; lines without a
+    // "<Name>:" prefix pass through unchanged.
+    .replace(/^\*{0,2}[A-Za-z][A-Za-z0-9_-]*\*{0,2}[ \t]*:\*{0,2}[ \t]*/, "")
     .replace(/^[:\-–—]\s*/, "")
     .trim();
 

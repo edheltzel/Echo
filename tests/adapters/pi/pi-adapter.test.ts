@@ -137,6 +137,73 @@ describe("Pi adapter lifecycle", () => {
     expect(payloads).toHaveLength(0);
   });
 
+  test("before_agent_start appends the voice-line instruction to the system prompt", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    const result = (await handlers.get("before_agent_start")?.(
+      { prompt: "do a thing", systemPrompt: "BASE" },
+      createContext(),
+    )) as { systemPrompt?: string; systemPromptAppend?: string } | undefined;
+
+    expect(result?.systemPrompt?.startsWith("BASE")).toBe(true);
+    expect(result?.systemPrompt).toContain("🗣️ Atlas:");
+    // Never clobbers: the base prompt survives ahead of the appended instruction.
+    expect(result?.systemPrompt!.indexOf("BASE")).toBeLessThan(result!.systemPrompt!.indexOf("🗣️ Atlas:"));
+    // Fallback append form is also offered for runtimes that ignore the replace return.
+    expect(result?.systemPromptAppend).toContain("🗣️ Atlas:");
+  });
+
+  test("before_agent_start uses the configured persona name", async () => {
+    process.env.ATLAS_VOICE_PERSONA_NAME = "Themis";
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    const result = (await handlers.get("before_agent_start")?.(
+      { prompt: "x", systemPrompt: "BASE" },
+      createContext(),
+    )) as { systemPrompt?: string } | undefined;
+
+    expect(result?.systemPrompt).toContain("🗣️ Themis:");
+    expect(result?.systemPrompt).not.toContain("🗣️ Atlas:");
+  });
+
+  test("before_agent_start does not inject in a suppressed headless subagent", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+    const ctx = createContext("session-1", { mode: "json", hasUI: false });
+
+    const result = await handlers.get("before_agent_start")?.(
+      { prompt: "x", systemPrompt: "BASE" },
+      ctx,
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test("before_agent_start does not inject when completions are disabled", async () => {
+    process.env.ATLAS_VOICE_SPEAK_COMPLETIONS = "off";
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    const result = await handlers.get("before_agent_start")?.(
+      { prompt: "x", systemPrompt: "BASE" },
+      createContext(),
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test("before_agent_start is a safe no-op when the runtime exposes no systemPrompt", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    // Older runtime: event lacks `systemPrompt`. Must not throw, must not inject.
+    const result = await handlers.get("before_agent_start")?.({ prompt: "x" }, createContext());
+
+    expect(result).toBeUndefined();
+  });
+
   test("dedupe expires so repeated legitimate later turns can speak", async () => {
     let now = 1_000;
     Date.now = () => now;

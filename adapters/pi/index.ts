@@ -31,6 +31,24 @@ function eventMessage(event: unknown): unknown {
     : undefined;
 }
 
+function readSystemPrompt(event: unknown): string | undefined {
+  if (typeof event === "object" && event !== null && "systemPrompt" in event) {
+    const value = (event as { systemPrompt?: unknown }).systemPrompt;
+    if (typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+/** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
+function buildVoiceLineInstruction(personaName: string): string {
+  return [
+    "## Spoken completion (required)",
+    "End EVERY response with a final line, on its own line as the very last line, in exactly this form:",
+    `🗣️ ${personaName}: <one sentence, 8-16 words, summarizing what you just did>`,
+    "Write plain spoken English in that line — no markdown, no code.",
+  ].join("\n");
+}
+
 export default function atlasVoicePiAdapter(pi: ExtensionAPI): void {
   const config = loadPiVoiceConfig();
   const spoken = new Map<string, number>();
@@ -79,6 +97,28 @@ export default function atlasVoicePiAdapter(pi: ExtensionAPI): void {
       pending.delete(key);
     }
   }
+
+  // Inject the 🗣️ convention into Pi's system prompt so the model emits the
+  // spoken line that message_end/turn_end then voices. Gated on the same flags
+  // as the speak side so disabled/suppressed contexts neither emit nor speak it.
+  pi.on("before_agent_start", (event, ctx) => {
+    if (!config.speakCompletions) return undefined;
+    if (config.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
+      return undefined;
+    }
+
+    const base = readSystemPrompt(event);
+    if (base === undefined) return undefined; // feature-detect: older runtime → safe no-op
+
+    const instruction = buildVoiceLineInstruction(config.personaName);
+    // Always APPEND to the chained prompt (never clobber other extensions).
+    // `systemPrompt` is the documented replace return; `systemPromptAppend`
+    // is the fallback for runtimes that ignore the replace return.
+    return {
+      systemPrompt: `${base}\n\n${instruction}`,
+      systemPromptAppend: `\n\n${instruction}`,
+    };
+  });
 
   pi.on("session_start", async (event, ctx) => {
     if (!config.greetOnSessionStart) return;

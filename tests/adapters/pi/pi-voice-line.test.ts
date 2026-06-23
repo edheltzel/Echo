@@ -15,6 +15,16 @@ describe("Pi voice line extraction", () => {
     expect(extractVoiceLineFromText("No spoken line here.")).toBeNull();
   });
 
+  test("strips a leading persona name so it is not spoken aloud", () => {
+    expect(extractVoiceLineFromText("🗣️ Atlas: shipped it")).toBe("shipped it");
+    expect(extractVoiceLineFromText("🗣️ Themis: dispatched the worker")).toBe("dispatched the worker");
+  });
+
+  test("keeps nameless voice lines unchanged (back-compat)", () => {
+    expect(extractVoiceLineFromText("🗣️ shipped the fix")).toBe("shipped the fix");
+    expect(extractVoiceLineFromText("🗣️ Refactor complete.")).toBe("Refactor complete.");
+  });
+
   test("extracts text blocks from assistant messages", () => {
     const message = {
       role: "assistant",
