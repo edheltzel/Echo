@@ -198,6 +198,38 @@ export interface VoiceLine {
 }
 
 /**
+ * Return a markdown text's non-code content lines in order: every non-blank
+ * line that is NOT a fence delimiter, NOT inside a fenced code block (``` /
+ * ~~~), and NOT an indented code block (≥4 spaces or a tab). This is the single
+ * fence/indent-aware line scan shared by the canonical voice-line parser
+ * (parseFinalVoiceLine) and the legacy 🎯 COMPLETED: fallback, so both honor
+ * code fences and indents identically — the scanner lives here once, never
+ * forked. CRLF tolerant: lines keep any trailing \r, which the per-line content
+ * regexes ignore (`.` excludes \r).
+ */
+function contentLines(text: string): string[] {
+  let fenceChar: string | null = null; // '`' or '~' while inside a fenced block
+  const lines: string[] = [];
+
+  for (const line of text.split('\n')) {
+    // A fence delimiter line: up to 3 leading spaces then ≥3 ` or ~ (CommonMark).
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      const ch = fence[1][0];
+      if (fenceChar === null) fenceChar = ch;        // open
+      else if (fenceChar === ch) fenceChar = null;   // close (same delimiter type)
+      continue;                                       // delimiter lines are never content
+    }
+    if (fenceChar !== null) continue;                 // inside a fenced block → code
+    if (/^(?: {4,}|\t)/.test(line)) continue;         // indented code block → code
+    if (!line.trim()) continue;                       // blank
+    lines.push(line);
+  }
+
+  return lines;
+}
+
+/**
  * Parse the FINAL real 🗣️ voice line of a response into its speaker name and
  * spoken words. Single source of truth for "who spoke and what they said": both
  * the voice resolver (resolvePersonaKey) and the words extractor
@@ -217,25 +249,9 @@ export interface VoiceLine {
 export function parseFinalVoiceLine(text: string): VoiceLine | null {
   if (!text) return null;
 
-  let fenceChar: string | null = null; // '`' or '~' while inside a fenced block
-  let lastContentLine: string | null = null;
-
-  for (const line of text.split('\n')) {
-    // A fence delimiter line: up to 3 leading spaces then ≥3 ` or ~ (CommonMark).
-    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (fence) {
-      const ch = fence[1][0];
-      if (fenceChar === null) fenceChar = ch;        // open
-      else if (fenceChar === ch) fenceChar = null;   // close (same delimiter type)
-      continue;                                       // delimiter lines are never content
-    }
-    if (fenceChar !== null) continue;                 // inside a fenced block → code
-    if (/^(?: {4,}|\t)/.test(line)) continue;         // indented code block → code
-    if (!line.trim()) continue;                       // blank
-    lastContentLine = line;
-  }
-
-  if (lastContentLine === null) return null;
+  const lines = contentLines(text);
+  const lastContentLine = lines[lines.length - 1];
+  if (lastContentLine === undefined) return null;
   // Column 0 only. The portion up to the colon is byte-identical to the original
   // resolvePersonaKey regex (no end anchor — `.` excludes `\r`, so `(.*)` stops
   // before a CRLF carriage return and a trailing `$` would break CRLF lines).
@@ -264,11 +280,17 @@ export function extractVoiceCompletion(text: string): string {
     if (words) return words;
   }
 
-  // Fallback: a 🎯 COMPLETED: marker (LAST match) when there is no voice line.
-  const matches = [...text.matchAll(/🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+?)(?:\n|$)/gi)];
-  const lastMatch = matches[matches.length - 1];
-  if (lastMatch && lastMatch[1]) {
-    return lastMatch[1].trim().replace(/^\[AGENT:\w+\]\s*/i, '').trim();
+  // Fallback: a 🎯 COMPLETED: marker when there is no voice line. Routed through
+  // the same fence/indent-aware scan as the voice line (contentLines) so a
+  // COMPLETED inside a code fence or an indented block never wins; the LAST
+  // content-line marker is used (the marker sits at the end of a response).
+  // Per-line `(.+)` is CRLF tolerant — `.` excludes the trailing \r.
+  const completed = /🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+)/i;
+  for (const line of contentLines(text).reverse()) {
+    const m = line.match(completed);
+    if (m && m[1]) {
+      return m[1].trim().replace(/^\[AGENT:\w+\]\s*/i, '').trim();
+    }
   }
 
   // Don't say anything if no voice line found
@@ -284,8 +306,8 @@ export function extractCompletionPlain(text: string): string {
 
   // Use global flag and find LAST match (voice line is at end of response)
   const completedPatterns = [
-    new RegExp(`🗣️\\s*\\*{0,2}${DA_IDENTITY.name}:?\\*{0,2}\\s*(.+?)(?:\\n|$)`, 'gi'),
-    /🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+?)(?:\n|$)/gi,
+    new RegExp(`🗣️\\s*\\*{0,2}${DA_IDENTITY.name}:?\\*{0,2}\\s*(.+?)(?:\\r?\\n|$)`, 'gi'),
+    /🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+?)(?:\r?\n|$)/gi,
   ];
 
   for (const pattern of completedPatterns) {
