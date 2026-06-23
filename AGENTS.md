@@ -206,6 +206,15 @@ Adapters are out-of-process host integrations. They should:
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
 
+### Pi adapter — per-turn completions (issue #15)
+
+Pi's own models don't emit the PAI `🗣️` line on their own, so the Pi adapter **injects** the convention. On `before_agent_start` (`adapters/pi/index.ts`) it appends an instruction to the chained `event.systemPrompt` (feature-detected; falls back to `systemPromptAppend`; no-ops on older runtimes) telling the model to end each response with `🗣️ <Name>: <8–16 word summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line — so Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
+
+- **Persona name** comes from config: `personaName` ← env `ATLAS_VOICE_PERSONA_NAME` (default `"Atlas"`), never hard-coded.
+- Injection is gated on `config.speakCompletions` (default on) **and** the same `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
+- `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading `<Name>:` (mirroring PAI's `parseFinalVoiceLine` name grammar) so the persona name isn't spoken aloud.
+- Adapter-only: no `core/` or daemon change; the daemon already resolves `voice_id` name keys.
+
 ## PAI compatibility path
 
 The old deep files under `claudecode/.claude/PAI/USER/Voice/` are compatibility wrappers:
