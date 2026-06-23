@@ -173,7 +173,26 @@ describe("selectVoice — what the Stop-hook path sends to the voice server", ()
     expect(sel.voiceId).not.toBe(ATLAS.mainDAVoiceID);
     // Persona delegates prosody to the daemon's per-agent config.
     expect(sel.voiceSettings).toBeUndefined();
-    expect(sel.speaker).toBe("themis");
+    // #33: title shows the display name (original-case tag), not the lowercase key.
+    expect(sel.speaker).toBe("Themis");
+  });
+
+  test("#33: speaker is the original-case display name while voiceId stays the lowercase key", () => {
+    const sel = selectVoice(parsedWith("🗣️ Themis: coordinating."), ATLAS, KNOWN);
+    // voice_id must remain the lowercase key the daemon resolves — unchanged.
+    expect(sel.voiceId).toBe("themis");
+    // title source is the display name from the tag, not the resolved key.
+    expect(sel.speaker).toBe("Themis");
+    expect(sel.speaker).not.toBe("themis");
+  });
+
+  test("#33 casing edge: an odd-case persona tag resolves voice correctly; title reflects the tag's case", () => {
+    // No canonical display-name field exists in voices.json, so the original-case
+    // tag IS the display source: voice still resolves (lowercased key), and the
+    // title mirrors exactly what was written.
+    const sel = selectVoice(parsedWith("🗣️ THEMIS: go."), ATLAS, KNOWN);
+    expect(sel.voiceId).toBe("themis");
+    expect(sel.speaker).toBe("THEMIS");
   });
 
   test("UNKNOWN persona key → DA voice fallback, never an unresolvable key (would be Ava)", () => {
@@ -219,10 +238,12 @@ describe("selectVoice — what the Stop-hook path sends to the voice server", ()
 });
 
 describe("buildVoicePayload — the exact payload sent to the voice server", () => {
-  test("persona selection → name key, persona title, no Atlas prosody", () => {
-    const payload = buildVoicePayload("Dispatching the worker.", "sess-1", { voiceId: "themis", speaker: "themis" });
+  test("persona selection → lowercase name key for voice, display-name title, no Atlas prosody", () => {
+    // Mirrors what selectVoice produces post-#33: voice_id is the resolvable
+    // lowercase key, title carries the original-case display name.
+    const payload = buildVoicePayload("Dispatching the worker.", "sess-1", { voiceId: "themis", speaker: "Themis" });
     expect(payload.voice_id).toBe("themis");
-    expect(payload.title).toBe("themis says");
+    expect(payload.title).toBe("Themis says");
     expect(payload.voice_settings).toBeUndefined();
     expect(payload.voice_enabled).toBe(true);
     expect(payload.source).toBe("pai");

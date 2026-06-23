@@ -249,7 +249,13 @@ export function selectVoice(
   const text = parsed.currentResponseText || parsed.lastMessage || '';
   const personaKey = resolvePersonaKey(text, identity.name);
   if (personaKey && knownAgents.has(personaKey)) {
-    return { voiceId: personaKey, speaker: personaKey };
+    // Title shows the persona's display name (original-case tag, e.g. "Themis"),
+    // while voice_id stays the lowercase key the daemon resolves (themis →
+    // en-US-MichelleNeural). voices.json has no canonical display-name field, so
+    // the tag's original-case name is the source. parseFinalVoiceLine is the same
+    // canonical parser resolvePersonaKey used, so name/key can never disagree.
+    const displayName = parseFinalVoiceLine(text)?.name ?? personaKey;
+    return { voiceId: personaKey, speaker: displayName };
   }
   return { voiceId: identity.mainDAVoiceID, voiceSettings: identity.voice, speaker: identity.name };
 }
