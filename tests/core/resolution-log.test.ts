@@ -122,6 +122,34 @@ describe("issue #24 — one resolution event per /notify", () => {
     expect(typeof ev.ts).toBe("string");
     expect(() => new Date(ev.ts).toISOString()).not.toThrow();
   });
+
+  test("successful `say` fallback logs the real macOS voice, not null (P1)", async () => {
+    if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
+
+    // edge-tts/elevenlabs/kokoro stay disabled (beforeEach); enable only `say`,
+    // which always reports healthy and (with spawn stubbed) speaks successfully.
+    (voicesConfig.providers as any).say.enabled = true;
+    const expectedVoice = (voicesConfig.providers as any).say.voice || "Daniel (Enhanced)";
+
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "say fallback path", voice_enabled: true }),
+    });
+    expect(res.status).toBe(200);
+
+    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    expect(lines.length).toBe(1);
+
+    const ev = JSON.parse(lines[0]);
+    expect(ev.provider).toBe("say");
+    expect(ev.voice).toBe(expectedVoice); // the real fallback voice, not null
+    expect(ev.voice).not.toBe(null);
+    expect(ev.success).toBe(true);
+    // edge-tts/elevenlabs/kokoro skipped (disabled), then say spoke → hops counts them.
+    expect(ev.attempts[ev.attempts.length - 1]).toEqual({ provider: "say", outcome: "success" });
+    expect(ev.hops).toBe(ev.attempts.length - 1);
+  });
 });
 
 describe("issue #24 — rolling size-cap prune", () => {

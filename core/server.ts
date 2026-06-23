@@ -1162,7 +1162,11 @@ export async function speakWithFallback(
     }
     if (success) {
       attempts.push({ provider: providerName, outcome: 'success' });
-      return { success: true, provider: providerName, voice: providerVoice ?? null, attempts };
+      // `say` ignores its voice arg and resolves the macOS fallback voice
+      // internally (getMacOSFallbackVoice), so providerVoice is unset for it —
+      // log that real voice rather than null on the most common drop-off path.
+      const actualVoice = providerName === 'say' ? getMacOSFallbackVoice() : (providerVoice ?? null);
+      return { success: true, provider: providerName, voice: actualVoice, attempts };
     }
     attempts.push({ provider: providerName, outcome: 'failed' });
   }
