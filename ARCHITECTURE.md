@@ -144,9 +144,10 @@ to Atlas automatically. Full mechanism: [`docs/voices.md`](docs/voices.md).
 
 Both adapters are **fully out-of-process**, import nothing from `core/`, and speak only the
 HTTP `/notify` contract. They are independent (no shared code): PAI suppresses subagents via
-stdin `agent_id` and reads `~/.claude/settings.json` for identity; Pi suppresses via
-`PI_SUBAGENT_*` env vars and reads only env. The only thing they agree on is the `/notify`
-wire shape. Adapter responsibilities, the Pi per-turn injection (#15), and the PAI
+stdin `agent_id` and reads `~/.claude/settings.json` for identity; Pi suppresses via the
+`ATLAS_VOICE_SUPPRESS` env flag plus run-context (headless modes — `hasUI === false`, or
+`mode` `json`/`print`) and is configured env-only (`shouldSuppressVoice` / `loadPiVoiceConfig`
+in `adapters/pi/config.ts`). The only thing they agree on is the `/notify` wire shape. Adapter responsibilities, the Pi per-turn injection (#15), and the PAI
 compatibility shim: [`docs/adapters.md`](docs/adapters.md).
 
 ## Invariants (must not do)
