@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-24
+
+Agent-first repository legibility + mechanical enforcement. No runtime behavior change.
+
+### Added
+
+- `ARCHITECTURE.md` (codemap, boundaries, invariants) and `SECURITY.md` (trust boundary, egress posture, secret handling).
+- `docs/` progressive-disclosure tree — `http-api.md`, `adapters.md`, `providers-observability.md`, `reliability.md`, `voices.md`, `dox.md`, and `design-docs/` (index + pi-completion-injection).
+- Mechanical enforcement: `tests/core/architecture-invariants.test.ts` — fails CI if `core/` imports a host/adapter API, references `:31337`, uses a `/tmp` process path, or adds a host-named route.
+
+### Changed
+
+- `AGENTS.md` slimmed to a lean entry point (~130 lines) with detail relocated into `docs/` (DOX procedure → `docs/dox.md`; contract preserved).
+
 ## [0.1.0] - 2026-06-23
 
 Initial release of the universal voice-system core plus PAI and Pi host adapters.
@@ -29,5 +43,6 @@ Initial release of the universal voice-system core plus PAI and Pi host adapters
 
 - Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
 
-[Unreleased]: https://github.com/edheltzel/atlas-voicesystem/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/edheltzel/atlas-voicesystem/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/edheltzel/atlas-voicesystem/releases/tag/v0.1.1
 [0.1.0]: https://github.com/edheltzel/atlas-voicesystem/releases/tag/v0.1.0
