@@ -162,6 +162,12 @@ Tunable via env (all parsed through `core/env.ts` `parseBoundedInt`, which falls
 
 The threshold is **global** across edgetts/elevenlabs/kokoro. Worst-case first-turn latency when edge-tts is down is ~30s (2 attempts × 15s + backoff) before fallback; mitigated because `speakWithFallback` is single-pass, so the same turn still falls through to local `say`.
 
+## Release & versioning
+
+- **Project version** lives in the root `package.json` (`version`, currently `0.1.0`). It is declarative metadata only — no code reads it, and the root manifest declares no dependencies or scripts, so it does not affect `bun run`/`bun test` or the Pi build. Adapter packages (e.g. `adapters/pi/package.json`) carry their own `version` independently.
+- **`CHANGELOG.md`** (repo root) tracks releases in [Keep a Changelog](https://keepachangelog.com/) format under [Semantic Versioning](https://semver.org/). Add notable changes under `## [Unreleased]` as work lands, then stamp a dated `## [x.y.z]` section at release time.
+- **Release flow:** work on `dev` → open a PR into `dev` and get reviewer sign-off → **Ed merges** → open a `dev` → `master` promotion PR → after it merges, tag `vX.Y.Z` and cut a GitHub release. **Ed owns all merges; Themis does not auto-merge.** Never push directly to `master` (see Invariants).
+
 ## File guide
 
 | Purpose | Path |
@@ -183,6 +189,8 @@ The threshold is **global** across edgetts/elevenlabs/kokoro. Worst-case first-t
 | Agent install docs | `docs/install-agent.md` |
 | Dev docs | `docs/development.md` |
 | Migration notes | `MIGRATIONS.md` |
+| Project version | `package.json` (root) |
+| Changelog | `CHANGELOG.md` |
 
 ## Invariants / must not do
 
