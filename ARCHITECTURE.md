@@ -74,7 +74,6 @@ The boundary is **mechanically enforced**, not just documented:
 | PAI adapter | `adapters/pai/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | Neutral lifecycle | `scripts/{install,start,stop,restart,status,uninstall}.sh` | Service install/lifecycle; no host logic. |
-| PAI compatibility shim | `claudecode/.claude/PAI/USER/Voice/` | Thin wrappers that keep pre-migration PAI installs working. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
@@ -147,8 +146,7 @@ HTTP `/notify` contract. They are independent (no shared code): PAI suppresses s
 stdin `agent_id` and reads `~/.claude/settings.json` for identity; Pi suppresses via the
 `ATLAS_VOICE_SUPPRESS` env flag plus run-context (headless modes — `hasUI === false`, or
 `mode` `json`/`print`) and is configured env-only (`shouldSuppressVoice` / `loadPiVoiceConfig`
-in `adapters/pi/config.ts`). The only thing they agree on is the `/notify` wire shape. Adapter responsibilities, the Pi per-turn injection (#15), and the PAI
-compatibility shim: [`docs/adapters.md`](docs/adapters.md).
+in `adapters/pi/config.ts`). The only thing they agree on is the `/notify` wire shape. Adapter responsibilities and the Pi per-turn injection (#15): [`docs/adapters.md`](docs/adapters.md).
 
 ## Invariants (must not do)
 

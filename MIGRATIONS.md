@@ -23,8 +23,6 @@ Neutral service identity:
 
 The installer unloads the old `com.pai.voice-server` service if loaded and quarantines `~/Library/LaunchAgents/com.pai.voice-server.plist` to prevent login-time port races.
 
-The historical stow path under `claudecode/.claude/PAI/USER/Voice/` remains as compatibility wrappers/config for existing PAI installs. Those wrappers delegate to `core/`, `adapters/pai/`, and root `scripts/`.
-
 ## PAI hook registration
 
 Canonical command:

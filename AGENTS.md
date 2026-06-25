@@ -8,8 +8,7 @@ detail live behind the pointers below — load them on demand (progressive discl
 
 A host-neutral daemon (`core/server.ts`, listening on `localhost:8888`) speaks text POSTed to
 `POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/pai/`,
-`adapters/pi/`) that never import `core/`. The historical PAI stow path
-`claudecode/.claude/PAI/USER/Voice/` holds compatibility wrappers only. Full codemap,
+`adapters/pi/`) that never import `core/`. Full codemap,
 boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs in an adapter
@@ -40,7 +39,7 @@ Service identity:
 - Log: `~/Library/Logs/atlas-voicesystem.log`
 
 The installer unloads and quarantines the old `com.pai.voice-server` plist if found. Do not
-resurrect the old service from compatibility scripts.
+resurrect the old service.
 
 ## Development workflow
 
@@ -53,8 +52,7 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 
 After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.atlas.voicesystem"`
 (tail `~/Library/Logs/atlas-voicesystem.log`). Use **Bun only** — no npm/npx/node. Run
-`bun test` + the smoke + the Pi build before shipping. PAI-wrapper smoke checks are in
-[docs/adapters.md](docs/adapters.md).
+`bun test` + the smoke + the Pi build before shipping.
 
 ## Release & versioning
 
@@ -74,7 +72,7 @@ merges; never push directly to `master`** (see Invariants).
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
-| Adapter rules + Pi #15 + PAI compatibility path | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + Pi #15 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |

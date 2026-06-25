@@ -116,18 +116,4 @@ exit 0
       rmSync(root, { recursive: true, force: true });
     }
   });
-
-  test("legacy deep lifecycle scripts delegate to neutral root scripts", () => {
-    for (const name of ["start", "stop", "restart", "status", "uninstall"]) {
-      const wrapper = readFileSync(`claudecode/.claude/PAI/USER/Voice/${name}.sh`, "utf8");
-      expect(wrapper).toContain(`scripts/${name}.sh`);
-      expect(wrapper).not.toContain("com.pai.voice-server");
-      expect(wrapper).not.toContain("kill -9");
-    }
-
-    const installWrapper = readFileSync("claudecode/.claude/PAI/USER/Voice/install.sh", "utf8");
-    expect(installWrapper).toContain("scripts/install.sh");
-    expect(installWrapper).toContain("--adapter pai");
-    expect(installWrapper).not.toContain("com.pai.voice-server");
-  });
 });
