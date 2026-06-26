@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-25
+
+Retire the legacy PAI stow tree; host integration is adapter-only. The adapter rename and full
+PAI de-brand are tracked separately in #59.
+
+### Added
+
+- Guard test (`tests/core/architecture-invariants.test.ts`, Invariant 5) pinning the retirement
+  so the legacy `claudecode/.claude/PAI/USER/Voice/` tree cannot return.
+
+### Changed
+
+- `adapters/pai/restore-hooks.ts` now migrates legacy `VoiceGate`/`VoiceGreeting` hook
+  registrations to the adapter paths idempotently.
+
+### Removed
+
+- Legacy PAI stow tree `claudecode/.claude/PAI/USER/Voice/` (20 files) retired (#1).
+
 ## [0.1.1] - 2026-06-24
 
 Agent-first repository legibility + mechanical enforcement. No runtime behavior change.
@@ -43,6 +62,7 @@ Initial release of the universal voice-system core plus PAI and Pi host adapters
 
 - Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
 
-[Unreleased]: https://github.com/edheltzel/atlas-voicesystem/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/edheltzel/atlas-voicesystem/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/edheltzel/atlas-voicesystem/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edheltzel/atlas-voicesystem/releases/tag/v0.1.1
 [0.1.0]: https://github.com/edheltzel/atlas-voicesystem/releases/tag/v0.1.0

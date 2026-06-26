@@ -4,12 +4,9 @@ import { readFileSync } from "node:fs";
 describe("core server route contract source", () => {
   const server = readFileSync("core/server.ts", "utf8");
 
-  test("keeps neutral default title in core with legacy override outside core", () => {
+  test("keeps neutral default title in core", () => {
     expect(server).toContain('DEFAULT_NOTIFICATION_TITLE = process.env.VOICESYSTEM_DEFAULT_TITLE || "Voice Notification"');
     expect(server).not.toContain("PAI Notification");
-
-    const legacyWrapper = readFileSync("claudecode/.claude/PAI/USER/Voice/server.ts", "utf8");
-    expect(legacyWrapper).toContain('process.env.VOICESYSTEM_DEFAULT_TITLE ??= "PAI Notification"');
   });
 
   test("unsupported POST routes fail explicitly instead of returning generic 200", () => {

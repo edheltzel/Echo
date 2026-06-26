@@ -1,4 +1,4 @@
-# Adapters & PAI compatibility path
+# Adapters
 
 Adapters are out-of-process host integrations that translate host lifecycle events into
 `POST /notify` calls. They import nothing from `core/` and speak only the HTTP contract. See
@@ -37,22 +37,3 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
-
-## PAI compatibility path
-
-The old deep files under `claudecode/.claude/PAI/USER/Voice/` are compatibility wrappers:
-
-- `server.ts` imports `core/server.ts` while preserving legacy PAI config/env paths.
-- Hook entrypoints import/re-export `adapters/pai/hooks/...`.
-- Lifecycle shell scripts delegate to root `scripts/` and old install defaults to
-  `--adapter pai`.
-
-PAI wrapper smoke checks:
-
-```bash
-printf '{"tool_name":"Bash","tool_input":{"command":"echo ok"}}' \
-  | bun run claudecode/.claude/PAI/USER/Voice/hooks/VoiceGate.hook.ts
-
-printf '{"source":"resume"}' \
-  | bun run claudecode/.claude/PAI/USER/Voice/hooks/VoiceGreeting.hook.ts
-```

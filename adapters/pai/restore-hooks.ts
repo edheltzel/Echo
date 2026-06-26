@@ -61,10 +61,6 @@ function loadSettings(): Settings {
   return JSON.parse(raw) as Settings;
 }
 
-function hookExists(entry: MatcherEntry, commands: Set<string>): boolean {
-  return entry.hooks.some((hook) => commands.has(hook.command));
-}
-
 const settings = loadSettings();
 settings.hooks ??= {};
 settings.hooks.PreToolUse ??= [];
@@ -81,10 +77,15 @@ if (!bashEntry) {
   process.exit(2);
 }
 
-if (!hookExists(bashEntry, DUPLICATE_VOICE_GATE_CMDS)) {
+const existingGate = bashEntry.hooks.find((h) => DUPLICATE_VOICE_GATE_CMDS.has(h.command));
+if (!existingGate) {
   bashEntry.hooks.push({ type: "command", command: VOICE_GATE_CMD });
   changed = true;
   log.push("+ PreToolUse[matcher=Bash] += VoiceGate.hook.ts");
+} else if (existingGate.command !== VOICE_GATE_CMD) {
+  existingGate.command = VOICE_GATE_CMD;
+  changed = true;
+  log.push("~ PreToolUse[matcher=Bash]: VoiceGate.hook.ts → adapter copy");
 } else {
   log.push("= PreToolUse[matcher=Bash] already has VoiceGate.hook.ts");
 }
@@ -98,10 +99,15 @@ if (!startupEntry) {
   log.push('+ SessionStart += { matcher: "startup", hooks: [] }');
 }
 
-if (!hookExists(startupEntry, DUPLICATE_VOICE_GREETING_CMDS)) {
+const existingGreeting = startupEntry.hooks.find((h) => DUPLICATE_VOICE_GREETING_CMDS.has(h.command));
+if (!existingGreeting) {
   startupEntry.hooks.push({ type: "command", command: VOICE_GREETING_CMD });
   changed = true;
   log.push("+ SessionStart[matcher=startup] += VoiceGreeting.hook.ts");
+} else if (existingGreeting.command !== VOICE_GREETING_CMD) {
+  existingGreeting.command = VOICE_GREETING_CMD;
+  changed = true;
+  log.push("~ SessionStart[matcher=startup]: VoiceGreeting.hook.ts → adapter copy");
 } else {
   log.push("= SessionStart[matcher=startup] already has VoiceGreeting.hook.ts");
 }

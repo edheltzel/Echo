@@ -1,5 +1,5 @@
-import { describe, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // Mechanical enforcement of the statically-checkable `core/` invariants that
@@ -150,5 +150,19 @@ describe("core architecture invariants", () => {
       "The universal core exposes only host-neutral routes (/notify, /notify/personality, /health). " +
         "Do not add host-named (PAI/Pi/Claude/OpenCode) endpoints — host specifics belong in an adapter.",
     );
+  });
+
+  // Invariant 5 — the legacy PAI stow tree is retired and must not silently return.
+  test("legacy PAI stow tree under claudecode/ stays retired", () => {
+    expect(existsSync("claudecode/.claude/PAI/USER/Voice")).toBe(false);
+
+    const tracked = Bun.spawnSync(["git", "ls-files", "claudecode/"]).stdout.toString().trim();
+    if (tracked.length > 0) {
+      throw new Error(
+        "The legacy PAI stow tree was retired — no files may be tracked under claudecode/. " +
+          "Host lifecycle glue lives in adapters/pai/.\n\nTracked files found:\n" +
+          tracked,
+      );
+    }
   });
 });

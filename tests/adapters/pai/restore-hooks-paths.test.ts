@@ -135,6 +135,54 @@ describe("PAI restore-hooks migration", () => {
     }
   });
 
+  test("migrates legacy VoiceGate/VoiceGreeting registrations to adapter paths and is idempotent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-legacy-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const legacyGate = resolve("claudecode/.claude/PAI/USER/Voice/hooks/VoiceGate.hook.ts");
+      const legacyGreeting = resolve("claudecode/.claude/PAI/USER/Voice/hooks/VoiceGreeting.hook.ts");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                { matcher: "Bash", hooks: [{ type: "command", command: legacyGate }] },
+              ],
+              SessionStart: [
+                { matcher: "startup", hooks: [{ type: "command", command: legacyGreeting }] },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        { mode: 0o644 },
+      );
+
+      const first = await runRestore(settingsPath);
+      const second = await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const expectedHooksDir = resolve("adapters/pai/hooks");
+
+      expect(first.exitCode).toBe(0);
+      expect(second.exitCode).toBe(0);
+      // Rewritten in place to the adapter path — migrated, not skipped; exactly one each, no duplicate.
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([
+        { type: "command", command: join(expectedHooksDir, "VoiceGate.hook.ts") },
+      ]);
+      expect(settings.hooks.SessionStart[0].hooks).toEqual([
+        { type: "command", command: join(expectedHooksDir, "VoiceGreeting.hook.ts") },
+      ]);
+      expect(first.stdout).toContain("VoiceGate.hook.ts → adapter copy");
+      expect(first.stdout).toContain("VoiceGreeting.hook.ts → adapter copy");
+      // Second run is a no-op.
+      expect(second.stdout).toContain("already current");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("registers the Stop VoiceCompletion hook when none exists", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-restore-stop-fresh-"));
     try {

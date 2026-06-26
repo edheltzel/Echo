@@ -230,7 +230,7 @@ See `docs/dependencies.md` for required runtime dependencies, optional TTS provi
 
 ## PAI migration notes
 
-See `MIGRATIONS.md`. Existing deep-path files under `claudecode/.claude/PAI/USER/Voice/` are compatibility wrappers or legacy config surfaces while installs migrate to `core/` + `adapters/`.
+See `MIGRATIONS.md`.
 
 ## Contributing
 
