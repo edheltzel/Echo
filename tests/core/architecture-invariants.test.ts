@@ -160,9 +160,33 @@ describe("core architecture invariants", () => {
     if (tracked.length > 0) {
       throw new Error(
         "The legacy PAI stow tree was retired — no files may be tracked under claudecode/. " +
-          "Host lifecycle glue lives in adapters/pai/.\n\nTracked files found:\n" +
+          "Host lifecycle glue lives in adapters/claudecode/.\n\nTracked files found:\n" +
           tracked,
       );
     }
+  });
+
+  // Invariant 6 — the old adapter name (adapters/pai) is retired and must not creep back.
+  test("the old adapters/pai name stays retired (renamed to adapters/claudecode in #59)", () => {
+    const tracked = Bun.spawnSync(["git", "ls-files", "adapters/pai", "tests/adapters/pai"])
+      .stdout.toString()
+      .trim();
+    if (tracked.length > 0) {
+      throw new Error(
+        "The Claude Code adapter was renamed adapters/pai → adapters/claudecode (#59). " +
+          "No files may be tracked under adapters/pai/ or tests/adapters/pai/.\n\nTracked files found:\n" +
+          tracked,
+      );
+    }
+
+    const installScript = readFileSync(join("scripts", "install.sh"), "utf8");
+    const offenders: string[] = [];
+    if (/--adapter\s+pai\b/.test(installScript)) offenders.push("scripts/install.sh: '--adapter pai' flag");
+    if (/^\s*pai\)/m.test(installScript)) offenders.push("scripts/install.sh: 'pai)' case branch");
+    if (installScript.includes("adapters/pai")) offenders.push("scripts/install.sh: 'adapters/pai' path");
+    assertNoOffenders(
+      offenders,
+      "scripts/install.sh must use the renamed adapter (claudecode), not the old 'pai' name (#59).",
+    );
   });
 });

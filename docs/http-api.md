@@ -49,5 +49,5 @@ reports `wouldEgress: false` and omits `egressTarget`. Detail in
 ## Unsupported paths
 
 Unsupported POST paths return an explicit JSON `404` with a `supported_endpoints` list; the
-universal core does not expose a PAI-named route. (See the invariants in
+universal core does not expose a host-named route. (See the invariants in
 [`../AGENTS.md`](../AGENTS.md).)

@@ -80,8 +80,8 @@ return form and **feature-detects** so it degrades safely on an older runtime.
 - **Getting the tag in:** PAI's global response-format convention instructs every response
   to end with a `🗣️ <Name>: <8–16 word summary>` line. The model emits it because the system
   prompt tells it to. **This is the exact thing replicated in Pi via `before_agent_start`.**
-- **Consuming the tag:** the PAI **Stop hook** `adapters/pai/hooks/VoiceCompletion.hook.ts`
-  runs each turn. `parseFinalVoiceLine` (`adapters/pai/hooks/lib/TranscriptParser.ts`) reads
+- **Consuming the tag:** the Claude Code **Stop hook** `adapters/claudecode/hooks/VoiceCompletion.hook.ts`
+  runs each turn. `parseFinalVoiceLine` (`adapters/claudecode/hooks/lib/TranscriptParser.ts`) reads
   the trailing `🗣️ <Name>:` tag into `{name, words}`; `handleVoice` uses the **name** to
   resolve voice/persona and `extractVoiceCompletion` yields the **words**.
 

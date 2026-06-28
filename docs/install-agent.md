@@ -44,17 +44,17 @@ Expected: JSON with `"status":"success"`.
 
 If FAIL: check rate limit and server logs.
 
-## 5. Install PAI adapter when needed
+## 5. Install Claude Code adapter when needed
 
 ```bash
-bash scripts/install.sh --adapter pai
+bash scripts/install.sh --adapter claudecode
 ```
 
-Expected: restore-hooks output reports existing or added PAI hook registrations.
+Expected: restore-hooks output reports existing or added Claude Code hook registrations.
 
-This wires the repo-owned per-turn voice **Stop** hook (`adapters/pai/hooks/VoiceCompletion.hook.ts`) into `settings.json`. Registration is idempotent: re-running the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates), so an uninstall→reinstall cycle always converges to exactly one Stop entry.
+This wires the repo-owned per-turn voice **Stop** hook (`adapters/claudecode/hooks/VoiceCompletion.hook.ts`) into `settings.json`. Registration is idempotent: re-running the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates), so an uninstall→reinstall cycle always converges to exactly one Stop entry.
 
-If FAIL: confirm PAI/Claude settings file exists and is writable.
+If FAIL: confirm the Claude Code settings file exists and is writable.
 
 ## 6. Install Pi adapter when needed
 

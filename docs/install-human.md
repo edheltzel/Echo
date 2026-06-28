@@ -7,7 +7,7 @@ This guide installs `atlas-voicesystem`, a local voice notification server for c
 The installer writes a macOS LaunchAgent for the universal core server and optionally registers one host adapter:
 
 - **Core only** — any process can POST to `/notify`.
-- **PAI adapter** — existing PAI lifecycle hooks continue to speak.
+- **Claude Code adapter** — Claude Code lifecycle hooks speak.
 - **Pi adapter** — Pi session start and `🗣️` completion lines speak.
 
 ## Prerequisites
@@ -24,13 +24,13 @@ This writes a neutral LaunchAgent (`com.atlas.voicesystem`) and starts the serve
 
 You should see a health success message. If not, open the log path printed by the script.
 
-## Add the PAI adapter
+## Add the Claude Code adapter
 
 ```bash
-bash scripts/install.sh --adapter pai
+bash scripts/install.sh --adapter claudecode
 ```
 
-This installs the same core server and re-applies PAI hook registrations through `adapters/pai/restore-hooks.ts`.
+This installs the same core server and re-applies Claude Code hook registrations through `adapters/claudecode/restore-hooks.ts`.
 
 ## Add the Pi adapter
 

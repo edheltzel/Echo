@@ -21,7 +21,6 @@ Conventional Commits are encouraged: `feat:`, `fix:`, `docs:`, `chore:`, `test:`
 - One concern per PR.
 - Link the issue.
 - Add or update tests when behavior changes.
-- Update `MIGRATIONS.md` when PAI migration behavior changes.
 - Update dependency/install docs when providers, adapters, or install flows change.
 
 ## Issue Filing
@@ -49,7 +48,7 @@ Out of scope: speech-to-text, voice cloning UI, and unrelated coding-agent featu
 5. Add install support in `scripts/install.sh --adapter <host>`.
 6. Add tests and a docs section in `docs/dependencies.md`.
 
-Use `adapters/pi/` as the first non-PAI reference implementation.
+Use `adapters/pi/` as the first non-Claude-Code reference implementation.
 
 ## Code of Conduct
 

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 async function runRestore(settingsPath: string, extraArgs: string[] = []) {
-  const proc = Bun.spawn(["bun", "run", "adapters/pai/restore-hooks.ts", ...extraArgs], {
+  const proc = Bun.spawn(["bun", "run", "adapters/claudecode/restore-hooks.ts", ...extraArgs], {
     env: { ...process.env, PAI_SETTINGS_PATH: settingsPath },
     stdout: "pipe",
     stderr: "pipe",
@@ -17,17 +17,20 @@ async function runRestore(settingsPath: string, extraArgs: string[] = []) {
   return { exitCode, stdout, stderr };
 }
 
-describe("PAI restore-hooks migration", () => {
+describe("Claude Code restore-hooks registration", () => {
   test("restore wrapper delegates to the adapter script", () => {
     const wrapper = readFileSync("scripts/restore-hooks.ts", "utf8");
-    expect(wrapper).toContain("adapters/pai/restore-hooks.ts");
+    expect(wrapper).toContain("adapters/claudecode/restore-hooks.ts");
   });
 
-  test("adapter restore script derives new hook paths from import.meta.url", () => {
-    const script = readFileSync("adapters/pai/restore-hooks.ts", "utf8");
+  test("adapter restore script derives hook paths from import.meta.url, with no legacy/historical machinery", () => {
+    const script = readFileSync("adapters/claudecode/restore-hooks.ts", "utf8");
     expect(script).toContain("fileURLToPath(import.meta.url)");
-    expect(script).toContain("HISTORICAL_REPO_ROOT");
-    expect(script).not.toContain('"Developer/atlas-voicesystem/adapters/pai/hooks"');
+    // The legacy stow tree and fixed-clone-location recognition were removed (#59).
+    expect(script).not.toContain("HISTORICAL_REPO_ROOT");
+    expect(script).not.toContain("LEGACY_HOOKS_DIR");
+    expect(script).not.toContain("PAI/USER/Voice");
+    expect(script).not.toContain("adapters/pai");
   });
 
   test("check mode validates without writing settings", async () => {
@@ -57,7 +60,7 @@ describe("PAI restore-hooks migration", () => {
       const first = await runRestore(settingsPath);
       const second = await runRestore(settingsPath);
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      const expectedHooksDir = resolve("adapters/pai/hooks");
+      const expectedHooksDir = resolve("adapters/claudecode/hooks");
 
       expect(first.exitCode).toBe(0);
       expect(second.exitCode).toBe(0);
@@ -119,7 +122,7 @@ describe("PAI restore-hooks migration", () => {
       const first = await runRestore(settingsPath);
       const second = await runRestore(settingsPath);
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      const repoCmd = join(resolve("adapters/pai/hooks"), "VoiceCompletion.hook.ts");
+      const repoCmd = join(resolve("adapters/claudecode/hooks"), "VoiceCompletion.hook.ts");
 
       expect(first.exitCode).toBe(0);
       // Replaced in place — same position, no duplicate added.
@@ -135,22 +138,43 @@ describe("PAI restore-hooks migration", () => {
     }
   });
 
-  test("migrates legacy VoiceGate/VoiceGreeting registrations to adapter paths and is idempotent", async () => {
-    const root = mkdtempSync(join(tmpdir(), "atlas-restore-legacy-"));
+  test("de-dupes a stale + adapter pair down to a single registration and is idempotent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-dedupe-"));
     try {
       const settingsPath = join(root, "settings.json");
-      const legacyGate = resolve("claudecode/.claude/PAI/USER/Voice/hooks/VoiceGate.hook.ts");
-      const legacyGreeting = resolve("claudecode/.claude/PAI/USER/Voice/hooks/VoiceGreeting.hook.ts");
+      const hooksDir = resolve("adapters/claudecode/hooks");
+      const gate = join(hooksDir, "VoiceGate.hook.ts");
+      const greeting = join(hooksDir, "VoiceGreeting.hook.ts");
+      const completion = join(hooksDir, "VoiceCompletion.hook.ts");
+      const unmanaged = join(process.env.HOME ?? "", ".claude/hooks/VoiceCompletion.hook.ts");
+      // A corrupted/double-registered settings: each managed hook appears twice,
+      // and the Stop hook has both the unmanaged and the adapter copy across entries.
       writeFileSync(
         settingsPath,
         JSON.stringify(
           {
             hooks: {
               PreToolUse: [
-                { matcher: "Bash", hooks: [{ type: "command", command: legacyGate }] },
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    { type: "command", command: gate },
+                    { type: "command", command: gate },
+                  ],
+                },
               ],
               SessionStart: [
-                { matcher: "startup", hooks: [{ type: "command", command: legacyGreeting }] },
+                {
+                  matcher: "startup",
+                  hooks: [
+                    { type: "command", command: greeting },
+                    { type: "command", command: greeting },
+                  ],
+                },
+              ],
+              Stop: [
+                { hooks: [{ type: "command", command: unmanaged }] },
+                { hooks: [{ type: "command", command: completion }] },
               ],
             },
           },
@@ -163,21 +187,58 @@ describe("PAI restore-hooks migration", () => {
       const first = await runRestore(settingsPath);
       const second = await runRestore(settingsPath);
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      const expectedHooksDir = resolve("adapters/pai/hooks");
 
       expect(first.exitCode).toBe(0);
       expect(second.exitCode).toBe(0);
-      // Rewritten in place to the adapter path — migrated, not skipped; exactly one each, no duplicate.
+      // Exactly one of each managed hook survives.
       expect(settings.hooks.PreToolUse[0].hooks).toEqual([
-        { type: "command", command: join(expectedHooksDir, "VoiceGate.hook.ts") },
+        { type: "command", command: gate },
       ]);
       expect(settings.hooks.SessionStart[0].hooks).toEqual([
-        { type: "command", command: join(expectedHooksDir, "VoiceGreeting.hook.ts") },
+        { type: "command", command: greeting },
       ]);
-      expect(first.stdout).toContain("VoiceGate.hook.ts → adapter copy");
-      expect(first.stdout).toContain("VoiceGreeting.hook.ts → adapter copy");
-      // Second run is a no-op.
+      const stopCommands = settings.hooks.Stop.flatMap((entry: { hooks: { command: string }[] }) =>
+        entry.hooks.map((h) => h.command),
+      );
+      expect(stopCommands.filter((c: string) => c === completion || c === unmanaged)).toEqual([completion]);
+      // Second run is a no-op once de-duped.
       expect(second.stdout).toContain("already current");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("--check reports a pending update for a stale registration without writing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-check-stale-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const gate = join(resolve("adapters/claudecode/hooks"), "VoiceGate.hook.ts");
+      const original =
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    { type: "command", command: gate },
+                    { type: "command", command: gate },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n";
+      writeFileSync(settingsPath, original, { mode: 0o644 });
+
+      const result = await runRestore(settingsPath, ["--check"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("would be updated");
+      // --check never mutates the file on disk.
+      expect(readFileSync(settingsPath, "utf8")).toBe(original);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -195,7 +256,7 @@ describe("PAI restore-hooks migration", () => {
 
       await runRestore(settingsPath);
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      const repoCmd = join(resolve("adapters/pai/hooks"), "VoiceCompletion.hook.ts");
+      const repoCmd = join(resolve("adapters/claudecode/hooks"), "VoiceCompletion.hook.ts");
 
       const stopCommands = settings.hooks.Stop.flatMap((entry: { hooks: { command: string }[] }) =>
         entry.hooks.map((h) => h.command),

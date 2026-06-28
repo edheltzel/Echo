@@ -5,9 +5,9 @@
  * Shared library for extracting content from Claude Code transcript files.
  * Used by Stop hooks for voice, tab state, and response capture.
  *
- * Vendored into the PAI adapter (atlas-voicesystem) so the adapter owns its
- * Stop-hook pipeline end-to-end. PAI-specific transcript logic — must not live
- * in core/. The only change from the upstream PAI copy is the identity import
+ * Vendored into the Claude Code adapter (atlas-voicesystem) so the adapter owns
+ * its Stop-hook pipeline end-to-end. Host-specific transcript logic — must not
+ * live in core/. The only change from the upstream copy is the identity import
  * path (repo-local ./identity instead of the live ~/.claude tree).
  *
  * CLI Usage:

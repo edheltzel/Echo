@@ -1,7 +1,7 @@
 /**
  * Centralized Path Resolution
  *
- * Handles environment variable expansion for portable PAI configuration.
+ * Handles environment variable expansion for portable configuration.
  * Claude Code doesn't expand $HOME in settings.json env values, so we do it here.
  *
  * Usage:
@@ -26,7 +26,7 @@ export function expandPath(path: string): string {
 }
 
 /**
- * Get the PAI directory (expanded)
+ * Get the config base directory (expanded)
  * Priority: PAI_DIR env var (expanded) → ~/.claude
  */
 export function getPaiDir(): string {

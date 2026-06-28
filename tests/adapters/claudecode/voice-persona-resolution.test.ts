@@ -8,10 +8,10 @@ import {
   loadKnownAgentKeys,
   resolvePersonaKey,
   selectVoice,
-} from "../../../adapters/pai/hooks/handlers/VoiceNotification";
-import { parseTranscript } from "../../../adapters/pai/hooks/lib/TranscriptParser";
-import type { Identity } from "../../../adapters/pai/hooks/lib/identity";
-import type { ParsedTranscript } from "../../../adapters/pai/hooks/lib/TranscriptParser";
+} from "../../../adapters/claudecode/hooks/handlers/VoiceNotification";
+import { parseTranscript } from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
+import type { Identity } from "../../../adapters/claudecode/hooks/lib/identity";
+import type { ParsedTranscript } from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
 
 // Atlas (DA) identity fixture — mirrors the hardcoded path the bug degraded to Ava.
 const ATLAS: Identity = {
@@ -61,7 +61,7 @@ describe("resolvePersonaKey — persona detection from the 🗣️ speaker tag",
   });
 
   test("an indented 🗣️ line is NOT a voice line (must be column 0)", () => {
-    // A genuine PAI voice line is never indented; indentation signals a demo/quote.
+    // A genuine voice line is never indented; indentation signals a demo/quote.
     expect(resolvePersonaKey("- summary\n  🗣️ Themis: go.", "Atlas")).toBeNull();
   });
 
@@ -246,7 +246,7 @@ describe("buildVoicePayload — the exact payload sent to the voice server", () 
     expect(payload.title).toBe("Themis says");
     expect(payload.voice_settings).toBeUndefined();
     expect(payload.voice_enabled).toBe(true);
-    expect(payload.source).toBe("pai");
+    expect(payload.source).toBe("claudecode");
     expect(payload.session_id).toBe("sess-1");
     expect(payload.message).toBe("Dispatching the worker.");
   });

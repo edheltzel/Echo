@@ -12,11 +12,12 @@ import { join } from 'path';
 const HOME = process.env.HOME!;
 const SETTINGS_PATH = join(HOME, '.claude/settings.json');
 
-// Default identity (fallback if settings.json doesn't have identity section)
+// Default identity (fallback if settings.json doesn't have identity section).
+// Neutral on purpose: never assume the user's DA name — they configure it in settings.json.
 const DEFAULT_IDENTITY = {
-  name: 'PAI',
-  fullName: 'Personal AI',
-  displayName: 'PAI',
+  name: 'Assistant',
+  fullName: 'Assistant',
+  displayName: 'Assistant',
   mainDAVoiceID: '',
   color: '#3B82F6',
 };

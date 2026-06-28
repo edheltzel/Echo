@@ -30,6 +30,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { hookLog } from './lib/hook-logger';
+import { getIdentity } from './lib/identity';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 const NOTIFY_TIMEOUT_MS = 12_000;
@@ -228,7 +229,7 @@ if (isNamedAgent && agentType) {
     const body: Record<string, unknown> = {
       message,
       title: `${agentType} ready`,
-      source: 'pai',
+      source: 'claudecode',
     };
     if (hookSessionId) body.session_id = hookSessionId;
     if (voiceId) body.voice_id = voiceId;
@@ -255,7 +256,9 @@ try {
   // uses Bun's native C++ file I/O and SIMD JSON parser
   const settings = await Bun.file(join(CLAUDE_DIR, 'settings.json')).json();
 
-  const daName = settings.daidentity?.displayName || settings.daidentity?.name || 'Atlas';
+  // Resolve the DA name through identity.ts (the single source of truth); it falls back to
+  // the neutral DEFAULT_IDENTITY when settings.json has no daidentity — never assuming a name.
+  const daName = getIdentity().displayName;
 
   const catchphrases = settings.daidentity?.startupCatchphrases;
   const catchphrase = (
@@ -273,7 +276,7 @@ try {
     ? {
         message: `[🎯 focused] ${catchphrase}`,
         title: `${daName} says`,
-        source: 'pai',
+        source: 'claudecode',
         personality: {
           name: daName.toLowerCase(),
           base_voice: personality.baseVoice,
@@ -291,7 +294,7 @@ try {
           playfulness: personality.playfulness,
         },
       }
-    : { message: catchphrase, title: `${daName} says`, source: 'pai', play: true };
+    : { message: catchphrase, title: `${daName} says`, source: 'claudecode', play: true };
 
   if (hookSessionId) body.session_id = hookSessionId;
 

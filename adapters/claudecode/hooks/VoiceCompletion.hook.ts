@@ -15,7 +15,7 @@
  * HANDLER: handlers/VoiceNotification.ts (resolves the active persona's voice
  * from the response's 🗣️ <Name>: tag; falls back to the DA voice).
  *
- * Repo-owned (atlas-voicesystem) so the PAI adapter owns the per-turn voice
+ * Repo-owned (atlas-voicesystem) so the Claude Code adapter owns the per-turn voice
  * pipeline end-to-end. Registered into settings.json by restore-hooks.ts.
  */
 

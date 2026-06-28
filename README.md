@@ -4,7 +4,7 @@ Standalone, multi-provider TTS notification server for coding agents, terminals,
 
 The server core accepts JSON on `localhost:8888` and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
-- `adapters/pai/` — PAI/Claude hook integration.
+- `adapters/claudecode/` — Claude Code hook integration.
 - `adapters/pi/` — Pi extension package integration.
 - direct HTTP — any process can POST to `/notify`.
 
@@ -12,7 +12,7 @@ The server core accepts JSON on `localhost:8888` and speaks through a provider c
 
 ```mermaid
 flowchart LR
-  PAI[PAI adapter] --> Notify[/POST /notify/]
+  ClaudeCode[Claude Code adapter] --> Notify[/POST /notify/]
   Pi[Pi adapter] --> Notify
   Curl[Scripts / curl] --> Notify
 
@@ -43,10 +43,10 @@ Quick core-only install:
 bash scripts/install.sh --adapter none
 ```
 
-Install with PAI hooks:
+Install with Claude Code hooks:
 
 ```bash
-bash scripts/install.sh --adapter pai
+bash scripts/install.sh --adapter claudecode
 ```
 
 Install with Pi adapter:
@@ -183,17 +183,17 @@ For the default `edge-tts` provider, each agent maps to a Microsoft neural voice
 ### Add a voice or persona
 
 1. **Add the entry** to `agents` in `core/voices.json`, keyed by a new lowercase name. Mirror an existing entry — `description`, optional `catchphrase`, and at least an `edgetts` block (add `kokoro` for parity). Pick a voice not already in use and validate it exists with `--list`. Reload the daemon as above.
-2. **Bind the persona to that key.** A PAI agent/persona only speaks in its voice if its brief tells it to send the key. In the agent definition (`~/.claude/agents/<Name>.md`, sourced from the `atlas-config` repo):
+2. **Bind the persona to that key.** An agent/persona only speaks in its voice if its brief tells it to send the key. In the agent definition (`~/.claude/agents/<Name>.md`, sourced from the `atlas-config` repo):
    - set frontmatter `voiceId: <key>`, and
    - make every self-voice `curl` POST to `http://localhost:8888/notify` with `"voice_id":"<key>"`.
 
    Gotchas that cause silence: an agent's frontmatter is **not** visible in its own prompt, so the self-voice instruction must live in the brief **body**; sending a raw ElevenLabs id (instead of the name key) won't resolve while ElevenLabs is disabled; and port `31337` is wrong — voice traffic is `:8888`.
 
-### Per-turn persona voice (PAI Stop hook)
+### Per-turn persona voice (Claude Code Stop hook)
 
-Beyond explicit self-voice `curl`s, the PAI adapter speaks the response's voice line automatically at the end of every turn via the Stop hook `adapters/pai/hooks/VoiceCompletion.hook.ts`. This hook is **persona-aware**: it reads the active speaker from the response's trailing `🗣️ <Name>:` line and sends that lowercase name as the `voice_id`. So when you adopt a main-session persona (e.g. `/Themis`), each turn is spoken in the persona's voice (`themis` → Michelle), not the default Atlas voice. When the speaker is Atlas, or there is no `🗣️` line, it uses the default voice — the Atlas path is unchanged.
+Beyond explicit self-voice `curl`s, the Claude Code adapter speaks the response's voice line automatically at the end of every turn via the Stop hook `adapters/claudecode/hooks/VoiceCompletion.hook.ts`. This hook is **persona-aware**: it reads the active speaker from the response's trailing `🗣️ <Name>:` line and sends that lowercase name as the `voice_id`. So when you adopt a main-session persona (e.g. `/Themis`), each turn is spoken in the persona's voice (`themis` → Michelle), not the default Atlas voice. When the speaker is Atlas, or there is no `🗣️` line, it uses the default voice — the Atlas path is unchanged.
 
-The signal is the response itself — no marker files, env vars, or registries — so the moment you stop using a persona, the voice reverts to Atlas on the next turn. For a persona to be voiced this way, its turns must include a `🗣️ <Persona>:` line (the standard response format already does). The hook is registered into `~/.claude/settings.json` by `bash scripts/install.sh --adapter pai` (which runs `restore-hooks.ts`); it replaces any older unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`.
+The signal is the response itself — no marker files, env vars, or registries — so the moment you stop using a persona, the voice reverts to Atlas on the next turn. For a persona to be voiced this way, its turns must include a `🗣️ <Persona>:` line (the standard response format already does). The hook is registered into `~/.claude/settings.json` by `bash scripts/install.sh --adapter claudecode` (which runs `restore-hooks.ts`); it replaces any older unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`.
 
 ### Auditioning edge voices
 
@@ -227,10 +227,6 @@ PORT=8889 tests/smoke-core.sh
 ## Dependency graph
 
 See `docs/dependencies.md` for required runtime dependencies, optional TTS providers, and optional host adapters.
-
-## PAI migration notes
-
-See `MIGRATIONS.md`.
 
 ## Contributing
 

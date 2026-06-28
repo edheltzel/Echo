@@ -7,7 +7,7 @@ detail live behind the pointers below — load them on demand (progressive discl
 ## Architecture in one breath
 
 A host-neutral daemon (`core/server.ts`, listening on `localhost:8888`) speaks text POSTed to
-`POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/pai/`,
+`POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/claudecode/`,
 `adapters/pi/`) that never import `core/`. Full codemap,
 boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
@@ -19,7 +19,7 @@ that calls `POST /notify`.
 ```bash
 # Install (core only / with a host adapter)
 bash scripts/install.sh --adapter none
-bash scripts/install.sh --adapter pai
+bash scripts/install.sh --adapter claudecode
 bash scripts/install.sh --adapter pi
 
 # Lifecycle
@@ -87,15 +87,15 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Circuit breaker · env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
-| PAI hooks + Stop-hook voice + registrar | `adapters/pai/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/pai/restore-hooks.ts` |
+| Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Pi extension package | `adapters/pi/` |
 | Neutral install/lifecycle | `scripts/` |
-| Migration notes · version · changelog | `MIGRATIONS.md`, `package.json`, `CHANGELOG.md` |
+| Version · changelog | `package.json`, `CHANGELOG.md` |
 
 ## Invariants / must not do
 
 - Do not import PAI, Pi, Claude Code, OpenCode, or other host APIs from `core/`.
-- Do not add new PAI-named endpoints to the universal server.
+- Do not add new host-named endpoints to the universal server.
 - Do not change the `/notify` request/response contract without an explicit compatibility plan.
 - Do not write process state to `/tmp`; use user-owned cache/log/config paths.
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
@@ -125,4 +125,4 @@ lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
 
 ### Child DOX Index
 
-This repository is single-context: the root `AGENTS.md` is the sole DOX contract — there are no child `AGENTS.md` files yet. Add one when a folder becomes a durable boundary that needs its own contract (likely candidates: `core/`, `adapters/pai/`, `adapters/pi/`, `scripts/`).
+This repository is single-context: the root `AGENTS.md` is the sole DOX contract — there are no child `AGENTS.md` files yet. Add one when a folder becomes a durable boundary that needs its own contract (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).

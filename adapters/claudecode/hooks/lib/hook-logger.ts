@@ -2,7 +2,7 @@
  * hook-logger.ts — Structured Hook Debug Logger
  *
  * PURPOSE:
- * Provides a centralized, structured logging utility for all PAI hooks.
+ * Provides a centralized, structured logging utility for all adapter hooks.
  * Writes JSONL entries to MEMORY/HOOKS/hook-debug.jsonl for fast debugging.
  *
  * USAGE:

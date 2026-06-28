@@ -10,7 +10,7 @@ for the wire shape.
 Adapters should:
 
 1. Observe host lifecycle events.
-2. Extract a short user-facing message (for Pi/PAI, the final `🗣️` line).
+2. Extract a short user-facing message (for Pi/Claude Code, the final `🗣️` line).
 3. Add `source` and `session_id` metadata when available.
 4. POST to `http://localhost:8888/notify`.
 5. Treat notify failures as non-fatal host-session warnings.
@@ -18,7 +18,7 @@ Adapters should:
 
 ## Pi adapter — per-turn completions (issue #15)
 
-Pi's own models don't emit the PAI `🗣️` line on their own, so the Pi adapter **injects** the
+Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
 convention. On `before_agent_start` (`adapters/pi/index.ts`) it appends an instruction to the
 chained `event.systemPrompt` (feature-detected; falls back to `systemPromptAppend`; no-ops on
 older runtimes) telling the model to end each response with `🗣️ <Name>: <8–16 word
@@ -30,7 +30,7 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading
-  `<Name>:` (mirroring PAI's `parseFinalVoiceLine` name grammar) so the persona name isn't
+  `<Name>:` (mirroring the Claude Code adapter's `parseFinalVoiceLine` name grammar) so the persona name isn't
   spoken aloud.
 - Adapter-only: no `core/` or daemon change; the daemon already resolves `voice_id` name
   keys.

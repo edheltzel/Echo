@@ -24,8 +24,8 @@
 | Host | Path | Status | Install |
 |---|---|---|---|
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
-| PAI | `adapters/pai/` | Reference adapter | `bash scripts/install.sh --adapter pai` |
-| Pi | `adapters/pi/` | First non-PAI adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
+| Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
+| Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
 | OpenCode | TBD | Planned | Future adapter |
 
 ## Decision matrix
@@ -33,7 +33,7 @@
 | Goal | Install |
 |---|---|
 | Minimum local server | Bun + `bash scripts/install.sh --adapter none` |
-| Existing PAI workflow | Bun + PAI + `bash scripts/install.sh --adapter pai` |
+| Existing Claude Code workflow | Bun + Claude Code + `bash scripts/install.sh --adapter claudecode` |
 | Pi voice lifecycle | Bun + Pi + `bash scripts/install.sh --adapter pi` |
 | Fully local speech | Bun + edge-tts or Kokoro + macOS fallback |
 | Cloud premium voice | Bun + ElevenLabs key + ElevenLabs enabled in config |

@@ -7,7 +7,7 @@
  * Only the main terminal session is allowed to curl the voice server at localhost:8888.
  *
  * ROOT CAUSE THIS FIXES:
- * Subagents inherit full PAI context (CLAUDE.md → SKILL.md → Algorithm),
+ * Subagents inherit full host context (CLAUDE.md → SKILL.md → Algorithm),
  * which mandates voice curls at every phase. Without this gate, every
  * spawned agent triggers voice announcements — flooding the voice server.
  *

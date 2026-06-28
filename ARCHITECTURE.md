@@ -10,23 +10,24 @@ atlas-voicesystem is a Bun/TypeScript text-to-speech notification daemon built a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
 (`core/server.ts`) listens on `localhost:8888` and exposes three HTTP endpoints
 (`POST /notify`, `POST /notify/personality`, `GET /health`). Any host — a Claude Code
-(PAI) session, a Pi (`@earendil-works/pi-coding-agent`) session, or a raw `curl` —
-observes its own lifecycle, extracts a short user-facing line (for PAI/Pi, the trailing
+session, a Pi (`@earendil-works/pi-coding-agent`) session, or a raw `curl` —
+observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
 macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner.
 
 ```
   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────┐
-  │  PAI / Claude    │   │  Pi coding agent │   │ curl / any   │
-  │  Code (host)     │   │  (host)          │   │ HTTP client  │
+  │  Claude Code     │   │  Pi coding agent │   │ curl / any   │
+  │  (host)          │   │  (host)          │   │ HTTP client  │
   └────────┬─────────┘   └────────┬─────────┘   └──────┬───────┘
    lifecycle events        lifecycle events            │
   (PreToolUse, Session-   (session_start, message_end, │
    Start, Stop hook)       turn_end, session_shutdown) │
            │                       │                    │
   ┌────────▼─────────┐   ┌─────────▼────────┐          │
-  │  adapters/pai/   │   │  adapters/pi/    │          │
+  │ adapters/        │   │  adapters/pi/    │          │
+  │ claudecode/      │   │                  │          │
   │  hooks + restore │   │  index.ts ext    │          │
   └────────┬─────────┘   └─────────┬────────┘          │
            │   POST JSON {message, voice_id?, source, session_id?}
@@ -71,7 +72,7 @@ The boundary is **mechanically enforced**, not just documented:
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
-| PAI adapter | `adapters/pai/` | Claude Code lifecycle hooks + a hook registrar. |
+| Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | Neutral lifecycle | `scripts/{install,start,stop,restart,status,uninstall}.sh` | Service install/lifecycle; no host logic. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
@@ -130,10 +131,10 @@ user-owned, size-capped file (never `/tmp`, never the repo), and is best-effort 
 error never breaks a `/notify`). Fields, path, and retention:
 [`docs/providers-observability.md`](docs/providers-observability.md).
 
-### Per-turn persona voice (PAI Stop hook)
-Each turn, the PAI Stop hook `adapters/pai/hooks/VoiceCompletion.hook.ts` speaks the
+### Per-turn persona voice (Claude Code Stop hook)
+Each turn, the Claude Code Stop hook `adapters/claudecode/hooks/VoiceCompletion.hook.ts` speaks the
 response's trailing `🗣️ <Name>:` line. A single canonical parser `parseFinalVoiceLine`
-(`adapters/pai/hooks/lib/TranscriptParser.ts`) feeds both voice selection and word
+(`adapters/claudecode/hooks/lib/TranscriptParser.ts`) feeds both voice selection and word
 extraction, so the chosen voice and spoken words can never disagree. A non-DA persona
 (e.g. `🗣️ Themis:`) is voiced by sending its lowercase name key as `voice_id`; the DA
 (Atlas) path uses the main voice. It is DRY and self-cleaning — dropping a persona reverts
@@ -142,7 +143,7 @@ to Atlas automatically. Full mechanism: [`docs/voices.md`](docs/voices.md).
 ## Adapters
 
 Both adapters are **fully out-of-process**, import nothing from `core/`, and speak only the
-HTTP `/notify` contract. They are independent (no shared code): PAI suppresses subagents via
+HTTP `/notify` contract. They are independent (no shared code): the Claude Code adapter suppresses subagents via
 stdin `agent_id` and reads `~/.claude/settings.json` for identity; Pi suppresses via the
 `ATLAS_VOICE_SUPPRESS` env flag plus run-context (headless modes — `hasUI === false`, or
 `mode` `json`/`print`) and is configured env-only (`shouldSuppressVoice` / `loadPiVoiceConfig`
@@ -155,7 +156,7 @@ are contract.
 
 - **Never import a host API into `core/`** — no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
-- **No new PAI-named endpoints.** The core exposes only `POST /notify`,
+- **No new host-named endpoints.** The core exposes only `POST /notify`,
   `POST /notify/personality`, `GET /health`. Unsupported POSTs return JSON 404 with
   `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit

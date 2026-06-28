@@ -24,9 +24,9 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, PAI, and Pi adapter modes", () => {
-    expect(script).toContain("--adapter none|pai|pi");
-    expect(script).toContain("adapters/pai/restore-hooks.ts\" --check");
+  test("supports core, Claude Code, and Pi adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|pi");
+    expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("pi install");
   });
 

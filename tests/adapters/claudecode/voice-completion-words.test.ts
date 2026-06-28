@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   extractVoiceCompletion,
   parseFinalVoiceLine,
-} from "../../../adapters/pai/hooks/lib/TranscriptParser";
-import { resolvePersonaKey } from "../../../adapters/pai/hooks/handlers/VoiceNotification";
+} from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
+import { resolvePersonaKey } from "../../../adapters/claudecode/hooks/handlers/VoiceNotification";
 
 const FENCE = "```";
 

@@ -12,7 +12,7 @@ ADAPTER="none"
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|pai|pi]
+Usage: scripts/install.sh [--adapter none|claudecode|pi]
 
 Installs the universal atlas-voicesystem core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|pai|pi) ;;
+  none|claudecode|pi) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -61,9 +61,9 @@ preflight() {
   fi
 
   case "$ADAPTER" in
-    pai)
-      echo "> Preflighting PAI adapter hook registration"
-      bun run "$REPO_ROOT/adapters/pai/restore-hooks.ts" --check >/dev/null
+    claudecode)
+      echo "> Preflighting Claude Code adapter hook registration"
+      bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null
       ;;
     pi)
       if ! command -v pi >/dev/null 2>&1; then
@@ -169,9 +169,9 @@ reload_core_service() {
 
 install_adapter() {
   case "$ADAPTER" in
-    pai)
-      echo "> Installing PAI adapter hook registrations"
-      bun run "$REPO_ROOT/adapters/pai/restore-hooks.ts"
+    claudecode)
+      echo "> Installing Claude Code adapter hook registrations"
+      bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts"
       ;;
     pi)
       echo "> Installing Pi adapter package"

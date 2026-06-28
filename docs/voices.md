@@ -1,6 +1,6 @@
 # Voices & per-turn persona voice
 
-How per-persona voices are configured and resolved, and how the PAI Stop hook speaks each
+How per-persona voices are configured and resolved, and how the Claude Code Stop hook speaks each
 turn's completion in the right persona's voice. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
 for the request flow and [`adapters.md`](adapters.md) for the adapter wiring.
 
@@ -27,12 +27,12 @@ by `bun test`.
 
 ## Per-turn persona voice (Stop hook)
 
-Every turn, the PAI Stop hook `adapters/pai/hooks/VoiceCompletion.hook.ts` speaks the
+Every turn, the Claude Code Stop hook `adapters/claudecode/hooks/VoiceCompletion.hook.ts` speaks the
 response's voice line. It is **persona-aware in both voice and words**: a single canonical
-parser `parseFinalVoiceLine` (`adapters/pai/hooks/lib/TranscriptParser.ts`) reads the
+parser `parseFinalVoiceLine` (`adapters/claudecode/hooks/lib/TranscriptParser.ts`) reads the
 response's trailing `🗣️ <Name>:` tag into `{name, words}`, and both the voice resolver and
 the words extractor consume it so the chosen voice and the spoken words can never disagree.
-`handleVoice` (`adapters/pai/hooks/handlers/VoiceNotification.ts`) calls
+`handleVoice` (`adapters/claudecode/hooks/handlers/VoiceNotification.ts`) calls
 `selectVoice`/`resolvePersonaKey` (which delegate to `parseFinalVoiceLine`) for the
 **voice**; `extractVoiceCompletion` (same parser) yields the **words**. When `<Name>` is a
 non-DA persona (e.g. `🗣️ Themis:`), the hook sends that lowercase **name key** as `voice_id`
@@ -45,10 +45,10 @@ files, env vars, or registries), so dropping a persona reverts to Atlas on the n
 automatically. For a **main-session** persona to be voiced, its turns must carry the
 `🗣️ <Persona>:` tag (the global response format already does this).
 `parseFinalVoiceLine`/`resolvePersonaKey`/`selectVoice` are covered by
-`tests/adapters/pai/voice-persona-resolution.test.ts`; `extractVoiceCompletion`'s
-persona-words behavior by `tests/adapters/pai/voice-completion-words.test.ts`.
+`tests/adapters/claudecode/voice-persona-resolution.test.ts`; `extractVoiceCompletion`'s
+persona-words behavior by `tests/adapters/claudecode/voice-completion-words.test.ts`.
 
 The Stop hook is repo-owned and registered into `settings.json` by `restore-hooks.ts`
 (replacing any unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`), alongside VoiceGate and
 VoiceGreeting. Its transcript parsing lives in
-`adapters/pai/hooks/lib/{hook-io,TranscriptParser}.ts` (PAI-specific — never in `core/`).
+`adapters/claudecode/hooks/lib/{hook-io,TranscriptParser}.ts` (host-specific — never in `core/`).

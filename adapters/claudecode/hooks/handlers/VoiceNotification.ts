@@ -96,7 +96,7 @@ function normalizeSpokenText(text: string): string {
 
 function startupCatchphrasesFromSettings(settings: any): string[] {
   const identity = settings.daidentity ?? {};
-  const daName = identity.displayName || identity.name || 'Atlas';
+  const daName = identity.displayName || identity.name || DA_IDENTITY.displayName;
   const phrases = [
     identity.startupCatchphrase,
     ...(Array.isArray(identity.startupCatchphrases) ? identity.startupCatchphrases : []),
@@ -170,7 +170,7 @@ async function sendNotification(payload: ElevenLabsNotificationPayload, sessionI
  *
  * A main-session persona (e.g. adopting `/Themis`) is NOT a Task subagent, so
  * no env var signals it. The reliable per-turn signal is the response itself:
- * by the PAI MODES contract, the `🗣️ <Name>:` voice line is the FINAL line of
+ * by the host's MODES contract, the `🗣️ <Name>:` voice line is the FINAL line of
  * the response and sits at column 0 (a genuine voice line is never indented).
  *
  * We parse line-by-line (not regex over the whole string, which is fragile):
@@ -207,7 +207,7 @@ export function loadKnownAgentKeys(): Set<string> {
   try {
     // Mirror the daemon's resolution (core/server.ts): VOICES_PATH env override,
     // else core/voices.json relative to the repo root (this file lives at
-    // adapters/pai/hooks/handlers/, so the root is four levels up).
+    // adapters/claudecode/hooks/handlers/, so the root is four levels up).
     const voicesPath = process.env.VOICES_PATH || join(import.meta.dir, '..', '..', '..', '..', 'core', 'voices.json');
     const config = JSON.parse(readFileSync(voicesPath, 'utf-8'));
     cachedAgentKeys = new Set(Object.keys(config.agents ?? {}));
@@ -276,7 +276,7 @@ export function buildVoicePayload(
     voice_enabled: true,
     voice_id: voiceId,
     session_id: sessionId,
-    source: 'pai',
+    source: 'claudecode',
     voice_settings: voiceSettings ? {
       stability: voiceSettings.stability ?? 0.5,
       similarity_boost: voiceSettings.similarity_boost ?? 0.75,
