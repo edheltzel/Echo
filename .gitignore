@@ -8,6 +8,9 @@
 # Local agent scratch / draft issues (promoted to GitHub Issues, not committed)
 .scratch/
 
+# Project-local Atlas agent artifacts (plans, handoffs, worktrees) — not committed
+.agents/atlas/
+
 # Audio (runtime artifacts)
 *.mp3
 *.wav
