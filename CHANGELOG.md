@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-01
+
 Renamed the project **Atlas Voicesystem → Echo** (Ed's call — "Atlas" is personal). A full
 de-brand across the brand/display name, the GitHub repo slug (`edheltzel/echo`), package names
 (`echo`, `@echo/pi-adapter`), default filesystem paths, the LaunchAgent label, and the
 environment-variable knobs. The persona-name default (`Atlas`) is unchanged.
+
+**Versioning note:** the Breaking items below change the install contract (LaunchAgent label and
+default filesystem paths) and would normally warrant a major bump; they ship under a patch bump
+(0.3.0 → 0.3.1) by maintainer decision, since the installer migrates a running service
+automatically and no released consumer depends on the old label or paths.
 
 ### Breaking
 
@@ -125,7 +132,8 @@ Initial release of the universal voice-system core plus PAI and Pi host adapters
 
 - Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
 
-[Unreleased]: https://github.com/edheltzel/echo/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/edheltzel/echo/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/edheltzel/echo/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/edheltzel/echo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/edheltzel/echo/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edheltzel/echo/releases/tag/v0.1.1
