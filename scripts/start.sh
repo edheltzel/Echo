@@ -17,7 +17,7 @@ fi
 launchctl load "$PLIST_PATH"
 sleep 2
 if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8888/health >/dev/null 2>&1; then
-  echo "OK echo started on :8888"
+  echo "OK Echo started on :8888"
 else
   echo "Service loaded but health check failed. Check logs: $LOG_PATH" >&2
   exit 1

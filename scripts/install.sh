@@ -16,7 +16,7 @@ usage() {
   cat <<EOF
 Usage: scripts/install.sh [--adapter none|claudecode|pi]
 
-Installs the universal echo core as a macOS LaunchAgent.
+Installs the universal Echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
 EOF
 }
@@ -168,7 +168,7 @@ reload_core_service() {
   done
 
   if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8888/health >/dev/null 2>&1; then
-    echo "OK echo is healthy on :8888"
+    echo "OK Echo is healthy on :8888"
   else
     echo "Voice server did not respond. Check logs: $LOG_PATH" >&2
     exit 1

@@ -1,6 +1,6 @@
 ![Echo — a voice for any agent](assets/banner.png)
 
-# echo
+# Echo
 
 Standalone, multi-provider TTS notification server for coding agents, terminals, and scripts.
 
@@ -77,7 +77,7 @@ Manual speak request:
 ```bash
 curl -X POST http://localhost:8888/notify \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from echo"}'
+  -d '{"message":"Hello from Echo"}'
 ```
 
 Silent smoke request:

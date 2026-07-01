@@ -1,6 +1,6 @@
 # Security Model
 
-echo is a **local-only** TTS notification daemon. It is not a public service:
+Echo is a **local-only** TTS notification daemon. It is not a public service:
 its threat model is "a process on this machine POSTs text to be spoken." This doc describes
 the trust boundary, egress posture, and secret handling. For the request flow see
 [`ARCHITECTURE.md`](ARCHITECTURE.md); for egress detail see

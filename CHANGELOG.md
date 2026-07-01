@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Capitalized the project display name to **Echo** consistently across docs and user-facing
+  script messages (brand text only; package name `echo`, service label `com.echo`, and paths
+  are unchanged).
+
 ## [0.3.1] - 2026-07-01
 
 Renamed the project **Atlas Voicesystem → Echo** (Ed's call — "Atlas" is personal). A full

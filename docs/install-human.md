@@ -48,7 +48,7 @@ Inside Pi, `/voice-status` shows adapter configuration.
 curl -fsS http://localhost:8888/health
 curl -fsS -X POST http://localhost:8888/notify \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from echo"}'
+  -d '{"message":"Hello from Echo"}'
 ```
 
 The second command should speak aloud unless your provider chain is disabled or muted.

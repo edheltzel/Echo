@@ -1,6 +1,6 @@
 # Claude Code Adapter
 
-Claude Code integration for echo.
+Claude Code integration for Echo.
 
 This adapter owns all Claude Code lifecycle glue:
 
