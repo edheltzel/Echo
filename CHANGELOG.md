@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
+  (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
+  (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
+  `ECHO_VOICE_PERSONA_NAME`), so Pi sessions sound distinct from the default identity voice.
+  A running daemon loads `voices.json` once at startup — restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) so the new `pi` entry resolves.
+
 ### Changed
 - Capitalized the project display name to **Echo** in documentation/marketing prose only
   (headings and descriptive text). Code, CLI/daemon output, command examples, the package

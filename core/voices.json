@@ -275,6 +275,18 @@
         "voice": "en-US-AndrewNeural",
         "speed": 1.0
       }
+    },
+    "pi": {
+      "description": "Coding-agent host voice",
+      "catchphrase": "Coding session ready.",
+      "kokoro": {
+        "voice": "am_puck",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-GuyNeural",
+        "speed": 1.0
+      }
     }
   }
 }
