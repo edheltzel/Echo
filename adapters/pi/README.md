@@ -1,6 +1,6 @@
 # Pi Adapter
 
-Pi host adapter for echo.
+Pi host adapter for Echo.
 
 The adapter is a Pi package. It listens to Pi lifecycle events and translates them into `/notify` requests against the local voice server.
 

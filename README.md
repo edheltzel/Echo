@@ -1,6 +1,6 @@
 ![Echo — a voice for any agent](assets/banner.png)
 
-# echo
+# Echo
 
 Standalone, multi-provider TTS notification server for coding agents, terminals, and scripts.
 
