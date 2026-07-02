@@ -121,6 +121,92 @@ describe("install script adapter support", () => {
       expect(second.exitCode).toBe(0);
       expect(readFileSync(claudeSettings, "utf8")).toBe(claudeAfterFirst);
       expect(readFileSync(piSettings, "utf8")).toBe(piAfterFirst);
+
+      // After healing, --check reports clean with exit 0.
+      const check = await runInstall(["--check"], env);
+      expect(check.exitCode).toBe(0);
+      expect(check.stderr).not.toContain("Stale paths found");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("refresh-all never touches host configs that merely contain lookalike substrings", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-lookalike-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(join(home, ".pi/agent"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      // Substring lookalikes that the reconcilers would NOT match: detection must not
+      // trip on them, or refresh would append an echo registration to a host that
+      // never had one.
+      const claudeSettings = join(home, ".claude/settings.json");
+      const piSettings = join(home, ".pi/agent/settings.json");
+      const claudeOriginal =
+        JSON.stringify(
+          { permissions: { allow: ["Bash(ls /y/adapters/claudecode/hooks/)"] }, hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } },
+          null,
+          2,
+        ) + "\n";
+      const piOriginal =
+        JSON.stringify(
+          { packages: ["/x/adapters/pipeline-tools", "git:github.com/user/adapters/pi"] },
+          null,
+          2,
+        ) + "\n";
+      writeFileSync(claudeSettings, claudeOriginal);
+      writeFileSync(piSettings, piOriginal);
+
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--adapter", "none"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("Refreshing");
+      expect(readFileSync(claudeSettings, "utf8")).toBe(claudeOriginal);
+      expect(readFileSync(piSettings, "utf8")).toBe(piOriginal);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a broken secondary adapter config warns but does not abort the requested install", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-warn-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      // A genuine echo hook registration (detection trips) but no PreToolUse Bash
+      // matcher — restore-hooks exits 2 (FATAL). The refresh must warn and continue.
+      const claudeSettings = join(home, ".claude/settings.json");
+      writeFileSync(
+        claudeSettings,
+        JSON.stringify(
+          { hooks: { Stop: [{ hooks: [{ type: "command", command: "/old/clone/adapters/claudecode/hooks/VoiceCompletion.hook.ts" }] }] } },
+          null,
+          2,
+        ) + "\n",
+      );
+
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--adapter", "none"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("WARN: Claude Code hook refresh failed");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -182,11 +268,15 @@ describe("install script adapter support", () => {
         PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
       });
 
-      expect(result.exitCode).toBe(0);
+      // Exit 3 = staleness detected, machine-checkable; the summary fires.
+      expect(result.exitCode).toBe(3);
+      expect(result.stderr).toContain("Stale paths found");
       // Dead repo paths in the plist are reported.
       expect(result.stdout).toContain("/dead/repo/core/server.ts");
       expect(result.stdout).toContain("/dead/repo");
-      // Both host settings checks report the pending reconcile.
+      // BOTH host settings checks ran (a stale first check must not truncate the scan).
+      expect(result.stdout).toContain("Checking Claude Code adapter hook registrations");
+      expect(result.stdout).toContain("Checking Pi adapter registration");
       expect(result.stdout).toContain("would be updated");
       // Nothing was mutated and no service was touched.
       expect(readFileSync(plistPath, "utf8")).toBe(plist);

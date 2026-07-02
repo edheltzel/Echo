@@ -32,7 +32,8 @@ A conforming registration:
    adapter's pattern but is not the canonical path (dead paths from a rename, duplicates from
    append-style installs).
 3. **Is idempotent** — rerunning against an already-correct config is a byte-for-byte no-op.
-4. **Supports `--check`** — reports pending changes (including stale paths) without mutating.
+4. **Supports `--check`** — reports pending changes (including stale paths) without mutating,
+   exiting 0 when current and 3 when changes are pending (machine-checkable).
 5. **Edits through symlinks** — if the host config may be a symlink (e.g. into a dotfiles
    repo), write by atomically replacing the resolved real file, never the symlink itself.
 

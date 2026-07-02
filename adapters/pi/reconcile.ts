@@ -23,6 +23,10 @@ if (!existsSync(SETTINGS_PATH)) {
 type Settings = { packages?: string[]; [k: string]: unknown };
 const settings = JSON.parse(readFileSync(SETTINGS_PATH, "utf8")) as Settings;
 settings.packages ??= [];
+if (!Array.isArray(settings.packages)) {
+  console.error(`FATAL: "packages" in ${SETTINGS_PATH} is not an array — refusing to rewrite`);
+  process.exit(2);
+}
 
 // Pi resolves relative package paths against the settings file's nominal directory
 // (~/.pi/agent), not the symlink target's directory — canonicalize relative to it.
@@ -77,9 +81,10 @@ if (!kept) {
 settings.packages = packages;
 
 if (CHECK_ONLY) {
+  // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
   log.push(changed ? "✓ preflight passed — Pi settings would be updated" : "✓ preflight passed — Pi settings already current");
   console.log(log.join("\n"));
-  process.exit(0);
+  process.exit(changed ? 3 : 0);
 }
 
 if (changed) {

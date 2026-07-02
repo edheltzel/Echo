@@ -74,7 +74,7 @@ Every install run re-reconciles **all** installed adapter registrations regardle
 bash scripts/install.sh --check
 ```
 
-Expected: reports stale plist/hook/package paths if any; exit 0; nothing modified.
+Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected — machine-checkable for automation.
 
 ## 8. Status
 

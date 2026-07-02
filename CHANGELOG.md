@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supports `--check`, and writes through a symlinked `~/.pi/agent/settings.json` without
   replacing the symlink (#77).
 - `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
-  `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating (#77).
+  `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating; exits 0 when
+  current, 3 when staleness was detected (adapter `--check` modes use the same codes) (#77).
 
 ### Changed
 - The installer now re-reconciles **every installed adapter registration on every run**,

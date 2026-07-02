@@ -24,7 +24,8 @@ Adapter registration is optional and runs only after adapter preflight passes.
 Every run also re-reconciles all already-installed adapter registrations, so a
 repo directory rename heals with one rerun (#77).
 --check reports stale echo-related paths across the plist and host settings
-without mutating anything.
+without mutating anything. Exit 0 when everything is current, 3 when stale
+paths were detected.
 EOF
 }
 
@@ -67,12 +68,15 @@ is_loaded() {
   launchctl list 2>/dev/null | grep "$1" >/dev/null 2>&1
 }
 
+# Detection mirrors the reconcilers' matchers (a JSON string holding a hook command under
+# adapters/claudecode/hooks/, or a scheme-free packages entry ending in adapters/pi), so a
+# host config that merely mentions a similar substring is never touched by refresh-all.
 claudecode_installed() {
-  [ -f "$CLAUDE_SETTINGS" ] && grep -q "adapters/claudecode/hooks/" "$CLAUDE_SETTINGS"
+  [ -f "$CLAUDE_SETTINGS" ] && grep -qE '"[^"]*/adapters/claudecode/hooks/[^/"]+\.hook\.ts"' "$CLAUDE_SETTINGS"
 }
 
 pi_installed() {
-  [ -f "$PI_SETTINGS" ] && grep -q "adapters/pi" "$PI_SETTINGS"
+  [ -f "$PI_SETTINGS" ] && grep -qE '"([^":]*/)?adapters/pi/?"' "$PI_SETTINGS"
 }
 
 preflight() {
@@ -84,7 +88,9 @@ preflight() {
   case "$ADAPTER" in
     claudecode)
       echo "> Preflighting Claude Code adapter hook registration"
-      bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null
+      # --check exits 3 when changes are pending — normal before an install; only
+      # a real failure (unparseable settings, missing Bash matcher) aborts.
+      bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
     pi)
       if ! command -v pi >/dev/null 2>&1; then
@@ -245,21 +251,35 @@ check_installation() {
   fi
 
   # --check is read-only and always reports: a failing adapter check must not
-  # abort the remaining checks.
+  # abort the remaining checks. Adapter --check exits 3 when changes are pending.
+  local rc
   if claudecode_installed; then
     echo "> Checking Claude Code adapter hook registrations"
-    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check \
-      || { echo "WARN: Claude Code hook check failed" >&2; stale=1; }
+    rc=0
+    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: Claude Code hook check failed" >&2
+      stale=1
+    fi
   fi
 
   if pi_installed; then
     echo "> Checking Pi adapter registration"
-    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check \
-      || { echo "WARN: Pi registration check failed" >&2; stale=1; }
+    rc=0
+    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: Pi registration check failed" >&2
+      stale=1
+    fi
   fi
 
   if [ "$stale" -eq 1 ]; then
     echo "Stale paths found — rerun scripts/install.sh to reconcile." >&2
+    exit 3
   fi
 }
 

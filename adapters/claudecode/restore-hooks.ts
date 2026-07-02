@@ -4,7 +4,7 @@
 
 import { chmodSync, copyFileSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -44,18 +44,35 @@ const log: string[] = [];
 // 0) Prune stale foreign-clone registrations (#77): any adapter hook file registered from a
 // non-canonical adapters/claudecode/hooks directory — e.g. a pre-rename repo path. Matching
 // the whole hooks dir (not a hook-name list) means future hook files can't escape pruning.
-// The unmanaged ~/.claude/hooks/VoiceCompletion.hook.ts doesn't match this pattern; step 3
-// replaces it in place instead.
+// Canonical is decided by realpath (dead-path-tolerant, like the Pi reconciler), so a live
+// canonical hook spelled through a symlinked repo path is normalized in place rather than
+// pruned and re-added. The unmanaged ~/.claude/hooks/VoiceCompletion.hook.ts doesn't match
+// this pattern; step 3 replaces it in place instead.
 const ADAPTER_HOOK_RE = /\/adapters\/claudecode\/hooks\/[^/]+\.hook\.ts$/;
+const REAL_HOOKS_DIR = realpathSync(REPO_HOOKS_DIR);
 for (const [event, entries] of Object.entries(settings.hooks)) {
   if (!Array.isArray(entries)) continue;
   for (const entry of entries) {
     if (!Array.isArray(entry.hooks)) continue;
     for (const hook of [...entry.hooks]) {
-      if (ADAPTER_HOOK_RE.test(hook.command) && !hook.command.startsWith(`${REPO_HOOKS_DIR}/`)) {
+      if (!ADAPTER_HOOK_RE.test(hook.command)) continue;
+      let real: string | null = null;
+      try {
+        real = realpathSync(hook.command);
+      } catch {
+        real = null; // dead path
+      }
+      if (real === null || dirname(real) !== REAL_HOOKS_DIR) {
         entry.hooks.splice(entry.hooks.indexOf(hook), 1);
         changed = true;
         log.push(`- ${event}: removed stale ${hook.command}`);
+        continue;
+      }
+      const canonical = join(REPO_HOOKS_DIR, basename(real));
+      if (hook.command !== canonical) {
+        hook.command = canonical;
+        changed = true;
+        log.push(`~ ${event}: normalized ${basename(real)} → repo spelling`);
       }
     }
   }
@@ -137,9 +154,10 @@ if (completionMatches.length === 0) {
 }
 
 if (CHECK_ONLY) {
+  // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
   log.push(changed ? "✓ preflight passed — settings.json would be updated" : "✓ preflight passed — settings.json already current");
   console.log(log.join("\n"));
-  process.exit(0);
+  process.exit(changed ? 3 : 0);
 }
 
 if (changed) {

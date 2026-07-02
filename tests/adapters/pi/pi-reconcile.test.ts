@@ -48,6 +48,10 @@ describe("Pi adapter registration reconcile", () => {
       // Second run is a no-op.
       expect(second.exitCode).toBe(0);
       expect(second.stdout).toContain("already current");
+      // Once current, --check signals clean with exit 0.
+      const check = await runReconcile(settingsPath, ["--check"]);
+      expect(check.exitCode).toBe(0);
+      expect(check.stdout).toContain("already current");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -130,9 +134,28 @@ describe("Pi adapter registration reconcile", () => {
 
       const result = await runReconcile(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      // Exit 3 = stale/pending changes detected, machine-checkable.
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("would be updated");
       expect(result.stdout).toContain("/dead/old-clone/adapters/pi");
+      expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses to rewrite when packages is not an array", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-pi-reconcile-badtype-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const original = JSON.stringify({ packages: "npm:foo", theme: "dark" }, null, 2) + "\n";
+      writeFileSync(settingsPath, original);
+
+      const result = await runReconcile(settingsPath);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain("not an array");
+      // The malformed file is refused, never corrupted.
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
     } finally {
       rmSync(root, { recursive: true, force: true });

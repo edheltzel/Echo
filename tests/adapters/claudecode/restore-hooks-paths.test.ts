@@ -42,7 +42,8 @@ describe("Claude Code restore-hooks registration", () => {
 
       const result = await runRestore(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      // Exit 3 = changes pending (registrations missing on a fresh settings file).
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("preflight passed");
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
       expect(existsSync(`${settingsPath}.bak`)).toBe(false);
@@ -64,6 +65,10 @@ describe("Claude Code restore-hooks registration", () => {
 
       expect(first.exitCode).toBe(0);
       expect(second.exitCode).toBe(0);
+      // Once current, --check signals clean with exit 0.
+      const check = await runRestore(settingsPath, ["--check"]);
+      expect(check.exitCode).toBe(0);
+      expect(check.stdout).toContain("already current");
       expect(settings.hooks.PreToolUse[0].hooks).toEqual([
         { type: "command", command: join(expectedHooksDir, "VoiceGate.hook.ts") },
       ]);
@@ -284,7 +289,8 @@ describe("Claude Code restore-hooks registration", () => {
 
       const result = await runRestore(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      // Exit 3 = stale/pending changes detected, machine-checkable.
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("stale");
       expect(result.stdout).toContain("would be updated");
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
@@ -320,10 +326,45 @@ describe("Claude Code restore-hooks registration", () => {
 
       const result = await runRestore(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("would be updated");
       // --check never mutates the file on disk.
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("normalizes a live canonical hook spelled through a symlinked dir instead of pruning it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-symlink-spelling-"));
+    try {
+      // A symlink whose target is the real repo: same live hook files, different spelling.
+      // Realpath comparison must recognize it as canonical and normalize in place — not
+      // prune it and append a duplicate registration.
+      const repoLink = join(root, "repo-link");
+      symlinkSync(resolve("."), repoLink);
+      const symlinkSpelledGate = join(repoLink, "adapters/claudecode/hooks/VoiceGate.hook.ts");
+      const canonicalGate = join(resolve("adapters/claudecode/hooks"), "VoiceGate.hook.ts");
+
+      const settingsPath = join(root, "settings.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          { hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: symlinkSpelledGate }] }] } },
+          null,
+          2,
+        ) + "\n",
+        { mode: 0o644 },
+      );
+
+      const first = await runRestore(settingsPath);
+      const second = await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+
+      expect(first.exitCode).toBe(0);
+      // Exactly one registration, in the tool's own canonical spelling — no duplicate.
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([{ type: "command", command: canonicalGate }]);
+      expect(second.stdout).toContain("already current");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
