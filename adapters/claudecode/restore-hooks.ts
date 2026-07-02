@@ -41,6 +41,24 @@ settings.hooks.Stop ??= [];
 let changed = false;
 const log: string[] = [];
 
+// 0) Prune stale foreign-clone registrations (#77): any command that is one of our managed
+// hook files but lives at a non-canonical path — e.g. a pre-rename repo directory. The
+// unmanaged ~/.claude/hooks/VoiceCompletion.hook.ts doesn't match this pattern; step 3
+// replaces it in place instead.
+const MANAGED_HOOK_RE = /\/adapters\/claudecode\/hooks\/(VoiceGate|VoiceGreeting|VoiceCompletion)\.hook\.ts$/;
+const CANONICAL_CMDS = new Set([VOICE_GATE_CMD, VOICE_GREETING_CMD, VOICE_COMPLETION_CMD]);
+for (const [event, entries] of Object.entries(settings.hooks)) {
+  for (const entry of entries) {
+    for (const hook of [...entry.hooks]) {
+      if (MANAGED_HOOK_RE.test(hook.command) && !CANONICAL_CMDS.has(hook.command)) {
+        entry.hooks.splice(entry.hooks.indexOf(hook), 1);
+        changed = true;
+        log.push(`- ${event}: removed stale ${hook.command}`);
+      }
+    }
+  }
+}
+
 // Reconcile a single matcher entry to exactly one canonical hook registration:
 // add it if absent, and collapse any duplicates so a stale + adapter pair can't survive.
 function reconcileEntry(entry: MatcherEntry, canonical: string, loc: string, hookFile: string): void {
