@@ -14,7 +14,7 @@ ADAPTER="none"
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|pi]
+Usage: scripts/install.sh [--adapter none|claudecode|pi|omp]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|pi) ;;
+  none|claudecode|pi|omp) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -70,6 +70,12 @@ preflight() {
     pi)
       if ! command -v pi >/dev/null 2>&1; then
         echo "Pi CLI is required for --adapter pi" >&2
+        exit 1
+      fi
+      ;;
+    omp)
+      if ! command -v omp >/dev/null 2>&1; then
+        echo "omp CLI is required for --adapter omp" >&2
         exit 1
       fi
       ;;
@@ -184,6 +190,10 @@ install_adapter() {
     pi)
       echo "> Installing Pi adapter package"
       pi install "$REPO_ROOT/adapters/pi"
+      ;;
+    omp)
+      echo "> Reconciling oh-my-pi adapter registration"
+      bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts"
       ;;
   esac
 }

@@ -24,10 +24,11 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, and Pi adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|pi");
+  test("supports core, Claude Code, Pi, and omp adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("pi install");
+    expect(script).toContain("adapters/pi/reconcile-omp.ts");
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
@@ -58,6 +59,32 @@ describe("install script adapter support", () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Pi CLI is required");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
+      expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("preflights missing omp before mutating host state", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-install-preflight-omp-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      const launchctlLog = join(root, "launchctl.log");
+
+      writeExecutable(join(bin, "bun"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+
+      const result = await runInstall(["--adapter", "omp"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("omp CLI is required");
       expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
       expect(existsSync(launchctlLog)).toBe(false);
     } finally {
