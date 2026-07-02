@@ -13,8 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`
   registers the adapter via `adapters/pi/reconcile-omp.ts` — an idempotent
   reconcile-and-prune symlink (`~/.omp/agent/extensions/echo-voice` → `adapters/pi/`) per the
-  #77 contract, with `--check` exiting 0 when current / 3 when pending. omp uses the same
-  `pi` voice and persona as upstream Pi.
+  #77 contract with strict ownership (only the `echo-voice` name is ever touched, healed
+  only for provably-Echo targets, FATAL exit 2 otherwise), `--check` exiting 0 current /
+  3 pending / 2 fatal, and a preflight that surfaces FATAL states before any host mutation.
+  omp uses the same `pi` voice and persona as upstream Pi.
 - **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
   (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
   (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via

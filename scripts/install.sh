@@ -78,6 +78,11 @@ preflight() {
         echo "omp CLI is required for --adapter omp" >&2
         exit 1
       fi
+      echo "> Preflighting oh-my-pi adapter registration"
+      # Exit 3 (changes pending) is normal before an install; exit 2 (FATAL,
+      # e.g. a foreign entry occupying echo-voice) must abort BEFORE any host
+      # state is mutated.
+      bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 }

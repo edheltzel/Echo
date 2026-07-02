@@ -59,9 +59,14 @@ The two host differences the adapter absorbs:
   `adapters/pi/reconcile-omp.ts`, which maintains a single `echo-voice` symlink in
   `~/.omp/agent/extensions/` pointing at `adapters/pi/` (omp loads the entries declared in
   the package.json `pi` field through it). The script follows the reconcile-and-prune
-  contract from #77: canonical path derived from the adapter's own location, stale
-  `*/adapters/pi` links from a renamed clone pruned, idempotent reruns, and `--check`
-  exiting 0 when current / 3 when changes are pending.
+  contract from #77 with strict ownership: Echo owns **only** the `echo-voice` name — no
+  other entry is ever touched, whatever its target. The `echo-voice` entry is healed only
+  when it provably belongs to Echo (a dead `*/adapters/pi` target from a renamed clone, or
+  a live target whose package.json is `@echo/pi-adapter` — another Echo checkout, re-pointed
+  at this one). Anything else occupying the name is FATAL (exit 2), never replaced.
+  Reruns are idempotent; `--check` exits 0 when current / 3 when changes are pending /
+  2 on a FATAL state, and the installer preflights `--check` (tolerating 3) so a FATAL
+  state aborts before any host state is mutated.
 
 omp uses the **same voice and persona as Pi** (`voice_id: "pi"`, `personaName: "Pi"` — the
 `agents.pi` entry from #76); there is no separate omp persona.

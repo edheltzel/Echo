@@ -1,14 +1,22 @@
 #!/usr/bin/env bun
 // Idempotently reconciles the oh-my-pi extension registration (#18) per the
-// reconcile-and-prune contract (#77): exactly one symlink in
-// ~/.omp/agent/extensions/ points at this repo's adapters/pi directory; stale
-// links whose target matches */adapters/pi but no longer resolves here (a
-// renamed or moved clone) are pruned. omp discovers the directory through the
-// symlink and loads the entries declared in package.json's `pi` field.
+// reconcile-and-prune contract (#77). Echo owns exactly ONE entry in
+// ~/.omp/agent/extensions/: the `echo-voice` symlink pointing at this repo's
+// adapters/pi directory (omp loads the entries declared in package.json's
+// `pi` field through it). No other entry is ever touched — including links
+// under other names whose target happens to end in adapters/pi.
+//
+// The `echo-voice` entry itself is healed only when it provably belongs to
+// Echo: a dead target spelled */adapters/pi (this clone before a rename), or
+// a live target whose package.json name is `@echo/pi-adapter` (another Echo
+// clone — reconciling re-points it at THIS clone). Anything else occupying
+// the name — a real file/dir, an unrelated symlink, or a live non-Echo
+// adapters/pi target — is FATAL (exit 2), never replaced.
+//
 // Safe to run repeatedly. `--check` reports without mutating (exit 3 =
 // changes pending, 0 = current, 2 = fatal).
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,76 +24,88 @@ import { fileURLToPath } from "node:url";
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
 const EXTENSIONS_DIR = process.env.OMP_EXTENSIONS_DIR || join(homedir(), ".omp/agent/extensions");
 const LINK_NAME = "echo-voice";
+const OWNERSHIP_MARKER = "@echo/pi-adapter";
 const CHECK_ONLY = process.argv.includes("--check");
 
 const CANONICAL_DIR = realpathSync(ADAPTER_DIR);
 const CANONICAL_LINK = join(EXTENSIONS_DIR, LINK_NAME);
 
-function isAdapterPathTarget(target: string): boolean {
+function isEchoCloneSpelling(target: string): boolean {
   return /(^|\/)adapters\/pi\/?$/.test(target);
 }
 
-function resolvesToCanonical(target: string): boolean {
+/** Resolved real path of a link target, or null when the target is dead. */
+function resolveTarget(target: string): string | null {
   const abs = isAbsolute(target) ? target : resolve(EXTENSIONS_DIR, target);
   try {
-    return realpathSync(abs) === CANONICAL_DIR;
+    return realpathSync(abs);
   } catch {
-    return false; // dead path
+    return null;
   }
 }
 
-let changed = false;
+/** Ownership marker: the target directory is an Echo Pi adapter checkout. */
+function isEchoAdapterPackage(realDir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(realDir, "package.json"), "utf8")) as { name?: unknown };
+    return pkg?.name === OWNERSHIP_MARKER;
+  } catch {
+    return false;
+  }
+}
+
+function fatal(message: string): never {
+  console.error(`FATAL: ${message}`);
+  process.exit(2);
+}
+
+let op: "none" | "create" | "replace" = "create";
 const log: string[] = [];
-const actions: Array<() => void> = [];
 
-const entries = existsSync(EXTENSIONS_DIR) ? readdirSync(EXTENSIONS_DIR) : [];
-let kept = false;
-for (const name of entries) {
-  const entryPath = join(EXTENSIONS_DIR, name);
-  if (!lstatSync(entryPath).isSymbolicLink()) {
-    if (name === LINK_NAME) {
-      console.error(`FATAL: ${entryPath} exists but is not a symlink — refusing to replace it`);
-      process.exit(2);
-    }
-    continue; // someone else's extension file/dir
-  }
-  const target = readlinkSync(entryPath);
-  const canonical = resolvesToCanonical(target);
-  if (!canonical && !isAdapterPathTarget(target)) {
-    if (name === LINK_NAME) {
-      console.error(`FATAL: ${entryPath} is a symlink to unrelated ${target} — refusing to replace it`);
-      process.exit(2);
-    }
-    continue; // unrelated symlink
-  }
-  if (canonical && !kept && name === LINK_NAME) {
-    kept = true;
-    log.push(`= extensions already has ${LINK_NAME} → ${target}`);
-    continue;
-  }
-  // Stale (dead or foreign clone), duplicate, or wrongly-named link — prune;
-  // the canonical link is (re)created below if missing.
-  changed = true;
-  log.push(`- extensions: removed ${canonical ? "duplicate" : "stale"} ${name} → ${target}`);
-  actions.push(() => rmSync(entryPath));
+// lstat (not existsSync): a dead symlink must still be seen and classified.
+let linkStat: ReturnType<typeof lstatSync> | null = null;
+try {
+  linkStat = lstatSync(CANONICAL_LINK);
+} catch {
+  linkStat = null;
 }
 
-if (!kept) {
-  changed = true;
+if (linkStat) {
+  if (!linkStat.isSymbolicLink()) {
+    fatal(`${CANONICAL_LINK} exists but is not a symlink — refusing to replace it`);
+  }
+  const target = readlinkSync(CANONICAL_LINK);
+  const real = resolveTarget(target);
+  if (real === CANONICAL_DIR) {
+    op = "none";
+    log.push(`= extensions already has ${LINK_NAME} → ${target}`);
+  } else if (real === null && isEchoCloneSpelling(target)) {
+    // Dead */adapters/pi target: this clone's link from before a rename/move.
+    op = "replace";
+    log.push(`~ extensions: ${LINK_NAME} ${target} (dead) → ${CANONICAL_DIR}`);
+  } else if (real !== null && isEchoCloneSpelling(target) && isEchoAdapterPackage(real)) {
+    // Live link into ANOTHER Echo clone — reconcile re-points it at this one.
+    op = "replace";
+    log.push(`~ extensions: ${LINK_NAME} ${target} (other Echo clone) → ${CANONICAL_DIR}`);
+  } else {
+    fatal(`${CANONICAL_LINK} is a symlink to ${target}, which is not an Echo adapter checkout — refusing to replace it`);
+  }
+} else {
   log.push(`+ extensions += ${LINK_NAME} → ${CANONICAL_DIR}`);
-  actions.push(() => {
-    mkdirSync(EXTENSIONS_DIR, { recursive: true });
-    symlinkSync(CANONICAL_DIR, CANONICAL_LINK);
-  });
 }
 
 if (CHECK_ONLY) {
   // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
-  log.push(changed ? "✓ preflight passed — omp registration would be updated" : "✓ preflight passed — omp registration already current");
+  const pending = op !== "none";
+  log.push(pending ? "✓ preflight passed — omp registration would be updated" : "✓ preflight passed — omp registration already current");
   console.log(log.join("\n"));
-  process.exit(changed ? 3 : 0);
+  process.exit(pending ? 3 : 0);
 }
 
-for (const action of actions) action();
-if (changed) log.push(`✓ omp registration updated in ${EXTENSIONS_DIR}`);
+if (op !== "none") {
+  if (op === "replace") rmSync(CANONICAL_LINK);
+  mkdirSync(EXTENSIONS_DIR, { recursive: true });
+  symlinkSync(CANONICAL_DIR, CANONICAL_LINK);
+  log.push(`✓ omp registration updated in ${EXTENSIONS_DIR}`);
+}
 console.log(log.join("\n"));

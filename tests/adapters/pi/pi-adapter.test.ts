@@ -211,6 +211,20 @@ describe("Pi adapter lifecycle", () => {
     expect(result?.systemPrompt?.[2]).toContain("🗣️ Pi:");
   });
 
+  test("before_agent_start injects into an empty array system prompt", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    // omp with an empty assembled prompt is legitimate — the instruction still lands.
+    const result = (await handlers.get("before_agent_start")?.(
+      { prompt: "x", systemPrompt: [] },
+      createContext(),
+    )) as { systemPrompt?: string[] } | undefined;
+
+    expect(result?.systemPrompt).toHaveLength(1);
+    expect(result?.systemPrompt?.[0]).toContain("🗣️ Pi:");
+  });
+
   test("before_agent_start is a safe no-op for an unknown systemPrompt shape", async () => {
     const { api, handlers } = createMockPi();
     atlasVoicePiAdapter(api as any);

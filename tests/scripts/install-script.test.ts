@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,6 +29,9 @@ describe("install script adapter support", () => {
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/pi/reconcile-omp.ts");
+    // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
+    // registration state aborts before any host state is mutated.
+    expect(script).toContain('reconcile-omp.ts" --check >/dev/null || [ $? -eq 3 ]');
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
@@ -87,6 +90,77 @@ describe("install script adapter support", () => {
       expect(result.stderr).toContain("omp CLI is required");
       expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
       expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Reviewer scenario (PR #80 finding 2): a FATAL omp registration state must
+  // abort in preflight, BEFORE the LaunchAgent plist is written or launchctl runs.
+  test("omp preflight surfaces a FATAL registration state before mutating host state", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-omp-fatal-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const extensions = join(root, "extensions");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      // FATAL state: a real directory occupies the echo-voice name.
+      mkdirSync(join(extensions, "echo-voice"), { recursive: true });
+      const launchctlLog = join(root, "launchctl.log");
+
+      // Real bun (the preflight actually runs reconcile-omp.ts); stub the rest.
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "omp"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+
+      const result = await runInstall(["--adapter", "omp"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        OMP_EXTENSIONS_DIR: extensions,
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("FATAL");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
+      expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("omp preflight tolerates pending changes (exit 3) and the install registers the adapter", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-omp-ok-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      const extensions = join(root, "extensions"); // absent → --check exits 3 (pending)
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "omp"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+
+      const result = await runInstall(["--adapter", "omp"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        OMP_EXTENSIONS_DIR: extensions,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      // install_adapter reconciled the registration.
+      expect(lstatSync(join(extensions, "echo-voice")).isSymbolicLink()).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
