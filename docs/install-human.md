@@ -38,9 +38,17 @@ This installs the same core server and re-applies Claude Code hook registrations
 bash scripts/install.sh --adapter pi
 ```
 
-This installs the core server, then registers `adapters/pi/` as a Pi package.
+This installs the core server, then registers `adapters/pi/` as a Pi package and reconciles the registration so no stale entry survives.
 
 Inside Pi, `/voice-status` shows adapter configuration.
+
+## Moved or renamed the repo directory?
+
+Rerun the installer once (any `--adapter` value). It rewrites the LaunchAgent and re-reconciles every installed adapter registration, removing paths that point at the old location. To see what's stale without changing anything:
+
+```bash
+bash scripts/install.sh --check
+```
 
 ## Verify manually
 

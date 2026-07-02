@@ -62,11 +62,21 @@ If FAIL: confirm the Claude Code settings file exists and is writable.
 bash scripts/install.sh --adapter pi
 ```
 
-Expected: Pi package install succeeds and health check passes.
+Expected: Pi package install succeeds, the registration reconcile reports the canonical `adapters/pi` entry, and health check passes.
 
-If FAIL: confirm `command -v pi` works, then run `pi install ./adapters/pi` manually.
+If FAIL: confirm `command -v pi` works, then run `pi install ./adapters/pi` and `bun run adapters/pi/reconcile.ts` manually.
 
-## 7. Status
+## 7. Heal after a repo move/rename
+
+Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
+
+```bash
+bash scripts/install.sh --check
+```
+
+Expected: reports stale plist/hook/package paths if any; exit 0; nothing modified.
+
+## 8. Status
 
 ```bash
 bash scripts/status.sh
@@ -74,7 +84,7 @@ bash scripts/status.sh
 
 Expected: neutral service `com.echo` is listed or health returns OK.
 
-## 8. Uninstall
+## 9. Uninstall
 
 ```bash
 bash scripts/uninstall.sh

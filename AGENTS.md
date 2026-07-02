@@ -73,7 +73,7 @@ merges; never push directly to `master`** (see Invariants).
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
-| Adapter rules + Pi #15 | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + registration contract (#77) + Pi #15 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
