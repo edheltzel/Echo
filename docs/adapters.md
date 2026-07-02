@@ -32,7 +32,8 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   the injection feature above, #76 also touched `core/voices.json` data — a running daemon
   loads voices.json once at startup, so restart it
   (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the `pi` entry; until then the
-  adapter's `voice_id: "pi"` is unresolvable and falls back to the identity voice.
+  adapter's `voice_id: "pi"` is unresolvable and falls back to the provider default voice
+  (audibly the identity voice on stock installs), logged as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading
