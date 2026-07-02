@@ -65,6 +65,139 @@ describe("install script adapter support", () => {
     }
   });
 
+  test("refreshes ALL installed adapters regardless of --adapter, and rerunning is a no-op (#77)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-refresh-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(join(home, ".pi/agent"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      // Registrations left behind by a renamed repo directory: markers present, paths dead.
+      const claudeSettings = join(home, ".claude/settings.json");
+      const piSettings = join(home, ".pi/agent/settings.json");
+      writeFileSync(
+        claudeSettings,
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [{ type: "command", command: "/old/clone/adapters/claudecode/hooks/VoiceGate.hook.ts" }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      writeFileSync(piSettings, JSON.stringify({ packages: ["/old/clone/adapters/pi"] }, null, 2) + "\n");
+
+      // Real bun (the adapter tools must actually run); stub the service plumbing —
+      // `list` must report com.echo so the post-load liveness check passes.
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` };
+
+      // --adapter none: neither adapter was asked for, both must still be reconciled.
+      const first = await runInstall(["--adapter", "none"], env);
+      expect(first.exitCode).toBe(0);
+      expect(first.stdout).toContain("Refreshing Claude Code adapter hook registrations");
+      expect(first.stdout).toContain("Refreshing Pi adapter registration");
+
+      const claudeAfterFirst = readFileSync(claudeSettings, "utf8");
+      const piAfterFirst = readFileSync(piSettings, "utf8");
+      expect(claudeAfterFirst).not.toContain("/old/clone/");
+      expect(piAfterFirst).not.toContain("/old/clone/");
+      expect(claudeAfterFirst).toContain("adapters/claudecode/hooks/VoiceGate.hook.ts");
+      expect(piAfterFirst).toContain("adapters/pi");
+
+      // Rerunning is a no-op: settings bytes unchanged.
+      const second = await runInstall(["--adapter", "none"], env);
+      expect(second.exitCode).toBe(0);
+      expect(readFileSync(claudeSettings, "utf8")).toBe(claudeAfterFirst);
+      expect(readFileSync(piSettings, "utf8")).toBe(piAfterFirst);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("--check reports dead echo-related paths across plist and host settings without mutating (#77)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-check-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const launchAgents = join(home, "Library/LaunchAgents");
+      const launchctlLog = join(root, "launchctl.log");
+      mkdirSync(launchAgents, { recursive: true });
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(join(home, ".pi/agent"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      const plistPath = join(launchAgents, "com.echo.plist");
+      const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/bun</string>
+        <string>run</string>
+        <string>/dead/repo/core/server.ts</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/dead/repo</string>
+</dict>
+</plist>
+`;
+      writeFileSync(plistPath, plist);
+      const claudeSettings = join(home, ".claude/settings.json");
+      const piSettings = join(home, ".pi/agent/settings.json");
+      const claudeOriginal =
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [{ type: "command", command: "/old/clone/adapters/claudecode/hooks/VoiceGate.hook.ts" }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n";
+      const piOriginal = JSON.stringify({ packages: ["/old/clone/adapters/pi"] }, null, 2) + "\n";
+      writeFileSync(claudeSettings, claudeOriginal);
+      writeFileSync(piSettings, piOriginal);
+
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--check"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      // Dead repo paths in the plist are reported.
+      expect(result.stdout).toContain("/dead/repo/core/server.ts");
+      expect(result.stdout).toContain("/dead/repo");
+      // Both host settings checks report the pending reconcile.
+      expect(result.stdout).toContain("would be updated");
+      // Nothing was mutated and no service was touched.
+      expect(readFileSync(plistPath, "utf8")).toBe(plist);
+      expect(readFileSync(claudeSettings, "utf8")).toBe(claudeOriginal);
+      expect(readFileSync(piSettings, "utf8")).toBe(piOriginal);
+      expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("unloads and quarantines BOTH legacy LaunchAgents before loading com.echo", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-migration-"));
     try {
