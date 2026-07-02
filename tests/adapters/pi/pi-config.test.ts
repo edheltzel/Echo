@@ -18,6 +18,15 @@ describe("Pi voice config", () => {
     expect(loadPiVoiceConfig({ ECHO_VOICE_ID: "custom" }).voiceId).toBe("custom");
   });
 
+  test("default voice_id resolves against core/voices.json agents (cross-boundary contract, #76)", async () => {
+    // Renaming/removing the agents.pi entry would silently revert Pi to the identity
+    // voice at runtime while literal-string tests stay green — bind the two halves.
+    const voices = await Bun.file(new URL("../../../core/voices.json", import.meta.url)).json();
+    const defaultVoiceId = loadPiVoiceConfig({}).voiceId!;
+    expect(Object.keys(voices.agents)).toContain(defaultVoiceId);
+    expect(voices.agents[defaultVoiceId].edgetts.voice).toBe("en-US-GuyNeural");
+  });
+
   test("suppresses headless run modes (Pi subagents run `pi --mode json -p`)", () => {
     expect(shouldSuppressVoice({ hasUI: false }, {})).toBe(true);
     expect(shouldSuppressVoice({ mode: "json" }, {})).toBe(true);

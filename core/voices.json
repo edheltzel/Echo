@@ -277,8 +277,8 @@
       }
     },
     "pi": {
-      "description": "pi coding-agent host voice",
-      "catchphrase": "pi session ready.",
+      "description": "Coding-agent host voice",
+      "catchphrase": "Coding session ready.",
       "kokoro": {
         "voice": "am_puck",
         "speed": 1.0

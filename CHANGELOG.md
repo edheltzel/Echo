@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
   (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
   `ECHO_VOICE_PERSONA_NAME`), so Pi sessions sound distinct from the default identity voice.
+  A running daemon loads `voices.json` once at startup — restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) so the new `pi` entry resolves.
 
 ### Changed
 - Capitalized the project display name to **Echo** in documentation/marketing prose only
