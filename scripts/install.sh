@@ -230,7 +230,7 @@ check_installation() {
     echo "> Checking $PLIST_PATH"
     local server_path workdir path
     server_path="$(sed -n 's|.*<string>\(.*core/server\.ts\)</string>.*|\1|p' "$PLIST_PATH")"
-    workdir="$(grep -A1 '<key>WorkingDirectory</key>' "$PLIST_PATH" | sed -n 's|.*<string>\(.*\)</string>.*|\1|p')"
+    workdir="$(grep -A1 '<key>WorkingDirectory</key>' "$PLIST_PATH" | sed -n 's|.*<string>\(.*\)</string>.*|\1|p' || true)"
     for path in "$server_path" "$workdir"; do
       if [ -n "$path" ] && [ ! -e "$path" ]; then
         echo "STALE ${PLIST_PATH}: $path"

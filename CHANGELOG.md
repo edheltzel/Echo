@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `adapters/pi/reconcile.ts`: idempotent Pi registration reconcile — replaces stale
+  `*/adapters/pi` packages entries with the canonical path in place, collapses duplicates,
+  supports `--check`, and writes through a symlinked `~/.pi/agent/settings.json` without
+  replacing the symlink (#77).
+- `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
+  `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating (#77).
+
 ### Changed
+- The installer now re-reconciles **every installed adapter registration on every run**,
+  regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).
+- `adapters/claudecode/restore-hooks.ts` prunes stale foreign-clone Voice hook registrations
+  (non-canonical `*/adapters/claudecode/hooks/Voice*.hook.ts` paths left by a rename) (#77).
+- `docs/adapters.md` documents the mandatory reconcile-and-prune registration contract for
+  all current and future adapters (#77).
 - Capitalized the project display name to **Echo** in documentation/marketing prose only
   (headings and descriptive text). Code, CLI/daemon output, command examples, the package
   name `echo`, service label `com.echo`, and paths are unchanged.
