@@ -196,6 +196,33 @@ describe("Pi adapter lifecycle", () => {
     expect(result).toBeUndefined();
   });
 
+  test("before_agent_start appends to an array system prompt (oh-my-pi shape)", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    // oh-my-pi passes systemPrompt as string[] and expects string[] back.
+    const result = (await handlers.get("before_agent_start")?.(
+      { prompt: "do a thing", systemPrompt: ["BASE-1", "BASE-2"] },
+      createContext(),
+    )) as { systemPrompt?: string[] } | undefined;
+
+    expect(Array.isArray(result?.systemPrompt)).toBe(true);
+    expect(result?.systemPrompt?.slice(0, 2)).toEqual(["BASE-1", "BASE-2"]);
+    expect(result?.systemPrompt?.[2]).toContain("🗣️ Pi:");
+  });
+
+  test("before_agent_start is a safe no-op for an unknown systemPrompt shape", async () => {
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as any);
+
+    const result = await handlers.get("before_agent_start")?.(
+      { prompt: "x", systemPrompt: [{ role: "system", content: "BASE" }] },
+      createContext(),
+    );
+
+    expect(result).toBeUndefined();
+  });
+
   test("before_agent_start is a safe no-op when the runtime exposes no systemPrompt", async () => {
     const { api, handlers } = createMockPi();
     atlasVoicePiAdapter(api as any);
