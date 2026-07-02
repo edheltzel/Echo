@@ -55,14 +55,21 @@ summary>`. The existing `message_end`/`turn_end` path then extracts and speaks t
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
 - **Persona name** comes from config: `personaName` ← env `ECHO_VOICE_PERSONA_NAME` (default
-  `"Atlas"`), never hard-coded.
+  `"Pi"`), never hard-coded.
+- **Distinct voice (issue #76):** `voiceId` defaults to `"pi"` (env `ECHO_VOICE_ID` overrides),
+  which the daemon resolves via `agents.pi` in `core/voices.json` → `en-US-GuyNeural`. Unlike
+  the injection feature above, #76 also touched `core/voices.json` data — a running daemon
+  loads voices.json once at startup, so restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the `pi` entry; until then the
+  adapter's `voice_id: "pi"` is unresolvable and falls back to the provider default voice
+  (audibly the identity voice on stock installs), logged as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading
   `<Name>:` (mirroring the Claude Code adapter's `parseFinalVoiceLine` name grammar) so the persona name isn't
   spoken aloud.
-- Adapter-only: no `core/` or daemon change; the daemon already resolves `voice_id` name
-  keys.
+- The injection feature itself (#15) is adapter-only: no `core/` or daemon change; the daemon
+  already resolves `voice_id` name keys.
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).

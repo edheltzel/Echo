@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
+  (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
+  (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
+  `ECHO_VOICE_PERSONA_NAME`), so Pi sessions sound distinct from the default identity voice.
+  A running daemon loads `voices.json` once at startup — restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) so the new `pi` entry resolves.
 - `adapters/pi/reconcile.ts`: idempotent Pi registration reconcile — replaces stale
   `*/adapters/pi` packages entries with the canonical path in place, collapses duplicates,
   supports `--check`, and writes through a symlinked `~/.pi/agent/settings.json` without
@@ -15,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
   `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating; exits 0 when
   current, 3 when staleness was detected (adapter `--check` modes use the same codes) (#77).
-
 ### Changed
 - The installer now re-reconciles **every installed adapter registration on every run**,
   regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).

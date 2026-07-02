@@ -32,13 +32,13 @@ silent fallbacks — see the root README's "Deprecated environment variables"):
 | `ECHO_NOTIFY_URL` | `http://localhost:8888/notify` | Core notify endpoint |
 | `ECHO_VOICE_TITLE` | `Pi Notification` | Notification title |
 | `ECHO_VOICE_CATCHPHRASE` | `Pi session ready.` | Session-start greeting |
-| `ECHO_VOICE_ID` | unset | Optional voice mapping/id |
+| `ECHO_VOICE_ID` | `pi` | Voice mapping/id (resolves to `agents.pi` in `core/voices.json`) |
 | `ECHO_VOICE_ENABLED` | `true` | Set `false` for silent notifications |
 | `ECHO_VOICE_GREET_ON_START` | `true` | Enable/disable greetings |
 | `ECHO_VOICE_SPEAK_COMPLETIONS` | `true` | Enable/disable `🗣️` completion speech |
 | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | `true` | Suppress Pi subagent voices |
 | `ECHO_VOICE_SUPPRESS` | `false` | Global emergency suppression |
-| `ECHO_VOICE_PERSONA_NAME` | `Atlas` | Spoken persona name in `🗣️` completions |
+| `ECHO_VOICE_PERSONA_NAME` | `Pi` | Spoken persona name in `🗣️` completions |
 
 ## Status command
 

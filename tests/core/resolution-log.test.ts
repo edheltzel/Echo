@@ -48,6 +48,11 @@ mock.module("node:child_process", () => ({
 const TMP = mkdtempSync(join(tmpdir(), "vrlog-"));
 const HTTP_LOG = join(TMP, "http-resolution.jsonl");
 process.env.ECHO_RESOLUTION_LOG = HTTP_LOG;
+// The agent-key test drives a stubbed edgetts speak, which creates real temp
+// dirs under AUDIO_CACHE_DIR (a module-load const) — point it at scratch. If a
+// sibling file already imported the daemon its own scratch dir won, which is
+// equally safe.
+process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 
 const { server, voicesConfig, writeResolutionEvent } = await import("../../core/server.ts");
 const PORT = (server as any).port;
@@ -155,6 +160,41 @@ describe("issue #24 — one resolution event per /notify", () => {
     // edge-tts/elevenlabs/kokoro skipped (disabled), then say spoke → hops counts them.
     expect(ev.attempts[ev.attempts.length - 1]).toEqual({ provider: "say", outcome: "success" });
     expect(ev.hops).toBe(ev.attempts.length - 1);
+  });
+
+  test("voice_id 'pi' resolves as agent-key to en-US-GuyNeural (#76)", async () => {
+    if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
+
+    // Enable only edgetts (the primary provider); the spawn stub makes its
+    // health probe, synthesis, and playback all "succeed", so the event records
+    // the voice the daemon actually resolved for the pi agent key — the
+    // daemon-side half of the Pi adapter's default voice_id contract.
+    (voicesConfig.providers as any).edgetts.enabled = true;
+
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "pi persona resolution",
+        voice_enabled: true,
+        voice_id: "pi", // the Pi adapter's default (#76)
+        source: "pi",
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    expect(lines.length).toBe(1);
+
+    const ev = JSON.parse(lines[0]);
+    expect(ev.requested_voice_id).toBe("pi");
+    expect(ev.resolution).toBe("agent-key");
+    expect(ev.resolution_reason).toBeUndefined();
+    expect(ev.provider).toBe("edgetts");
+    expect(ev.voice).toBe("en-US-GuyNeural"); // agents.pi.edgetts.voice
+    expect(ev.success).toBe(true);
+    expect(ev.attempts[0]).toEqual({ provider: "edgetts", outcome: "success" });
+    expect(ev.hops).toBe(0); // primary provider spoke — no fallback hops
   });
 });
 
