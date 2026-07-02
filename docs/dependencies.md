@@ -26,6 +26,7 @@
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
 | Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
+| oh-my-pi (omp) | `adapters/pi/` (shared) | Supported — same adapter, dual-shape `before_agent_start` | `bash scripts/install.sh --adapter omp` |
 | OpenCode | TBD | Planned | Future adapter |
 
 ## Decision matrix
@@ -35,6 +36,7 @@
 | Minimum local server | Bun + `bash scripts/install.sh --adapter none` |
 | Existing Claude Code workflow | Bun + Claude Code + `bash scripts/install.sh --adapter claudecode` |
 | Pi voice lifecycle | Bun + Pi + `bash scripts/install.sh --adapter pi` |
+| oh-my-pi voice lifecycle | Bun + omp + `bash scripts/install.sh --adapter omp` |
 | Fully local speech | Bun + edge-tts or Kokoro + macOS fallback |
 | Cloud premium voice | Bun + ElevenLabs key + ElevenLabs enabled in config |
 

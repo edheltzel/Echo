@@ -44,3 +44,24 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
+
+## oh-my-pi (omp) — same adapter, dual host (issue #18)
+
+`adapters/pi/` serves both upstream Pi and the oh-my-pi fork; there is no separate
+`adapters/omp/`. The host package import is type-only (erased at load), the lifecycle event
+surface is shape-identical, and omp subagents hard-code `hasUI: false`, so suppression holds.
+The two host differences the adapter absorbs:
+
+- **`before_agent_start.systemPrompt` shape:** upstream Pi passes a `string`; omp passes a
+  `string[]`. The injection handler feature-detects both and returns the same shape it
+  received (`string[]` in → `[...base, instruction]` out). Unknown shapes still no-op safely.
+- **Registration:** omp has no `pi install`. `bash scripts/install.sh --adapter omp` runs
+  `adapters/pi/reconcile-omp.ts`, which maintains a single `echo-voice` symlink in
+  `~/.omp/agent/extensions/` pointing at `adapters/pi/` (omp loads the entries declared in
+  the package.json `pi` field through it). The script follows the reconcile-and-prune
+  contract from #77: canonical path derived from the adapter's own location, stale
+  `*/adapters/pi` links from a renamed clone pruned, idempotent reruns, and `--check`
+  exiting 0 when current / 3 when changes are pending.
+
+omp uses the **same voice and persona as Pi** (`voice_id: "pi"`, `personaName: "Pi"` — the
+`agents.pi` entry from #76); there is no separate omp persona.

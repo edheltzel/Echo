@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
+  oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
+  `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`
+  registers the adapter via `adapters/pi/reconcile-omp.ts` — an idempotent
+  reconcile-and-prune symlink (`~/.omp/agent/extensions/echo-voice` → `adapters/pi/`) per the
+  #77 contract, with `--check` exiting 0 when current / 3 when pending. omp uses the same
+  `pi` voice and persona as upstream Pi.
 - **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
   (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
   (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
