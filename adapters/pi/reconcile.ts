@@ -32,7 +32,7 @@ const CANONICAL_ENTRY = relative(SETTINGS_DIR, CANONICAL_DIR);
 
 function isAdapterPathEntry(entry: string): boolean {
   if (/^(npm|git|https?|ssh):/.test(entry)) return false;
-  return /\/adapters\/pi\/?$/.test(entry);
+  return /(^|\/)adapters\/pi\/?$/.test(entry);
 }
 
 function resolvesToCanonical(entry: string): boolean {

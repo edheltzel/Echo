@@ -2,7 +2,7 @@
 // Idempotently re-applies echo's Claude Code settings.json hook registrations.
 // Safe to run repeatedly. Backs up settings.json before mutating.
 
-import { chmodSync, copyFileSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,16 +41,18 @@ settings.hooks.Stop ??= [];
 let changed = false;
 const log: string[] = [];
 
-// 0) Prune stale foreign-clone registrations (#77): any command that is one of our managed
-// hook files but lives at a non-canonical path — e.g. a pre-rename repo directory. The
-// unmanaged ~/.claude/hooks/VoiceCompletion.hook.ts doesn't match this pattern; step 3
+// 0) Prune stale foreign-clone registrations (#77): any adapter hook file registered from a
+// non-canonical adapters/claudecode/hooks directory — e.g. a pre-rename repo path. Matching
+// the whole hooks dir (not a hook-name list) means future hook files can't escape pruning.
+// The unmanaged ~/.claude/hooks/VoiceCompletion.hook.ts doesn't match this pattern; step 3
 // replaces it in place instead.
-const MANAGED_HOOK_RE = /\/adapters\/claudecode\/hooks\/(VoiceGate|VoiceGreeting|VoiceCompletion)\.hook\.ts$/;
-const CANONICAL_CMDS = new Set([VOICE_GATE_CMD, VOICE_GREETING_CMD, VOICE_COMPLETION_CMD]);
+const ADAPTER_HOOK_RE = /\/adapters\/claudecode\/hooks\/[^/]+\.hook\.ts$/;
 for (const [event, entries] of Object.entries(settings.hooks)) {
+  if (!Array.isArray(entries)) continue;
   for (const entry of entries) {
+    if (!Array.isArray(entry.hooks)) continue;
     for (const hook of [...entry.hooks]) {
-      if (MANAGED_HOOK_RE.test(hook.command) && !CANONICAL_CMDS.has(hook.command)) {
+      if (ADAPTER_HOOK_RE.test(hook.command) && !hook.command.startsWith(`${REPO_HOOKS_DIR}/`)) {
         entry.hooks.splice(entry.hooks.indexOf(hook), 1);
         changed = true;
         log.push(`- ${event}: removed stale ${hook.command}`);
@@ -141,12 +143,15 @@ if (CHECK_ONLY) {
 }
 
 if (changed) {
+  // Write through a possible symlink: atomically replace the resolved real file, so a
+  // settings.json symlinked into a dotfiles repo stays a symlink (#77).
+  const realPath = realpathSync(SETTINGS_PATH);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backup = `${SETTINGS_PATH}.bak-${stamp}`;
-  const temp = `${SETTINGS_PATH}.tmp-${process.pid}`;
-  copyFileSync(SETTINGS_PATH, backup);
+  const backup = `${realPath}.bak-${stamp}`;
+  const temp = `${realPath}.tmp-${process.pid}`;
+  copyFileSync(realPath, backup);
   writeFileSync(temp, JSON.stringify(settings, null, 2) + "\n");
-  renameSync(temp, SETTINGS_PATH);
+  renameSync(temp, realPath);
   log.push(`✓ settings.json updated (backup: ${backup})`);
 } else {
   log.push("✓ settings.json already current — no write");

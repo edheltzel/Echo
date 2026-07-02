@@ -214,13 +214,16 @@ install_adapter() {
 refresh_installed_adapters() {
   # A directory rename leaves stale paths in every registered host config (#77):
   # re-reconcile each installed adapter on every run, regardless of --adapter.
+  # A broken secondary adapter config must not fail the requested install — warn instead.
   if [ "$ADAPTER" != "claudecode" ] && claudecode_installed; then
     echo "> Refreshing Claude Code adapter hook registrations"
-    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts"
+    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
+      || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
   fi
   if [ "$ADAPTER" != "pi" ] && pi_installed; then
     echo "> Refreshing Pi adapter registration"
-    bun run "$REPO_ROOT/adapters/pi/reconcile.ts"
+    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" \
+      || echo "WARN: Pi registration refresh failed — run adapters/pi/reconcile.ts manually" >&2
   fi
 }
 
@@ -241,14 +244,18 @@ check_installation() {
     echo "= no $PLIST_PATH — core not installed"
   fi
 
+  # --check is read-only and always reports: a failing adapter check must not
+  # abort the remaining checks.
   if claudecode_installed; then
     echo "> Checking Claude Code adapter hook registrations"
-    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check
+    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check \
+      || { echo "WARN: Claude Code hook check failed" >&2; stale=1; }
   fi
 
   if pi_installed; then
     echo "> Checking Pi adapter registration"
-    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check
+    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check \
+      || { echo "WARN: Pi registration check failed" >&2; stale=1; }
   fi
 
   if [ "$stale" -eq 1 ]; then

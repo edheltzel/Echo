@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 async function runRestore(settingsPath: string, extraArgs: string[] = []) {
   const proc = Bun.spawn(["bun", "run", "adapters/claudecode/restore-hooks.ts", ...extraArgs], {
@@ -324,6 +324,39 @@ describe("Claude Code restore-hooks registration", () => {
       expect(result.stdout).toContain("would be updated");
       // --check never mutates the file on disk.
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("edits through a symlinked settings.json without replacing the symlink (#77)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-symlink-"));
+    try {
+      // Mirror a dotfiles layout: ~/.claude/settings.json -> ../dotfiles/.../settings.json
+      const nominalDir = join(root, "claude");
+      const dotfilesDir = join(root, "dotfiles/claude");
+      mkdirSync(nominalDir, { recursive: true });
+      mkdirSync(dotfilesDir, { recursive: true });
+      const realFile = join(dotfilesDir, "settings.json");
+      const linkPath = join(nominalDir, "settings.json");
+      writeFileSync(
+        realFile,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }, null, 2) + "\n",
+        { mode: 0o644 },
+      );
+      const linkTarget = relative(nominalDir, realFile);
+      symlinkSync(linkTarget, linkPath);
+
+      const result = await runRestore(linkPath);
+
+      expect(result.exitCode).toBe(0);
+      // Still the same symlink, pointing at the same target; content updated through it.
+      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(linkPath)).toBe(linkTarget);
+      const settings = JSON.parse(readFileSync(realFile, "utf8"));
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([
+        { type: "command", command: join(resolve("adapters/claudecode/hooks"), "VoiceGate.hook.ts") },
+      ]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
