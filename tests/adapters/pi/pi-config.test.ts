@@ -8,6 +8,14 @@ describe("Pi voice config", () => {
     expect(config.title).toBe("Pi Notification");
     expect(config.catchphrase).toBe("Pi session ready.");
     expect(config.voiceEnabled).toBe(true);
+    expect(config.personaName).toBe("Pi");
+  });
+
+  test("defaults voice_id to the pi persona (distinct Pi voice, #76)", () => {
+    // Resolves to agents.pi in core/voices.json (en-US-GuyNeural), not the identity default.
+    expect(loadPiVoiceConfig({}).voiceId).toBe("pi");
+    // Still overridable via the canonical env name.
+    expect(loadPiVoiceConfig({ ECHO_VOICE_ID: "custom" }).voiceId).toBe("custom");
   });
 
   test("suppresses headless run modes (Pi subagents run `pi --mode json -p`)", () => {
@@ -53,7 +61,7 @@ describe("Pi voice config", () => {
       loadPiVoiceConfig({ ECHO_VOICE_ID: "echo-id", ATLAS_VOICE_ID: "atlas-id" }).voiceId,
     ).toBe("echo-id");
     // Persona default is unchanged when no override is set.
-    expect(loadPiVoiceConfig({}).personaName).toBe("Atlas");
+    expect(loadPiVoiceConfig({}).personaName).toBe("Pi");
     // Emergency suppression also honors the legacy name.
     expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, { ATLAS_VOICE_SUPPRESS: "true" })).toBe(true);
   });

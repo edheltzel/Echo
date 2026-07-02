@@ -26,7 +26,9 @@ summary>`. The existing `message_end`/`turn_end` path then extracts and speaks t
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
 - **Persona name** comes from config: `personaName` ← env `ECHO_VOICE_PERSONA_NAME` (default
-  `"Atlas"`), never hard-coded.
+  `"Pi"`), never hard-coded.
+- **Distinct voice (issue #76):** `voiceId` defaults to `"pi"` (env `ECHO_VOICE_ID` overrides),
+  which the daemon resolves via `agents.pi` in `core/voices.json` → `en-US-GuyNeural`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading

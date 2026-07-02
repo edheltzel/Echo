@@ -75,6 +75,7 @@ describe("Pi adapter lifecycle", () => {
         message: "Pi session ready.",
         title: "Pi Notification",
         voice_enabled: true,
+        voice_id: "pi",
         session_id: "session-1",
         source: "pi",
       },
@@ -148,11 +149,11 @@ describe("Pi adapter lifecycle", () => {
     )) as { systemPrompt?: string; systemPromptAppend?: string } | undefined;
 
     expect(result?.systemPrompt?.startsWith("BASE")).toBe(true);
-    expect(result?.systemPrompt).toContain("🗣️ Atlas:");
+    expect(result?.systemPrompt).toContain("🗣️ Pi:");
     // Never clobbers: the base prompt survives ahead of the appended instruction.
-    expect(result?.systemPrompt!.indexOf("BASE")).toBeLessThan(result!.systemPrompt!.indexOf("🗣️ Atlas:"));
+    expect(result?.systemPrompt!.indexOf("BASE")).toBeLessThan(result!.systemPrompt!.indexOf("🗣️ Pi:"));
     // Fallback append form is also offered for runtimes that ignore the replace return.
-    expect(result?.systemPromptAppend).toContain("🗣️ Atlas:");
+    expect(result?.systemPromptAppend).toContain("🗣️ Pi:");
   });
 
   test("before_agent_start uses the configured persona name", async () => {
