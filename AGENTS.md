@@ -74,7 +74,7 @@ merges; never push directly to `master`** (see Invariants).
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
-| Adapter rules + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + registration contract (#77) + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
@@ -103,6 +103,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
 - Do not broad-kill whatever owns port `8888`; it may be another service.
 - Do not commit secrets or `.env` files.
+- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
