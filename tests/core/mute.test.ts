@@ -176,10 +176,13 @@ describe("mute state — set / toggle / lazy expiry", () => {
 // Speech-stage gate — /notify while muted
 // =============================================================================
 
+// Unique rate-limit bucket per request — the shared daemon caps 10/min per
+// client IP, and the suite-wide 'localhost' bucket has no headroom to spare.
+let bucket = 0;
 async function postNotify(): Promise<Response> {
   return fetch(`http://localhost:${PORT}/notify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": `mute-gate-test-${bucket++}` },
     body: JSON.stringify({ message: "mute gate test", voice_enabled: true, voice_id: "pi" }),
   });
 }
