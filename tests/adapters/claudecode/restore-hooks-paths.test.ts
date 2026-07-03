@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 async function runRestore(settingsPath: string, extraArgs: string[] = []) {
   const proc = Bun.spawn(["bun", "run", "adapters/claudecode/restore-hooks.ts", ...extraArgs], {
@@ -42,7 +42,8 @@ describe("Claude Code restore-hooks registration", () => {
 
       const result = await runRestore(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      // Exit 3 = changes pending (registrations missing on a fresh settings file).
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("preflight passed");
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
       expect(existsSync(`${settingsPath}.bak`)).toBe(false);
@@ -64,6 +65,10 @@ describe("Claude Code restore-hooks registration", () => {
 
       expect(first.exitCode).toBe(0);
       expect(second.exitCode).toBe(0);
+      // Once current, --check signals clean with exit 0.
+      const check = await runRestore(settingsPath, ["--check"]);
+      expect(check.exitCode).toBe(0);
+      expect(check.stdout).toContain("already current");
       expect(settings.hooks.PreToolUse[0].hooks).toEqual([
         { type: "command", command: join(expectedHooksDir, "VoiceGate.hook.ts") },
       ]);
@@ -208,6 +213,92 @@ describe("Claude Code restore-hooks registration", () => {
     }
   });
 
+  test("prunes stale foreign-clone Voice hook paths left by a repo directory rename (#77)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-stale-clone-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const hooksDir = resolve("adapters/claudecode/hooks");
+      const gate = join(hooksDir, "VoiceGate.hook.ts");
+      const greeting = join(hooksDir, "VoiceGreeting.hook.ts");
+      const completion = join(hooksDir, "VoiceCompletion.hook.ts");
+      // The pre-rename clone location: same hook filenames, dead directory.
+      const staleDir = "/Users/someone/Developer/atlas-voicesystem/adapters/claudecode/hooks";
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    { type: "command", command: join(staleDir, "VoiceGate.hook.ts") },
+                    { type: "command", command: "/some/OtherTool.hook.ts" },
+                  ],
+                },
+              ],
+              SessionStart: [
+                { matcher: "startup", hooks: [{ type: "command", command: join(staleDir, "VoiceGreeting.hook.ts") }] },
+              ],
+              Stop: [
+                { hooks: [{ type: "command", command: join(staleDir, "VoiceCompletion.hook.ts") }] },
+              ],
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        { mode: 0o644 },
+      );
+
+      const first = await runRestore(settingsPath);
+      const second = await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+
+      expect(first.exitCode).toBe(0);
+      // Stale clone paths are gone; canonical paths registered; unrelated hooks untouched.
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([
+        { type: "command", command: "/some/OtherTool.hook.ts" },
+        { type: "command", command: gate },
+      ]);
+      expect(settings.hooks.SessionStart[0].hooks).toEqual([{ type: "command", command: greeting }]);
+      const stopCommands = settings.hooks.Stop.flatMap((entry: { hooks: { command: string }[] }) =>
+        entry.hooks.map((h) => h.command),
+      );
+      expect(stopCommands).toEqual([completion]);
+      expect(JSON.stringify(settings)).not.toContain(staleDir);
+      // Second run is a no-op.
+      expect(second.stdout).toContain("already current");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("--check reports stale foreign-clone paths without writing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-check-clone-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const staleGate = "/Users/someone/Developer/atlas-voicesystem/adapters/claudecode/hooks/VoiceGate.hook.ts";
+      const original =
+        JSON.stringify(
+          { hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: staleGate }] }] } },
+          null,
+          2,
+        ) + "\n";
+      writeFileSync(settingsPath, original, { mode: 0o644 });
+
+      const result = await runRestore(settingsPath, ["--check"]);
+
+      // Exit 3 = stale/pending changes detected, machine-checkable.
+      expect(result.exitCode).toBe(3);
+      expect(result.stdout).toContain("stale");
+      expect(result.stdout).toContain("would be updated");
+      expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("--check reports a pending update for a stale registration without writing", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-restore-check-stale-"));
     try {
@@ -235,10 +326,78 @@ describe("Claude Code restore-hooks registration", () => {
 
       const result = await runRestore(settingsPath, ["--check"]);
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain("would be updated");
       // --check never mutates the file on disk.
       expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("normalizes a live canonical hook spelled through a symlinked dir instead of pruning it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-symlink-spelling-"));
+    try {
+      // A symlink whose target is the real repo: same live hook files, different spelling.
+      // Realpath comparison must recognize it as canonical and normalize in place — not
+      // prune it and append a duplicate registration.
+      const repoLink = join(root, "repo-link");
+      symlinkSync(resolve("."), repoLink);
+      const symlinkSpelledGate = join(repoLink, "adapters/claudecode/hooks/VoiceGate.hook.ts");
+      const canonicalGate = join(resolve("adapters/claudecode/hooks"), "VoiceGate.hook.ts");
+
+      const settingsPath = join(root, "settings.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          { hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: symlinkSpelledGate }] }] } },
+          null,
+          2,
+        ) + "\n",
+        { mode: 0o644 },
+      );
+
+      const first = await runRestore(settingsPath);
+      const second = await runRestore(settingsPath);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+
+      expect(first.exitCode).toBe(0);
+      // Exactly one registration, in the tool's own canonical spelling — no duplicate.
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([{ type: "command", command: canonicalGate }]);
+      expect(second.stdout).toContain("already current");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("edits through a symlinked settings.json without replacing the symlink (#77)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-symlink-"));
+    try {
+      // Mirror a dotfiles layout: ~/.claude/settings.json -> ../dotfiles/.../settings.json
+      const nominalDir = join(root, "claude");
+      const dotfilesDir = join(root, "dotfiles/claude");
+      mkdirSync(nominalDir, { recursive: true });
+      mkdirSync(dotfilesDir, { recursive: true });
+      const realFile = join(dotfilesDir, "settings.json");
+      const linkPath = join(nominalDir, "settings.json");
+      writeFileSync(
+        realFile,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }, null, 2) + "\n",
+        { mode: 0o644 },
+      );
+      const linkTarget = relative(nominalDir, realFile);
+      symlinkSync(linkTarget, linkPath);
+
+      const result = await runRestore(linkPath);
+
+      expect(result.exitCode).toBe(0);
+      // Still the same symlink, pointing at the same target; content updated through it.
+      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(linkPath)).toBe(linkTarget);
+      const settings = JSON.parse(readFileSync(realFile, "utf8"));
+      expect(settings.hooks.PreToolUse[0].hooks).toEqual([
+        { type: "command", command: join(resolve("adapters/claudecode/hooks"), "VoiceGate.hook.ts") },
+      ]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -16,6 +16,35 @@ Adapters should:
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
 
+## Registration contract — reconcile and prune (issue #77)
+
+Every adapter MUST ship an **idempotent reconcile-and-prune registration** for whatever host
+config holds its repo paths. Append-only registration is forbidden: a repo directory rename
+leaves the old path behind, and the failure is silent on hosts that skip a missing package
+(Pi) and loud on hosts that execute the registered path (Claude Code). Both happened in
+production on 2026-07-02.
+
+A conforming registration:
+
+1. **Sets the required path explicitly** — derives the canonical path from the adapter's own
+   location (`import.meta.url`), never from a hardcoded clone location.
+2. **Prunes stale variants** — removes or replaces in place any registration that matches the
+   adapter's pattern but is not the canonical path (dead paths from a rename, duplicates from
+   append-style installs).
+3. **Is idempotent** — rerunning against an already-correct config is a byte-for-byte no-op.
+4. **Supports `--check`** — reports pending changes (including stale paths) without mutating,
+   exiting 0 when current and 3 when changes are pending (machine-checkable).
+5. **Edits through symlinks** — if the host config may be a symlink (e.g. into a dotfiles
+   repo), write by atomically replacing the resolved real file, never the symlink itself.
+
+Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
+`~/.claude/settings.json`) and `adapters/pi/reconcile.ts` (packages entry in
+`~/.pi/agent/settings.json`). `scripts/install.sh` re-reconciles **every installed adapter on
+every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates the
+adapters' check modes plus the LaunchAgent plist paths — a new adapter must plug its
+reconcile and check commands into both. Future hosts (oh-my-pi #18, Codex/OpenCode #30)
+inherit this contract.
+
 ## Pi adapter — per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
