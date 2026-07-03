@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
+import { readMuteState } from "./mute";
 import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
@@ -1071,7 +1072,17 @@ export async function speakWithFallback(
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
-): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[] }> {
+): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean }> {
+  // Runtime mute gate (#83): sits before the provider loop so ONE check covers
+  // every provider including the macOS `say` fallback. Lazy expiry — a timed
+  // mute past its deadline reads as unmuted. Logging and voice resolution
+  // already happened upstream; the caller records the drop-off event tagged muted.
+  const muteState = readMuteState();
+  if (muteState.muted) {
+    console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
+    return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
+  }
+
   // Build provider order: primary first, then fallback order
   const providerOrder = [
     voicesConfig.defaultProvider,
@@ -1230,7 +1241,9 @@ async function sendNotification(
 
       const result = await speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion);
 
-      if (result.success) {
+      if (result.muted) {
+        console.log('🔇 Speech suppressed (muted)');
+      } else if (result.success) {
         console.log(`✅ Speech via ${result.provider}`);
       } else {
         console.warn('⚠️  All speech providers failed');
@@ -1249,6 +1262,7 @@ async function sendNotification(
         hops: result.success ? result.attempts.length - 1 : result.attempts.length,
         attempts: result.attempts,
         success: result.success,
+        ...(result.muted && { muted: true }),
       });
     } catch (error) {
       console.error("Failed to speak:", error);
