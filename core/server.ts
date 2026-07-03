@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
-import { readMuteState } from "./mute";
+import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
@@ -1408,6 +1408,52 @@ export const server = serve({
       }
     }
 
+    // /mute — global runtime mute (#83). An explicit JSON body sets state;
+    // an EMPTY body toggles, so a one-keystroke hotkey needs no state
+    // knowledge. Response is always the resulting state {muted, muted_until}.
+    if (url.pathname === "/mute" && req.method === "POST") {
+      try {
+        const text = await req.text();
+        let state;
+        if (text.trim() === "") {
+          state = toggleMuteState();
+        } else {
+          let data: any;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error("Invalid JSON body");
+          }
+          if (typeof data?.muted !== "boolean") {
+            throw new Error("Invalid body: 'muted' must be a boolean");
+          }
+          if (data.duration_minutes !== undefined &&
+              (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
+            throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+          }
+          state = setMuteState(data.muted, data.duration_minutes);
+        }
+
+        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`);
+        return new Response(
+          JSON.stringify(state),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200
+          }
+        );
+      } catch (error: any) {
+        log('error', `Mute error: ${error.message || error}`);
+        return new Response(
+          JSON.stringify({ status: "error", message: error.message || "Internal server error" }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: error.message?.includes('Invalid') ? 400 : 500
+          }
+        );
+      }
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const providerStatus = await getProviderStatus();
 
@@ -1423,6 +1469,7 @@ export const server = serve({
           macos_fallback_voice: getMacOSFallbackVoice(),
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
+          mute: readMuteState(),
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,
@@ -1447,7 +1494,7 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "GET /health"];
+    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health"];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -1488,5 +1535,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, POST /notify/personality, GET /health`);
+log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);
