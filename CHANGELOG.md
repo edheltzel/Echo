@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the new voice.
 
 ### Added
+- **Runtime mute** (#83): one global mute switch on the daemon — `POST /mute` (explicit
+  JSON body sets state; an **empty body toggles**, hotkey-friendly) plus
+  `scripts/mute.sh on [minutes] | off | toggle | status`. Muted notifications are processed
+  and logged normally (echo.log + resolution drop-off log carry a `muted` marker); audio
+  alone is suppressed across every provider **including the macOS `say` fallback**, via one
+  gate before the provider loop. Mute is indefinite or timed (`duration_minutes`); timed
+  mutes expire lazily and silently. State survives daemon restarts with its deadline intact
+  in a user-owned `mute.json` (atomic writes; missing/corrupt file = unmuted; path override
+  `ECHO_MUTE_STATE_PATH`). `GET /health` exposes an additive `mute` block. Hotkey binding
+  examples (Raycast / Shortcuts / Stream Deck) in [docs/http-api.md](docs/http-api.md).
 - **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
   oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
   `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`

@@ -20,7 +20,8 @@ the trust boundary, egress posture, and secret handling. For the request flow se
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.
 
-There is **no authentication** on `/notify` — any local process may request speech. That is
+There is **no authentication** on `/notify` — any local process may request speech — and
+the same applies to `/mute` (#83): any local process may flip the global mute. That is
 an accepted design property for a single-user local daemon, not an oversight; do not add
 network exposure without revisiting it.
 

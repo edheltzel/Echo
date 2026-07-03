@@ -26,6 +26,9 @@ bash scripts/install.sh --adapter omp
 # Lifecycle
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
+# Runtime mute (audio off; notifications still processed + logged)
+bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
+
 # Health / silent smoke
 curl -fsS http://localhost:8888/health
 curl -fsS -X POST http://localhost:8888/notify \
@@ -70,7 +73,7 @@ merges; never push directly to `master`** (see Invariants).
 |---|---|
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
-| HTTP API (`/notify`, `/notify/personality`, `/health`) | [docs/http-api.md](docs/http-api.md) |
+| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
