@@ -61,6 +61,11 @@ and a single `writeResolutionEvent` call in `sendNotification`'s voice-enabled p
   `getVoiceMapping` already returned (not a re-query), so the log can never disagree with the
   actual resolution. A `circuit-open` outcome is read from the imported `circuitBreakers` map
   (the provider's health probe consults `shouldSkipProvider`).
+- **Muted records (#83):** while the runtime mute is on, each voice-enabled `/notify` still
+  writes its event, with voice resolution intact but the speech stage suppressed:
+  `provider: "muted"`, `attempts: []`, `hops: 0`, `success: false`, plus an additive
+  `muted: true` marker. Consumers computing provider failure rates must filter on `muted` —
+  a muted afternoon is not a provider outage.
 
 Proven by `tests/core/resolution-log.test.ts`: one `/notify` writes exactly one event with
 the expected fields, and the rolling prune is driven past the cap (file never exceeds it,

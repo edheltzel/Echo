@@ -4,6 +4,10 @@ PORT="${PORT:-8889}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="${ROOT}/.smoke-core.log"
 
+# Pin the runtime-mute state (#83) to scratch so the smoke daemon never reads
+# (or, via lazy-expiry cleanup, rewrites) the operator's real mute.json.
+export ECHO_MUTE_STATE_PATH="$(mktemp -d)/mute.json"
+
 PORT="$PORT" bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
