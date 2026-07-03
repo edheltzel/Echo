@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadPiVoiceConfig, shouldSuppressVoice } from "./config.ts";
+import { loadPiVoiceConfig, pickStartupCatchphrase, shouldSuppressVoice } from "./config.ts";
 import { sendPiNotification } from "./notify-client.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "./voice-line.ts";
 
@@ -132,7 +132,7 @@ export default function atlasVoicePiAdapter(pi: ExtensionAPI): void {
   pi.on("session_start", async (event, ctx) => {
     if (!config.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
-    await speak(config.catchphrase, ctx);
+    await speak(pickStartupCatchphrase(config.startupCatchphrases), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {

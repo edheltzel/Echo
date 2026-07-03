@@ -162,7 +162,7 @@ describe("issue #24 — one resolution event per /notify", () => {
     expect(ev.hops).toBe(ev.attempts.length - 1);
   });
 
-  test("voice_id 'pi' resolves as agent-key to en-US-GuyNeural (#76)", async () => {
+  test("voice_id 'pi' resolves as agent-key to en-GB-RyanNeural (#76, #81)", async () => {
     if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
 
     // Enable only edgetts (the primary provider); the spawn stub makes its
@@ -191,7 +191,7 @@ describe("issue #24 — one resolution event per /notify", () => {
     expect(ev.resolution).toBe("agent-key");
     expect(ev.resolution_reason).toBeUndefined();
     expect(ev.provider).toBe("edgetts");
-    expect(ev.voice).toBe("en-US-GuyNeural"); // agents.pi.edgetts.voice
+    expect(ev.voice).toBe("en-GB-RyanNeural"); // agents.pi.edgetts.voice (#81)
     expect(ev.success).toBe(true);
     expect(ev.attempts[0]).toEqual({ provider: "edgetts", outcome: "success" });
     expect(ev.hops).toBe(0); // primary provider spoke — no fallback hops

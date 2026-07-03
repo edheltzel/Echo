@@ -57,8 +57,9 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 - **Persona name** comes from config: `personaName` ← env `ECHO_VOICE_PERSONA_NAME` (default
   `"Pi"`), never hard-coded.
-- **Distinct voice (issue #76):** `voiceId` defaults to `"pi"` (env `ECHO_VOICE_ID` overrides),
-  which the daemon resolves via `agents.pi` in `core/voices.json` → `en-US-GuyNeural`. Unlike
+- **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"` (env
+  `ECHO_VOICE_ID` overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
+  → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
   the injection feature above, #76 also touched `core/voices.json` data — a running daemon
   loads voices.json once at startup, so restart it
   (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the `pi` entry; until then the
