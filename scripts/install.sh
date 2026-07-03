@@ -12,12 +12,14 @@ PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
+# reconcile-omp.ts honors the same override, so detection and reconcile agree.
+OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 ADAPTER="none"
 CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|pi] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|pi|omp] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -56,7 +58,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|pi) ;;
+  none|claudecode|pi|omp) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -79,6 +81,13 @@ pi_installed() {
   [ -f "$PI_SETTINGS" ] && grep -qE '"([^":]*/)?adapters/pi/?"' "$PI_SETTINGS"
 }
 
+# Anchored to the one entry Echo owns (#18): the echo-voice symlink — present
+# even when its target is dead (a renamed clone), which is exactly the state
+# refresh-all must heal. Foreign entries never trigger detection.
+omp_installed() {
+  [ -L "$OMP_EXTENSIONS/echo-voice" ]
+}
+
 preflight() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "Bun is required. Install it from https://bun.sh/" >&2
@@ -97,6 +106,17 @@ preflight() {
         echo "Pi CLI is required for --adapter pi" >&2
         exit 1
       fi
+      ;;
+    omp)
+      if ! command -v omp >/dev/null 2>&1; then
+        echo "omp CLI is required for --adapter omp" >&2
+        exit 1
+      fi
+      echo "> Preflighting oh-my-pi adapter registration"
+      # Exit 3 (changes pending) is normal before an install; exit 2 (FATAL,
+      # e.g. a foreign entry occupying echo-voice) must abort BEFORE any host
+      # state is mutated.
+      bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 }
@@ -214,6 +234,10 @@ install_adapter() {
       echo "> Reconciling Pi adapter registration"
       bun run "$REPO_ROOT/adapters/pi/reconcile.ts"
       ;;
+    omp)
+      echo "> Reconciling oh-my-pi adapter registration"
+      bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts"
+      ;;
   esac
 }
 
@@ -230,6 +254,11 @@ refresh_installed_adapters() {
     echo "> Refreshing Pi adapter registration"
     bun run "$REPO_ROOT/adapters/pi/reconcile.ts" \
       || echo "WARN: Pi registration refresh failed — run adapters/pi/reconcile.ts manually" >&2
+  fi
+  if [ "$ADAPTER" != "omp" ] && omp_installed; then
+    echo "> Refreshing oh-my-pi adapter registration"
+    bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts" \
+      || echo "WARN: omp registration refresh failed — run adapters/pi/reconcile-omp.ts manually" >&2
   fi
 }
 
@@ -273,6 +302,18 @@ check_installation() {
       stale=1
     elif [ "$rc" -ne 0 ]; then
       echo "WARN: Pi registration check failed" >&2
+      stale=1
+    fi
+  fi
+
+  if omp_installed; then
+    echo "> Checking oh-my-pi adapter registration"
+    rc=0
+    bun run "$REPO_ROOT/adapters/pi/reconcile-omp.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: omp registration check failed" >&2
       stale=1
     fi
   fi

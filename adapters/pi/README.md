@@ -1,6 +1,7 @@
 # Pi Adapter
 
-Pi host adapter for Echo.
+Pi host adapter for Echo. Serves both upstream Pi and the oh-my-pi (omp) fork — see
+[docs/adapters.md](../../docs/adapters.md) for the dual-host details (#18).
 
 The adapter is a Pi package. It listens to Pi lifecycle events and translates them into `/notify` requests against the local voice server.
 
@@ -14,6 +15,13 @@ Or let the repository installer do it:
 
 ```bash
 bash scripts/install.sh --adapter pi
+```
+
+For oh-my-pi, the installer reconciles a symlink registration instead (omp has no
+`pi install`):
+
+```bash
+bash scripts/install.sh --adapter omp   # runs adapters/pi/reconcile-omp.ts
 ```
 
 ## Behavior

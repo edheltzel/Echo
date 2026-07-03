@@ -31,10 +31,14 @@ function eventMessage(event: unknown): unknown {
     : undefined;
 }
 
-function readSystemPrompt(event: unknown): string | undefined {
+function readSystemPrompt(event: unknown): string | string[] | undefined {
   if (typeof event === "object" && event !== null && "systemPrompt" in event) {
     const value = (event as { systemPrompt?: unknown }).systemPrompt;
     if (typeof value === "string") return value;
+    // oh-my-pi passes systemPrompt as string[] (upstream Pi uses string).
+    if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+      return value as string[];
+    }
   }
   return undefined;
 }
@@ -108,12 +112,17 @@ export default function atlasVoicePiAdapter(pi: ExtensionAPI): void {
     }
 
     const base = readSystemPrompt(event);
-    if (base === undefined) return undefined; // feature-detect: older runtime → safe no-op
+    if (base === undefined) return undefined; // feature-detect: unknown shape → safe no-op
 
     const instruction = buildVoiceLineInstruction(config.personaName);
-    // Always APPEND to the chained prompt (never clobber other extensions).
-    // `systemPrompt` is the documented replace return; `systemPromptAppend`
-    // is the fallback for runtimes that ignore the replace return.
+    // Always APPEND to the chained prompt (never clobber other extensions),
+    // returning the same shape the host passed in.
+    if (Array.isArray(base)) {
+      // oh-my-pi: systemPrompt is string[] in and string[] out.
+      return { systemPrompt: [...base, instruction] };
+    }
+    // Upstream Pi: `systemPrompt` is the documented replace return;
+    // `systemPromptAppend` is the fallback for runtimes that ignore it.
     return {
       systemPrompt: `${base}\n\n${instruction}`,
       systemPromptAppend: `\n\n${instruction}`,

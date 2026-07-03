@@ -38,12 +38,13 @@ A conforming registration:
    repo), write by atomically replacing the resolved real file, never the symlink itself.
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
-`~/.claude/settings.json`) and `adapters/pi/reconcile.ts` (packages entry in
-`~/.pi/agent/settings.json`). `scripts/install.sh` re-reconciles **every installed adapter on
-every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates the
-adapters' check modes plus the LaunchAgent plist paths — a new adapter must plug its
-reconcile and check commands into both. Future hosts (oh-my-pi #18, Codex/OpenCode #30)
-inherit this contract.
+`~/.claude/settings.json`), `adapters/pi/reconcile.ts` (packages entry in
+`~/.pi/agent/settings.json`), and `adapters/pi/reconcile-omp.ts` (the `echo-voice` symlink in
+`~/.omp/agent/extensions/`, #18). `scripts/install.sh` re-reconciles **every installed
+adapter on every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates
+the adapters' check modes plus the LaunchAgent plist paths — a new adapter must plug its
+reconcile and check commands into both. Future hosts (Codex/OpenCode #30) inherit this
+contract.
 
 ## Pi adapter — per-turn completions (issue #15)
 
@@ -73,3 +74,29 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
+
+## oh-my-pi (omp) — same adapter, dual host (issue #18)
+
+`adapters/pi/` serves both upstream Pi and the oh-my-pi fork; there is no separate
+`adapters/omp/`. The host package import is type-only (erased at load), the lifecycle event
+surface is shape-identical, and omp subagents hard-code `hasUI: false`, so suppression holds.
+The two host differences the adapter absorbs:
+
+- **`before_agent_start.systemPrompt` shape:** upstream Pi passes a `string`; omp passes a
+  `string[]`. The injection handler feature-detects both and returns the same shape it
+  received (`string[]` in → `[...base, instruction]` out). Unknown shapes still no-op safely.
+- **Registration:** omp has no `pi install`. `bash scripts/install.sh --adapter omp` runs
+  `adapters/pi/reconcile-omp.ts`, which maintains a single `echo-voice` symlink in
+  `~/.omp/agent/extensions/` pointing at `adapters/pi/` (omp loads the entries declared in
+  the package.json `pi` field through it). The script follows the reconcile-and-prune
+  contract from #77 with strict ownership: Echo owns **only** the `echo-voice` name — no
+  other entry is ever touched, whatever its target. The `echo-voice` entry is healed only
+  when it provably belongs to Echo (a dead `*/adapters/pi` target from a renamed clone, or
+  a live target whose package.json is `@echo/pi-adapter` — another Echo checkout, re-pointed
+  at this one). Anything else occupying the name is FATAL (exit 2), never replaced.
+  Reruns are idempotent; `--check` exits 0 when current / 3 when changes are pending /
+  2 on a FATAL state, and the installer preflights `--check` (tolerating 3) so a FATAL
+  state aborts before any host state is mutated.
+
+omp uses the **same voice and persona as Pi** (`voice_id: "pi"`, `personaName: "Pi"` — the
+`agents.pi` entry from #76); there is no separate omp persona.
