@@ -106,6 +106,12 @@ describe("mute state — tolerant reads", () => {
     expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
   });
 
+  test("non-string muted_until (hand-edited numeric epoch) → unmuted, never indefinite mute", () => {
+    const p = join(TMP, "numts.json");
+    writeFileSync(p, JSON.stringify({ muted: true, muted_until: 12345 }));
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+  });
+
   test("unparseable muted_until timestamp → unmuted, no crash", () => {
     const p = join(TMP, "badts.json");
     writeFileSync(p, JSON.stringify({ muted: true, muted_until: "not-a-date" }));

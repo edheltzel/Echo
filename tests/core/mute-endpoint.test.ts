@@ -105,6 +105,63 @@ describe("issue #83 — POST /mute invalid bodies → 400, state untouched", () 
   }
 });
 
+describe("issue #83 — /mute reliability under load and failure", () => {
+  test("/mute is NOT starved by a /notify flood (dedicated rate-limit bucket)", async () => {
+    // Exhaust one client's shared bucket with 10 notify-path requests, then
+    // assert /mute from the same client still succeeds. Uses a dedicated
+    // x-forwarded-for so the suite-wide 'localhost' bucket is untouched.
+    const floodHeaders = { "Content-Type": "application/json", "x-forwarded-for": "mute-flood-test" };
+    for (let i = 0; i < 10; i++) {
+      await fetch(`http://localhost:${PORT}/notify`, {
+        method: "POST",
+        headers: floodHeaders,
+        body: JSON.stringify({ message: "flood", voice_enabled: false }),
+      });
+    }
+    // Bucket exhausted: an 11th notify-path request is rejected...
+    const starved = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: floodHeaders,
+      body: JSON.stringify({ message: "flood", voice_enabled: false }),
+    });
+    expect(starved.status).toBe(429);
+    // ...but the mute control still works (its own `mute:` bucket).
+    const res = await fetch(`http://localhost:${PORT}/mute`, {
+      method: "POST",
+      headers: floodHeaders,
+      body: JSON.stringify({ muted: false }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("state-write failure → 500 with error shape (incl. request_id)", async () => {
+    // Point the state path UNDER a regular file so mkdirSync throws ENOTDIR —
+    // a non-validation failure that must map to 500, not 400.
+    const blocker = join(TMP, "not-a-dir");
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(blocker, "file");
+    const saved = process.env.ECHO_MUTE_STATE_PATH;
+    process.env.ECHO_MUTE_STATE_PATH = join(blocker, "mute.json");
+    try {
+      const res = await postMute(JSON.stringify({ muted: true }));
+      expect(res.status).toBe(500);
+      const err = await res.json();
+      expect(err.status).toBe("error");
+      expect(typeof err.request_id).toBe("string");
+    } finally {
+      process.env.ECHO_MUTE_STATE_PATH = saved;
+    }
+  });
+
+  test("400 error body carries request_id (sibling-endpoint convention)", async () => {
+    const res = await postMute("{nope");
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.status).toBe("error");
+    expect(typeof err.request_id).toBe("string");
+  });
+});
+
 describe("issue #83 — /health mute block", () => {
   test("shows mute state in both states; existing fields unchanged", async () => {
     const unmuted = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();

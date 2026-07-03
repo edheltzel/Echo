@@ -76,11 +76,22 @@ describe("issue #83 — scripts/mute.sh", () => {
     expect(readMuteState(MUTE_PATH).muted).toBe(false);
   });
 
-  test("status → reports mute state from /health", async () => {
+  test("status → reports mute state from /health as parseable JSON", async () => {
     writeMuteState({ muted: true, muted_until: null });
     const result = await runMute(["status"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('"muted":true');
+    const parsed = JSON.parse(result.stdout.trim()); // machine-readable contract
+    expect(parsed.mute).toEqual({ muted: true, muted_until: null });
+  });
+
+  test("on 007 → leading zeros normalized, valid JSON body, 7-minute mute", async () => {
+    const result = await runMute(["on", "007"]);
+    expect(result.exitCode).toBe(0);
+    const state = readMuteState(MUTE_PATH);
+    expect(state.muted).toBe(true);
+    const deadline = Date.parse(state.muted_until!);
+    expect(deadline).toBeLessThanOrEqual(Date.now() + 7 * 60_000);
+    expect(deadline).toBeGreaterThan(Date.now() + 6 * 60_000);
   });
 
   test("invalid minutes argument → usage error, no request", async () => {

@@ -1325,7 +1325,11 @@ export const server = serve({
       return new Response(null, { headers: corsHeaders, status: 204 });
     }
 
-    if (!checkRateLimit(clientIp)) {
+    // /mute gets its own rate-limit bucket (#83): a burst of /notify traffic
+    // must never starve the mute control — the exact moment the user wants
+    // silence is when notification traffic is heaviest.
+    const rateKey = url.pathname === "/mute" ? `mute:${clientIp}` : clientIp;
+    if (!checkRateLimit(rateKey)) {
       return new Response(
         JSON.stringify({ status: "error", message: "Rate limit exceeded" }),
         {
@@ -1412,6 +1416,7 @@ export const server = serve({
     // an EMPTY body toggles, so a one-keystroke hotkey needs no state
     // knowledge. Response is always the resulting state {muted, muted_until}.
     if (url.pathname === "/mute" && req.method === "POST") {
+      const reqId = generateRequestId();
       try {
         const text = await req.text();
         let state;
@@ -1434,7 +1439,7 @@ export const server = serve({
           state = setMuteState(data.muted, data.duration_minutes);
         }
 
-        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`);
+        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
         return new Response(
           JSON.stringify(state),
           {
@@ -1443,9 +1448,9 @@ export const server = serve({
           }
         );
       } catch (error: any) {
-        log('error', `Mute error: ${error.message || error}`);
+        log('error', `Mute error: ${error.message || error}`, { requestId: reqId });
         return new Response(
-          JSON.stringify({ status: "error", message: error.message || "Internal server error" }),
+          JSON.stringify({ status: "error", message: error.message || "Internal server error", request_id: reqId }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: error.message?.includes('Invalid') ? 400 : 500

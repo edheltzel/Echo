@@ -56,6 +56,14 @@ export function readMuteState(path: string = resolveMuteStatePath()): MuteState 
   }
   if (!parsed.muted) return { ...UNMUTED };
 
+  // A non-string, non-null deadline (e.g. a hand-edited numeric epoch) is a
+  // malformed shape — falling back to "indefinite mute" would turn corruption
+  // into the strongest possible mute, inverting the tolerant-read contract.
+  if (parsed.muted_until != null && typeof parsed.muted_until !== 'string') {
+    console.warn(`🔇 Mute state file malformed (${path}) — treating as unmuted`);
+    return { ...UNMUTED };
+  }
+
   const until = typeof parsed.muted_until === 'string' ? parsed.muted_until : null;
   if (until !== null) {
     const deadline = Date.parse(until);
