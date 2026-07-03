@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Pi/omp startup greeting pool + voice retune** (#81): the shared Pi adapter now greets
+  each user-visible `session_start` with a random pick from a pool of neutral catchphrases
+  (mirroring the Claude Code adapter's `startupCatchphrases` mechanism) instead of the single
+  static "Pi session ready."; setting `ECHO_VOICE_CATCHPHRASE` (or the legacy
+  `ATLAS_VOICE_CATCHPHRASE`) pins the greeting to that one line. The shared `pi` voice entry
+  in `core/voices.json` changes to `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%`);
+  the never-read `agents.pi.catchphrase` field is removed (dead data — core never reads
+  `catchphrase`, and the greeting now lives in the adapter pool). Data-only `core/` change;
+  a running daemon loads `voices.json` once at startup, so restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the new voice.
+
 ### Added
 - **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
   oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
