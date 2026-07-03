@@ -8,8 +8,8 @@ pages for per-area detail.
 
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
-(`core/server.ts`) listens on `localhost:8888` and exposes three HTTP endpoints
-(`POST /notify`, `POST /notify/personality`, `GET /health`). Any host — a Claude Code
+(`core/server.ts`) listens on `localhost:8888` and exposes four HTTP endpoints
+(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`). Any host — a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) session, or a raw `curl` —
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
@@ -70,11 +70,12 @@ The boundary is **mechanically enforced**, not just documented:
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it. |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
+| Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
-| Neutral lifecycle | `scripts/{install,start,stop,restart,status,uninstall}.sh` | Service install/lifecycle; no host logic. |
+| Neutral lifecycle | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute; no host logic. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
@@ -91,10 +92,12 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    the **short name key**, never a raw provider voice id.
 4. **Apply pronunciations** — `applyPronunciations` runs word-boundary regex replacements
    from `pronunciations.json` (re-applied per provider).
-5. **Speak with fallback** — `speakWithFallback` walks
-   `[defaultProvider, ...fallbackOrder]`, skipping any provider that is disabled, unhealthy,
-   or circuit-open, and returns the per-provider `attempts` trail plus the voice actually
-   used (consumed by the drop-off log).
+5. **Speak with fallback** — `speakWithFallback` first checks the runtime mute state
+   (`core/mute.ts`, #83): while muted, speech is suppressed before the provider loop (one
+   gate covers every provider including `say`) and the drop-off event is tagged `muted`.
+   Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
+   disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
+   the voice actually used (consumed by the drop-off log).
 6. **Banner** — an `osascript` notification banner, then a structured response
    (`{status, message, request_id}`).
 
@@ -157,8 +160,8 @@ are contract.
 - **Never import a host API into `core/`** — no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
 - **No new host-named endpoints.** The core exposes only `POST /notify`,
-  `POST /notify/personality`, `GET /health`. Unsupported POSTs return JSON 404 with
-  `supported_endpoints`.
+  `POST /notify/personality`, `POST /mute`, `GET /health`. Unsupported POSTs return JSON 404
+  with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan — many callers depend on the body shape and status semantics.
 - **All voice traffic is `:8888`.** No new `localhost:31337` references (the legacy Pulse

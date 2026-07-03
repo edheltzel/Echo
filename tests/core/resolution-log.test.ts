@@ -53,6 +53,9 @@ process.env.ECHO_RESOLUTION_LOG = HTTP_LOG;
 // sibling file already imported the daemon its own scratch dir won, which is
 // equally safe.
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
+// Pin the runtime-mute state (#83) away from the operator's real mute.json —
+// a live muted state would suppress the `say`/edgetts positive controls here.
+process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 
 const { server, voicesConfig, writeResolutionEvent } = await import("../../core/server.ts");
 const PORT = (server as any).port;

@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
+import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
@@ -1071,7 +1072,17 @@ export async function speakWithFallback(
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
-): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[] }> {
+): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean }> {
+  // Runtime mute gate (#83): sits before the provider loop so ONE check covers
+  // every provider including the macOS `say` fallback. Lazy expiry — a timed
+  // mute past its deadline reads as unmuted. Logging and voice resolution
+  // already happened upstream; the caller records the drop-off event tagged muted.
+  const muteState = readMuteState();
+  if (muteState.muted) {
+    console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
+    return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
+  }
+
   // Build provider order: primary first, then fallback order
   const providerOrder = [
     voicesConfig.defaultProvider,
@@ -1230,7 +1241,9 @@ async function sendNotification(
 
       const result = await speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion);
 
-      if (result.success) {
+      if (result.muted) {
+        console.log('🔇 Speech suppressed (muted)');
+      } else if (result.success) {
         console.log(`✅ Speech via ${result.provider}`);
       } else {
         console.warn('⚠️  All speech providers failed');
@@ -1249,6 +1262,7 @@ async function sendNotification(
         hops: result.success ? result.attempts.length - 1 : result.attempts.length,
         attempts: result.attempts,
         success: result.success,
+        ...(result.muted && { muted: true }),
       });
     } catch (error) {
       console.error("Failed to speak:", error);
@@ -1311,7 +1325,11 @@ export const server = serve({
       return new Response(null, { headers: corsHeaders, status: 204 });
     }
 
-    if (!checkRateLimit(clientIp)) {
+    // /mute gets its own rate-limit bucket (#83): a burst of /notify traffic
+    // must never starve the mute control — the exact moment the user wants
+    // silence is when notification traffic is heaviest.
+    const rateKey = url.pathname === "/mute" ? `mute:${clientIp}` : clientIp;
+    if (!checkRateLimit(rateKey)) {
       return new Response(
         JSON.stringify({ status: "error", message: "Rate limit exceeded" }),
         {
@@ -1394,6 +1412,53 @@ export const server = serve({
       }
     }
 
+    // /mute — global runtime mute (#83). An explicit JSON body sets state;
+    // an EMPTY body toggles, so a one-keystroke hotkey needs no state
+    // knowledge. Response is always the resulting state {muted, muted_until}.
+    if (url.pathname === "/mute" && req.method === "POST") {
+      const reqId = generateRequestId();
+      try {
+        const text = await req.text();
+        let state;
+        if (text.trim() === "") {
+          state = toggleMuteState();
+        } else {
+          let data: any;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error("Invalid JSON body");
+          }
+          if (typeof data?.muted !== "boolean") {
+            throw new Error("Invalid body: 'muted' must be a boolean");
+          }
+          if (data.duration_minutes !== undefined &&
+              (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
+            throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+          }
+          state = setMuteState(data.muted, data.duration_minutes);
+        }
+
+        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
+        return new Response(
+          JSON.stringify(state),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200
+          }
+        );
+      } catch (error: any) {
+        log('error', `Mute error: ${error.message || error}`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({ status: "error", message: error.message || "Internal server error", request_id: reqId }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: error.message?.includes('Invalid') ? 400 : 500
+          }
+        );
+      }
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const providerStatus = await getProviderStatus();
 
@@ -1409,6 +1474,7 @@ export const server = serve({
           macos_fallback_voice: getMacOSFallbackVoice(),
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
+          mute: readMuteState(),
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,
@@ -1433,7 +1499,7 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "GET /health"];
+    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health"];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -1474,5 +1540,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, POST /notify/personality, GET /health`);
+log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);

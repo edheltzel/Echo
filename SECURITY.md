@@ -20,9 +20,14 @@ the trust boundary, egress posture, and secret handling. For the request flow se
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.
 
-There is **no authentication** on `/notify` — any local process may request speech. That is
-an accepted design property for a single-user local daemon, not an oversight; do not add
-network exposure without revisiting it.
+There is **no authentication** on `/notify` — any local process may request speech — and
+the same applies to `/mute` (#83): any local process may flip the global mute. Note the
+reach is wider than "local process": a `POST` with an empty or `text/plain` body is a
+CORS **simple request**, sent without preflight, so a cross-origin web page in a local
+browser can fire it blind (e.g. `sendBeacon`) — the localhost CORS header only prevents
+reading the *response*, not sending the request. That reach is an accepted risk for a
+single-user local daemon (impact is audio-only; notifications are still processed and
+logged), not an oversight; do not add network exposure without revisiting it.
 
 ## Egress posture
 

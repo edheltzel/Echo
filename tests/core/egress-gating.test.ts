@@ -18,7 +18,15 @@ process.env.PORT = "0";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import * as realChildProcess from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { circuitBreakers } from "../../core/circuit-breaker.ts";
+
+// Pin the runtime-mute state (#83) away from the operator's real mute.json —
+// speakWithFallback reads it on every call, and a live muted state would make
+// the positive-control assertions below fail nondeterministically.
+process.env.ECHO_MUTE_STATE_PATH ??= join(mkdtempSync(join(tmpdir(), "egress-mute-")), "mute.json");
 
 // --- spawn spy (edge-tts egresses via spawn, not fetch) ---------------------
 // Capture the real spawn before mocking, then route the module's `spawn` through
