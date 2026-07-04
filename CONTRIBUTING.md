@@ -23,6 +23,13 @@ Conventional Commits are encouraged: `feat:`, `fix:`, `docs:`, `chore:`, `test:`
 - Add or update tests when behavior changes.
 - Update dependency/install docs when providers, adapters, or install flows change.
 
+## Branching & Releases
+
+Work happens on `dev`: open PRs into `dev`, never push directly to `master`, and Ed owns
+all merges. The authoritative release flow — versioning, changelog, `dev`→`master`
+promotion PRs, and tagging — lives in [`AGENTS.md`](AGENTS.md) → *Release & versioning*;
+read it before preparing a release.
+
 ## Issue Filing
 
 Use the repo's issue shape when possible:
@@ -45,7 +52,10 @@ Out of scope: speech-to-text, voice cloning UI, and unrelated coding-agent featu
 2. Translate host lifecycle events into `/notify` payloads.
 3. Include `source` and `session_id` when available.
 4. Keep host-specific settings and paths inside the adapter.
-5. Add install support in `scripts/install.sh --adapter <host>`.
+5. Add install support in `scripts/install.sh --adapter <host>`. Registration must be an
+   idempotent reconcile-and-prune (set the canonical path, remove stale variants, support
+   `--check`) — never append-only. The contract lives in [`docs/adapters.md`](docs/adapters.md)
+   (#77).
 6. Add tests and a docs section in `docs/dependencies.md`.
 
 Use `adapters/pi/` as the first non-Claude-Code reference implementation.
