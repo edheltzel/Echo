@@ -88,12 +88,12 @@ state knowledge). The response is always the resulting state:
   The mute auto-expires **silently** at the deadline (lazy — voice simply resumes on the
   next notification). Invalid bodies return `400` and leave state untouched.
 
-State persists across daemon restarts, deadline included: it lives in a user-owned file
-(`~/Library/Application Support/echo/mute.json` on macOS, `$XDG_STATE_HOME/echo/mute.json`
-elsewhere; override with `ECHO_MUTE_STATE_PATH`), written atomically. A missing or corrupt
-state file means unmuted — never a crash.
+State persists across daemon restarts, deadline included, in a user-owned state file — its
+location and the `ECHO_MUTE_STATE_PATH` override are in [`configuration.md`](configuration.md).
+A missing or corrupt state file means unmuted — never a crash.
 
-`scripts/mute.sh on [minutes] | off | toggle | status` wraps this endpoint (honors `PORT`).
+Day-to-day mute usage — the `scripts/mute.sh` wrapper — lives in
+[`operations.md`](operations.md).
 
 ### Hotkey bindings
 

@@ -28,7 +28,7 @@ curl -fsS -X POST http://localhost:8889/notify \
   -d '{"message":"dev smoke","voice_enabled":false}'
 ```
 
-Adapters should expose endpoint configuration. For Pi, set:
+Adapters should expose endpoint configuration. For Pi (same for oh-my-pi, with `omp`), set:
 
 ```bash
 ECHO_NOTIFY_URL=http://localhost:8889/notify pi

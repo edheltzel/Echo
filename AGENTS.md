@@ -87,8 +87,8 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
-| Operations (start/stop/restart/status · update · repo moves) | [docs/operations.md](docs/operations.md) |
-| Configuration (env files, `PORT`, config paths, provider toggles) | [docs/configuration.md](docs/configuration.md) |
+| Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| Configuration (env files, `PORT`, config paths, provider toggles, deprecated env names) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
 ## Repo map

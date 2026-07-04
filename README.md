@@ -7,7 +7,8 @@ Standalone, multi-provider TTS notification server for coding agents, terminals,
 The server core accepts JSON on `localhost:8888` and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
 - `adapters/claudecode/` — Claude Code hook integration.
-- `adapters/pi/` — Pi extension package integration.
+- `adapters/pi/` — Pi extension package integration; the same adapter also serves the
+  oh-my-pi (omp) fork.
 - direct HTTP — any process can POST to `/notify`.
 
 ## Architecture
@@ -15,7 +16,7 @@ The server core accepts JSON on `localhost:8888` and speaks through a provider c
 ```mermaid
 flowchart LR
   ClaudeCode[Claude Code adapter] --> Notify[/POST /notify/]
-  Pi[Pi adapter] --> Notify
+  Pi[Pi / oh-my-pi adapter] --> Notify
   Curl[Scripts / curl] --> Notify
 
   subgraph Core[Universal core]
@@ -85,6 +86,7 @@ bash scripts/status.sh
 bash scripts/restart.sh
 bash scripts/stop.sh
 bash scripts/start.sh
+bash scripts/mute.sh status    # runtime mute: on [minutes] | off | toggle | status
 ```
 
 Manual health check:
@@ -105,7 +107,7 @@ Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md]
 
 ## API
 
-Three endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
+Four endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 
@@ -128,6 +130,14 @@ provider's default. See **Voices** below for resolution order.
 ### `POST /notify/personality`
 
 Compatibility endpoint for callers that only provide a `message`.
+
+### `POST /mute`
+
+Global runtime mute: audio off while notifications are still accepted, processed, and
+logged. An empty body toggles (one-keystroke hotkey friendly);
+`{"muted": true, "duration_minutes": 30}` sets a timed mute. Day-to-day usage via
+`scripts/mute.sh`: [docs/operations.md](docs/operations.md); endpoint contract + hotkey
+bindings: [docs/http-api.md](docs/http-api.md).
 
 ### `GET /health`
 
@@ -177,61 +187,10 @@ Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/v
 
 ## Deprecated environment variables
 
-Echo reads its configuration from `ECHO_*` environment variables. The project's
-former names — `ATLAS_VOICE_*` (Pi adapter) and `VOICESYSTEM_*` (core) — **still
-work as silent fallbacks**, so nothing breaks on upgrade, but they are
-**deprecated** and slated for removal in a future major release.
-
-**Read order:** the canonical `ECHO_*` name is read first; if it is unset, the
-legacy name(s) are consulted in order. Two settings converge two old names onto a
-single canonical name (priority `ECHO_*` → `ATLAS_VOICE_*` → `VOICESYSTEM_*`).
-
-| Old name | New canonical | Notes |
-|---|---|---|
-| `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (with `VOICESYSTEM_NOTIFY_URL`) |
-| `VOICESYSTEM_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (with `VOICESYSTEM_VOICE_ID`) |
-| `VOICESYSTEM_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` | |
-| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` | |
-| `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` | default value is now `Pi` (#76) |
-| `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` | |
-| `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` | |
-| `ATLAS_VOICE_SPEAK_COMPLETIONS` | `ECHO_VOICE_SPEAK_COMPLETIONS` | |
-| `ATLAS_VOICE_SUPPRESS_SUBAGENTS` | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | |
-| `ATLAS_VOICE_SUPPRESS` | `ECHO_VOICE_SUPPRESS` | |
-| `VOICESYSTEM_ENV_PATHS` | `ECHO_ENV_PATHS` | |
-| `VOICESYSTEM_DEFAULT_TITLE` | `ECHO_DEFAULT_TITLE` | |
-| `VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS` | `ECHO_AUDIO_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS` | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_AUDIO_CACHE_DIR` | `ECHO_AUDIO_CACHE_DIR` | |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_MS` | `ECHO_EDGETTS_TIMEOUT_MS` | |
-| `VOICESYSTEM_EDGETTS_SYNTH_RETRIES` | `ECHO_EDGETTS_SYNTH_RETRIES` | |
-| `VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS` | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | |
-| `VOICESYSTEM_RESOLUTION_LOG` | `ECHO_RESOLUTION_LOG` | |
-| `VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES` | `ECHO_RESOLUTION_LOG_MAX_BYTES` | |
-| `VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD` | `ECHO_CIRCUIT_BREAKER_THRESHOLD` | |
-
-### Migrating
-
-**Human:** search your shell profile, `~/.config/echo/.env`, and your LaunchAgent
-plist for the old names and replace each per the table above, then restart the
-daemon:
-
-```bash
-rg -l 'ATLAS_VOICE_|VOICESYSTEM_' ~/.zshrc ~/.bashrc ~/.config/echo/.env 2>/dev/null
-bash scripts/restart.sh
-```
-
-**Agent:** run `rg -l 'ATLAS_VOICE_|VOICESYSTEM_'` across your config locations,
-rewrite each match to its `ECHO_*` canonical per the table (collapsing the two
-convergence pairs onto `ECHO_NOTIFY_URL` / `ECHO_VOICE_ID`), then restart the
-daemon with `bash scripts/restart.sh`.
-
-> Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and
-> the LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A
-> reinstall (`bash scripts/install.sh`) migrates the running service
-> automatically — see the [CHANGELOG](CHANGELOG.md).
+Echo reads `ECHO_*` environment variables. The former names — `ATLAS_VOICE_*` (Pi adapter)
+and `VOICESYSTEM_*` (core) — still work as deprecated silent fallbacks, so nothing breaks
+on upgrade. The full old→new mapping table and migration steps live in
+[docs/configuration.md](docs/configuration.md#deprecated-environment-variables).
 
 ## Documentation
 
@@ -239,7 +198,7 @@ daemon with `bash scripts/restart.sh`.
 |---|---|
 | Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
 | Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
-| Start/stop/restart, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
 | Look up env files, `PORT`, and `voices.json` schema | [docs/configuration.md](docs/configuration.md) |
 | Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
 | Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |

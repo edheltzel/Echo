@@ -1,4 +1,4 @@
-# Get Started with Echo
+# Hear your first spoken notification
 
 In this tutorial, we'll install the Echo voice server on your Mac and hear it speak its
 first notification. By the end, you'll have a background service that speaks any message
@@ -167,7 +167,7 @@ In this tutorial, you:
 
 ## Next steps
 
-- **Wire up a host adapter** — have Claude Code or Pi speak automatically:
+- **Wire up a host adapter** — have Claude Code, Pi, or oh-my-pi speak automatically:
   [install-human.md](install-human.md)
 - **Change or add voices** — pick different persona voices by ear:
   [voices.md](voices.md)

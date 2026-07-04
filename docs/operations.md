@@ -67,6 +67,25 @@ Returns JSON containing `"status":"healthy"`.
   notification's requested voice resolved, including fallbacks. Details in
   [`providers-observability.md`](providers-observability.md).
 
+## Mute
+
+`scripts/mute.sh` wraps `POST /mute` (honors `PORT`). While muted, notifications are still
+accepted, processed, and logged — only the audio is suppressed, across every provider:
+
+```bash
+bash scripts/mute.sh status    # prints the current state, e.g. {"mute":{"muted":false,"muted_until":null}}
+bash scripts/mute.sh on        # mute indefinitely
+bash scripts/mute.sh on 30     # mute for 30 minutes, then auto-resume
+bash scripts/mute.sh off       # unmute now
+bash scripts/mute.sh toggle    # flip state — same as an empty POST /mute
+```
+
+Each command prints the resulting state as JSON. Mute state survives daemon restarts,
+deadline included — the state-file location and its `ECHO_MUTE_STATE_PATH` override are in
+[`configuration.md`](configuration.md). A timed mute expires silently: voice simply resumes
+on the next notification. The `/mute` endpoint contract and one-keystroke hotkey bindings
+(Raycast, Apple Shortcuts, Stream Deck) are in [`http-api.md`](http-api.md).
+
 ## Update after a `git pull`
 
 Bun runs the TypeScript sources directly — there is no build step.

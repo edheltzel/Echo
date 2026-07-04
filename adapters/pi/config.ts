@@ -41,8 +41,8 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
 
 export function loadPiVoiceConfig(env: Record<string, string | undefined> = process.env): PiVoiceConfig {
   // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* / VOICESYSTEM_*
-  // names remain as silent, deprecated fallbacks (see README "Deprecated environment
-  // variables"). NOTIFY_URL and VOICE_ID converge two legacy names onto one canonical.
+  // names remain as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
+  // environment variables"). NOTIFY_URL and VOICE_ID converge two legacy names onto one canonical.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
     endpoint: env.ECHO_NOTIFY_URL ?? env.ATLAS_VOICE_NOTIFY_URL ?? env.VOICESYSTEM_NOTIFY_URL ?? "http://localhost:8888/notify",

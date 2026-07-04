@@ -16,7 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expected outputs, and the uninstall/deregistration caveat; `CONTRIBUTING.md` gains
   branching/release rules and the #77 adapter-registration pointer; duplicated voice
   audition copies in README/`docs/install-human.md`/`docs/development.md` reduced to
-  pointers.
+  pointers. Follow-up pass: day-to-day mute usage (`scripts/mute.sh`) moved from
+  `docs/http-api.md` to `docs/operations.md` and `ECHO_MUTE_STATE_PATH` documented in
+  `docs/configuration.md` (#84 follow-up; the `/mute` endpoint contract + hotkey bindings
+  stay in `docs/http-api.md`); the deprecated env-name mapping/migration moved from
+  `README.md` to `docs/configuration.md` (README keeps a pointer); README gains the
+  `/mute` endpoint and the mute lifecycle command; oh-my-pi (omp) is now named alongside
+  Pi in README/`ARCHITECTURE.md`/getting-started prose.
 - **Pi/omp startup greeting pool + voice retune** (#81): the shared Pi adapter now greets
   each user-visible `session_start` with a random pick from a pool of neutral catchphrases
   (mirroring the Claude Code adapter's `startupCatchphrases` mechanism) instead of the single

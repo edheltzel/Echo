@@ -35,7 +35,8 @@ bash scripts/install.sh --adapter omp   # runs adapters/pi/reconcile-omp.ts
 ## Configuration
 
 Environment variables (the legacy `ATLAS_VOICE_*` names still work as deprecated
-silent fallbacks — see the root README's "Deprecated environment variables"):
+silent fallbacks — see
+[`docs/configuration.md`](../../docs/configuration.md#deprecated-environment-variables)):
 
 | Variable | Default | Purpose |
 |---|---|---|

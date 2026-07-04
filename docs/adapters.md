@@ -57,6 +57,10 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 - **Persona name** comes from config: `personaName` ← env `ECHO_VOICE_PERSONA_NAME` (default
   `"Pi"`), never hard-coded.
+- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from a
+  pool of neutral catchphrases (`adapters/pi/config.ts`, mirroring the Claude Code adapter's
+  `startupCatchphrases`). Setting `ECHO_VOICE_CATCHPHRASE` replaces the pool with that single
+  line, pinning the greeting; `ECHO_VOICE_GREET_ON_START=false` disables it.
 - **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"` (env
   `ECHO_VOICE_ID` overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike

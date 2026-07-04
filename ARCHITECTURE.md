@@ -10,7 +10,7 @@ Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
 (`core/server.ts`) listens on `localhost:8888` and exposes four HTTP endpoints
 (`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`). Any host — a Claude Code
-session, a Pi (`@earendil-works/pi-coding-agent`) session, or a raw `curl` —
+session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` —
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
@@ -18,7 +18,7 @@ macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner
 
 ```
   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────┐
-  │  Claude Code     │   │  Pi coding agent │   │ curl / any   │
+  │  Claude Code     │   │  Pi / oh-my-pi   │   │ curl / any   │
   │  (host)          │   │  (host)          │   │ HTTP client  │
   └────────┬─────────┘   └────────┬─────────┘   └──────┬───────┘
    lifecycle events        lifecycle events            │
@@ -74,7 +74,7 @@ The boundary is **mechanically enforced**, not just documented:
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
-| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
+| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention; the same package serves the oh-my-pi (omp) fork. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler. |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path). |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
