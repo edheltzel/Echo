@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Human-friendly documentation overhaul**: `README.md` slimmed to landing + quickstart +
+  routing (accurate `/notify` defaults, no more `"voice_id":"atlas"` example);
+  `docs/voices.md` is now the single voice home (resolution order, audition commands + flag
+  table, self-service how-tos incl. ElevenLabs setup); `docs/http-api.md` documents the full
+  `/notify` contract (all fields optional); install docs cover `--adapter omp`, exact
+  expected outputs, and the uninstall/deregistration caveat; `CONTRIBUTING.md` gains
+  branching/release rules and the #77 adapter-registration pointer; duplicated voice
+  audition copies in README/`docs/install-human.md`/`docs/development.md` reduced to
+  pointers.
 - **Pi/omp startup greeting pool + voice retune** (#81): the shared Pi adapter now greets
   each user-visible `session_start` with a random pick from a pool of neutral catchphrases
   (mirroring the Claude Code adapter's `startupCatchphrases` mechanism) instead of the single
@@ -18,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `catchphrase`, and the greeting now lives in the adapter pool). Data-only `core/` change;
   a running daemon loads `voices.json` once at startup, so restart it
   (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the new voice.
+- The installer now re-reconciles **every installed adapter registration on every run**,
+  regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).
+- `adapters/claudecode/restore-hooks.ts` prunes stale foreign-clone Voice hook registrations
+  (non-canonical `*/adapters/claudecode/hooks/Voice*.hook.ts` paths left by a rename) (#77).
+- `docs/adapters.md` documents the mandatory reconcile-and-prune registration contract for
+  all current and future adapters (#77).
+- Capitalized the project display name to **Echo** in documentation/marketing prose only
+  (headings and descriptive text). Code, CLI/daemon output, command examples, the package
+  name `echo`, service label `com.echo`, and paths are unchanged.
 
 ### Added
 - **Runtime mute** (#83): one global mute switch on the daemon — `POST /mute` (explicit
@@ -30,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in a user-owned `mute.json` (atomic writes; missing/corrupt file = unmuted; path override
   `ECHO_MUTE_STATE_PATH`). `GET /health` exposes an additive `mute` block. Hotkey binding
   examples (Raycast / Shortcuts / Stream Deck) in [docs/http-api.md](docs/http-api.md).
+- **New docs**: `docs/getting-started.md` (beginner tutorial, first install → first spoken
+  notification), `docs/operations.md` (start/stop/restart/status, update-after-pull,
+  repo-move recovery, logs, uninstall), and `docs/configuration.md` (env files,
+  `ECHO_ENV_PATHS`, `PORT`, `voices.json`/`pronunciations.json` reference).
 - **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
   oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
   `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`
@@ -52,16 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
   `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating; exits 0 when
   current, 3 when staleness was detected (adapter `--check` modes use the same codes) (#77).
-### Changed
-- The installer now re-reconciles **every installed adapter registration on every run**,
-  regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).
-- `adapters/claudecode/restore-hooks.ts` prunes stale foreign-clone Voice hook registrations
-  (non-canonical `*/adapters/claudecode/hooks/Voice*.hook.ts` paths left by a rename) (#77).
-- `docs/adapters.md` documents the mandatory reconcile-and-prune registration contract for
-  all current and future adapters (#77).
-- Capitalized the project display name to **Echo** in documentation/marketing prose only
-  (headings and descriptive text). Code, CLI/daemon output, command examples, the package
-  name `echo`, service label `com.echo`, and paths are unchanged.
 
 ## [0.3.1] - 2026-07-01
 

@@ -67,6 +67,12 @@ it). Track notable changes in `CHANGELOG.md` ([Keep a Changelog](https://keepach
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
 merges; never push directly to `master`** (see Invariants).
 
+**Promotion PRs must be merge-committed, never squashed.** Squashing a `dev`→`master`
+promotion collapses the merge and drops `dev` from `master`'s ancestry, recreating the
+divergence that makes the *next* promotion phantom-conflict (bit us on #74). If a promotion is
+squashed anyway, immediately resync with a real merge commit: `git merge origin/master` into
+`dev` (favor master's version/CHANGELOG) and push `dev`, restoring `master` as an ancestor.
+
 ## Documentation map
 
 | Topic | Doc |
@@ -76,10 +82,13 @@ merges; never push directly to `master`** (see Invariants).
 | HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
-| Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
+| Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
 | Adapter rules + registration contract (#77) + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
+| Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
+| Operations (start/stop/restart/status · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| Configuration (env files, `PORT`, config paths, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
 ## Repo map
@@ -132,3 +141,26 @@ lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
 ### Child DOX Index
 
 This repository is single-context: the root `AGENTS.md` is the sole DOX contract — there are no child `AGENTS.md` files yet. Add one when a folder becomes a durable boundary that needs its own contract (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).
+
+<!-- BACKLOG.MD GUIDELINES START -->
+<CRITICAL_INSTRUCTION>
+
+## Backlog.md Workflow
+
+This project uses Backlog.md for task and project management.
+
+**For every user request in this project, run `backlog instructions overview` before answering or taking action.**
+
+Use the overview to decide whether to search, read, create, or update Backlog tasks.
+
+Use the detailed guides when needed:
+- `backlog instructions task-creation` for creating or splitting tasks
+- `backlog instructions task-execution` for planning and implementation workflow
+- `backlog instructions task-finalization` for completion and handoff
+
+Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
+
+Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
+
+</CRITICAL_INSTRUCTION>
+<!-- BACKLOG.MD GUIDELINES END -->

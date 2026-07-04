@@ -66,7 +66,17 @@ Expected: Pi package install succeeds, the registration reconcile reports the ca
 
 If FAIL: confirm `command -v pi` works, then run `pi install ./adapters/pi` and `bun run adapters/pi/reconcile.ts` manually.
 
-## 7. Heal after a repo move/rename
+## 7. Install oh-my-pi (omp) adapter when needed
+
+```bash
+bash scripts/install.sh --adapter omp
+```
+
+Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extensions/` (created, re-pointed, or already current) and the health check passes. omp reuses the shared Pi adapter and the Pi voice — there is no separate `adapters/omp/`.
+
+If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually — ownership rules in `docs/adapters.md`.
+
+## 8. Heal after a repo move/rename
 
 Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
 
@@ -76,7 +86,7 @@ bash scripts/install.sh --check
 
 Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected — machine-checkable for automation.
 
-## 8. Status
+## 9. Status
 
 ```bash
 bash scripts/status.sh
@@ -84,10 +94,12 @@ bash scripts/status.sh
 
 Expected: neutral service `com.echo` is listed or health returns OK.
 
-## 9. Uninstall
+## 10. Uninstall
 
 ```bash
 bash scripts/uninstall.sh
 ```
 
 Expected: LaunchAgent is removed. Logs are preserved.
+
+Caveat: adapter registrations are **not** removed — Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive uninstall. No deregistration tooling exists; remove those entries manually before deleting the repo directory.

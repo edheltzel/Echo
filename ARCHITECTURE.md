@@ -75,7 +75,8 @@ The boundary is **mechanically enforced**, not just documented:
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
-| Neutral lifecycle | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute; no host logic. |
+| Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler. |
+| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path). |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
@@ -184,6 +185,8 @@ The authoritative copy of the invariant list and the DOX rail lives in [`AGENTS.
 | You want to… | Read |
 |---|---|
 | Build, test, and run | [`AGENTS.md`](AGENTS.md), [`docs/development.md`](docs/development.md) |
+| Operate the installed service (start/stop/update/repo moves) | [`docs/operations.md`](docs/operations.md) |
+| Configure env files, ports, and providers | [`docs/configuration.md`](docs/configuration.md) |
 | Call or extend the HTTP API | [`docs/http-api.md`](docs/http-api.md) |
 | Understand egress / observability | [`docs/providers-observability.md`](docs/providers-observability.md) |
 | Tune reliability / circuit breaker | [`docs/reliability.md`](docs/reliability.md) |
