@@ -175,11 +175,12 @@ For the default `edge-tts` provider, each agent maps to a Microsoft neural voice
 Changing a persona's voice, adding a new persona, and the per-turn persona voice spoken
 by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 
-### Gotchas that cause silence
+### Gotchas: wrong voice or silence
 
 - Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
-  while ElevenLabs is disabled.
-- Port `31337` is wrong — voice traffic is `:8888`.
+  while ElevenLabs is disabled — it speaks in the active provider's **default voice**
+  instead of the persona you meant.
+- Port `31337` causes silence — voice traffic is `:8888`.
 
 ### Auditioning edge voices
 
