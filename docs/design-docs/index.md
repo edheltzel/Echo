@@ -1,6 +1,6 @@
 # Design Documents
 
-Catalogue of design docs for echo. Each captures the rationale behind a
+Catalogue of design docs for Echo. Each captures the rationale behind a
 non-obvious decision so agents (and humans) can recover the *why*, not just the *what*. See
 [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for the current codemap.
 

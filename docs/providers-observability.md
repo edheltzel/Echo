@@ -57,10 +57,18 @@ and a single `writeResolutionEvent` call in `sendNotification`'s voice-enabled p
   `resolution_reason` (fallback only), `provider` (or `none`), `voice` (actual, or `null`),
   `hops` (providers skipped/failed before the chosen one), `attempts[]` (`{provider,
   outcome}` where outcome ∈ `success`/`failed`/`unhealthy`/`circuit-open`/`disabled`),
-  `success`. `classifyResolution` derives the resolution from the `VoiceMapping`
-  `getVoiceMapping` already returned (not a re-query), so the log can never disagree with the
-  actual resolution. A `circuit-open` outcome is read from the imported `circuitBreakers` map
-  (the provider's health probe consults `shouldSkipProvider`).
+  `success`. Failed/skipped attempts may include additive diagnostics (`phase`, `reason`,
+  `message`, `elapsed_ms`, `timeout_ms`, `exit_code`, `signal`, `stderr`, `command`) so the
+  log says whether a failure came from a health import, synthesis, playback, or the breaker.
+  `classifyResolution` derives the resolution from the `VoiceMapping` `getVoiceMapping`
+  already returned (not a re-query), so the log can never disagree with the actual
+  resolution. An edge-tts `circuit-open` attempt is read directly from the imported
+  `circuitBreakers` map; edge-tts health checks remain diagnostic and do not gate `/notify`.
+- **Muted records (#83):** while the runtime mute is on, each voice-enabled `/notify` still
+  writes its event, with voice resolution intact but the speech stage suppressed:
+  `provider: "muted"`, `attempts: []`, `hops: 0`, `success: false`, plus an additive
+  `muted: true` marker. Consumers computing provider failure rates must filter on `muted` —
+  a muted afternoon is not a provider outage.
 
 Proven by `tests/core/resolution-log.test.ts`: one `/notify` writes exactly one event with
 the expected fields, and the rolling prune is driven past the cap (file never exceeds it,

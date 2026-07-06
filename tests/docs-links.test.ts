@@ -2,10 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 const docs = [
-  "docs/dependencies.md",
-  "docs/development.md",
+  "docs/getting-started.md",
   "docs/install-human.md",
   "docs/install-agent.md",
+  "docs/operations.md",
+  "docs/configuration.md",
+  "docs/http-api.md",
+  "docs/voices.md",
+  "docs/providers-observability.md",
+  "docs/reliability.md",
+  "docs/dependencies.md",
+  "docs/development.md",
   "CONTRIBUTING.md",
 ];
 

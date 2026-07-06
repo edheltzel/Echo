@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-06
+
+### Fixed
+- **Edge TTS fallback regression hardening**: `/notify` no longer lets the diagnostic
+  `python -c "import edge_tts"` health probe veto Edge TTS and fall through to macOS `say`.
+  Edge is skipped only when disabled or when its circuit breaker is open from real synthesis
+  failures. Edge synthesis now logs structured phase/reason/elapsed/timeout/exit/stderr
+  diagnostics, serializes synthesis attempts to reduce concurrent-process flakiness, and uses
+  an adaptive timeout (`base + per-character`, capped) so longer messages do not hit the same
+  fixed budget as short probes.
+
+### Changed
+- **Human-friendly documentation overhaul**: `README.md` slimmed to landing + quickstart +
+  routing (accurate `/notify` defaults, no more `"voice_id":"atlas"` example);
+  `docs/voices.md` is now the single voice home (resolution order, audition commands + flag
+  table, self-service how-tos incl. ElevenLabs setup); `docs/http-api.md` documents the full
+  `/notify` contract (all fields optional); install docs cover `--adapter omp`, exact
+  expected outputs, and the uninstall/deregistration caveat; `CONTRIBUTING.md` gains
+  branching/release rules and the #77 adapter-registration pointer; duplicated voice
+  audition copies in README/`docs/install-human.md`/`docs/development.md` reduced to
+  pointers. Follow-up pass: day-to-day mute usage (`scripts/mute.sh`) moved from
+  `docs/http-api.md` to `docs/operations.md` and `ECHO_MUTE_STATE_PATH` documented in
+  `docs/configuration.md` (#84 follow-up; the `/mute` endpoint contract + hotkey bindings
+  stay in `docs/http-api.md`); the deprecated env-name mapping/migration moved from
+  `README.md` to `docs/configuration.md` (README keeps a pointer); README gains the
+  `/mute` endpoint and the mute lifecycle command; oh-my-pi (omp) is now named alongside
+  Pi in README/`ARCHITECTURE.md`/getting-started prose.
+- **Pi/omp startup greeting pool + voice retune** (#81): the shared Pi adapter now greets
+  each user-visible `session_start` with a random pick from a pool of neutral catchphrases
+  (mirroring the Claude Code adapter's `startupCatchphrases` mechanism) instead of the single
+  static "Pi session ready."; setting `ECHO_VOICE_CATCHPHRASE` (or the legacy
+  `ATLAS_VOICE_CATCHPHRASE`) pins the greeting to that one line. The shared `pi` voice entry
+  in `core/voices.json` changes to `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%`);
+  the never-read `agents.pi.catchphrase` field is removed (dead data — core never reads
+  `catchphrase`, and the greeting now lives in the adapter pool). Data-only `core/` change;
+  a running daemon loads `voices.json` once at startup, so restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the new voice.
+- The installer now re-reconciles **every installed adapter registration on every run**,
+  regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).
+- `adapters/claudecode/restore-hooks.ts` prunes stale foreign-clone Voice hook registrations
+  (non-canonical `*/adapters/claudecode/hooks/Voice*.hook.ts` paths left by a rename) (#77).
+- `docs/adapters.md` documents the mandatory reconcile-and-prune registration contract for
+  all current and future adapters (#77).
+- Capitalized the project display name to **Echo** in documentation/marketing prose only
+  (headings and descriptive text). Code, CLI/daemon output, command examples, the package
+  name `echo`, service label `com.echo`, and paths are unchanged.
+
+### Added
+- **Runtime mute** (#83): one global mute switch on the daemon — `POST /mute` (explicit
+  JSON body sets state; an **empty body toggles**, hotkey-friendly) plus
+  `scripts/mute.sh on [minutes] | off | toggle | status`. Muted notifications are processed
+  and logged normally (echo.log + resolution drop-off log carry a `muted` marker); audio
+  alone is suppressed across every provider **including the macOS `say` fallback**, via one
+  gate before the provider loop. Mute is indefinite or timed (`duration_minutes`); timed
+  mutes expire lazily and silently. State survives daemon restarts with its deadline intact
+  in a user-owned `mute.json` (atomic writes; missing/corrupt file = unmuted; path override
+  `ECHO_MUTE_STATE_PATH`). `GET /health` exposes an additive `mute` block. Hotkey binding
+  examples (Raycast / Shortcuts / Stream Deck) in [docs/http-api.md](docs/http-api.md).
+- **New docs**: `docs/getting-started.md` (beginner tutorial, first install → first spoken
+  notification), `docs/operations.md` (start/stop/restart/status, update-after-pull,
+  repo-move recovery, logs, uninstall), and `docs/configuration.md` (env files,
+  `ECHO_ENV_PATHS`, `PORT`, `voices.json`/`pronunciations.json` reference).
+- **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
+  oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
+  `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`
+  registers the adapter via `adapters/pi/reconcile-omp.ts` — an idempotent
+  reconcile-and-prune symlink (`~/.omp/agent/extensions/echo-voice` → `adapters/pi/`) per the
+  #77 contract with strict ownership (only the `echo-voice` name is ever touched, healed
+  only for provably-Echo targets, FATAL exit 2 otherwise), `--check` exiting 0 current /
+  3 pending / 2 fatal, and a preflight that surfaces FATAL states before any host mutation.
+  omp uses the same `pi` voice and persona as upstream Pi.
+- **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
+  (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
+  (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
+  `ECHO_VOICE_PERSONA_NAME`), so Pi sessions sound distinct from the default identity voice.
+  A running daemon loads `voices.json` once at startup — restart it
+  (`launchctl kickstart -k "gui/$UID/com.echo"`) so the new `pi` entry resolves.
+- `adapters/pi/reconcile.ts`: idempotent Pi registration reconcile — replaces stale
+  `*/adapters/pi` packages entries with the canonical path in place, collapses duplicates,
+  supports `--check`, and writes through a symlinked `~/.pi/agent/settings.json` without
+  replacing the symlink (#77).
+- `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
+  `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating; exits 0 when
+  current, 3 when staleness was detected (adapter `--check` modes use the same codes) (#77).
+
 ## [0.3.1] - 2026-07-01
 
 Renamed the project **Atlas Voicesystem → Echo** (Ed's call — "Atlas" is personal). A full
@@ -132,7 +217,8 @@ Initial release of the universal voice-system core plus PAI and Pi host adapters
 
 - Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
 
-[Unreleased]: https://github.com/edheltzel/echo/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/edheltzel/echo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/edheltzel/echo/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/edheltzel/echo/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/edheltzel/echo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/edheltzel/echo/compare/v0.1.1...v0.2.0

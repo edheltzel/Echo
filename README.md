@@ -1,13 +1,14 @@
 ![Echo — a voice for any agent](assets/banner.png)
 
-# echo
+# Echo
 
 Standalone, multi-provider TTS notification server for coding agents, terminals, and scripts.
 
 The server core accepts JSON on `localhost:8888` and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
 - `adapters/claudecode/` — Claude Code hook integration.
-- `adapters/pi/` — Pi extension package integration.
+- `adapters/pi/` — Pi extension package integration; the same adapter also serves the
+  oh-my-pi (omp) fork.
 - direct HTTP — any process can POST to `/notify`.
 
 ## Architecture
@@ -15,7 +16,7 @@ The server core accepts JSON on `localhost:8888` and speaks through a provider c
 ```mermaid
 flowchart LR
   ClaudeCode[Claude Code adapter] --> Notify[/POST /notify/]
-  Pi[Pi adapter] --> Notify
+  Pi[Pi / oh-my-pi adapter] --> Notify
   Curl[Scripts / curl] --> Notify
 
   subgraph Core[Universal core]
@@ -33,29 +34,50 @@ flowchart LR
 
 The universal core is in `core/`. It should not import host adapters or assume PAI, Pi, or any other harness.
 
-## Install
+## Quickstart
 
-For humans: `docs/install-human.md`.
-
-For autonomous agents: `docs/install-agent.md`.
-
-Quick core-only install:
+Requires macOS and [Bun](https://bun.sh/). New to Echo? Follow the guided tutorial
+instead: **[docs/getting-started.md](docs/getting-started.md)**.
 
 ```bash
 bash scripts/install.sh --adapter none
 ```
 
-Install with Claude Code hooks:
+The installer output ends with:
 
-```bash
-bash scripts/install.sh --adapter claudecode
+```
+OK echo is healthy on :8888
 ```
 
-Install with Pi adapter:
+Send your first spoken notification:
 
 ```bash
-bash scripts/install.sh --adapter pi
+curl -X POST http://localhost:8888/notify \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Hello from Echo"}'
 ```
+
+You should hear "Hello from Echo" spoken aloud and see:
+
+```json
+{"status":"success","message":"Notification sent","request_id":"..."}
+```
+
+Hear nothing, or an unexpected voice? See [If you hear nothing — or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
+
+## Install
+
+The quickstart above installs the core only. To also wire a host adapter:
+
+```bash
+bash scripts/install.sh --adapter claudecode   # Claude Code hooks
+bash scripts/install.sh --adapter pi           # Pi extension
+bash scripts/install.sh --adapter omp          # oh-my-pi extension
+```
+
+Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
+
+Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/install-agent.md).
 
 ## Operation
 
@@ -64,20 +86,13 @@ bash scripts/status.sh
 bash scripts/restart.sh
 bash scripts/stop.sh
 bash scripts/start.sh
+bash scripts/mute.sh status    # runtime mute: on [minutes] | off | toggle | status
 ```
 
 Manual health check:
 
 ```bash
 curl -fsS http://localhost:8888/health
-```
-
-Manual speak request:
-
-```bash
-curl -X POST http://localhost:8888/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from echo"}'
 ```
 
 Silent smoke request:
@@ -88,79 +103,64 @@ curl -fsS -X POST http://localhost:8888/notify \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
 
+Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md](docs/operations.md).
+
 ## API
+
+Four endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 
 ```json
 {
-  "title": "Voice Notification",
   "message": "Task complete",
-  "voice_enabled": true,
-  "voice_id": "atlas",
-  "voice_settings": {
-    "stability": 0.5,
-    "similarity_boost": 0.75,
-    "style": 0.0,
-    "speed": 1.0,
-    "use_speaker_boost": true
-  },
-  "session_id": "optional-host-session-id",
-  "source": "optional-host-name"
+  "voice_id": "themis",
+  "title": "Voice Notification",
+  "voice_enabled": true
 }
 ```
 
-All fields are optional except `message`. `voice_enabled: false` keeps the notification path silent for smoke tests.
+All fields are optional — a missing `message` defaults to `"Task completed"`.
+`voice_enabled: false` keeps the notification path silent for smoke tests.
 
-`voice_id` takes a persona **name key** from `voices.json` (e.g. `kai`, `themis`). The main Atlas voice is the default — it plays whenever `voice_id` is omitted or doesn't match a configured agent (so `"atlas"` above resolves to that default). See **Voices** for resolution order.
+`voice_id` takes a persona **name key** from `voices.json` (e.g. `kai`, `themis`). Omit it
+to get the default Atlas identity voice; an unrecognized value falls back to the active
+provider's default. See **Voices** below for resolution order.
 
 ### `POST /notify/personality`
 
 Compatibility endpoint for callers that only provide a `message`.
 
+### `POST /mute`
+
+Global runtime mute: audio off while notifications are still accepted, processed, and
+logged. An empty body toggles (one-keystroke hotkey friendly);
+`{"muted": true, "duration_minutes": 30}` sets a timed mute. Day-to-day usage via
+`scripts/mute.sh`: [docs/operations.md](docs/operations.md); endpoint contract + hotkey
+bindings: [docs/http-api.md](docs/http-api.md).
+
 ### `GET /health`
 
-Returns provider status, fallback order, circuit-breaker state, pronunciation rule count, and emotional preset count.
-
-Each provider entry includes an egress audit — `enabled`, `healthy`, and `wouldEgress` (with `egressTarget` when it's true). A **disabled provider makes zero outbound calls** (no synthesis request, no auth/health probe) and always reports `wouldEgress: false`. Note that the default provider, `edge-tts`, is an **online** Microsoft service, so it *does* egress when enabled — for a fully-local setup, run `kokoro` (local endpoint) or `say` and disable `edgetts`/`elevenlabs`.
+Returns provider status, fallback order, circuit-breaker state, pronunciation rule count,
+and emotional preset count. Each provider entry includes an egress audit; note that the
+default provider, `edge-tts`, is an **online** Microsoft service. Details:
+[docs/http-api.md](docs/http-api.md) and
+[docs/providers-observability.md](docs/providers-observability.md).
 
 ### Voice-resolution drop-off log
 
-To make it observable *why* a `/notify` used the voice it did, the daemon appends **one structured JSONL event per voice-enabled `/notify`** to a machine-readable log — separate from the human-readable daemon log (`~/Library/Logs/echo.log`).
-
-- **Path:** `~/Library/Logs/echo/voice-resolution.jsonl` on macOS (else `$XDG_STATE_HOME` or `~/.local/state` under `echo/`). Override with `ECHO_RESOLUTION_LOG`.
-- **Retention:** single size-capped file (`~1MB`, override `ECHO_RESOLUTION_LOG_MAX_BYTES`). On each write, oldest whole lines are pruned to stay under the cap (newest always kept) — no logrotate, no time-based rotation.
-- **Best-effort:** a write failure is swallowed and never breaks a notification.
-
-Each line:
-
-```json
-{
-  "ts": "2026-06-23T13:16:16.822Z",
-  "requested_voice_id": "themis",
-  "resolution": "agent-key",
-  "provider": "edgetts",
-  "voice": "en-US-MichelleNeural",
-  "hops": 0,
-  "attempts": [{ "provider": "edgetts", "outcome": "success" }],
-  "success": true
-}
-```
-
-| Field | Meaning |
-|---|---|
-| `requested_voice_id` | The `voice_id` the caller sent (`null` if omitted). |
-| `resolution` | How it resolved: `identity-default` (none requested), `identity`, `agent-key`, `elevenlabs-id`, or `fallback`. |
-| `resolution_reason` | Present only when `resolution` is `fallback` — why the id didn't resolve. |
-| `provider` | Provider that actually spoke, or `none` if all failed. |
-| `voice` | Actual provider voice used (`null` on total failure). |
-| `hops` | Providers skipped/failed before the chosen one (`0` = primary spoke first try). |
-| `attempts` | Per-provider outcome trail: `success` \| `failed` \| `unhealthy` \| `circuit-open` \| `disabled`. |
-| `success` | Whether any provider spoke. |
+To make it observable *why* a `/notify` used the voice it did, the daemon appends one
+structured JSONL event per voice-enabled `/notify` to
+`~/Library/Logs/echo/voice-resolution.jsonl` — separate from the human-readable daemon log
+(`~/Library/Logs/echo.log`). Fields, retention, and overrides:
+[docs/providers-observability.md](docs/providers-observability.md).
 
 ## Voices
 
-Voices are configured per agent in `core/voices.json`. The `identity` mapping is the default ("Atlas") voice; every entry under `agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`, `themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
+Voices are configured per agent in `core/voices.json`. The `identity` mapping is the
+default ("Atlas") voice — it speaks whenever `voice_id` is omitted. Every entry under
+`agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`,
+`themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
 
 **Resolution order** (`getVoiceMapping` in `core/server.ts`): the `voice_id` is matched against (1) an `agents` **name key**, then (2) any agent's `elevenlabs.voice_id`, then (3) the `identity` voice; no match falls back to the active provider's default voice. So callers should send the **name key** (e.g. `"themis"`), not a raw provider voice id.
 
@@ -172,108 +172,42 @@ For the default `edge-tts` provider, each agent maps to a Microsoft neural voice
 }
 ```
 
-### Change a persona's voice
+Changing a persona's voice, adding a new persona, and the per-turn persona voice spoken
+by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 
-1. Audition voices by ear (see below) and confirm the target voice name exists: `bun scripts/preview-voices.ts --list`.
-2. Edit that agent's `edgetts.voice` (and optional `speed`) in `core/voices.json`.
-3. Reload the daemon so it re-reads the config:
-   ```bash
-   launchctl kickstart -k "gui/$UID/com.echo"
-   ```
-4. Verify: `curl -fsS -X POST http://localhost:8888/notify -H 'Content-Type: application/json' -d '{"message":"voice check","voice_id":"<key>","voice_enabled":true}'`.
+### Gotchas: wrong voice or silence
 
-### Add a voice or persona
-
-1. **Add the entry** to `agents` in `core/voices.json`, keyed by a new lowercase name. Mirror an existing entry — `description`, optional `catchphrase`, and at least an `edgetts` block (add `kokoro` for parity). Pick a voice not already in use and validate it exists with `--list`. Reload the daemon as above.
-2. **Bind the persona to that key.** An agent/persona only speaks in its voice if its brief tells it to send the key. In the agent definition (`~/.claude/agents/<Name>.md`, sourced from the `atlas-config` repo):
-   - set frontmatter `voiceId: <key>`, and
-   - make every self-voice `curl` POST to `http://localhost:8888/notify` with `"voice_id":"<key>"`.
-
-   Gotchas that cause silence: an agent's frontmatter is **not** visible in its own prompt, so the self-voice instruction must live in the brief **body**; sending a raw ElevenLabs id (instead of the name key) won't resolve while ElevenLabs is disabled; and port `31337` is wrong — voice traffic is `:8888`.
-
-### Per-turn persona voice (Claude Code Stop hook)
-
-Beyond explicit self-voice `curl`s, the Claude Code adapter speaks the response's voice line automatically at the end of every turn via the Stop hook `adapters/claudecode/hooks/VoiceCompletion.hook.ts`. This hook is **persona-aware**: it reads the active speaker from the response's trailing `🗣️ <Name>:` line and sends that lowercase name as the `voice_id`. So when you adopt a main-session persona (e.g. `/Themis`), each turn is spoken in the persona's voice (`themis` → Michelle), not the default Atlas voice. When the speaker is Atlas, or there is no `🗣️` line, it uses the default voice — the Atlas path is unchanged.
-
-The signal is the response itself — no marker files, env vars, or registries — so the moment you stop using a persona, the voice reverts to Atlas on the next turn. For a persona to be voiced this way, its turns must include a `🗣️ <Persona>:` line (the standard response format already does). The hook is registered into `~/.claude/settings.json` by `bash scripts/install.sh --adapter claudecode` (which runs `restore-hooks.ts`); it replaces any older unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`.
+- Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
+  while ElevenLabs is disabled — it speaks in the active provider's **default voice**
+  instead of the persona you meant.
+- Port `31337` causes silence — voice traffic is `:8888`.
 
 ### Auditioning edge voices
 
-`scripts/preview-voices.ts` plays short samples so you can choose voices by ear before editing `voices.json`. It calls `edge-tts` directly and is dev tooling — not part of the runtime request path.
-
-```bash
-bun scripts/preview-voices.ts --list                                # list English voices, no audio
-bun scripts/preview-voices.ts --locale en-GB                        # audition all en-GB voices
-bun scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
-bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
-bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synth command, no audio
-```
-
-| Flag | Purpose | Default |
-|---|---|---|
-| `--locale` | Comma-separated locale prefixes to audition | `en-US,en-GB,en-AU,en-IE` |
-| `--voices` | Explicit voice ids (overrides `--locale`) | — |
-| `--text` | Sample line spoken (`{voice}` is substituted) | `Hi, I'm {voice}. This is how I sound for Atlas.` |
-| `--rate` | edge-tts rate applied to every sample | `+0%` |
-| `--list` / `--dry-run` | Print matched voices (and synth command) without playing audio | off |
+Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/voices.json`. Commands and the full flag table live in [docs/voices.md](docs/voices.md).
 
 ## Deprecated environment variables
 
-Echo reads its configuration from `ECHO_*` environment variables. The project's
-former names — `ATLAS_VOICE_*` (Pi adapter) and `VOICESYSTEM_*` (core) — **still
-work as silent fallbacks**, so nothing breaks on upgrade, but they are
-**deprecated** and slated for removal in a future major release.
+Echo reads `ECHO_*` environment variables. The former names — `ATLAS_VOICE_*` (Pi adapter)
+and `VOICESYSTEM_*` (core) — still work as deprecated silent fallbacks, so nothing breaks
+on upgrade. The full old→new mapping table and migration steps live in
+[docs/configuration.md](docs/configuration.md#deprecated-environment-variables).
 
-**Read order:** the canonical `ECHO_*` name is read first; if it is unset, the
-legacy name(s) are consulted in order. Two settings converge two old names onto a
-single canonical name (priority `ECHO_*` → `ATLAS_VOICE_*` → `VOICESYSTEM_*`).
+## Documentation
 
-| Old name | New canonical | Notes |
-|---|---|---|
-| `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (with `VOICESYSTEM_NOTIFY_URL`) |
-| `VOICESYSTEM_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (with `VOICESYSTEM_VOICE_ID`) |
-| `VOICESYSTEM_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` | |
-| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` | |
-| `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` | default value is still `Atlas` |
-| `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` | |
-| `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` | |
-| `ATLAS_VOICE_SPEAK_COMPLETIONS` | `ECHO_VOICE_SPEAK_COMPLETIONS` | |
-| `ATLAS_VOICE_SUPPRESS_SUBAGENTS` | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | |
-| `ATLAS_VOICE_SUPPRESS` | `ECHO_VOICE_SUPPRESS` | |
-| `VOICESYSTEM_ENV_PATHS` | `ECHO_ENV_PATHS` | |
-| `VOICESYSTEM_DEFAULT_TITLE` | `ECHO_DEFAULT_TITLE` | |
-| `VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS` | `ECHO_AUDIO_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS` | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_AUDIO_CACHE_DIR` | `ECHO_AUDIO_CACHE_DIR` | |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_MS` | `ECHO_EDGETTS_TIMEOUT_MS` | |
-| `VOICESYSTEM_EDGETTS_SYNTH_RETRIES` | `ECHO_EDGETTS_SYNTH_RETRIES` | |
-| `VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS` | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | |
-| `VOICESYSTEM_RESOLUTION_LOG` | `ECHO_RESOLUTION_LOG` | |
-| `VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES` | `ECHO_RESOLUTION_LOG_MAX_BYTES` | |
-| `VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD` | `ECHO_CIRCUIT_BREAKER_THRESHOLD` | |
-
-### Migrating
-
-**Human:** search your shell profile, `~/.config/echo/.env`, and your LaunchAgent
-plist for the old names and replace each per the table above, then restart the
-daemon:
-
-```bash
-rg -l 'ATLAS_VOICE_|VOICESYSTEM_' ~/.zshrc ~/.bashrc ~/.config/echo/.env 2>/dev/null
-bash scripts/restart.sh
-```
-
-**Agent:** run `rg -l 'ATLAS_VOICE_|VOICESYSTEM_'` across your config locations,
-rewrite each match to its `ECHO_*` canonical per the table (collapsing the two
-convergence pairs onto `ECHO_NOTIFY_URL` / `ECHO_VOICE_ID`), then restart the
-daemon with `bash scripts/restart.sh`.
-
-> Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and
-> the LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A
-> reinstall (`bash scripts/install.sh`) migrates the running service
-> automatically — see the [CHANGELOG](CHANGELOG.md).
+| I want to… | Read |
+|---|---|
+| Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
+| Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
+| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Look up env files, `PORT`, and `voices.json` schema | [docs/configuration.md](docs/configuration.md) |
+| Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
+| Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
+| Change or add voices; per-turn persona voice | [docs/voices.md](docs/voices.md) |
+| Understand provider egress + the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
+| Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
+| See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
+| Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
 
 ## Development
 
@@ -283,10 +217,6 @@ See `docs/development.md`.
 bun test
 PORT=8889 tests/smoke-core.sh
 ```
-
-## Dependency graph
-
-See `docs/dependencies.md` for required runtime dependencies, optional TTS providers, and optional host adapters.
 
 ## Contributing
 

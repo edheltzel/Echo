@@ -18,7 +18,15 @@ process.env.PORT = "0";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import * as realChildProcess from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { circuitBreakers } from "../../core/circuit-breaker.ts";
+
+// Pin the runtime-mute state (#83) away from the operator's real mute.json —
+// speakWithFallback reads it on every call, and a live muted state would make
+// the positive-control assertions below fail nondeterministically.
+process.env.ECHO_MUTE_STATE_PATH ??= join(mkdtempSync(join(tmpdir(), "egress-mute-")), "mute.json");
 
 // --- spawn spy (edge-tts egresses via spawn, not fetch) ---------------------
 // Capture the real spawn before mocking, then route the module's `spawn` through
@@ -51,6 +59,14 @@ mock.module("node:child_process", () => ({
 
 function isEdgeTtsSpawn(call: { command: string; args: string[] }): boolean {
   return call.command.includes("python") || call.args.join(" ").includes("edge_tts");
+}
+
+function isEdgeHealthImportSpawn(call: { command: string; args: string[] }): boolean {
+  return call.args.includes("-c") && call.args.join(" ").includes("import edge_tts");
+}
+
+function isEdgeSynthesisSpawn(call: { command: string; args: string[] }): boolean {
+  return call.args.includes("-m") && call.args.includes("edge_tts");
 }
 
 const { providers, getProviderStatus, speakWithFallback, voicesConfig } =
@@ -172,6 +188,46 @@ describe("issue #26 — egress gating: no outbound calls when a provider is disa
     expect(status.edgetts.wouldEgress).toBe(true);
     // The spy is proven live: enabling edge-tts is what makes it spawn.
     expect(spawnCalls.filter(isEdgeTtsSpawn).length).toBe(1);
+    expect(spawnCalls.filter(isEdgeHealthImportSpawn).length).toBe(1);
+  });
+
+  test("edge-tts enabled → speakWithFallback does not run the diagnostic health import gate", async () => {
+    (voicesConfig.providers as any).edgetts.enabled = true;
+
+    const result = await speakWithFallback("hello world");
+
+    expect(result.success).toBe(true);
+    expect(result.provider).toBe("edgetts");
+    expect(spawnCalls.filter(isEdgeHealthImportSpawn).length).toBe(0);
+    expect(spawnCalls.filter(isEdgeSynthesisSpawn).length).toBe(1);
+  });
+
+  test("edge-tts health diagnostics include reason, phase, stderr, and timeout budget", async () => {
+    (voicesConfig.providers as any).edgetts.enabled = true;
+    spawnImpl = (command: string, args: unknown = []) => {
+      const argv = Array.isArray(args) ? (args as string[]) : [];
+      spawnCalls.push({ command: String(command), args: argv });
+      const child: any = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { write() {}, end() {} };
+      child.kill = () => {};
+      child.pid = 4242;
+      queueMicrotask(() => {
+        child.stderr.emit("data", "edge import exploded");
+        child.emit("exit", 1);
+      });
+      return child;
+    };
+
+    const status = await getProviderStatus();
+
+    expect(status.edgetts.enabled).toBe(true);
+    expect(status.edgetts.healthy).toBe(false);
+    expect(status.edgetts.health_diagnostic?.phase).toBe("health-import");
+    expect(status.edgetts.health_diagnostic?.reason).toBe("nonzero-exit");
+    expect(status.edgetts.health_diagnostic?.timeout_ms).toBe(3000);
+    expect(status.edgetts.health_diagnostic?.stderr).toContain("edge import exploded");
   });
 
   test("ElevenLabs enabled → audit + speakWithFallback egress to api.elevenlabs.io (positive control)", async () => {

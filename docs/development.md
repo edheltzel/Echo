@@ -28,7 +28,7 @@ curl -fsS -X POST http://localhost:8889/notify \
   -d '{"message":"dev smoke","voice_enabled":false}'
 ```
 
-Adapters should expose endpoint configuration. For Pi, set:
+Adapters should expose endpoint configuration. For Pi (same for oh-my-pi, with `omp`), set:
 
 ```bash
 ECHO_NOTIFY_URL=http://localhost:8889/notify pi
@@ -44,15 +44,7 @@ If a provider subprocess hangs, stop the watch process and clear the dev port.
 
 ## Auditioning edge voices
 
-Per-agent edge-tts voices live in `core/voices.json` (each agent's `edgetts: { voice, speed }`). To choose voices by ear before editing that file, sample them with:
-
-```bash
-bun scripts/preview-voices.ts --list            # list English voices, no audio
-bun scripts/preview-voices.ts --locale en-GB    # play every en-GB voice
-bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
-```
-
-`--list`/`--dry-run` are audio-free (CI-safe). See the **Voices** section of `README.md` for the full flag table. The script calls `edge-tts` directly and is not on the runtime request path.
+Choose per-agent edge-tts voices by ear with `bun scripts/preview-voices.ts` before editing `core/voices.json`. Commands, flags, and the workflow live in [voices.md](voices.md). The script calls `edge-tts` directly and is not on the runtime request path.
 
 ## Tests
 

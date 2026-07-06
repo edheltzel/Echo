@@ -21,9 +21,13 @@ that calls `POST /notify`.
 bash scripts/install.sh --adapter none
 bash scripts/install.sh --adapter claudecode
 bash scripts/install.sh --adapter pi
+bash scripts/install.sh --adapter omp
 
 # Lifecycle
 bash scripts/{status,start,stop,restart,uninstall}.sh
+
+# Runtime mute (audio off; notifications still processed + logged)
+bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
 
 # Health / silent smoke
 curl -fsS http://localhost:8888/health
@@ -63,19 +67,28 @@ it). Track notable changes in `CHANGELOG.md` ([Keep a Changelog](https://keepach
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
 merges; never push directly to `master`** (see Invariants).
 
+**Promotion PRs must be merge-committed, never squashed.** Squashing a `dev`→`master`
+promotion collapses the merge and drops `dev` from `master`'s ancestry, recreating the
+divergence that makes the *next* promotion phantom-conflict (bit us on #74). If a promotion is
+squashed anyway, immediately resync with a real merge commit: `git merge origin/master` into
+`dev` (favor master's version/CHANGELOG) and push `dev`, restoring `master` as an ancestor.
+
 ## Documentation map
 
 | Topic | Doc |
 |---|---|
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
-| HTTP API (`/notify`, `/notify/personality`, `/health`) | [docs/http-api.md](docs/http-api.md) |
+| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
-| Voices + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
-| Adapter rules + Pi #15 | [docs/adapters.md](docs/adapters.md) |
+| Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
+| Adapter rules + registration contract (#77) + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
+| Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
+| Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| Configuration (env files, `PORT`, config paths, provider toggles, deprecated env names) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
 ## Repo map
@@ -102,6 +115,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
 - Do not broad-kill whatever owns port `8888`; it may be another service.
 - Do not commit secrets or `.env` files.
+- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 

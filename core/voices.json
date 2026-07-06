@@ -275,6 +275,17 @@
         "voice": "en-US-AndrewNeural",
         "speed": 1.0
       }
+    },
+    "pi": {
+      "description": "Coding-agent host voice",
+      "kokoro": {
+        "voice": "am_puck",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-GB-RyanNeural",
+        "speed": 0.92
+      }
     }
   }
 }
