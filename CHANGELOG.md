@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-06
+
 ### Fixed
 - **Edge TTS fallback regression hardening**: `/notify` no longer lets the diagnostic
   `python -c "import edge_tts"` health probe veto Edge TTS and fall through to macOS `say`.
@@ -215,7 +217,8 @@ Initial release of the universal voice-system core plus PAI and Pi host adapters
 
 - Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
 
-[Unreleased]: https://github.com/edheltzel/echo/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/edheltzel/echo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/edheltzel/echo/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/edheltzel/echo/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/edheltzel/echo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/edheltzel/echo/compare/v0.1.1...v0.2.0
