@@ -45,6 +45,7 @@ interface TTSProvider {
   isEnabled(): boolean;
   isHealthy(): Promise<boolean>;
   speak(text: string, voice?: string, settings?: VoiceSettings): Promise<boolean>;
+  getLastDiagnostic?(): ProviderDiagnostic | undefined;
 }
 
 interface VoiceSettings {
@@ -53,6 +54,18 @@ interface VoiceSettings {
   style?: number;
   speed?: number;
   use_speaker_boost?: boolean;
+}
+
+interface ProviderDiagnostic {
+  phase?: string;
+  reason?: string;
+  message?: string;
+  elapsed_ms?: number;
+  timeout_ms?: number;
+  exit_code?: number | null;
+  signal?: string | null;
+  stderr?: string;
+  command?: string;
 }
 
 interface ProviderConfig {
@@ -547,74 +560,187 @@ function spawnSafe(command: string, args: string[], timeoutMs = NOTIFICATION_PRO
 // --- Edge TTS Provider ---
 // edge-tts is Microsoft's ONLINE WebSocket TTS, so transient synthesis blips
 // happen. Retry the synth step a bounded number of times before counting a
-// provider failure, and keep the synth timeout env-tunable (mirrors the other
-// ECHO_*_TIMEOUT_MS knobs). Worst-case added latency is bounded by
-// EDGETTS_SYNTH_RETRIES × (timeout + backoff).
+// provider failure. Health checks are diagnostic only on the hot /notify path:
+// an import probe must not veto a real synthesis attempt unless the breaker is
+// already open from genuine provider failures.
 // Bounded parses: a NaN/negative/zero override must fall back to the default,
 // never to a degenerate value (0ms timeout = instant fail; 0 retries from NaN
 // would zero the loop → false success). retries floor 0, timeout/backoff floor 1.
 // Canonical ECHO_* read first; legacy VOICESYSTEM_* kept as a silent fallback.
 const EDGETTS_TIMEOUT_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_MS, 15000, 1);
+const EDGETTS_TIMEOUT_MAX_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_MAX_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS, 60000, 1);
+const EDGETTS_TIMEOUT_PER_CHAR_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS, 20, 0);
+const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(process.env.ECHO_EDGETTS_HEALTH_TIMEOUT_MS ?? process.env.VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS, 3000, 1);
 const EDGETTS_SYNTH_RETRIES = parseBoundedInt(process.env.ECHO_EDGETTS_SYNTH_RETRIES ?? process.env.VOICESYSTEM_EDGETTS_SYNTH_RETRIES, 1, 0);
 const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(process.env.ECHO_EDGETTS_SYNTH_BACKOFF_MS ?? process.env.VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS, 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
 
+class EdgeProcessError extends Error {
+  diagnostic: ProviderDiagnostic;
+
+  constructor(diagnostic: ProviderDiagnostic) {
+    super(diagnostic.message || diagnostic.reason || 'Edge TTS process failed');
+    this.name = 'EdgeProcessError';
+    this.diagnostic = diagnostic;
+  }
+}
+
+let edgeSynthesisQueue: Promise<void> = Promise.resolve();
+
+async function serializeEdgeSynthesis<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = edgeSynthesisQueue.catch(() => {});
+  let release!: () => void;
+  edgeSynthesisQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+function trimDiagnosticText(value: unknown, maxLength = 500): string | undefined {
+  const text = String(value ?? '').trim();
+  if (!text) return undefined;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function edgeCommandLabel(phase: string): string {
+  return phase === 'health-import'
+    ? `${PYTHON3_PATH} -c "import edge_tts"`
+    : `${PYTHON3_PATH} -m edge_tts`;
+}
+
+function formatProviderDiagnostic(diagnostic: ProviderDiagnostic): string {
+  const parts = [
+    diagnostic.reason || 'error',
+    diagnostic.phase && `phase=${diagnostic.phase}`,
+    diagnostic.elapsed_ms !== undefined && `elapsed=${diagnostic.elapsed_ms}ms`,
+    diagnostic.timeout_ms !== undefined && `timeout=${diagnostic.timeout_ms}ms`,
+    diagnostic.exit_code !== undefined && `exit=${diagnostic.exit_code}`,
+    diagnostic.signal && `signal=${diagnostic.signal}`,
+    diagnostic.command && `cmd=${diagnostic.command}`,
+    diagnostic.stderr && `stderr=${JSON.stringify(diagnostic.stderr)}`,
+  ].filter(Boolean);
+  return parts.join(' ');
+}
+
+function diagnosticFromError(error: unknown): ProviderDiagnostic {
+  if (error instanceof EdgeProcessError) return error.diagnostic;
+  const message = error instanceof Error ? error.message : String(error);
+  return { reason: 'error', message };
+}
+
+function edgeSynthesisTimeoutMs(text: string): number {
+  return Math.min(EDGETTS_TIMEOUT_MAX_MS, EDGETTS_TIMEOUT_MS + text.length * EDGETTS_TIMEOUT_PER_CHAR_MS);
+}
+
+function runEdgeProcess(
+  args: string[],
+  phase: string,
+  timeoutMs: number,
+): Promise<ProviderDiagnostic> {
+  const startedAt = Date.now();
+  const child = spawn(PYTHON3_PATH, args);
+  let stderr = '';
+
+  child.stderr?.on('data', (chunk) => {
+    stderr += String(chunk);
+  });
+
+  return new Promise<ProviderDiagnostic>((resolve, reject) => {
+    let settled = false;
+    const command = edgeCommandLabel(phase);
+    const finish = (diagnostic: ProviderDiagnostic, failed: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      const fullDiagnostic: ProviderDiagnostic = {
+        phase,
+        elapsed_ms: Date.now() - startedAt,
+        timeout_ms: timeoutMs,
+        command,
+        ...diagnostic,
+        ...(trimDiagnosticText(stderr) && { stderr: trimDiagnosticText(stderr) }),
+      };
+      if (failed) reject(new EdgeProcessError(fullDiagnostic));
+      else resolve(fullDiagnostic);
+    };
+
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish({ reason: 'timeout', message: `${phase} timed out after ${timeoutMs}ms` }, true);
+    }, timeoutMs);
+
+    child.on('error', (error) => {
+      finish({ reason: 'spawn-error', message: error.message }, true);
+    });
+    child.on('exit', (code, signal) => {
+      if ((code ?? 1) === 0) {
+        finish({ reason: 'ok', exit_code: code, signal: signal ? String(signal) : null }, false);
+      } else {
+        finish({ reason: 'nonzero-exit', message: `${phase} exited with code ${code}`, exit_code: code, signal: signal ? String(signal) : null }, true);
+      }
+    });
+  });
+}
+
 class EdgeTTSProvider implements TTSProvider {
   name = 'edgetts';
+  private lastDiagnostic: ProviderDiagnostic | undefined;
 
   isEnabled(): boolean {
     return voicesConfig.providers.edgetts?.enabled !== false;
   }
 
+  getLastDiagnostic(): ProviderDiagnostic | undefined {
+    return this.lastDiagnostic;
+  }
+
   async isHealthy(): Promise<boolean> {
-    if (shouldSkipProvider('edgetts')) return false;
-    // Check module importability only — no network call. Actual synthesis
-    // failures are handled by the circuit breaker in speak().
+    if (shouldSkipProvider('edgetts')) {
+      this.lastDiagnostic = { phase: 'circuit-breaker', reason: 'circuit-open', message: 'edge-tts circuit breaker is open' };
+      return false;
+    }
+    // Check module importability only — no network call. This is diagnostic for
+    // /health/startup output; /notify tries synthesis directly unless the breaker
+    // is open so a slow import probe cannot force a false fallback to `say`.
     try {
-      const check = spawn(PYTHON3_PATH, ['-c', 'import edge_tts']);
-      const exitCode = await new Promise<number>((resolve) => {
-        check.on('exit', resolve);
-        check.on('error', () => resolve(1));
-        setTimeout(() => { check.kill(); resolve(1); }, 3000);
-      });
-      return exitCode === 0;
-    } catch {
+      await runEdgeProcess(['-c', 'import edge_tts'], 'health-import', EDGETTS_HEALTH_TIMEOUT_MS);
+      return true;
+    } catch (error) {
+      this.lastDiagnostic = diagnosticFromError(error);
+      console.warn(`⚕️  Edge TTS health probe failed: ${formatProviderDiagnostic(this.lastDiagnostic)}`);
       return false;
     }
   }
 
   // Synthesize one attempt to outFile. Resolves on success, rejects on a
   // non-zero exit, spawn error, or timeout — i.e. a genuine PROVIDER failure.
-  private synthesizeOnce(processedText: string, voice: string, rate: string, outFile: string): Promise<void> {
-    const synth = spawn(PYTHON3_PATH, [
+  private synthesizeOnce(processedText: string, voice: string, rate: string, outFile: string, timeoutMs: number): Promise<ProviderDiagnostic> {
+    return runEdgeProcess([
       '-m', 'edge_tts',
       '--text', processedText,
       '--voice', voice,
       '--rate', rate,
       '--write-media', outFile,
-    ]);
-
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => { synth.kill(); reject(new Error('Edge TTS synthesis timeout')); }, EDGETTS_TIMEOUT_MS);
-      synth.on('exit', (code) => {
-        clearTimeout(timeout);
-        if ((code ?? 1) === 0) resolve();
-        else reject(new Error(`edge-tts exited with code ${code}`));
-      });
-      synth.on('error', (err) => { clearTimeout(timeout); reject(err); });
-    });
+    ], 'synthesis', timeoutMs);
   }
 
   async speak(text: string, voice?: string, settings?: VoiceSettings): Promise<boolean> {
     const edgettsVoice = voice || voicesConfig.providers.edgetts?.defaultVoice || 'en-US-AvaNeural';
     const rate = edgeRateFromSpeed(settings?.speed, voicesConfig.providers.edgetts?.rate);
     const processedText = applyPronunciations(text);
+    const synthTimeoutMs = edgeSynthesisTimeoutMs(processedText);
     let tmp: { dir: string; file: string } | undefined;
+    this.lastDiagnostic = undefined;
 
     try {
       // --- Synthesis (the provider's responsibility → governed by the breaker).
       //     Retry transient blips with backoff before recording a failure. ---
-      let synthError: any;
+      let synthDiagnostic: ProviderDiagnostic | undefined;
       for (let attempt = 0; attempt <= EDGETTS_SYNTH_RETRIES; attempt++) {
         if (attempt > 0) {
           console.warn(`🔁 Edge TTS synth retry ${attempt}/${EDGETTS_SYNTH_RETRIES}...`);
@@ -622,23 +748,25 @@ class EdgeTTSProvider implements TTSProvider {
         }
         if (tmp) cleanupAudioTempDir(tmp.dir);
         tmp = createAudioTempFile('edgetts', 'mp3');
-        console.log(`🌐 Edge TTS speaking (voice: ${edgettsVoice})...`);
+        console.log(`🌐 Edge TTS speaking (voice: ${edgettsVoice}, rate: ${rate}, timeout: ${synthTimeoutMs}ms)...`);
         try {
-          await this.synthesizeOnce(processedText, edgettsVoice, rate, tmp.file);
-          synthError = undefined;
+          await serializeEdgeSynthesis(() => this.synthesizeOnce(processedText, edgettsVoice, rate, tmp!.file, synthTimeoutMs));
+          synthDiagnostic = undefined;
           break;
         } catch (err) {
-          synthError = err;
+          synthDiagnostic = diagnosticFromError(err);
+          this.lastDiagnostic = synthDiagnostic;
+          console.warn(`❌ Edge TTS synth attempt ${attempt + 1}/${EDGETTS_SYNTH_RETRIES + 1} failed: ${formatProviderDiagnostic(synthDiagnostic)}`);
         }
       }
 
-      if (synthError) {
+      if (synthDiagnostic) {
         // Synthesis failed after all retries → a genuine provider failure.
         recordProviderFailure('edgetts');
-        if (synthError.message?.includes('timeout')) {
-          console.warn(`⏱️  Edge TTS timeout after ${EDGETTS_TIMEOUT_MS}ms (${EDGETTS_SYNTH_RETRIES} retries exhausted)`);
+        if (synthDiagnostic.reason === 'timeout') {
+          console.warn(`⏱️  Edge TTS timeout after ${synthDiagnostic.timeout_ms}ms (${EDGETTS_SYNTH_RETRIES} retries exhausted; elapsed ${synthDiagnostic.elapsed_ms}ms)`);
         } else {
-          console.error('❌ Edge TTS synthesis error:', synthError.message || synthError);
+          console.error(`❌ Edge TTS synthesis error: ${formatProviderDiagnostic(synthDiagnostic)}`);
         }
         return false;
       }
@@ -647,6 +775,7 @@ class EdgeTTSProvider implements TTSProvider {
       // actually ran (tmp is set per attempt). A degenerate loop that ran zero
       // iterations must NOT report a false success and mask a real outage.
       if (!tmp) {
+        this.lastDiagnostic = { phase: 'synthesis', reason: 'no-attempt', message: 'no synthesis attempt ran' };
         recordProviderFailure('edgetts');
         console.error('❌ Edge TTS: no synthesis attempt ran');
         return false;
@@ -663,10 +792,12 @@ class EdgeTTSProvider implements TTSProvider {
         const play = spawn(player, [tmp!.file]);
         await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
       } catch (playError: any) {
+        this.lastDiagnostic = { phase: 'playback', reason: 'local-playback-failed', message: playError.message || String(playError), command: player };
         console.error(`🔇 Edge TTS playback failed via ${player} (local issue, provider unaffected):`, playError.message || playError);
         return false;
       }
 
+      this.lastDiagnostic = undefined;
       console.log('✅ Edge TTS completed');
       return true;
     } finally {
@@ -906,8 +1037,18 @@ function egressTargetFor(name: string): string | undefined {
   }
 }
 
-export async function getProviderStatus(): Promise<Record<string, { enabled: boolean; healthy: boolean; wouldEgress: boolean; egressTarget?: string; endpoint?: string }>> {
-  const status: Record<string, { enabled: boolean; healthy: boolean; wouldEgress: boolean; egressTarget?: string; endpoint?: string }> = {};
+type ProviderStatus = {
+  enabled: boolean;
+  healthy: boolean;
+  wouldEgress: boolean;
+  egressTarget?: string;
+  endpoint?: string;
+  apiKeyConfigured?: boolean;
+  health_diagnostic?: ProviderDiagnostic;
+};
+
+export async function getProviderStatus(): Promise<Record<string, ProviderStatus>> {
+  const status: Record<string, ProviderStatus> = {};
 
   for (const [name, provider] of Object.entries(providers)) {
     const enabled = provider.isEnabled();
@@ -918,11 +1059,14 @@ export async function getProviderStatus(): Promise<Record<string, { enabled: boo
     // disabled provider always reports false.
     const wouldEgress = enabled && egressTarget !== undefined;
 
+    const diagnostic = provider.getLastDiagnostic?.();
+
     status[name] = {
       enabled,
       healthy,
       wouldEgress,
       ...(wouldEgress && { egressTarget }),
+      ...(diagnostic && !healthy && { health_diagnostic: diagnostic }),
       ...(name === 'kokoro' && { endpoint: voicesConfig.providers.kokoro.endpoint }),
       ...(name === 'elevenlabs' && { apiKeyConfigured: !!resolveEnvVar(voicesConfig.providers.elevenlabs.apiKey) })
     };
@@ -972,7 +1116,7 @@ const RESOLUTION_LOG_MAX_BYTES = parseBoundedInt(process.env.ECHO_RESOLUTION_LOG
 
 type AttemptOutcome = 'success' | 'failed' | 'unhealthy' | 'circuit-open' | 'disabled';
 
-interface SpeakAttempt {
+interface SpeakAttempt extends ProviderDiagnostic {
   provider: string;
   outcome: AttemptOutcome;
 }
@@ -1105,15 +1249,35 @@ export async function speakWithFallback(
       continue;
     }
 
-    const healthy = await provider.isHealthy();
-    if (!healthy) {
-      // An unhealthy skip is attributed to the circuit breaker when its breaker
-      // is open (the health probe consults shouldSkipProvider); otherwise it's a
-      // genuine health-probe failure.
-      const outcome: AttemptOutcome = circuitBreakers[providerName]?.isOpen ? 'circuit-open' : 'unhealthy';
-      console.log(`⏭️  Skipping ${providerName} (${outcome})`);
-      attempts.push({ provider: providerName, outcome });
-      continue;
+    // Edge health probes are diagnostic only. On the hot /notify path, Edge is
+    // skipped only when config disables it or its circuit breaker is open from
+    // real synthesis failures; a slow Python import probe must not force `say`.
+    if (providerName === 'edgetts') {
+      const breaker = circuitBreakers.edgetts;
+      if (shouldSkipProvider('edgetts')) {
+        const cooldownRemainingMs = Math.max(0, CIRCUIT_BREAKER_RESET_MS - (Date.now() - breaker.lastFailure));
+        console.log(`⏭️  Skipping edgetts (circuit-open, retry in ${cooldownRemainingMs}ms)`);
+        attempts.push({
+          provider: providerName,
+          outcome: 'circuit-open',
+          phase: 'circuit-breaker',
+          reason: 'open',
+          message: `${breaker.failures} failures; retry in ${cooldownRemainingMs}ms`,
+        });
+        continue;
+      }
+    } else {
+      const healthy = await provider.isHealthy();
+      if (!healthy) {
+        // An unhealthy skip is attributed to the circuit breaker when its breaker
+        // is open (the health probe consults shouldSkipProvider); otherwise it's a
+        // genuine health-probe failure.
+        const outcome: AttemptOutcome = circuitBreakers[providerName]?.isOpen ? 'circuit-open' : 'unhealthy';
+        const diagnostic = provider.getLastDiagnostic?.();
+        console.log(`⏭️  Skipping ${providerName} (${outcome}${diagnostic ? `: ${formatProviderDiagnostic(diagnostic)}` : ''})`);
+        attempts.push({ provider: providerName, outcome, ...(diagnostic ?? {}) });
+        continue;
+      }
     }
 
     // --- 3-tier voice settings resolution ---
@@ -1191,7 +1355,7 @@ export async function speakWithFallback(
       const actualVoice = providerName === 'say' ? getMacOSFallbackVoice() : (providerVoice ?? null);
       return { success: true, provider: providerName, voice: actualVoice, attempts };
     }
-    attempts.push({ provider: providerName, outcome: 'failed' });
+    attempts.push({ provider: providerName, outcome: 'failed', ...(provider.getLastDiagnostic?.() ?? {}) });
   }
 
   return { success: false, provider: 'none', voice: null, attempts };
