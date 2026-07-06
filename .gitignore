@@ -10,6 +10,8 @@
 
 # Project-local Atlas agent artifacts (plans, handoffs, worktrees) — not committed
 .agents/atlas/
+.agents/.worktrees/
+.worktrees/
 banks/
 
 # Audio (runtime artifacts)
