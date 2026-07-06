@@ -23,6 +23,9 @@ missing/non-numeric/below-floor values:
 |---|---|---|
 | `ECHO_CIRCUIT_BREAKER_THRESHOLD` | 2 | 1 |
 | `ECHO_EDGETTS_TIMEOUT_MS` | 15000 | 1 |
+| `ECHO_EDGETTS_TIMEOUT_MAX_MS` | 60000 | 1 |
+| `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS` | 20 | 0 |
+| `ECHO_EDGETTS_HEALTH_TIMEOUT_MS` | 3000 | 1 |
 | `ECHO_EDGETTS_SYNTH_RETRIES` | 1 | 0 |
 | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | 250 | 1 |
 
@@ -34,6 +37,13 @@ isolated post-retry failure; a second consecutive failure still opens the breake
 sustained outages are never masked). The breaker stays open for 60s
 (`CIRCUIT_BREAKER_RESET_MS`) before half-opening for a retest.
 
-Worst-case first-turn latency when edge-tts is down is ~30s (2 attempts × 15s + backoff)
-before fallback; mitigated because `speakWithFallback` is single-pass, so the same turn still
-falls through to local `say`.
+`ECHO_EDGETTS_TIMEOUT_MS` is the base synthesis budget. The actual per-attempt budget is
+adaptive: `base + (message length × ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS)`, capped at
+`ECHO_EDGETTS_TIMEOUT_MAX_MS`. The health timeout is diagnostic-only for `/health`/startup;
+`/notify` does **not** skip edge-tts just because the Python import probe is slow. On the hot
+path, edge-tts is skipped only when disabled or when the circuit breaker is already open from
+real synthesis failures.
+
+Worst-case first-turn latency when edge-tts is down is bounded by the adaptive timeout ×
+`(retries + 1)` plus backoff before fallback; mitigated because `speakWithFallback` is
+single-pass, so the same turn still falls through to local `say`.

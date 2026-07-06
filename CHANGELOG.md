@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Edge TTS fallback regression hardening**: `/notify` no longer lets the diagnostic
+  `python -c "import edge_tts"` health probe veto Edge TTS and fall through to macOS `say`.
+  Edge is skipped only when disabled or when its circuit breaker is open from real synthesis
+  failures. Edge synthesis now logs structured phase/reason/elapsed/timeout/exit/stderr
+  diagnostics, serializes synthesis attempts to reduce concurrent-process flakiness, and uses
+  an adaptive timeout (`base + per-character`, capped) so longer messages do not hit the same
+  fixed budget as short probes.
+
 ### Changed
 - **Human-friendly documentation overhaul**: `README.md` slimmed to landing + quickstart +
   routing (accurate `/notify` defaults, no more `"voice_id":"atlas"` example);

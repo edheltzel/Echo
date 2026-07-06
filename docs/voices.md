@@ -164,8 +164,10 @@ Three signals, in order:
    - `agent-key` but the wrong `provider` spoke → read `attempts[]`: `disabled` = enable it
      in `voices.json` + restart; `circuit-open` = see `/health` `.circuit_breakers` and
      [`reliability.md`](reliability.md) (auto-retests after 60s); `unhealthy`/`failed` =
-     provider-specific (edge-tts: does `python3 -c 'import edge_tts'` work?; kokoro: is
-     `127.0.0.1:8880` up?; elevenlabs: is the key valid?).
+     provider-specific. Additive attempt fields (`phase`, `reason`, `stderr`, `timeout_ms`)
+     narrow the branch: edge-tts `synthesis` means the real provider failed; edge-tts
+     `health-import` appears in `/health` diagnostics only; kokoro usually means
+     `127.0.0.1:8880` is down; ElevenLabs usually means the key or API response failed.
    - No new event at all → the request was `voice_enabled:false` (which skips both voice and
      the log write), rate-limited (`429`), or rejected (`400`) — check the HTTP response and
      the daemon log.
