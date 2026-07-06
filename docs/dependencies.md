@@ -14,7 +14,7 @@
 
 | Provider | Cost | Requirements | Behavior when absent |
 |---|---|---|---|
-| edge-tts | Free | Python at `/opt/homebrew/bin/python3` with `edge_tts` module | Circuit breaker skips to next provider |
+| edge-tts | Free | Python at `/opt/homebrew/bin/python3` with `edge_tts` module | Synthesis failure is logged with diagnostics, then fallback; repeated real failures open the circuit breaker |
 | ElevenLabs | Paid/cloud | `ELEVENLABS_API_KEY` and provider enabled in `voices.json` | Disabled by default; skipped when no key |
 | Kokoro | Free/local | Local Kokoro-compatible server on `127.0.0.1:8880` | Disabled by default; skipped when unhealthy |
 | macOS `say` | Free/local | macOS | Terminal fallback when enabled |
@@ -29,7 +29,7 @@
   /opt/homebrew/bin/python3 -m pip install --break-system-packages edge-tts
   ```
 
-  Without it, notifications still speak — the chain silently falls back to macOS `say`, which uses a noticeably different voice. If you hear the wrong voice, this is the first thing to check.
+  Without it, notifications still speak — Edge synthesis fails with diagnostics and the chain falls back to macOS `say`, which uses a noticeably different voice. If you hear the wrong voice, check the latest `attempts[]` in `~/Library/Logs/echo/voice-resolution.jsonl`; `phase:"synthesis"` plus Python stderr usually points here.
 
 - **ElevenLabs** — nothing to install locally. Set `ELEVENLABS_API_KEY` in an env file the daemon reads, enable the provider in `core/voices.json`, then restart the daemon.
 

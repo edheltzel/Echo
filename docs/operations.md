@@ -64,7 +64,8 @@ Returns JSON containing `"status":"healthy"`.
 
 - Server log: `~/Library/Logs/echo.log` — `tail -f` it while debugging.
 - Voice-resolution log: `~/Library/Logs/echo/voice-resolution.jsonl` — records how each
-  notification's requested voice resolved, including fallbacks. Details in
+  notification's requested voice resolved, including fallbacks and provider diagnostics
+  (`phase`, `reason`, timeout, exit code, stderr). Details in
   [`providers-observability.md`](providers-observability.md).
 
 ## Mute

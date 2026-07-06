@@ -134,12 +134,15 @@ Work through these checks in order:
    ```
 
    You should see JSON lines with a `provider` field (who spoke) and `attempts` (which
-   providers were tried and why they were skipped).
+   providers were tried and why they were skipped or failed). Failed attempts may include
+   diagnostic fields such as `phase`, `reason`, `timeout_ms`, `exit_code`, and `stderr`.
 
-**Wrong voice — a British male voice ("Daniel") instead of Ava?** The default voice
-engine, edge-tts, isn't installed, so Echo fell back to the built-in macOS `say` voice.
-Echo looks for edge-tts via the Homebrew Python at `/opt/homebrew/bin/python3`. Install
-it and restart:
+**Wrong voice — a British male voice ("Daniel") instead of Ava?** Echo fell back to the
+built-in macOS `say` voice. First read the latest `attempts[]`: Edge is skipped only when
+it is disabled or its circuit breaker is open; otherwise a `failed` Edge attempt means real
+synthesis failed and the diagnostic fields explain why. A common cause is that edge-tts is
+not installed for the Homebrew Python at `/opt/homebrew/bin/python3`. Install it and
+restart:
 
 ```bash
 /opt/homebrew/bin/python3 -m pip install edge-tts

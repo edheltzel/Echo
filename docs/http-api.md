@@ -125,8 +125,11 @@ Each provider entry carries an **egress audit** (`getProviderStatus` in `core/se
 `enabled`, `healthy`, and `wouldEgress` (true only when the provider is *both* enabled and
 makes an outbound network request when used), plus `egressTarget` when `wouldEgress` is
 true. This makes the gating guarantee auditable at a glance — a disabled provider always
-reports `wouldEgress: false` and omits `egressTarget`. The kokoro entry adds its `endpoint`;
-the elevenlabs entry adds `apiKeyConfigured` (reflects only the `voices.json` `apiKey`
+reports `wouldEgress: false` and omits `egressTarget`. An unhealthy provider may also include
+`health_diagnostic` (`phase`, `reason`, `elapsed_ms`, `timeout_ms`, `exit_code`, `stderr`,
+`command`). For edge-tts, that health diagnostic is status-only: `/notify` does not skip Edge
+just because the import probe is slow or failed. The kokoro entry adds its `endpoint`; the
+elevenlabs entry adds `apiKeyConfigured` (reflects only the `voices.json` `apiKey`
 indirection, not the bare-env fallback — see [`configuration.md`](configuration.md)). Detail
 in [`providers-observability.md`](providers-observability.md).
 
