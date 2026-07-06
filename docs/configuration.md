@@ -44,7 +44,7 @@ Precedence rules:
 | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | `10000` | macOS notification (osascript) timeout |
 | `ECHO_MUTE_STATE_PATH` | `~/Library/Application Support/echo/mute.json` (macOS), else `$XDG_STATE_HOME`/`~/.local/state` under `echo/mute.json` | Runtime mute state file (`POST /mute`), written atomically; missing/corrupt = unmuted |
 | `ECHO_RESOLUTION_LOG` / `ECHO_RESOLUTION_LOG_MAX_BYTES` | see [`providers-observability.md`](providers-observability.md) | Voice-resolution drop-off log path / size cap |
-| `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts retry knobs |
+| `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_TIMEOUT_MAX_MS`, `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS`, `ECHO_EDGETTS_HEALTH_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts timeout/retry knobs |
 
 Every `ECHO_*` knob also accepts its legacy `VOICESYSTEM_*` name as a deprecated silent
 fallback (full mapping in [Deprecated environment variables](#deprecated-environment-variables)
@@ -68,9 +68,11 @@ Location: `core/voices.json`, or wherever `VOICES_PATH` points. Top-level keys:
 
 Per notification, `speakWithFallback` walks `defaultProvider` first, then `fallbackOrder`
 minus the duplicate — a single pass. A **disabled** provider is skipped before any network or
-health path (the structural egress gate — [`providers-observability.md`](providers-observability.md));
-an unhealthy or circuit-open provider is skipped ([`reliability.md`](reliability.md)); a
-failed provider falls through to the next.
+health path (the structural egress gate — [`providers-observability.md`](providers-observability.md)).
+For edge-tts specifically, the `/notify` hot path does not run the diagnostic Python-import
+health probe; it tries synthesis unless edge-tts is disabled or its circuit breaker is open
+([`reliability.md`](reliability.md)). Other unhealthy or circuit-open providers are skipped;
+a failed provider falls through to the next.
 
 ### Provider blocks
 
@@ -150,7 +152,10 @@ single canonical name (priority `ECHO_*` → `ATLAS_VOICE_*` → `VOICESYSTEM_*`
 | `VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS` | `ECHO_AUDIO_PROCESS_TIMEOUT_MS` | |
 | `VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS` | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | |
 | `VOICESYSTEM_AUDIO_CACHE_DIR` | `ECHO_AUDIO_CACHE_DIR` | |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_MS` | `ECHO_EDGETTS_TIMEOUT_MS` | |
+| `VOICESYSTEM_EDGETTS_TIMEOUT_MS` | `ECHO_EDGETTS_TIMEOUT_MS` | Base synthesis timeout |
+| `VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS` | `ECHO_EDGETTS_TIMEOUT_MAX_MS` | Adaptive synthesis timeout cap |
+| `VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS` | `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS` | Adaptive synthesis timeout increment |
+| `VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS` | `ECHO_EDGETTS_HEALTH_TIMEOUT_MS` | Diagnostic import-probe timeout |
 | `VOICESYSTEM_EDGETTS_SYNTH_RETRIES` | `ECHO_EDGETTS_SYNTH_RETRIES` | |
 | `VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS` | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | |
 | `VOICESYSTEM_RESOLUTION_LOG` | `ECHO_RESOLUTION_LOG` | |
