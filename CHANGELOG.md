@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Clarified README and troubleshooting docs for Edge TTS diagnostic-only health checks,
+  resolution-log provider diagnostics, and macOS `say` fallback investigation.
+- Documented local development worktree cleanup and ignored `.worktrees/` so temporary
+  feature worktrees are not reported as untracked project files.
+
 ## [0.4.0] - 2026-07-06
 
 ### Fixed

@@ -85,7 +85,7 @@ The first command returns JSON containing `"status":"healthy"`. The second retur
 
 - Check the service: `bash scripts/status.sh` shows load state, health, and the last log lines.
 - Tail the server log: `tail -20 ~/Library/Logs/echo.log`.
-- Read the voice-resolution log at `~/Library/Logs/echo/voice-resolution.jsonl` — it records how each notification's requested voice resolved, including fallbacks. An unexpected voice usually means the provider chain fell back (for example to macOS `say`). `docs/voices.md` explains voice resolution; `docs/dependencies.md` lists what each provider needs.
+- Read the voice-resolution log at `~/Library/Logs/echo/voice-resolution.jsonl` — it records how each notification's requested voice resolved, including fallbacks. An unexpected voice usually means the provider chain fell back (for example to macOS `say`); failed attempts include diagnostic fields such as `phase`, `reason`, `timeout_ms`, and `stderr`. `docs/voices.md` explains voice resolution; `docs/dependencies.md` lists what each provider needs.
 
 Day-to-day start/stop/restart/status procedures live in `docs/operations.md`.
 

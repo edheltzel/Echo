@@ -143,16 +143,20 @@ bindings: [docs/http-api.md](docs/http-api.md).
 
 Returns provider status, fallback order, circuit-breaker state, pronunciation rule count,
 and emotional preset count. Each provider entry includes an egress audit; note that the
-default provider, `edge-tts`, is an **online** Microsoft service. Details:
-[docs/http-api.md](docs/http-api.md) and
-[docs/providers-observability.md](docs/providers-observability.md).
+default provider, `edge-tts`, is an **online** Microsoft service. Edge's health probe is
+status-only: `/notify` still tries real Edge synthesis unless Edge is disabled or its
+circuit breaker is open. Details: [docs/http-api.md](docs/http-api.md),
+[docs/providers-observability.md](docs/providers-observability.md), and
+[docs/reliability.md](docs/reliability.md).
 
 ### Voice-resolution drop-off log
 
 To make it observable *why* a `/notify` used the voice it did, the daemon appends one
 structured JSONL event per voice-enabled `/notify` to
 `~/Library/Logs/echo/voice-resolution.jsonl` — separate from the human-readable daemon log
-(`~/Library/Logs/echo.log`). Fields, retention, and overrides:
+(`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
+`elapsed_ms`, `timeout_ms`, `exit_code`, and `stderr`, so Edge failures distinguish health
+status, synthesis, playback, and circuit-breaker paths. Fields, retention, and overrides:
 [docs/providers-observability.md](docs/providers-observability.md).
 
 ## Voices
@@ -180,6 +184,9 @@ by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 - Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
   while ElevenLabs is disabled — it speaks in the active provider's **default voice**
   instead of the persona you meant.
+- Unexpected macOS `say` usually means Edge is disabled, the Edge circuit is open, or real
+  Edge synthesis failed. Check `attempts[]` in the resolution log; the diagnostic health
+  probe alone no longer forces `say` fallback.
 - Port `31337` causes silence — voice traffic is `:8888`.
 
 ### Auditioning edge voices
