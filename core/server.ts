@@ -20,12 +20,21 @@
 
 import { serve } from "bun";
 import { spawn } from "node:child_process";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import {
+  writeAudioLifecycleEvent,
+  classifyPlaybackOutcome,
+  classifyPlaybackError,
+  parseAfinfoDuration,
+  type AudioLifecycleEvent,
+  type PlaybackExitReason,
+} from "./audio-log";
 import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
@@ -534,6 +543,50 @@ function waitForProcess(proc: ReturnType<typeof spawn>, label: string, timeoutMs
   });
 }
 
+// --- Audio lifecycle capture (Phase 1 / U2) --------------------------------
+// A per-request mutable slot carried via AsyncLocalStorage so the two playback
+// sites (playAudio + the inline edgetts path) can deposit measured metrics
+// without threading params through every provider signature. ALS keeps
+// concurrent /notify requests isolated. The /notify handler owns run() and the
+// final writeAudioLifecycleEvent; playback sites only deposit here.
+interface AudioCaptureSlot {
+  synth_duration_ms?: number | null;
+  clip_duration_s?: number | null;
+  play_started_at?: string | null;
+  play_ended_at?: string | null;
+  play_time_ms?: number | null;
+  exit_reason?: PlaybackExitReason | null;
+}
+
+const audioCapture = new AsyncLocalStorage<AudioCaptureSlot>();
+
+// Best-effort clip duration via afinfo (present on macOS). Never throws.
+function afinfoDurationSafe(file: string): number | null {
+  try {
+    const res = Bun.spawnSync(['/usr/bin/afinfo', file]);
+    return parseAfinfoDuration(res.stdout.toString());
+  } catch {
+    return null;
+  }
+}
+
+// Deposit playback metrics into the ambient request slot. No-op outside a
+// request (e.g. a unit test calling playAudio directly) so instrumentation
+// never depends on the caller. `error` present → derive the exit reason from
+// the waitForProcess rejection; absent → a clean exit.
+function recordPlayback(file: string, playStart: number, playEnd: number, outcome: { exitCode: number | null; error?: unknown }): void {
+  const slot = audioCapture.getStore();
+  if (!slot) return;
+  const reason: PlaybackExitReason = 'error' in outcome
+    ? classifyPlaybackOutcome(classifyPlaybackError(outcome.error instanceof Error ? outcome.error.message : String(outcome.error)))
+    : classifyPlaybackOutcome({ timedOut: false, errored: false, exitCode: outcome.exitCode ?? 0 });
+  slot.clip_duration_s = afinfoDurationSafe(file);
+  slot.play_started_at = new Date(playStart).toISOString();
+  slot.play_ended_at = new Date(playEnd).toISOString();
+  slot.play_time_ms = playEnd - playStart;
+  slot.exit_reason = reason;
+}
+
 async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff' = 'mp3'): Promise<void> {
   const temp = createAudioTempFile('play', format);
   await Bun.write(temp.file, audioBuffer);
@@ -541,8 +594,13 @@ async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff
   const volume = getVolumeSetting();
   const proc = spawn('/usr/bin/afplay', ['-v', volume.toString(), temp.file]);
 
+  const playStart = Date.now();
   try {
     await waitForProcess(proc, 'afplay', AUDIO_PROCESS_TIMEOUT_MS);
+    recordPlayback(temp.file, playStart, Date.now(), { exitCode: 0 });
+  } catch (error) {
+    recordPlayback(temp.file, playStart, Date.now(), { exitCode: null, error });
+    throw error;
   } finally {
     cleanupAudioTempDir(temp.dir);
   }
@@ -741,6 +799,7 @@ class EdgeTTSProvider implements TTSProvider {
       // --- Synthesis (the provider's responsibility → governed by the breaker).
       //     Retry transient blips with backoff before recording a failure. ---
       let synthDiagnostic: ProviderDiagnostic | undefined;
+      const synthStart = Date.now();
       for (let attempt = 0; attempt <= EDGETTS_SYNTH_RETRIES; attempt++) {
         if (attempt > 0) {
           console.warn(`🔁 Edge TTS synth retry ${attempt}/${EDGETTS_SYNTH_RETRIES}...`);
@@ -784,14 +843,19 @@ class EdgeTTSProvider implements TTSProvider {
       // The online provider did its job — mark it healthy regardless of what
       // happens during local playback below.
       recordProviderSuccess('edgetts');
+      const edgeSlot = audioCapture.getStore();
+      if (edgeSlot) edgeSlot.synth_duration_ms = Date.now() - synthStart;
 
       // --- Playback (a LOCAL concern: afplay/mpv). A playback failure must NOT
       //     open the edge-tts breaker — the provider already succeeded. ---
       const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
+      const playStart = Date.now();
       try {
         const play = spawn(player, [tmp!.file]);
         await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
+        recordPlayback(tmp!.file, playStart, Date.now(), { exitCode: 0 });
       } catch (playError: any) {
+        recordPlayback(tmp!.file, playStart, Date.now(), { exitCode: null, error: playError });
         this.lastDiagnostic = { phase: 'playback', reason: 'local-playback-failed', message: playError.message || String(playError), command: player };
         console.error(`🔇 Edge TTS playback failed via ${player} (local issue, provider unaffected):`, playError.message || playError);
         return false;
@@ -1371,6 +1435,8 @@ async function sendNotification(
   voiceEnabled = true,
   voiceId: string | null = null,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
+  sessionId: string | null = null,
+  requestId: string | null = null,
 ) {
   const titleValidation = validateInput(title);
   const messageValidation = validateInput(message);
@@ -1403,7 +1469,13 @@ async function sendNotification(
 
       console.log(`🎙️  Speaking...`);
 
-      const result = await speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion);
+      // Run the speak inside an audio-capture context so the playback sites
+      // (playAudio + the inline edgetts path) deposit their measured metrics
+      // into this per-request slot (Phase 1 / U2). ALS isolates concurrent
+      // /notify requests.
+      const audioSlot: AudioCaptureSlot = {};
+      const result = await audioCapture.run(audioSlot, () =>
+        speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion));
 
       if (result.muted) {
         console.log('🔇 Speech suppressed (muted)');
@@ -1428,6 +1500,27 @@ async function sendNotification(
         success: result.success,
         ...(result.muted && { muted: true }),
       });
+
+      // Audio lifecycle event (Phase 1 / R1): pairs the request context with the
+      // playback metrics deposited by the playback sites, so truncation becomes
+      // visible — a short play shows play_time_ms < clip_duration_s. Correlates
+      // with the hook's voice-events.jsonl by session_id. Best-effort.
+      const event: AudioLifecycleEvent = {
+        ts: logTimestamp(),
+        session_id: sessionId,
+        request_id: requestId,
+        message_chars: safeMessage.length,
+        provider: result.provider,
+        synth_duration_ms: audioSlot.synth_duration_ms ?? null,
+        clip_duration_s: audioSlot.clip_duration_s ?? null,
+        play_started_at: audioSlot.play_started_at ?? null,
+        play_ended_at: audioSlot.play_ended_at ?? null,
+        play_time_ms: audioSlot.play_time_ms ?? null,
+        exit_reason: audioSlot.exit_reason ?? null,
+        muted: result.muted ?? false,
+        success: result.success,
+      };
+      writeAudioLifecycleEvent(event);
     } catch (error) {
       console.error("Failed to speak:", error);
     }
@@ -1522,7 +1615,7 @@ export const server = serve({
 
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
-        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings);
+        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, sessionId, reqId);
 
         log('info', `✅ Notification delivered`, ctx);
         return new Response(
