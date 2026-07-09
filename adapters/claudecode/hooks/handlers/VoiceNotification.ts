@@ -10,7 +10,8 @@
  */
 
 import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody, type VoicePersonality } from '../lib/identity';
 import { getISOTimestamp } from '../lib/time';
@@ -37,10 +38,14 @@ interface ElevenLabsNotificationPayload {
   source?: string;
 }
 
+// 'aborted' = the 12s client AbortController fired after the POST was already
+// received by the daemon (which plays independently). Distinct from 'failed'
+// (a real network/HTTP error) so the log stops mislabeling played audio as a
+// failure — the #24-style honesty the resolution log already gives the daemon.
 interface VoiceEvent {
   timestamp: string;
   session_id: string;
-  event_type: 'sent' | 'failed' | 'skipped';
+  event_type: 'sent' | 'failed' | 'skipped' | 'aborted';
   message: string;
   character_count: number;
   voice_engine: 'elevenlabs';
@@ -49,7 +54,19 @@ interface VoiceEvent {
   error?: string;
 }
 
-const VOICE_LOG_PATH = paiPath('MEMORY', 'VOICE', 'voice-events.jsonl');
+// Structured voice events live in the environment dir ~/.agents/Echo/ (created
+// 0700), correlatable with the daemon's audio-lifecycle log by session_id.
+// Overridable via ECHO_VOICE_EVENTS_LOG; resolved at write time so a test can
+// redirect it. User-owned, never /tmp.
+export function resolveVoiceEventsLogPath(): string {
+  return process.env.ECHO_VOICE_EVENTS_LOG ?? join(homedir(), '.agents', 'Echo', 'voice-events.jsonl');
+}
+
+// True when a fetch was aborted (the 12s client timeout), vs. a genuine failure.
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 const CURRENT_WORK_PATH = paiPath('MEMORY', 'STATE', 'current-work.json');
 
 function getActiveWorkDir(): string | null {
@@ -67,15 +84,16 @@ function getActiveWorkDir(): string | null {
   return null;
 }
 
-function logVoiceEvent(event: VoiceEvent): void {
+export function logVoiceEvent(event: VoiceEvent): void {
   const line = JSON.stringify(event) + '\n';
 
   try {
-    const dir = paiPath('MEMORY', 'VOICE');
+    const path = resolveVoiceEventsLogPath();
+    const dir = dirname(path);
     if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
-    appendFileSync(VOICE_LOG_PATH, line);
+    appendFileSync(path, line);
   } catch {
     // Silent fail
   }
@@ -153,11 +171,13 @@ async function sendNotification(payload: ElevenLabsNotificationPayload, sessionI
     }
   } catch (error) {
     const fetchMs = Date.now() - fetchStart;
-    const isAbort = error instanceof Error && error.name === 'AbortError';
+    const isAbort = isAbortError(error);
     console.error(`[Voice] fetch_${isAbort ? 'abort' : 'fail'}: ${error} (${fetchMs}ms)`);
     logVoiceEvent({
       ...baseEvent,
-      event_type: 'failed',
+      // The daemon received the POST and plays independently; a client-side
+      // abort is not a delivery failure. Label it honestly.
+      event_type: isAbort ? 'aborted' : 'failed',
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
