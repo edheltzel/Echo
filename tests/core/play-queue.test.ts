@@ -5,15 +5,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { PlayQueue, type PlayJob } from "../../core/play-queue";
+import { waitFor } from "./poll";
 
-// Poll until `cond` holds (the consumer is async; there is no drain handle).
-async function waitFor(cond: () => boolean, timeoutMs = 2000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!cond()) {
-    if (Date.now() > deadline) throw new Error("waitFor timed out");
-    await Bun.sleep(5);
-  }
-}
 
 function job(id: string, sessionId: string | null, receivedAt = Date.now()): PlayJob<string> {
   return { id, sessionId, receivedAt, payload: id };
@@ -215,11 +208,11 @@ describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
     }
   }
 
-  test("defaults: age cap 30s, depth 20 when env is unset", () => {
+  test("defaults: age cap 60s, depth 20 when env is unset", () => {
     withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", undefined, () => {
       withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", undefined, () => {
         const q = new PlayQueue<string>({ player: noopPlayer });
-        expect(q.ageCapMs).toBe(30_000);
+        expect(q.ageCapMs).toBe(60_000);
         expect(q.maxDepth).toBe(20);
       });
     });
@@ -238,7 +231,7 @@ describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
   test("NaN / negative / zero / below-floor values fall back to the default", () => {
     for (const bad of ["garbage", "-5", "0", "999"]) { // age-cap floor is 1000
       withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", bad, () => {
-        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(30_000);
+        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(60_000);
       });
     }
     for (const bad of ["garbage", "-1", "0"]) { // depth floor is 1

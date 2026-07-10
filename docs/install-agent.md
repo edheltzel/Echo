@@ -40,7 +40,7 @@ curl -fsS -X POST http://localhost:8888/notify \
   -d '{"message":"install verification","voice_enabled":false}'
 ```
 
-Expected: JSON with `"status":"success"`.
+Expected: JSON with `"status":"accepted"` (HTTP 202 — the line is queued and speaks async).
 
 If FAIL: check rate limit and server logs.
 

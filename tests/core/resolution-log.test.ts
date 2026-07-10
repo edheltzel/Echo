@@ -19,6 +19,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitFor } from "./poll";
 
 // --- spawn stub -------------------------------------------------------------
 // sendNotification always spawns osascript for the macOS banner; with every
@@ -62,16 +63,13 @@ const PORT = (server as any).port;
 
 // Speak runs async behind the play queue (Phase 2 / R2): /notify acks 202 on
 // receipt and the resolution event lands when the consumer finishes — poll.
+function logLines(): string[] {
+  return existsSync(HTTP_LOG) ? readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean) : [];
+}
+
 async function waitForLines(count: number, timeoutMs = 5000): Promise<string[]> {
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    const lines = existsSync(HTTP_LOG)
-      ? readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean)
-      : [];
-    if (lines.length >= count) return lines;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${count} resolution lines; got ${lines.length}`);
-    await Bun.sleep(10);
-  }
+  await waitFor(() => logLines().length >= count, timeoutMs, () => `${count} resolution lines; got ${logLines().length}`);
+  return logLines();
 }
 
 const CONST_TS = "1970-01-01T00:00:00.000Z";
@@ -101,7 +99,10 @@ beforeEach(() => {
   }
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Drain guard: the resolution row is written before the job's final
+  // osascript spawn; give the in-flight job a beat before restoring spawn.
+  await Bun.sleep(25);
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];

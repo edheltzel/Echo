@@ -14,6 +14,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitFor } from "./poll";
 
 const PLAY_MS = 120;
 
@@ -69,7 +70,11 @@ beforeEach(() => {
   HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `notify-queue-test-${bucket++}` };
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Drain guard: the polled row is written just BEFORE the job's final
+  // osascript spawn, so give the in-flight job a beat to finish before the
+  // real spawn is restored (else a straggler shows a real banner).
+  await Bun.sleep(25);
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];
@@ -87,13 +92,8 @@ function readRows(): any[] {
 }
 
 async function waitForRows(count: number, timeoutMs = 5000): Promise<any[]> {
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    const rows = readRows();
-    if (rows.length >= count) return rows;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${count} rows; got ${rows.length}`);
-    await Bun.sleep(10);
-  }
+  await waitFor(() => readRows().length >= count, timeoutMs, () => `${count} rows; got ${readRows().length}`);
+  return readRows();
 }
 
 describe("/notify acks on receipt (R2)", () => {
@@ -111,7 +111,7 @@ describe("/notify acks on receipt (R2)", () => {
     expect(body.status).toBe("accepted");
     expect(typeof body.request_id).toBe("string");
     // Ack precedes playback: round-trip is queue-insert time, not play time.
-    expect(elapsed).toBeLessThan(100);
+    expect(elapsed).toBeLessThan(PLAY_MS); // ack precedes playback completion
 
     // The consumer then plays it and writes the played lifecycle row.
     const rows = await waitForRows(1);
@@ -154,5 +154,30 @@ describe("/notify acks on receipt (R2)", () => {
     expect(rows[0].disposition).toBe("played"); // reached the player; the gate suppressed audio
     expect(rows[0].play_time_ms).toBe(null);
     expect(rows[0].exit_reason).toBe(null);
+  });
+
+  test("/notify/personality feeds the same queue: 202 + played lifecycle row", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify/personality`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "personality shim line", session_id: "sess-persona" }),
+    });
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.status).toBe("accepted");
+    expect(typeof body.request_id).toBe("string");
+
+    const rows = await waitForRows(1);
+    expect(rows[0].session_id).toBe("sess-persona");
+    expect(rows[0].request_id).toBe(body.request_id);
+    expect(rows[0].disposition).toBe("played");
+  });
+
+  test("/health reports the play-queue depth (additive field)", async () => {
+    const res = await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS });
+    expect(res.status).toBe(200);
+    const health = await res.json();
+    expect(typeof health.play_queue.depth).toBe("number");
+    expect(health.play_queue.depth).toBeGreaterThanOrEqual(0);
   });
 });

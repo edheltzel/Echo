@@ -76,15 +76,18 @@ remains `true` and callers that treat any 2xx as success — including the shipp
 which only log the status — are unaffected. The semantics shift from "delivered" to
 "accepted": a `202` no longer means the line was spoken. True playback outcome now lives in
 the audio-lifecycle log (`~/.agents/Echo/audio-lifecycle.jsonl`), where each request's row
-records a `disposition` — `played` (with the measured play window), `superseded`, or
-`dropped-stale`.
+records a `disposition` — `played` (reached the player; carries the measured play window
+unless muted), `superseded`, or `dropped-stale` (waited past the age cap at dequeue, or
+evicted by the depth cap at enqueue — `disposition_reason` says which). Voice-disabled
+lines are not logged (the lifecycle log records spoken lines only).
 
 ## `POST /notify/personality`
 
 Compatibility endpoint for callers that only provide a `message`. Always voice-enabled,
 default title, identity voice; same validation and response shape (success message
 `"Personality notification accepted"`). Lines feed the same global play queue and ack
-`202` on receipt.
+`202` on receipt; a `session_id` here coalesces against `/notify` lines from the same
+session (one queue, one key).
 
 ## `POST /mute`
 
@@ -136,6 +139,7 @@ In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
 
 Returns `status`, `port`, `activeProvider` (= `defaultProvider`), `fallbackOrder`, provider
 status, `macos_fallback_voice`, pronunciation rule count, emotional preset count, live
+`play_queue` (`{depth}` — queued-not-playing lines), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
 `reset_after_ms`), and the current mute state (`mute: {muted, muted_until}`).
 

@@ -19,6 +19,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitFor } from "./poll";
 
 const realSpawn = realChildProcess.spawn;
 let spawnImpl: (...args: any[]) => any = realSpawn;
@@ -52,16 +53,13 @@ const PORT = (server as any).port;
 
 // Playback is async behind the play queue (Phase 2 / R2): /notify acks 202 on
 // receipt and the row lands when the consumer finishes the job — poll for it.
+function logLines(): string[] {
+  return existsSync(LOG) ? readFileSync(LOG, "utf-8").split("\n").filter(Boolean) : [];
+}
+
 async function waitForLines(count: number, timeoutMs = 5000): Promise<string[]> {
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    const lines = existsSync(LOG)
-      ? readFileSync(LOG, "utf-8").split("\n").filter(Boolean)
-      : [];
-    if (lines.length >= count) return lines;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${count} lifecycle lines; got ${lines.length}`);
-    await Bun.sleep(10);
-  }
+  await waitFor(() => logLines().length >= count, timeoutMs, () => `${count} lifecycle lines; got ${logLines().length}`);
+  return logLines();
 }
 
 let savedEnabled: Record<string, boolean>;
@@ -78,7 +76,9 @@ beforeEach(() => {
   (voicesConfig.providers as any).edgetts.enabled = true;
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Drain guard: rows land just before the job's final osascript spawn.
+  await Bun.sleep(25);
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];

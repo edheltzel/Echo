@@ -60,7 +60,7 @@ curl -X POST http://localhost:8888/notify \
 You should hear "Hello from Echo" spoken aloud and see:
 
 ```json
-{"status":"success","message":"Notification sent","request_id":"..."}
+{"status":"accepted","message":"Notification accepted","request_id":"..."}
 ```
 
 Hear nothing, or an unexpected voice? See [If you hear nothing — or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).

@@ -88,7 +88,7 @@ If edge-tts is installed for `/opt/homebrew/bin/python3`, you should hear the de
 "Ava" voice say *"Hello from Echo"* and see:
 
 ```json
-{"status":"success","message":"Notification sent","request_id":"..."}
+{"status":"accepted","message":"Notification accepted","request_id":"..."}
 ```
 
 That's it — Echo is working. Anything on your machine can now speak by POSTing to
@@ -154,7 +154,7 @@ If `/opt/homebrew/bin/python3` doesn't exist, install Python first with
 
 Repeat Step 4 — you should now hear Ava.
 
-**No sound at all, but the curl returned `"status":"success"`?** Check your output
+**No sound at all, but the curl returned `"status":"accepted"`?** Check your output
 device and volume, then check the resolution log (check 3 above): if the last line has
 `"success":false`, the `attempts` array tells you which provider failed and how.
 

@@ -55,8 +55,12 @@ export class PlayQueue<T> {
     // Bounded env reads (ECHO_* convention): a NaN/negative/zero override
     // falls back to the default rather than a degenerate cap that would drop
     // everything (age cap floor 1s) or serialize nothing (depth floor 1).
+    // Age-cap default matches the daemon's playback-process timeout (60s,
+    // ECHO_AUDIO_PROCESS_TIMEOUT_MS): a single hung/long play blocks the
+    // serial consumer for at most that long, so a smaller cap would let one
+    // bad play mass-drop every line queued behind it.
     this.ageCapMs = opts.ageCapMs
-      ?? parseBoundedInt(process.env.ECHO_PLAY_QUEUE_AGE_CAP_MS, 30_000, 1_000);
+      ?? parseBoundedInt(process.env.ECHO_PLAY_QUEUE_AGE_CAP_MS, 60_000, 1_000);
     this.maxDepth = opts.maxDepth
       ?? parseBoundedInt(process.env.ECHO_PLAY_QUEUE_MAX_DEPTH, 20, 1);
     void this.consume();
@@ -113,13 +117,15 @@ export class PlayQueue<T> {
         continue;
       }
 
-      const now = this.opts.now?.() ?? Date.now();
-      if (now - next.receivedAt > this.ageCapMs) {
-        this.report(next, "dropped-stale", "age-cap-exceeded");
-        continue;
-      }
-
+      // One catch-all per job: nothing inside (an injected now(), the age
+      // check, the player) may kill this loop — a dead consumer would
+      // silently end global playback while /notify keeps acking 202.
       try {
+        const now = this.opts.now?.() ?? Date.now();
+        if (now - next.receivedAt > this.ageCapMs) {
+          this.report(next, "dropped-stale", "age-cap-exceeded");
+          continue;
+        }
         await this.opts.player(next);
       } catch (error) {
         try {

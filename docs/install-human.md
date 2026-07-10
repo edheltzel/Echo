@@ -79,7 +79,7 @@ curl -fsS -X POST http://localhost:8888/notify \
   -d '{"message":"Hello from echo"}'
 ```
 
-The first command returns JSON containing `"status":"healthy"`. The second returns `"status":"success"` and speaks aloud.
+The first command returns JSON containing `"status":"healthy"`. The second returns `"status":"accepted"` (202 — the line is queued) and then speaks aloud.
 
 ### If you hear nothing, or the wrong voice
 

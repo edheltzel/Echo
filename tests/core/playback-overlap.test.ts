@@ -19,11 +19,12 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitFor } from "./poll";
 
 // Deterministic "playback duration" for the stubbed afplay. Long enough that
 // concurrent requests would demonstrably overlap without serialization, and
 // that a burst can be enqueued while the first line is still playing.
-const PLAY_MS = 150;
+const PLAY_MS = 250;
 
 const realSpawn = realChildProcess.spawn;
 let spawnImpl: (...args: any[]) => any = realSpawn;
@@ -78,7 +79,9 @@ beforeEach(() => {
   HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `overlap-test-${bucket++}` };
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Drain guard: rows land just before the job's final osascript spawn.
+  await Bun.sleep(25);
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];
@@ -105,15 +108,8 @@ function readRows(): any[] {
 
 // Playback is async behind the queue; poll the lifecycle log for the rows.
 async function waitForRows(count: number, timeoutMs = 5000): Promise<any[]> {
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    const rows = readRows();
-    if (rows.length >= count) return rows;
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${count} lifecycle rows; got ${rows.length}`);
-    }
-    await Bun.sleep(10);
-  }
+  await waitFor(() => readRows().length >= count, timeoutMs, () => `${count} lifecycle rows; got ${readRows().length}`);
+  return readRows();
 }
 
 // Sorted play windows must not intersect: each next line starts at or after

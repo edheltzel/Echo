@@ -1568,8 +1568,15 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
   },
   onDisposition: (job, disposition, reason) => {
+    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
+    // The lifecycle log records one event per SPOKEN line (core/audio-log.ts);
+    // banner-only jobs never write a played row, so their drop rows would
+    // skew the log to 100%-dropped for voice-disabled traffic.
+    if (!job.payload.voiceEnabled) return;
     // Minimal lifecycle row (R7): the line never reached the player, so there
     // are no playback metrics — just the disposition and its reason.
+    // message_chars here is the validation-sanitized length (pre marker-strip),
+    // slightly larger than a played row's post-strip count.
     writeAudioLifecycleEvent({
       ts: logTimestamp(),
       session_id: job.sessionId,
@@ -1587,12 +1594,72 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
       disposition,
       disposition_reason: reason,
     });
-    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
   },
   onPlayerError: (job, error) => {
     log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
+    // Defense-in-depth row (R7): sendNotification swallows speak errors
+    // internally (writing its own played row), so this path only fires when
+    // it throws BEFORE its lifecycle write — without this row the 202-acked
+    // line would vanish from the log entirely.
+    if (!job.payload.voiceEnabled) return;
+    writeAudioLifecycleEvent({
+      ts: logTimestamp(),
+      session_id: job.sessionId,
+      request_id: job.id,
+      message_chars: job.payload.messageChars,
+      provider: 'none',
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: 'error',
+      muted: false,
+      success: false,
+      disposition: 'played', // it reached the player; the play itself failed
+    });
   },
 });
+
+// Validate on receipt so bad input still fails 4xx BEFORE enqueue (R2), then
+// hand the line to the queue. Shared by /notify and the personality shim so
+// their validation + payload semantics cannot drift apart.
+function enqueueNotification(
+  reqId: string,
+  opts: {
+    title: string;
+    message: string;
+    voiceEnabled: boolean;
+    voiceId: string | null;
+    voiceSettings: Partial<VoiceSettings> | null;
+    sessionId: string | null;
+  },
+): void {
+  const titleValidation = validateInput(opts.title);
+  if (!titleValidation.valid) {
+    throw new Error(`Invalid title: ${titleValidation.error}`);
+  }
+  const messageValidation = validateInput(opts.message);
+  if (!messageValidation.valid) {
+    throw new Error(`Invalid message: ${messageValidation.error}`);
+  }
+
+  playQueue.enqueue({
+    id: reqId,
+    sessionId: opts.sessionId,
+    receivedAt: Date.now(),
+    payload: {
+      title: opts.title,
+      message: opts.message,
+      voiceEnabled: opts.voiceEnabled,
+      voiceId: opts.voiceId,
+      voiceSettings: opts.voiceSettings,
+      sessionId: opts.sessionId,
+      requestId: reqId,
+      messageChars: messageValidation.sanitized!.length,
+    },
+  });
+}
 
 // =============================================================================
 // Rate Limiting
@@ -1670,32 +1737,12 @@ export const server = serve({
           throw new Error('Invalid voice_id');
         }
 
-        // Validate on receipt so bad input still fails 4xx BEFORE enqueue
-        // (R2). Same rules sendNotification applies when the job plays.
-        const titleValidation = validateInput(title);
-        if (!titleValidation.valid) {
-          throw new Error(`Invalid title: ${titleValidation.error}`);
-        }
-        const messageValidation = validateInput(message);
-        if (!messageValidation.valid) {
-          throw new Error(`Invalid message: ${messageValidation.error}`);
-        }
-
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
         // Ack on receipt, play async from the queue (R1/R2): synthesis and
         // playback happen in the queue's single consumer, one line at a time.
         // True playback outcome lives in the audio-lifecycle log (R7).
-        playQueue.enqueue({
-          id: reqId,
-          sessionId,
-          receivedAt: Date.now(),
-          payload: {
-            title, message, voiceEnabled, voiceId, voiceSettings, sessionId,
-            requestId: reqId,
-            messageChars: messageValidation.sanitized!.length,
-          },
-        });
+        enqueueNotification(reqId, { title, message, voiceEnabled, voiceId, voiceSettings, sessionId });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
         return new Response(
@@ -1728,23 +1775,11 @@ export const server = serve({
 
         log('info', `🎭 Personality notification: "${message}"`, ctx);
 
-        const messageValidation = validateInput(message);
-        if (!messageValidation.valid) {
-          throw new Error(`Invalid message: ${messageValidation.error}`);
-        }
-
         // Same global queue as /notify: one voice at a time across every
         // entry point (R1). Ack on receipt (R2).
-        playQueue.enqueue({
-          id: reqId,
-          sessionId,
-          receivedAt: Date.now(),
-          payload: {
-            title: DEFAULT_NOTIFICATION_TITLE, message, voiceEnabled: true,
-            voiceId: null, voiceSettings: null, sessionId,
-            requestId: reqId,
-            messageChars: messageValidation.sanitized!.length,
-          },
+        enqueueNotification(reqId, {
+          title: DEFAULT_NOTIFICATION_TITLE, message, voiceEnabled: true,
+          voiceId: null, voiceSettings: null, sessionId,
         });
 
         log('info', `📥 Personality notification accepted`, ctx);
@@ -1830,6 +1865,9 @@ export const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           mute: readMuteState(),
+          // Additive (Phase 2): queued-not-playing line count, so a backlog
+          // or wedged consumer is observable without reading the lifecycle log.
+          play_queue: { depth: playQueue.depth },
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,

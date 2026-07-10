@@ -18,6 +18,9 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// Speak runs async behind the play queue (Phase 2 / R2): poll for the side
+// effect each job produces, and always drain fully before the test returns.
+import { waitFor as waitUntil } from "./poll";
 
 // --- spawn stub -------------------------------------------------------------
 // sendNotification always spawns osascript for the macOS banner; the gate tests
@@ -191,18 +194,6 @@ async function postNotify(): Promise<Response> {
     headers: { "Content-Type": "application/json", "x-forwarded-for": `mute-gate-test-${bucket++}` },
     body: JSON.stringify({ message: "mute gate test", voice_enabled: true, voice_id: "pi" }),
   });
-}
-
-// Speak runs async behind the play queue (Phase 2 / R2): /notify acks 202 on
-// receipt; poll for the side effect (a spawn, a log line) the job produces.
-// Every gate test MUST wait for its job to finish before returning, so no
-// straggler plays after afterEach restores the real spawn.
-async function waitUntil(cond: () => boolean, timeoutMs = 5000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!cond()) {
-    if (Date.now() > deadline) throw new Error("waitUntil timed out");
-    await Bun.sleep(10);
-  }
 }
 
 function resolutionLines(): string[] {
