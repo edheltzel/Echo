@@ -109,10 +109,22 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
 - **Overlap risk of bare fire-and-forget.** The synchronous handler today gives *accidental*
   per-session serialization (the next turn can't start mid-play). Bare fire-and-forget removes
   it, so rapid turns could overlap — and overlap is a leading truncation suspect. So the real
-  fork is `202` + a **serial play-queue** vs. bare fire-and-forget; decide from data, not
-  assumption. Prototype must add a `.catch()` on the un-awaited playback promise, confirm the
-  audio-lifecycle row still writes *after* the response returns (Bun keeps the pending promise
-  alive — verify), and fire two overlapping requests to capture overlap timing in the same run.
+  fork is `202` + a **serial play-queue** vs. bare fire-and-forget.
+
+  **Prototype results (2026-07-10, throwaway `202` edit measured on `:8889`, then reverted):**
+  - Latency fix works: `202` returned in **38 ms** (was ~7 s synchronous).
+  - ALS survives fire-and-forget: the audio-lifecycle row still wrote correctly **after** the
+    response returned (`clip 8.376 s`, `play 9310 ms`, `completed`) — observability preserved,
+    Bun keeps the pending promise alive. `.catch()` on the un-awaited promise required.
+  - **Overlap CONFIRMED:** two back-to-back requests produced **~8 s of concurrent playback**
+    (B `19.533→31.612`, A `23.319→34.834`) — two `afplay` processes at once. The daemon has
+    **no playback serialization**, so concurrent `/notify`s overlap in *both* the current and
+    the `202` model (bare fire-and-forget just makes it easier to hit).
+  - **Implication:** overlap is now the **leading truncation suspect** — concurrent
+    sessions/turns talking over each other reads as "cut off." So ship `202` **with a serial
+    play-queue** (or a queue independent of `202`), not bare. The production lifecycle log will
+    confirm overlap by showing intersecting `play_started_at`/`play_ended_at` windows on the
+    turns Ed perceives as truncated.
 
 ---
 
