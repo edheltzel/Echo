@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Voice playback serialization (Phase 2)**: a global serial play queue in the daemon
+  (`core/play-queue.ts`) — one voice at a time across all sessions and hosts, the in-flight
+  line never interrupted. Queued lines coalesce newest-per-session and age out past
+  `ECHO_PLAY_QUEUE_AGE_CAP_MS` (depth-capped by `ECHO_PLAY_QUEUE_MAX_DEPTH`); every line's
+  outcome lands in the audio-lifecycle log as a `disposition`
+  (`played`/`superseded`/`dropped-stale`).
+
 ### Changed
+- **`/notify` (and `/notify/personality`) now ack `202` on receipt** instead of `200` after
+  playback: callers unblock in milliseconds while synthesis and playback run from the queue.
+  Compatibility: still 2xx (`response.ok` true), so existing callers are unaffected; true
+  playback outcome now lives in the audio-lifecycle log (see `docs/http-api.md`).
 - Clarified README and troubleshooting docs for Edge TTS diagnostic-only health checks,
   resolution-log provider diagnostics, and macOS `say` fallback investigation.
 - Documented local development worktree cleanup and ignored `.worktrees/` so temporary

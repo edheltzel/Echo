@@ -99,6 +99,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 |---|---|
 | Universal daemon | `core/server.ts` |
 | Circuit breaker · env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
+| Serial play queue (one voice at a time) | `core/play-queue.ts` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |

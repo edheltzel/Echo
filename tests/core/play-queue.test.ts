@@ -200,6 +200,62 @@ describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
   });
 });
 
+describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
+  const noopPlayer = async () => {};
+
+  function withEnv(name: string, value: string | undefined, fn: () => void): void {
+    const saved = process.env[name];
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+    try {
+      fn();
+    } finally {
+      if (saved === undefined) delete process.env[name];
+      else process.env[name] = saved;
+    }
+  }
+
+  test("defaults: age cap 30s, depth 20 when env is unset", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", undefined, () => {
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", undefined, () => {
+        const q = new PlayQueue<string>({ player: noopPlayer });
+        expect(q.ageCapMs).toBe(30_000);
+        expect(q.maxDepth).toBe(20);
+      });
+    });
+  });
+
+  test("valid overrides are honored", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", "5000", () => {
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", "3", () => {
+        const q = new PlayQueue<string>({ player: noopPlayer });
+        expect(q.ageCapMs).toBe(5000);
+        expect(q.maxDepth).toBe(3);
+      });
+    });
+  });
+
+  test("NaN / negative / zero / below-floor values fall back to the default", () => {
+    for (const bad of ["garbage", "-5", "0", "999"]) { // age-cap floor is 1000
+      withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", bad, () => {
+        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(30_000);
+      });
+    }
+    for (const bad of ["garbage", "-1", "0"]) { // depth floor is 1
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", bad, () => {
+        expect(new PlayQueue<string>({ player: noopPlayer }).maxDepth).toBe(20);
+      });
+    }
+  });
+
+  test("explicit options win over env", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", "5000", () => {
+      const q = new PlayQueue<string>({ player: noopPlayer, ageCapMs: 1234 });
+      expect(q.ageCapMs).toBe(1234);
+    });
+  });
+});
+
 describe("PlayQueue — resilience (R6)", () => {
   test("a rejecting player does not stall the queue; the next job still plays", async () => {
     const played: string[] = [];

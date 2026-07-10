@@ -68,6 +68,7 @@ The boundary is **mechanically enforced**, not just documented:
 |---|---|---|
 | Universal daemon | `core/server.ts` | The entire TTS engine: config load, sanitization, voice resolution, the four providers, the HTTP handler. |
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
+| Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, injected player. |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it. |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
@@ -86,21 +87,27 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
 1. **Rate-limit** — `checkRateLimit(clientIp)`: 10 requests per 60s per client IP, 429 on
    breach. With no proxy header, all local callers share one `localhost` bucket.
 2. **Validate + sanitize** — `validateInput` (non-empty string, ≤500 chars) then
-   `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown).
-3. **Resolve the voice** — `getVoiceMapping(voice_id)` resolves the request's `voice_id`
+   `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
+   input is a 4xx **before** anything is queued.
+3. **Enqueue + ack `202`** — the validated line joins the global serial play queue
+   (`core/play-queue.ts`) and the request returns immediately
+   (`{status: "accepted", request_id}`). The queue's single consumer runs steps 4–7 one
+   line at a time — a new line never plays over an in-flight one; queued lines coalesce
+   newest-per-session and age out (dispositions recorded in the audio-lifecycle log).
+4. **Resolve the voice** — `getVoiceMapping(voice_id)` resolves the request's `voice_id`
    **name key** in order: (1) `agents` name key (e.g. `"themis"`), (2) any
    `elevenlabs.voice_id`, (3) `identity`, else the active provider's default. Callers send
    the **short name key**, never a raw provider voice id.
-4. **Apply pronunciations** — `applyPronunciations` runs word-boundary regex replacements
+5. **Apply pronunciations** — `applyPronunciations` runs word-boundary regex replacements
    from `pronunciations.json` (re-applied per provider).
-5. **Speak with fallback** — `speakWithFallback` first checks the runtime mute state
+6. **Speak with fallback** — `speakWithFallback` first checks the runtime mute state
    (`core/mute.ts`, #83): while muted, speech is suppressed before the provider loop (one
    gate covers every provider including `say`) and the drop-off event is tagged `muted`.
    Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
    disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
    the voice actually used (consumed by the drop-off log).
-6. **Banner** — an `osascript` notification banner, then a structured response
-   (`{status, message, request_id}`).
+7. **Banner** — an `osascript` notification banner; each line's outcome
+   (`played`/`superseded`/`dropped-stale` + play window) lands in the audio-lifecycle log.
 
 Full endpoint contract and request body: [`docs/http-api.md`](docs/http-api.md).
 Voice config and the per-turn persona voice: [`docs/voices.md`](docs/voices.md).

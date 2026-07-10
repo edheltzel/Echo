@@ -115,6 +115,11 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
 
 ## Outstanding Questions (deferred until Phase 1 data exists)
 
+> **Resolved by Phase 2:** the `202`-on-receipt + serial play-queue fork below shipped in
+> [`2026-07-10-001-feat-voice-playback-serialization-plan.md`](2026-07-10-001-feat-voice-playback-serialization-plan.md)
+> (`core/play-queue.ts`): `202` + global serial queue, newest-per-session coalescing, age
+> cap, and `disposition` in the audio-lifecycle log.
+
 - Does the truncation fix belong hook-side (abort/timeout), daemon-side (playback), or both?
   Decided from R1/R4 evidence.
 - **`202`-on-receipt is a LATENCY fix, decoupled from truncation — do not conflate.** Returning

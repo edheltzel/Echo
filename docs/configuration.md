@@ -44,6 +44,8 @@ Precedence rules:
 | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | `10000` | macOS notification (osascript) timeout |
 | `ECHO_MUTE_STATE_PATH` | `~/Library/Application Support/echo/mute.json` (macOS), else `$XDG_STATE_HOME`/`~/.local/state` under `echo/mute.json` | Runtime mute state file (`POST /mute`), written atomically; missing/corrupt = unmuted |
 | `ECHO_RESOLUTION_LOG` / `ECHO_RESOLUTION_LOG_MAX_BYTES` | see [`providers-observability.md`](providers-observability.md) | Voice-resolution drop-off log path / size cap |
+| `ECHO_PLAY_QUEUE_AGE_CAP_MS` | `30000` (floor `1000`) | Play queue (Phase 2): a queued line that has waited longer than this since receipt is dropped (`dropped-stale`) instead of played late |
+| `ECHO_PLAY_QUEUE_MAX_DEPTH` | `20` (floor `1`) | Play queue (Phase 2): max queued lines; enqueueing beyond it drops the oldest queued line |
 | `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_TIMEOUT_MAX_MS`, `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS`, `ECHO_EDGETTS_HEALTH_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts timeout/retry knobs |
 
 Every `ECHO_*` knob also accepts its legacy `VOICESYSTEM_*` name as a deprecated silent
