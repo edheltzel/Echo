@@ -1,5 +1,11 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadPiVoiceConfig, pickStartupCatchphrase, shouldSuppressVoice } from "./config.ts";
+import {
+  loadPiVoiceConfig,
+  pickStartupCatchphrase,
+  shouldSuppressVoice,
+  type PiVoiceConfig,
+} from "./config.ts";
+import { loadEchoEnvironment } from "../../shared/echo-env.ts";
 import { sendPiNotification } from "./notify-client.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "./voice-line.ts";
 
@@ -53,8 +59,10 @@ function buildVoiceLineInstruction(personaName: string): string {
   ].join("\n");
 }
 
-export default function atlasVoicePiAdapter(pi: ExtensionAPI): void {
-  const config = loadPiVoiceConfig();
+export default function atlasVoicePiAdapter(
+  pi: ExtensionAPI,
+  config: PiVoiceConfig = loadPiVoiceConfig(loadEchoEnvironment()),
+): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
 

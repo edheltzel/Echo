@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DEFAULT_STARTUP_CATCHPHRASES,
   loadPiVoiceConfig,
@@ -6,6 +9,7 @@ import {
   shouldSuppressVoice,
 } from "../../../adapters/pi/config";
 import { edgeRateFromSpeed } from "../../../core/edge-rate";
+import { loadEchoEnvironment } from "../../../shared/echo-env";
 
 describe("Pi voice config", () => {
   test("uses safe defaults without host-specific settings", () => {
@@ -15,6 +19,31 @@ describe("Pi voice config", () => {
     expect(config.startupCatchphrases).toEqual(DEFAULT_STARTUP_CATCHPHRASES);
     expect(config.voiceEnabled).toBe(true);
     expect(config.personaName).toBe("Pi");
+  });
+
+  test("loads persistent adapter identity from Echo config with process env precedence", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-pi-config-"));
+    try {
+      const configDir = join(home, ".config", "echo");
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(
+        join(configDir, ".env"),
+        'ECHO_VOICE_PERSONA_NAME=Atlas\nECHO_VOICE_CATCHPHRASE="Atlas online and standing by."\n',
+      );
+
+      const fromFile = loadPiVoiceConfig(loadEchoEnvironment({}, home));
+      expect(fromFile.personaName).toBe("Atlas");
+      expect(fromFile.startupCatchphrases).toEqual(["Atlas online and standing by."]);
+
+      const fromProcess = loadPiVoiceConfig(loadEchoEnvironment(
+        { ECHO_VOICE_PERSONA_NAME: "Override" },
+        home,
+      ));
+      expect(fromProcess.personaName).toBe("Override");
+      expect(fromProcess.startupCatchphrases).toEqual(["Atlas online and standing by."]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   test("default greeting pool has variety and no hardcoded persona name (#81)", () => {
