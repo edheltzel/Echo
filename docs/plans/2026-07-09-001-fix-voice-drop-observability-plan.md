@@ -98,10 +98,21 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
 
 ## Outstanding Questions (deferred until Phase 1 data exists)
 
-- Does the fix belong hook-side (abort/timeout), daemon-side (playback), or both? Decided from
-  R1/R4 evidence.
-- If playback must outlive the hook's POST wait: fire-and-forget `202` on receipt vs. a longer
-  client timeout? A Phase 2 design decision.
+- Does the truncation fix belong hook-side (abort/timeout), daemon-side (playback), or both?
+  Decided from R1/R4 evidence.
+- **`202`-on-receipt is a LATENCY fix, decoupled from truncation — do not conflate.** Returning
+  `202` when the request is validated (then synth+play async) removes the blocking wait in the
+  greeting hook (`VoiceGreeting.hook.ts` SessionStart, measured ~6.8 s median / 12 s max) and
+  the Stop hook (~9–12 s/turn), and retires the 12 s client abort (no more false
+  `failed`/`aborted`). It does **NOT** fix truncation: R4 proved the daemon already plays the
+  full clip to completion. Two beneficiaries (latency + log honesty), not three.
+- **Overlap risk of bare fire-and-forget.** The synchronous handler today gives *accidental*
+  per-session serialization (the next turn can't start mid-play). Bare fire-and-forget removes
+  it, so rapid turns could overlap — and overlap is a leading truncation suspect. So the real
+  fork is `202` + a **serial play-queue** vs. bare fire-and-forget; decide from data, not
+  assumption. Prototype must add a `.catch()` on the un-awaited playback promise, confirm the
+  audio-lifecycle row still writes *after* the response returns (Bun keeps the pending promise
+  alive — verify), and fire two overlapping requests to capture overlap timing in the same run.
 
 ---
 
