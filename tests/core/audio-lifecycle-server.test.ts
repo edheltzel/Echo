@@ -50,6 +50,20 @@ process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 const { server, voicesConfig } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
+// Playback is async behind the play queue (Phase 2 / R2): /notify acks 202 on
+// receipt and the row lands when the consumer finishes the job — poll for it.
+async function waitForLines(count: number, timeoutMs = 5000): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const lines = existsSync(LOG)
+      ? readFileSync(LOG, "utf-8").split("\n").filter(Boolean)
+      : [];
+    if (lines.length >= count) return lines;
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${count} lifecycle lines; got ${lines.length}`);
+    await Bun.sleep(10);
+  }
+}
+
 let savedEnabled: Record<string, boolean>;
 
 beforeEach(() => {
@@ -91,12 +105,13 @@ describe("audio-lifecycle event per /notify", () => {
         session_id: "sess-abc",
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
 
-    const lines = readFileSync(LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = await waitForLines(1);
     expect(lines.length).toBe(1);
 
     const ev = JSON.parse(lines[0]);
+    expect(ev.disposition).toBe("played");          // Phase 2 / R7
     expect(ev.session_id).toBe("sess-abc");        // R3 correlation key
     expect(typeof ev.request_id).toBe("string");    // req-NNN threaded through
     expect(ev.provider).toBe("edgetts");
@@ -119,9 +134,9 @@ describe("audio-lifecycle event per /notify", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "muted turn", voice_enabled: true, session_id: "sess-mute" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
 
-    const lines = readFileSync(LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = await waitForLines(1);
     expect(lines.length).toBe(1);
     const ev = JSON.parse(lines[0]);
     expect(ev.muted).toBe(true);

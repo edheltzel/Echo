@@ -44,6 +44,7 @@ import {
   setCircuitBreakerLogger,
   shouldSkipProvider,
 } from "./circuit-breaker";
+import { PlayQueue } from "./play-queue";
 
 // =============================================================================
 // Types and Interfaces
@@ -1519,6 +1520,7 @@ async function sendNotification(
         exit_reason: audioSlot.exit_reason ?? null,
         muted: result.muted ?? false,
         success: result.success,
+        disposition: 'played', // reached the player (Phase 2 / R7)
       };
       writeAudioLifecycleEvent(event);
     } catch (error) {
@@ -1536,6 +1538,61 @@ async function sendNotification(
     console.error("Notification display error:", error);
   }
 }
+
+// =============================================================================
+// Play Queue — global playback serialization (Phase 2)
+// =============================================================================
+//
+// One queue per daemon: /notify (and the /notify/personality shim) validate,
+// enqueue, and ack 202 on receipt (R2); this single consumer plays one line at
+// a time via the existing sendNotification speak path (R1/KTD4). Queued lines
+// coalesce newest-per-session (R4) and age out at dequeue (R5); both outcomes
+// are recorded in the audio-lifecycle log as minimal disposition rows (R7).
+// Age/depth knobs: ECHO_PLAY_QUEUE_AGE_CAP_MS / ECHO_PLAY_QUEUE_MAX_DEPTH.
+
+interface NotifyJobPayload {
+  title: string;
+  message: string;
+  voiceEnabled: boolean;
+  voiceId: string | null;
+  voiceSettings: Partial<VoiceSettings> | null;
+  sessionId: string | null;
+  requestId: string;
+  messageChars: number; // sanitized length, for disposition rows that never play
+}
+
+const playQueue = new PlayQueue<NotifyJobPayload>({
+  player: async (job) => {
+    const p = job.payload;
+    await sendNotification(p.title, p.message, p.voiceEnabled, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
+  },
+  onDisposition: (job, disposition, reason) => {
+    // Minimal lifecycle row (R7): the line never reached the player, so there
+    // are no playback metrics — just the disposition and its reason.
+    writeAudioLifecycleEvent({
+      ts: logTimestamp(),
+      session_id: job.sessionId,
+      request_id: job.id,
+      message_chars: job.payload.messageChars,
+      provider: 'none',
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: null,
+      muted: false,
+      success: false,
+      disposition,
+      disposition_reason: reason,
+    });
+    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
+  },
+  onPlayerError: (job, error) => {
+    log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
+  },
+});
 
 // =============================================================================
 // Rate Limiting
@@ -1613,16 +1670,39 @@ export const server = serve({
           throw new Error('Invalid voice_id');
         }
 
+        // Validate on receipt so bad input still fails 4xx BEFORE enqueue
+        // (R2). Same rules sendNotification applies when the job plays.
+        const titleValidation = validateInput(title);
+        if (!titleValidation.valid) {
+          throw new Error(`Invalid title: ${titleValidation.error}`);
+        }
+        const messageValidation = validateInput(message);
+        if (!messageValidation.valid) {
+          throw new Error(`Invalid message: ${messageValidation.error}`);
+        }
+
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
-        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, sessionId, reqId);
+        // Ack on receipt, play async from the queue (R1/R2): synthesis and
+        // playback happen in the queue's single consumer, one line at a time.
+        // True playback outcome lives in the audio-lifecycle log (R7).
+        playQueue.enqueue({
+          id: reqId,
+          sessionId,
+          receivedAt: Date.now(),
+          payload: {
+            title, message, voiceEnabled, voiceId, voiceSettings, sessionId,
+            requestId: reqId,
+            messageChars: messageValidation.sanitized!.length,
+          },
+        });
 
-        log('info', `✅ Notification delivered`, ctx);
+        log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
         return new Response(
-          JSON.stringify({ status: "success", message: "Notification sent", request_id: reqId }),
+          JSON.stringify({ status: "accepted", message: "Notification accepted", request_id: reqId }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200
+            status: 202
           }
         );
       } catch (error: any) {
@@ -1643,18 +1723,36 @@ export const server = serve({
       try {
         const data = await req.json();
         const message = data.message || "Notification";
-        const ctx: LogContext = { requestId: reqId, sessionId: data.session_id, source: data.source };
+        const sessionId = data.session_id || null;
+        const ctx: LogContext = { requestId: reqId, sessionId, source: data.source };
 
         log('info', `🎭 Personality notification: "${message}"`, ctx);
 
-        await sendNotification(DEFAULT_NOTIFICATION_TITLE, message, true, null);
+        const messageValidation = validateInput(message);
+        if (!messageValidation.valid) {
+          throw new Error(`Invalid message: ${messageValidation.error}`);
+        }
 
-        log('info', `✅ Personality notification delivered`, ctx);
+        // Same global queue as /notify: one voice at a time across every
+        // entry point (R1). Ack on receipt (R2).
+        playQueue.enqueue({
+          id: reqId,
+          sessionId,
+          receivedAt: Date.now(),
+          payload: {
+            title: DEFAULT_NOTIFICATION_TITLE, message, voiceEnabled: true,
+            voiceId: null, voiceSettings: null, sessionId,
+            requestId: reqId,
+            messageChars: messageValidation.sanitized!.length,
+          },
+        });
+
+        log('info', `📥 Personality notification accepted`, ctx);
         return new Response(
-          JSON.stringify({ status: "success", message: "Personality notification sent", request_id: reqId }),
+          JSON.stringify({ status: "accepted", message: "Personality notification accepted", request_id: reqId }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200
+            status: 202
           }
         );
       } catch (error: any) {

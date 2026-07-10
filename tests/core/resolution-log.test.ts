@@ -60,6 +60,20 @@ process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 const { server, voicesConfig, writeResolutionEvent } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
+// Speak runs async behind the play queue (Phase 2 / R2): /notify acks 202 on
+// receipt and the resolution event lands when the consumer finishes — poll.
+async function waitForLines(count: number, timeoutMs = 5000): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const lines = existsSync(HTTP_LOG)
+      ? readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean)
+      : [];
+    if (lines.length >= count) return lines;
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${count} resolution lines; got ${lines.length}`);
+    await Bun.sleep(10);
+  }
+}
+
 const CONST_TS = "1970-01-01T00:00:00.000Z";
 function eventFor(voice: string): any {
   return {
@@ -117,9 +131,9 @@ describe("issue #24 — one resolution event per /notify", () => {
         voice_id: "zzz-nope", // unresolved → fallback with a reason
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
 
-    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = await waitForLines(1);
     expect(lines.length).toBe(1); // exactly one event per /notify
 
     const ev = JSON.parse(lines[0]);
@@ -150,9 +164,9 @@ describe("issue #24 — one resolution event per /notify", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "say fallback path", voice_enabled: true }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
 
-    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = await waitForLines(1);
     expect(lines.length).toBe(1);
 
     const ev = JSON.parse(lines[0]);
@@ -184,9 +198,9 @@ describe("issue #24 — one resolution event per /notify", () => {
         source: "pi",
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
 
-    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = await waitForLines(1);
     expect(lines.length).toBe(1);
 
     const ev = JSON.parse(lines[0]);

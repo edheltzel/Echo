@@ -193,21 +193,46 @@ async function postNotify(): Promise<Response> {
   });
 }
 
+// Speak runs async behind the play queue (Phase 2 / R2): /notify acks 202 on
+// receipt; poll for the side effect (a spawn, a log line) the job produces.
+// Every gate test MUST wait for its job to finish before returning, so no
+// straggler plays after afterEach restores the real spawn.
+async function waitUntil(cond: () => boolean, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error("waitUntil timed out");
+    await Bun.sleep(10);
+  }
+}
+
+function resolutionLines(): string[] {
+  return existsSync(HTTP_LOG)
+    ? readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean)
+    : [];
+}
+
 describe("issue #83 — speech-stage mute gate", () => {
   test("unmuted (no state file) → say provider actually spawns", async () => {
     (voicesConfig.providers as any).say.enabled = true;
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
-    expect(spawnedCommands).toContain("/usr/bin/say");
+    expect(res.status).toBe(202); // ack on receipt (Phase 2 / R2)
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/say"));
+    // Full drain (banner is the job's last spawn) — no straggler may play
+    // into the next test after afterEach restores the real spawn.
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript"));
   });
 
   test("muted → identical response shape, zero provider invocations, muted marker in drop-off log", async () => {
     (voicesConfig.providers as any).say.enabled = true;
 
-    // Baseline: unmuted response.
+    // Baseline: unmuted response. Wait for its job to drain so it cannot
+    // bleed a spawn or log line into the muted half below.
     const unmutedRes = await postNotify();
     const unmutedBody = await unmutedRes.json();
+    // The banner is the job's LAST spawn and follows the resolution write, so
+    // this guarantees the baseline row landed before the log is reset below.
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript"));
 
     // Mute, then notify again.
     writeMuteState({ muted: true, muted_until: null });
@@ -217,21 +242,24 @@ describe("issue #83 — speech-stage mute gate", () => {
     const res = await postNotify();
     const body = await res.json();
 
-    // R2: /notify contract byte-identical (same status, keys, and values —
-    // request_id is per-request by design).
+    // /notify contract shape-identical while muted (same status, keys, and
+    // values — request_id is per-request by design).
     expect(res.status).toBe(unmutedRes.status);
     expect(Object.keys(body).sort()).toEqual(Object.keys(unmutedBody).sort());
     expect(body.status).toBe(unmutedBody.status);
     expect(body.message).toBe(unmutedBody.message);
 
+    // The muted job drains: resolution row written, banner fired.
+    await waitUntil(() => resolutionLines().length === 1);
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript"));
+
     // R1: zero provider invocations — no say, no audio player. The macOS
     // banner (osascript) is visual, not audio, and still fires.
     expect(spawnedCommands).not.toContain("/usr/bin/say");
     expect(spawnedCommands).not.toContain("/usr/bin/afplay");
-    expect(spawnedCommands).toContain("/usr/bin/osascript");
 
     // R2: drop-off log still records the voice resolution, tagged muted.
-    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    const lines = resolutionLines();
     expect(lines.length).toBe(1);
     const ev = JSON.parse(lines[0]);
     expect(ev.muted).toBe(true);
@@ -246,8 +274,9 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeMuteState({ muted: true, muted_until: new Date(Date.now() - 1000).toISOString() });
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
-    expect(spawnedCommands).toContain("/usr/bin/say");
+    expect(res.status).toBe(202);
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/say"));
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript")); // full drain
   });
 
   test("future timed mute → suppressed", async () => {
@@ -255,7 +284,9 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString() });
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    // Wait for the job to drain (banner still fires), THEN assert no speech.
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript"));
     expect(spawnedCommands).not.toContain("/usr/bin/say");
   });
 
@@ -264,7 +295,8 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeFileSync(MUTE_PATH, "%%%corrupt%%%");
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
-    expect(spawnedCommands).toContain("/usr/bin/say");
+    expect(res.status).toBe(202);
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/say"));
+    await waitUntil(() => spawnedCommands.includes("/usr/bin/osascript")); // full drain
   });
 });
