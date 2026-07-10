@@ -27,6 +27,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { loadEchoEnvironment } from "../shared/echo-env";
 import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
@@ -169,34 +170,8 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // Configuration Loading
 // =============================================================================
 
-// Load .env from multiple locations (first found wins for each key).
-// Adapters may provide additional colon-separated paths with ECHO_ENV_PATHS
-// (legacy VOICESYSTEM_ENV_PATHS still honored as a silent fallback).
-const envPaths = [
-  ...((process.env.ECHO_ENV_PATHS ?? process.env.VOICESYSTEM_ENV_PATHS)?.split(':').filter(Boolean) ?? []),
-  join(homedir(), '.config', 'echo', '.env'),
-  join(homedir(), '.config', 'voicesystem', '.env'),
-  join(homedir(), '.env'),
-];
-
-for (const envPath of envPaths) {
-  if (existsSync(envPath)) {
-    const envContent = await Bun.file(envPath).text();
-    envContent.split('\n').forEach(line => {
-      const eqIndex = line.indexOf('=');
-      if (eqIndex === -1) return;
-      const key = line.slice(0, eqIndex).trim();
-      let value = line.slice(eqIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      if (key && value && !key.startsWith('#') && !process.env[key]) {
-        process.env[key] = value;
-      }
-    });
-  }
-}
+// Load the same user-owned Echo environment files consumed by host adapters.
+loadEchoEnvironment(process.env);
 
 const PORT = parseInt(process.env.PORT || "8888");
 const VOICES_PATH = process.env.VOICES_PATH || join(import.meta.dir, 'voices.json');

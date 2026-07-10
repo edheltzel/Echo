@@ -69,6 +69,7 @@ The boundary is **mechanically enforced**, not just documented:
 | Universal daemon | `core/server.ts` | The entire TTS engine: config load, sanitization, voice resolution, the four providers, the HTTP handler. |
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it. |
+| Shared Echo env-file loading | `shared/echo-env.ts` | Applies one process-first, first-file-per-key configuration contract in the daemon and Pi/omp adapter without crossing into `core/`. |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
@@ -146,12 +147,14 @@ to Atlas automatically. Full mechanism: [`docs/voices.md`](docs/voices.md).
 
 ## Adapters
 
-Both adapters are **fully out-of-process**, import nothing from `core/`, and speak only the
-HTTP `/notify` contract. They are independent (no shared code): the Claude Code adapter suppresses subagents via
-stdin `agent_id` and reads `~/.claude/settings.json` for identity; Pi suppresses via the
-`ECHO_VOICE_SUPPRESS` env flag plus run-context (headless modes — `hasUI === false`, or
-`mode` `json`/`print`) and is configured env-only (`shouldSuppressVoice` / `loadPiVoiceConfig`
-in `adapters/pi/config.ts`). The only thing they agree on is the `/notify` wire shape. Adapter responsibilities and the Pi per-turn injection (#15): [`docs/adapters.md`](docs/adapters.md).
+Adapters are **fully out-of-process**, import nothing from `core/`, and speak only the HTTP
+`/notify` contract. Host lifecycle behavior remains independent: the Claude Code adapter
+suppresses subagents via stdin `agent_id` and reads `~/.claude/settings.json` for identity;
+Pi suppresses via `ECHO_VOICE_SUPPRESS` plus run-context (`hasUI === false`, or mode
+`json`/`print`). The daemon and Pi/omp adapter share only the host-neutral environment-file
+loader (`shared/echo-env.ts`), so `~/.config/echo/.env` uses identical precedence in both
+processes. Adapter responsibilities and the Pi per-turn injection (#15):
+[`docs/adapters.md`](docs/adapters.md).
 
 ## Invariants (must not do)
 

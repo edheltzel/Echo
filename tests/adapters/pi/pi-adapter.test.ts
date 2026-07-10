@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import atlasVoicePiAdapter from "../../../adapters/pi/index";
+import { loadPiVoiceConfig } from "../../../adapters/pi/config";
 
-type Handler = (event: unknown, ctx: any) => Promise<void> | void;
+type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -17,6 +19,17 @@ function createMockPi() {
     },
   };
 }
+interface MockExtensionApi {
+  on: (event: string, handler: Handler) => unknown;
+  registerCommand: () => void;
+}
+
+function registerAdapter(api: MockExtensionApi): void {
+  // The mock implements the only ExtensionAPI methods exercised by this adapter.
+  const extensionApi = api as unknown as ExtensionAPI;
+  atlasVoicePiAdapter(extensionApi, loadPiVoiceConfig(process.env));
+}
+
 
 function createContext(sessionId = "session-1", overrides: Record<string, unknown> = {}) {
   return {
@@ -48,6 +61,7 @@ beforeEach(() => {
   delete process.env.ATLAS_VOICE_SUPPRESS;
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_CATCHPHRASE = "Pi session ready.";
+  process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
   Date.now = originalDateNow;
 });
 
@@ -66,7 +80,7 @@ describe("Pi adapter lifecycle", () => {
     };
 
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     await handlers.get("session_start")?.({ reason: "startup" }, createContext());
 
@@ -90,7 +104,7 @@ describe("Pi adapter lifecycle", () => {
     };
 
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
     const event = assistantEvent("m1");
     const ctx = createContext();
 
@@ -110,7 +124,7 @@ describe("Pi adapter lifecycle", () => {
     };
 
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
     const event = assistantEvent("m1");
     const ctx = createContext();
 
@@ -128,7 +142,7 @@ describe("Pi adapter lifecycle", () => {
     };
 
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
     // Pi spawns subagents as `pi --mode json -p`: headless, hasUI === false.
     const ctx = createContext("session-1", { mode: "json", hasUI: false });
 
@@ -141,7 +155,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start appends the voice-line instruction to the system prompt", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     const result = (await handlers.get("before_agent_start")?.(
       { prompt: "do a thing", systemPrompt: "BASE" },
@@ -159,7 +173,7 @@ describe("Pi adapter lifecycle", () => {
   test("before_agent_start uses the configured persona name", async () => {
     process.env.ECHO_VOICE_PERSONA_NAME = "Themis";
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     const result = (await handlers.get("before_agent_start")?.(
       { prompt: "x", systemPrompt: "BASE" },
@@ -172,7 +186,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start does not inject in a suppressed headless subagent", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
     const ctx = createContext("session-1", { mode: "json", hasUI: false });
 
     const result = await handlers.get("before_agent_start")?.(
@@ -186,7 +200,7 @@ describe("Pi adapter lifecycle", () => {
   test("before_agent_start does not inject when completions are disabled", async () => {
     process.env.ECHO_VOICE_SPEAK_COMPLETIONS = "off";
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     const result = await handlers.get("before_agent_start")?.(
       { prompt: "x", systemPrompt: "BASE" },
@@ -198,7 +212,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start appends to an array system prompt (oh-my-pi shape)", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     // oh-my-pi passes systemPrompt as string[] and expects string[] back.
     const result = (await handlers.get("before_agent_start")?.(
@@ -213,7 +227,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start injects into an empty array system prompt", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     // omp with an empty assembled prompt is legitimate — the instruction still lands.
     const result = (await handlers.get("before_agent_start")?.(
@@ -227,7 +241,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start is a safe no-op for an unknown systemPrompt shape", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     const result = await handlers.get("before_agent_start")?.(
       { prompt: "x", systemPrompt: [{ role: "system", content: "BASE" }] },
@@ -239,7 +253,7 @@ describe("Pi adapter lifecycle", () => {
 
   test("before_agent_start is a safe no-op when the runtime exposes no systemPrompt", async () => {
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
 
     // Older runtime: event lacks `systemPrompt`. Must not throw, must not inject.
     const result = await handlers.get("before_agent_start")?.({ prompt: "x" }, createContext());
@@ -257,7 +271,7 @@ describe("Pi adapter lifecycle", () => {
     };
 
     const { api, handlers } = createMockPi();
-    atlasVoicePiAdapter(api as any);
+    registerAdapter(api);
     const event = assistantEvent("m1");
     const ctx = createContext();
 
