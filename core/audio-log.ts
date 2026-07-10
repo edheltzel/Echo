@@ -28,6 +28,11 @@ import { parseBoundedInt } from './env';
 // timed-out; non-zero exit / signal → killed; spawn or other failure → error.
 export type PlaybackExitReason = 'completed' | 'timed-out' | 'killed' | 'error';
 
+// How the play-queue disposed of the line (Phase 2 / R7): reached the player
+// (`played`), dropped at dequeue past the age cap (`dropped-stale`), or
+// replaced by a newer same-session line while queued (`superseded`).
+export type AudioDisposition = 'played' | 'dropped-stale' | 'superseded';
+
 export interface AudioLifecycleEvent {
   ts: string;
   session_id: string | null;
@@ -42,6 +47,11 @@ export interface AudioLifecycleEvent {
   exit_reason: PlaybackExitReason | null;
   muted: boolean;
   success: boolean;
+  // Optional so pre-Phase-2 rows stay valid: readers treat an absent
+  // disposition as 'played'. Dropped/superseded rows carry the reason and no
+  // playback metrics.
+  disposition?: AudioDisposition;
+  disposition_reason?: string;
 }
 
 export function resolveAudioLifecycleLogPath(): string {
