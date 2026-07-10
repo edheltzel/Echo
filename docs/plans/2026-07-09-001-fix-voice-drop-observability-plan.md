@@ -62,12 +62,22 @@ status: implementation-ready
 - **No log records clip duration or actual play-time**, so a 20 s clip that plays only 12 s is
   currently indistinguishable from one that plays fully.
 
-## Explicitly UNKNOWN — do not assert (the point of Phase 1)
+## Leading hypothesis (Phase 1 done): playback OVERLAP, not single-clip truncation
 
-- **The truncation mechanism.** Ed hears a cut at ~12 s; the readable code paths say the daemon
-  plays to 60 s. Candidate suspects, none confirmed: the hook's 12 s abort reaching playback;
-  `afplay` killed early; overlapping concurrent plays; partial synthesis; temp-file collision.
-  Phase 1 exists to reveal which — we do not pick one now.
+Phase 1 (merged, #89) + the `202` prototype + Ed's own report converge on one mechanism, and
+it is **not** the daemon cutting a clip short:
+
+- **The daemon has no playback serialization.** Each `/notify` spawns its own `afplay`, so two
+  turns/sessions play **at the same time**. Measured: two back-to-back requests produced
+  **~8 s of concurrent playback** (see Outstanding Questions → Prototype results). Ed
+  corroborates directly — *"overlapping conversations, talking over each other."*
+- R4 **falsified** the single-clip theories: a clip plays to completion even when the client
+  aborts at 13 s. So "cut off / not the full speech" is almost certainly **a second voice
+  starting over the first**, not truncation of one clip.
+- **Still to confirm from production rows (don't over-assert):** whether *every* perceived
+  truncation is overlap, or a minority has another cause. The tell is intersecting
+  `play_started_at`/`play_ended_at` windows on the turns Ed flags. Overlap is the **primary
+  Phase 2 target**; keep the lifecycle log watching for non-overlap outliers.
 
 ---
 
@@ -88,13 +98,20 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
 - **R4 — First verification, before any code.** Time a direct `curl` of a long message to
   `/notify`, bypassing the hook. Full playback ⇒ hook-side; also cuts ⇒ daemon-side.
 
-### Phase 2 — Full-speech fidelity (the feature fix, TDD)
+### Phase 2 — Full-speech fidelity + no overlap (the feature fix, TDD)
 
-- **R5 — Failing test first (red → green).** A test drives a long line and asserts, against the
-  R1 record, `play_time ≈ clip_duration` with exit `completed`. It must fail first, then the
-  fix (whatever Phase 1 identified) makes it pass. Requirement is the *outcome*.
-- **R6 — No regression** to selectivity, latency budget, or false-failure labels; existing
-  tests stay green.
+- **R7 — No overlapping playback (PRIMARY target).** Concurrent `/notify`s must not play at
+  once: the daemon **serializes playback** (a play-queue) — or applies an explicit, deliberate
+  concurrency policy — so a new turn never talks over an in-progress one. Failing test first:
+  two overlapping requests must record **non-intersecting** `play_started_at`/`play_ended_at`
+  windows (fails today — measured ~8 s overlap). Ships together with the `202` latency fix
+  (Outstanding Questions): **`202` + queue, never bare fire-and-forget** (bare worsens overlap).
+- **R5 — Single-clip completion (secondary).** A long line records `play_time ≈ clip_duration`,
+  exit `completed` — guards against any residual single-clip truncation R4 didn't reproduce.
+  Test-first; must fail before the fix if a real single-clip case exists, else recorded as
+  already-satisfied with the R4 evidence.
+- **R6 — No regression** to selectivity, the `202` latency win, or false-failure labels;
+  existing tests stay green.
 
 ## Outstanding Questions (deferred until Phase 1 data exists)
 
@@ -293,12 +310,17 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
 
 ## Definition of Done
 
-- Phase 1 (U1–U3) merged: audio-lifecycle + hook events write to `~/.agents/Echo/`, correlated
-  by `session_id`; the 12 s abort no longer logs as `failed`; new tests green.
-- R4 curl verification run and its hook-vs-daemon verdict recorded.
-- A day of real-use data collected; the cutoff located from the lifecycle rows.
-- Phase 2 (U4) merged: the red `play_time ≈ clip_duration` test is green; a long summary is
-  heard in full, repeatably; `bun test` + smoke + Pi build all pass.
+- ✅ Phase 1 (U1–U3) merged (#89): audio-lifecycle + hook events write to `~/.agents/Echo/`,
+  correlated by `session_id`; the 12 s abort no longer logs as `failed`; new tests green.
+- ✅ R4 verification run: daemon plays clips to completion (not the cause); overlap confirmed.
+- A day of real-use data collected; **overlap confirmed as the dominant cause** from
+  intersecting play windows on flagged turns (or a non-overlap outlier surfaced).
+- Phase 2 (U4) merged:
+  - **R7:** two overlapping requests record non-intersecting play windows — no talking-over
+    (the primary fix); shipped as `202` + serial play-queue.
+  - **R5:** `play_time ≈ clip_duration` holds for a long line (no residual single-clip cut).
+  - `bun test` + smoke + Pi build all pass; a rapid burst of turns is heard one-at-a-time, in
+    full.
 
 ## Sources & Research
 
