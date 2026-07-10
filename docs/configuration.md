@@ -14,7 +14,7 @@ launchctl kickstart -k "gui/$UID/com.echo"
 
 ## Environment files
 
-At startup the daemon loads `KEY=VALUE` lines from these files, in order (`core/server.ts`):
+The daemon resolves `KEY=VALUE` config from these files, in order (`resolveEchoEnv` in `core/env.ts`):
 
 1. Every path in `ECHO_ENV_PATHS` (colon-separated; legacy `VOICESYSTEM_ENV_PATHS` honored as
    a silent fallback)
@@ -24,8 +24,11 @@ At startup the daemon loads `KEY=VALUE` lines from these files, in order (`core/
 
 Precedence rules:
 
-- A key is set only if not already present, so the **first file found wins per key**, and a
-  real environment variable (e.g. set in the LaunchAgent plist) always beats every file.
+- The **first file found wins per key**, and a real environment variable (e.g. set in the
+  LaunchAgent plist) always beats every file.
+- Resolution is **read-only**: file values are layered under the live environment at read
+  time; the daemon never writes them into `process.env` (importing a core module must not
+  leak env-file identity into same-process adapter code — see the AGENTS.md invariant).
 - Surrounding single or double quotes around values are stripped.
 - Lines without `=`, keys starting with `#`, and empty values are ignored.
 - No file is required to exist.

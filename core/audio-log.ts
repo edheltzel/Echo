@@ -22,7 +22,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { parseBoundedInt } from './env';
+import { parseBoundedInt, resolveEchoEnv } from './env';
 
 // How playback ended (KTD6): clean exit → completed; the process-timeout kill →
 // timed-out; non-zero exit / signal → killed; spawn or other failure → error.
@@ -57,10 +57,12 @@ export interface AudioLifecycleEvent {
 }
 
 export function resolveAudioLifecycleLogPath(): string {
-  return process.env.ECHO_AUDIO_LIFECYCLE_LOG ?? join(homedir(), '.agents', 'Echo', 'audio-lifecycle.jsonl');
+  return resolveEchoEnv('ECHO_AUDIO_LIFECYCLE_LOG') ?? join(homedir(), '.agents', 'Echo', 'audio-lifecycle.jsonl');
 }
 
 // ~1MB cap (floor 1KB). Override via ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES.
+// Live process env only (frozen at module load): this module initializes
+// before the daemon's config layer, matching the pre-Phase-2 behavior.
 export const AUDIO_LIFECYCLE_LOG_MAX_BYTES = parseBoundedInt(process.env.ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, 1_000_000, 1024);
 
 // Append one event, then roll the file back under the cap. Best-effort: all

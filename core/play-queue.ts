@@ -21,7 +21,7 @@
 //   always advances. Callback failures are swallowed — reporting must never
 //   stall playback. When idle the consumer awaits a wake signal (no polling).
 
-import { parseBoundedInt } from "./env";
+import { parseBoundedInt, resolveEchoEnv } from "./env";
 
 // Queue-side outcomes. `played` rows are written by the player itself.
 export type QueueDropDisposition = "dropped-stale" | "superseded";
@@ -60,9 +60,9 @@ export class PlayQueue<T> {
     // serial consumer for at most that long, so a smaller cap would let one
     // bad play mass-drop every line queued behind it.
     this.ageCapMs = opts.ageCapMs
-      ?? parseBoundedInt(process.env.ECHO_PLAY_QUEUE_AGE_CAP_MS, 60_000, 1_000);
+      ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS"), 60_000, 1_000);
     this.maxDepth = opts.maxDepth
-      ?? parseBoundedInt(process.env.ECHO_PLAY_QUEUE_MAX_DEPTH, 20, 1);
+      ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_MAX_DEPTH"), 20, 1);
     void this.consume();
   }
 

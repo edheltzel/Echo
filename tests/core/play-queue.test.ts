@@ -3,8 +3,9 @@
 // age-cap drop at dequeue (R5), never interrupting the in-flight job (R3),
 // and advancing past player errors (R6). No afplay, no server.
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { PlayQueue, type PlayJob } from "../../core/play-queue";
+import { primeEchoFileEnv } from "../../core/env";
 import { waitFor } from "./poll";
 
 
@@ -195,6 +196,11 @@ describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
 
 describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
   const noopPlayer = async () => {};
+
+  // Pin the env-file layer to empty so the operator's real ~/.config/echo/.env
+  // can never leak into the DEFAULTS expectations below.
+  beforeAll(() => primeEchoFileEnv({}));
+  afterAll(() => primeEchoFileEnv(undefined));
 
   function withEnv(name: string, value: string | undefined, fn: () => void): void {
     const saved = process.env[name];

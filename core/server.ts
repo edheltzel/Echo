@@ -25,7 +25,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
-import { parseBoundedInt } from "./env";
+import { parseBoundedInt, resolveEchoEnv } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import {
   writeAudioLifecycleEvent,
@@ -170,47 +170,24 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // Configuration Loading
 // =============================================================================
 
-// Load .env from multiple locations (first found wins for each key).
-// Adapters may provide additional colon-separated paths with ECHO_ENV_PATHS
-// (legacy VOICESYSTEM_ENV_PATHS still honored as a silent fallback).
-const envPaths = [
-  ...((process.env.ECHO_ENV_PATHS ?? process.env.VOICESYSTEM_ENV_PATHS)?.split(':').filter(Boolean) ?? []),
-  join(homedir(), '.config', 'echo', '.env'),
-  join(homedir(), '.config', 'voicesystem', '.env'),
-  join(homedir(), '.env'),
-];
+// Env-file config (first found wins per key; a real process value always
+// beats every file) is resolved through resolveEchoEnv (core/env.ts), which
+// NEVER writes to process.env — importing this module must not leak the
+// operator's env-file identity (ECHO_VOICE_*) into same-process adapter code
+// or its tests (the pi-adapter "Atlas" pollution; AGENTS.md #47 class hazard).
 
-for (const envPath of envPaths) {
-  if (existsSync(envPath)) {
-    const envContent = await Bun.file(envPath).text();
-    envContent.split('\n').forEach(line => {
-      const eqIndex = line.indexOf('=');
-      if (eqIndex === -1) return;
-      const key = line.slice(0, eqIndex).trim();
-      let value = line.slice(eqIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      if (key && value && !key.startsWith('#') && !process.env[key]) {
-        process.env[key] = value;
-      }
-    });
-  }
-}
-
-const PORT = parseInt(process.env.PORT || "8888");
-const VOICES_PATH = process.env.VOICES_PATH || join(import.meta.dir, 'voices.json');
+const PORT = parseInt(resolveEchoEnv("PORT") || "8888");
+const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voices.json');
 const DEFAULT_MACOS_VOICE = 'Daniel (Enhanced)';
 const ELEVENLABS_TIMEOUT_MS = 10_000;
 const KOKORO_TIMEOUT_MS = 10_000;
-const DEFAULT_NOTIFICATION_TITLE = process.env.ECHO_DEFAULT_TITLE ?? process.env.VOICESYSTEM_DEFAULT_TITLE ?? "Voice Notification";
-const AUDIO_PROCESS_TIMEOUT_MS = parseInt(process.env.ECHO_AUDIO_PROCESS_TIMEOUT_MS ?? process.env.VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS ?? "60000");
-const NOTIFICATION_PROCESS_TIMEOUT_MS = parseInt(process.env.ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS ?? process.env.VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS ?? "10000");
-const AUDIO_CACHE_DIR = process.env.ECHO_AUDIO_CACHE_DIR ?? process.env.VOICESYSTEM_AUDIO_CACHE_DIR ?? (
+const DEFAULT_NOTIFICATION_TITLE = resolveEchoEnv("ECHO_DEFAULT_TITLE") ?? resolveEchoEnv("VOICESYSTEM_DEFAULT_TITLE") ?? "Voice Notification";
+const AUDIO_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_AUDIO_PROCESS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS") ?? "60000");
+const NOTIFICATION_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS") ?? "10000");
+const AUDIO_CACHE_DIR = resolveEchoEnv("ECHO_AUDIO_CACHE_DIR") ?? resolveEchoEnv("VOICESYSTEM_AUDIO_CACHE_DIR") ?? (
   process.platform === 'darwin'
     ? join(homedir(), 'Library', 'Caches', 'echo', 'audio')
-    : join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'echo', 'audio')
+    : join(resolveEchoEnv("XDG_CACHE_HOME") || join(homedir(), '.cache'), 'echo', 'audio')
 );
 
 // Resolve environment variables in config values
@@ -218,7 +195,7 @@ function resolveEnvVar(value: string | undefined): string | undefined {
   if (!value) return value;
   const match = value.match(/^\$\{([^}]+)\}$/);
   if (match) {
-    return process.env[match[1]];
+    return resolveEchoEnv(match[1]);
   }
   return value;
 }
@@ -314,7 +291,7 @@ function escapeRegex(str: string): string {
 }
 
 function loadPronunciations(): void {
-  const pronPath = process.env.PRONUNCIATIONS_PATH || join(import.meta.dir, 'pronunciations.json');
+  const pronPath = resolveEchoEnv("PRONUNCIATIONS_PATH") || join(import.meta.dir, 'pronunciations.json');
   try {
     if (!existsSync(pronPath)) {
       console.warn('⚠️  No pronunciations.json found — TTS will use default pronunciations');
@@ -626,12 +603,12 @@ function spawnSafe(command: string, args: string[], timeoutMs = NOTIFICATION_PRO
 // never to a degenerate value (0ms timeout = instant fail; 0 retries from NaN
 // would zero the loop → false success). retries floor 0, timeout/backoff floor 1.
 // Canonical ECHO_* read first; legacy VOICESYSTEM_* kept as a silent fallback.
-const EDGETTS_TIMEOUT_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_MS, 15000, 1);
-const EDGETTS_TIMEOUT_MAX_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_MAX_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS, 60000, 1);
-const EDGETTS_TIMEOUT_PER_CHAR_MS = parseBoundedInt(process.env.ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS ?? process.env.VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS, 20, 0);
-const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(process.env.ECHO_EDGETTS_HEALTH_TIMEOUT_MS ?? process.env.VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS, 3000, 1);
-const EDGETTS_SYNTH_RETRIES = parseBoundedInt(process.env.ECHO_EDGETTS_SYNTH_RETRIES ?? process.env.VOICESYSTEM_EDGETTS_SYNTH_RETRIES, 1, 0);
-const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(process.env.ECHO_EDGETTS_SYNTH_BACKOFF_MS ?? process.env.VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS, 250, 1);
+const EDGETTS_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_MS"), 15000, 1);
+const EDGETTS_TIMEOUT_MAX_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MAX_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS"), 60000, 1);
+const EDGETTS_TIMEOUT_PER_CHAR_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS"), 20, 0);
+const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_HEALTH_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS"), 3000, 1);
+const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_SYNTH_RETRIES"), 1, 0);
+const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
 
 class EdgeProcessError extends Error {
@@ -911,7 +888,7 @@ class ElevenLabsProvider implements TTSProvider {
   private apiKey: string | undefined;
 
   constructor() {
-    this.apiKey = resolveEnvVar(voicesConfig.providers.elevenlabs.apiKey) || process.env.ELEVENLABS_API_KEY;
+    this.apiKey = resolveEnvVar(voicesConfig.providers.elevenlabs.apiKey) || resolveEchoEnv("ELEVENLABS_API_KEY");
   }
 
   isEnabled(): boolean {
@@ -1168,16 +1145,16 @@ export async function getProviderStatus(): Promise<Record<string, ProviderStatus
 // =============================================================================
 
 function resolveResolutionLogPath(): string {
-  return process.env.ECHO_RESOLUTION_LOG ?? process.env.VOICESYSTEM_RESOLUTION_LOG ?? (
+  return resolveEchoEnv("ECHO_RESOLUTION_LOG") ?? resolveEchoEnv("VOICESYSTEM_RESOLUTION_LOG") ?? (
     process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Logs', 'echo', 'voice-resolution.jsonl')
-      : join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'echo', 'voice-resolution.jsonl')
+      : join(resolveEchoEnv("XDG_STATE_HOME") || join(homedir(), '.local', 'state'), 'echo', 'voice-resolution.jsonl')
   );
 }
 
 // ~1MB cap (floor 1KB). Override via ECHO_RESOLUTION_LOG_MAX_BYTES (legacy
 // VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES kept as a silent fallback).
-const RESOLUTION_LOG_MAX_BYTES = parseBoundedInt(process.env.ECHO_RESOLUTION_LOG_MAX_BYTES ?? process.env.VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES, 1_000_000, 1024);
+const RESOLUTION_LOG_MAX_BYTES = parseBoundedInt(resolveEchoEnv("ECHO_RESOLUTION_LOG_MAX_BYTES") ?? resolveEchoEnv("VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES"), 1_000_000, 1024);
 
 type AttemptOutcome = 'success' | 'failed' | 'unhealthy' | 'circuit-open' | 'disabled';
 
