@@ -5,8 +5,8 @@ variables, `core/voices.json`, and `core/pronunciations.json`. For voice customi
 how-tos (change a voice, add a persona, enable ElevenLabs) see [`voices.md`](voices.md); for
 the request contract see [`http-api.md`](http-api.md).
 
-**All configuration is read once, at daemon startup.** Edits to any env file, `voices.json`,
-or `pronunciations.json` take effect only after a restart:
+The daemon and each Pi/omp host process read configuration once. Restart the daemon after
+changing daemon settings; fully relaunch Pi/omp after changing adapter settings:
 
 ```bash
 launchctl kickstart -k "gui/$UID/com.echo"
@@ -14,11 +14,12 @@ launchctl kickstart -k "gui/$UID/com.echo"
 
 ## Environment files
 
-At startup the daemon loads `KEY=VALUE` lines from these files, in order (`core/server.ts`):
+At startup the daemon and Pi/omp adapter load `KEY=VALUE` lines through `shared/echo-env.ts`
+from these files, in order:
 
 1. Every path in `ECHO_ENV_PATHS` (colon-separated; legacy `VOICESYSTEM_ENV_PATHS` honored as
    a silent fallback)
-2. `~/.config/echo/.env` — the recommended home for secrets such as `ELEVENLABS_API_KEY`
+2. `~/.config/echo/.env` — the recommended home for Echo secrets and adapter identity
 3. `~/.config/voicesystem/.env` (legacy)
 4. `~/.env`
 
@@ -29,6 +30,16 @@ Precedence rules:
 - Surrounding single or double quotes around values are stripped.
 - Lines without `=`, keys starting with `#`, and empty values are ignored.
 - No file is required to exist.
+
+Pi/omp identity can therefore be configured without shell-profile exports:
+
+```dotenv
+ECHO_VOICE_PERSONA_NAME=Atlas
+ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
+```
+
+Real process variables still win. Relaunch Pi/omp after editing the file; existing host
+processes keep the configuration loaded when their Echo extension started.
 
 ## Environment variables
 
