@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolution-log provider diagnostics, and macOS `say` fallback investigation.
 - Documented local development worktree cleanup and ignored `.worktrees/` so temporary
   feature worktrees are not reported as untracked project files.
+- Pi/omp now load adapter identity settings from Echo's standard environment-file chain
+  (including `~/.config/echo/.env`) through the same process-first precedence used by the
+  daemon; relaunching the host applies persistent persona and startup-greeting overrides.
 
 ## [0.4.0] - 2026-07-06
 

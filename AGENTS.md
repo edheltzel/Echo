@@ -98,8 +98,9 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Purpose | Path |
 |---|---|
 | Universal daemon | `core/server.ts` |
-| Circuit breaker · env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
+| Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
 | Serial play queue (one voice at a time) | `core/play-queue.ts` |
+| Shared Echo environment-file loader | `shared/echo-env.ts` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
@@ -116,12 +117,14 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
 - Do not broad-kill whatever owns port `8888`; it may be another service.
 - Do not commit secrets or `.env` files.
+- Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key. Adapters may import `shared/`, never `core/`.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not write env-file config into `process.env`. Core resolves env-file values through
-  `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at
-  import leaked the operator's `ECHO_VOICE_*` identity into same-process adapter tests
-  (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
+  `resolveEchoEnv` (`core/env.ts`, delegating file loading to `shared/echo-env.ts`) —
+  read-only, live env wins. Hydrating `process.env` at import leaked the operator's
+  `ECHO_VOICE_*` identity into same-process adapter tests (the pi-adapter "Atlas"
+  pollution, a #47-class file-order hazard); guarded by
   `tests/core/server-contract-source.test.ts`.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 

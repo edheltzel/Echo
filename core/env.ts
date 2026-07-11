@@ -2,9 +2,7 @@
 // Environment parsing helpers — host-neutral
 // =============================================================================
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { loadEchoEnvironment } from "../shared/echo-env";
 
 // Parse a numeric environment variable, falling back to `fallback` when the
 // value is missing, non-numeric, or below `min`. Guards against degenerate
@@ -37,35 +35,16 @@ export function parseBoundedInt(
 // through resolveEchoEnv, which layers the (lazily loaded, cached) file
 // values UNDER the live process environment without mutating it.
 
-let fileEnv: Record<string, string> | undefined;
+let fileEnv: Record<string, string | undefined> | undefined;
 
-function loadEchoFileEnv(): Record<string, string> {
-  const out: Record<string, string> = {};
-  const envPaths = [
-    ...((process.env.ECHO_ENV_PATHS ?? process.env.VOICESYSTEM_ENV_PATHS)?.split(":").filter(Boolean) ?? []),
-    join(homedir(), ".config", "echo", ".env"),
-    join(homedir(), ".config", "voicesystem", ".env"),
-    join(homedir(), ".env"),
-  ];
-  for (const envPath of envPaths) {
-    if (!existsSync(envPath)) continue;
-    for (const line of readFileSync(envPath, "utf8").split("\n")) {
-      const eqIndex = line.indexOf("=");
-      if (eqIndex === -1) continue;
-      const key = line.slice(0, eqIndex).trim();
-      let value = line.slice(eqIndex + 1).trim();
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-      if (key && value && !key.startsWith("#") && !out[key]) {
-        out[key] = value;
-      }
-    }
-  }
-  return out;
+// File layer only: delegate the file walk + per-key precedence to the shared
+// loader (the single home for that contract — AGENTS.md), seeded with just
+// the env-path config so no live process values leak into the cached layer.
+function loadEchoFileEnv(): Record<string, string | undefined> {
+  const seed: Record<string, string | undefined> = {};
+  if (process.env.ECHO_ENV_PATHS) seed.ECHO_ENV_PATHS = process.env.ECHO_ENV_PATHS;
+  if (process.env.VOICESYSTEM_ENV_PATHS) seed.VOICESYSTEM_ENV_PATHS = process.env.VOICESYSTEM_ENV_PATHS;
+  return loadEchoEnvironment(seed);
 }
 
 /**
@@ -85,6 +64,6 @@ export function resolveEchoEnv(key: string): string | undefined {
  * pass `{}` so the operator's real env files cannot leak into expectations;
  * `undefined` restores lazy loading from the real files.
  */
-export function primeEchoFileEnv(env: Record<string, string> | undefined): void {
+export function primeEchoFileEnv(env: Record<string, string | undefined> | undefined): void {
   fileEnv = env;
 }
