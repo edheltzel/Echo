@@ -79,9 +79,9 @@ beforeEach(() => {
   HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `overlap-test-${bucket++}` };
 });
 
-afterEach(async () => {
-  // Drain guard: rows land just before the job's final osascript spawn.
-  await Bun.sleep(25);
+afterEach(() => {
+  // The lifecycle/resolution rows are the player's last acts (the banner
+  // fires at accept time), so a polled row means the job is done.
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];

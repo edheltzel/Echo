@@ -37,7 +37,7 @@ macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner
               │   core/server.ts  (Bun serve, :8888)        │
               │   rate-limit → validate → sanitize →        │
               │   resolve voice → apply pronunciations →    │
-              │   speakWithFallback → osascript banner      │
+              │   speakWithFallback (banner @ accept)       │
               └────────────┬────────────────────────────────┘
                            │  provider order = [default, ...fallback]
        ┌──────────┬────────┴────────┬──────────────┐
@@ -90,11 +90,14 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
 2. **Validate + sanitize** — `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
    input is a 4xx **before** anything is queued.
-3. **Enqueue + ack `202`** — the validated line joins the global serial play queue
-   (`core/play-queue.ts`) and the request returns immediately
-   (`{status: "accepted", request_id}`). The queue's single consumer runs steps 4–7 one
-   line at a time — a new line never plays over an in-flight one; queued lines coalesce
-   newest-per-session and age out (dispositions recorded in the audio-lifecycle log).
+3. **Banner + enqueue + ack `202`** — the macOS banner fires immediately at accept
+   (outside the queue; a superseded/dropped line keeps its banner, and a
+   `voice_enabled: false` request is banner-only and never queued). The validated VOICE
+   line joins the global serial play queue (`core/play-queue.ts`) and the request returns
+   immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
+   steps 4–7 one line at a time — a new line never plays over an in-flight one; queued
+   lines coalesce newest-per-session and age out (dispositions recorded in the
+   audio-lifecycle log), and a hung player is bounded by the queue's watchdog.
 4. **Resolve the voice** — `getVoiceMapping(voice_id)` resolves the request's `voice_id`
    **name key** in order: (1) `agents` name key (e.g. `"themis"`), (2) any
    `elevenlabs.voice_id`, (3) `identity`, else the active provider's default. Callers send
@@ -107,8 +110,8 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
    disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
    the voice actually used (consumed by the drop-off log).
-7. **Banner** — an `osascript` notification banner; each line's outcome
-   (`played`/`superseded`/`dropped-stale` + play window) lands in the audio-lifecycle log.
+7. **Record** — each voice line's outcome (`played`/`superseded`/`dropped-stale` + play
+   window) lands in the audio-lifecycle log. (The banner already fired at step 3.)
 
 Full endpoint contract and request body: [`docs/http-api.md`](docs/http-api.md).
 Voice config and the per-turn persona voice: [`docs/voices.md`](docs/voices.md).

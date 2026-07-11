@@ -22,9 +22,9 @@ import { join } from "node:path";
 import { waitFor } from "./poll";
 
 // --- spawn stub -------------------------------------------------------------
-// sendNotification always spawns osascript for the macOS banner; with every
-// provider disabled no provider subprocess runs, but the banner spawn must still
-// be stubbed so the test never shells out. Swappable impl restored in afterEach.
+// Every accepted /notify spawns osascript for the accept-time banner; with all
+// providers disabled no provider subprocess runs, but the banner spawn must
+// still be stubbed so the test never shells out. Restored in afterEach.
 const realSpawn = realChildProcess.spawn;
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
@@ -99,10 +99,9 @@ beforeEach(() => {
   }
 });
 
-afterEach(async () => {
-  // Drain guard: the resolution row is written before the job's final
-  // osascript spawn; give the in-flight job a beat before restoring spawn.
-  await Bun.sleep(25);
+afterEach(() => {
+  // The lifecycle/resolution rows are the player's last acts (the banner
+  // fires at accept time), so a polled row means the job is done.
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];

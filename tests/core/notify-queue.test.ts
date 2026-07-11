@@ -1,7 +1,8 @@
 // Phase 2 / U2 — /notify acks on receipt and plays async from the queue (R2):
 // 202 returned before playback finishes, the job played by the queue consumer
-// (lifecycle row `played`), validation still 4xx BEFORE enqueue, and mute
-// still suppresses inside the player path.
+// (lifecycle row `played`), validation still 4xx BEFORE anything, the banner
+// fired at accept time OUTSIDE the queue, and mute still suppresses inside
+// the player path.
 //
 // Harness mirrors audio-lifecycle-server.test.ts: PORT=0, spawn stubbed
 // (afplay delayed by PLAY_MS so "playback" measurably outlives the request),
@@ -19,9 +20,11 @@ import { waitFor } from "./poll";
 const PLAY_MS = 120;
 
 const realSpawn = realChildProcess.spawn;
+let spawnedCommands: string[] = [];
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
 function stubSpawn(command: string): any {
+  spawnedCommands.push(String(command));
   const child: any = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -65,16 +68,15 @@ beforeEach(() => {
     (voicesConfig.providers as any)[name].enabled = false;
   }
   (voicesConfig.providers as any).edgetts.enabled = true;
+  spawnedCommands = [];
   if (existsSync(LOG)) rmSync(LOG);
   if (existsSync(MUTE_PATH)) rmSync(MUTE_PATH);
   HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `notify-queue-test-${bucket++}` };
 });
 
-afterEach(async () => {
-  // Drain guard: the polled row is written just BEFORE the job's final
-  // osascript spawn, so give the in-flight job a beat to finish before the
-  // real spawn is restored (else a straggler shows a real banner).
-  await Bun.sleep(25);
+afterEach(() => {
+  // The lifecycle row is the player's LAST act (the banner fires at accept
+  // time), so once a test has polled its row the job is done — no drain wait.
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];
@@ -154,6 +156,64 @@ describe("/notify acks on receipt (R2)", () => {
     expect(rows[0].disposition).toBe("played"); // reached the player; the gate suppressed audio
     expect(rows[0].play_time_ms).toBe(null);
     expect(rows[0].exit_reason).toBe(null);
+  });
+
+  test("banner-only (voice_enabled:false): 202, immediate banner, never queued, no row", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "banner only line", voice_enabled: false, session_id: "sess-banner" }),
+    });
+    expect(res.status).toBe(202);
+
+    // The banner fires immediately at accept — no queue wait.
+    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    // Never enqueued: no lifecycle row ever appears (per-spoken-line log).
+    await Bun.sleep(150);
+    expect(readRows().filter((r) => r.session_id === "sess-banner")).toEqual([]);
+  });
+
+  test("a banner-only line never supersedes a queued voice line (same session)", async () => {
+    // Blocker occupies the player so the voice target is deterministically QUEUED.
+    const blocker = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "blocker line", voice_enabled: true, session_id: "sess-blk" }),
+    });
+    expect(blocker.status).toBe(202);
+    const voice = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "queued voice line", voice_enabled: true, session_id: "sess-mix" }),
+    });
+    expect(voice.status).toBe(202);
+    // Same-session banner-only arrives while the voice line is queued.
+    const banner = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "banner only same session", voice_enabled: false, session_id: "sess-mix" }),
+    });
+    expect(banner.status).toBe(202);
+
+    // Both voice lines play; the queued line was NOT superseded by the banner.
+    const rows = await waitForRows(2);
+    const mix = rows.filter((r) => r.session_id === "sess-mix");
+    expect(mix.length).toBe(1);
+    expect(mix[0].disposition).toBe("played");
+  });
+
+  test("a voice line's banner fires at accept, before playback completes", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "banner precedes play", voice_enabled: true, session_id: "sess-early" }),
+    });
+    expect(res.status).toBe(202);
+
+    // Banner spawn is observable while the played row does not exist yet.
+    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    expect(readRows().filter((r) => r.session_id === "sess-early")).toEqual([]);
+    await waitForRows(1); // then the line still plays to completion
   });
 
   test("/notify/personality feeds the same queue: 202 + played lifecycle row", async () => {

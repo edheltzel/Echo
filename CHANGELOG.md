@@ -11,9 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Voice playback serialization (Phase 2)**: a global serial play queue in the daemon
   (`core/play-queue.ts`) — one voice at a time across all sessions and hosts, the in-flight
   line never interrupted. Queued lines coalesce newest-per-session and age out past
-  `ECHO_PLAY_QUEUE_AGE_CAP_MS` (depth-capped by `ECHO_PLAY_QUEUE_MAX_DEPTH`); every line's
-  outcome lands in the audio-lifecycle log as a `disposition`
-  (`played`/`superseded`/`dropped-stale`), and `/health` reports the queue depth.
+  `ECHO_PLAY_QUEUE_AGE_CAP_MS` (default 5 min; depth-capped by `ECHO_PLAY_QUEUE_MAX_DEPTH`);
+  every voice line's outcome lands in the audio-lifecycle log as a `disposition`
+  (`played`/`superseded`/`dropped-stale`). A watchdog (`ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS`,
+  default 2 min) bounds a hung player so the queue can never silently wedge, and `/health`
+  reports `play_queue: {depth, in_flight_ms, stalled}`.
+- **Banners decoupled from playback**: the macOS banner fires immediately when a
+  notification is accepted — it never waits behind voice playback, a superseded or
+  aged-out voice line keeps its banner, and `voice_enabled: false` requests are banner-only
+  (never queued, never able to supersede a queued voice line).
 
 ### Changed
 - **`/notify` (and `/notify/personality`) now ack `202` on receipt** instead of `200` after

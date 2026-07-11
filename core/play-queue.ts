@@ -39,36 +39,56 @@ export interface PlayQueueOptions<T> {
   onPlayerError?: (job: PlayJob<T>, error: unknown) => void;
   ageCapMs?: number;
   maxDepth?: number;
-  now?: () => number; // injectable clock for deterministic age-cap tests
+  playerTimeoutMs?: number;
+  now?: () => number; // injectable clock for deterministic age-cap/liveness tests
 }
 
 export class PlayQueue<T> {
   readonly ageCapMs: number;
   readonly maxDepth: number;
+  readonly playerTimeoutMs: number;
 
   private readonly opts: PlayQueueOptions<T>;
   private readonly queue: PlayJob<T>[] = [];
   private wake: (() => void) | null = null;
+  private inFlightSince: number | null = null;
 
   constructor(opts: PlayQueueOptions<T>) {
     this.opts = opts;
     // Bounded env reads (ECHO_* convention): a NaN/negative/zero override
-    // falls back to the default rather than a degenerate cap that would drop
-    // everything (age cap floor 1s) or serialize nothing (depth floor 1).
-    // Age-cap default matches the daemon's playback-process timeout (60s,
-    // ECHO_AUDIO_PROCESS_TIMEOUT_MS): a single hung/long play blocks the
-    // serial consumer for at most that long, so a smaller cap would let one
-    // bad play mass-drop every line queued behind it.
+    // falls back to the default rather than a degenerate value (floors below).
+    //
+    // Age cap (default 5 min): a STALENESS guard for lines stuck waiting, not
+    // a bound tied to any single timeout. It must comfortably exceed one
+    // line's worst-case occupancy of the consumer — synthesis retries with
+    // adaptive timeouts plus a full playback can approach ~2 minutes — or an
+    // ordinary slow line would mass-drop everything 202-acked behind it.
+    // Newest-per-session coalescing already bounds the backlog to one line
+    // per session, so a generous cap cannot grow the queue.
     this.ageCapMs = opts.ageCapMs
-      ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS"), 60_000, 1_000);
+      ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS"), 300_000, 1_000);
     this.maxDepth = opts.maxDepth
       ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_MAX_DEPTH"), 20, 1);
+    // Watchdog (default 2 min): liveness is ENFORCED by the queue, not
+    // borrowed from the player. Every subprocess in the speak path is
+    // process-timeout-bounded, so a player exceeding this is wedged in
+    // non-subprocess work; the queue reports it via onPlayerError and
+    // advances. (The abandoned player promise is detached, not cancelled —
+    // its own bounded subprocesses are already dead by this point.)
+    this.playerTimeoutMs = opts.playerTimeoutMs
+      ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS"), 120_000, 1_000);
     void this.consume();
   }
 
   /** Queued (not in-flight) job count. */
   get depth(): number {
     return this.queue.length;
+  }
+
+  /** How long the current job has been playing, or null when idle (liveness). */
+  get inFlightMs(): number | null {
+    if (this.inFlightSince === null) return null;
+    return (this.opts.now?.() ?? Date.now()) - this.inFlightSince;
   }
 
   enqueue(job: PlayJob<T>): void {
@@ -118,21 +138,38 @@ export class PlayQueue<T> {
       }
 
       // One catch-all per job: nothing inside (an injected now(), the age
-      // check, the player) may kill this loop — a dead consumer would
-      // silently end global playback while /notify keeps acking 202.
+      // check, the player, the watchdog) may kill this loop — a dead consumer
+      // would silently end global playback while /notify keeps acking 202.
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
       try {
         const now = this.opts.now?.() ?? Date.now();
         if (now - next.receivedAt > this.ageCapMs) {
           this.report(next, "dropped-stale", "age-cap-exceeded");
           continue;
         }
-        await this.opts.player(next);
+        this.inFlightSince = this.opts.now?.() ?? Date.now();
+        const playing = this.opts.player(next);
+        // A player that outlives the watchdog is abandoned; keep its eventual
+        // rejection handled so it can never surface as an unhandled rejection.
+        playing.catch(() => {});
+        await Promise.race([
+          playing,
+          new Promise<never>((_, reject) => {
+            watchdog = setTimeout(
+              () => reject(new Error(`player watchdog: job exceeded ${this.playerTimeoutMs}ms`)),
+              this.playerTimeoutMs,
+            );
+          }),
+        ]);
       } catch (error) {
         try {
           this.opts.onPlayerError?.(next, error);
         } catch {
           // Reporting must never stall the queue.
         }
+      } finally {
+        clearTimeout(watchdog);
+        this.inFlightSince = null;
       }
     }
   }

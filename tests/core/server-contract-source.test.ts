@@ -9,7 +9,9 @@ describe("core server route contract source", () => {
     // the operator's ECHO_VOICE_* identity into same-process adapter code and
     // its tests (the pi-adapter "Atlas" pollution; an AGENTS.md #47 class
     // file-order hazard). Core reads config through resolveEchoEnv instead.
-    const assignment = /process\.env(\.\w+|\[[^\]]*\])\s*=[^=]/;
+    // Catches plain/compound assignment (=, ??=, ||=, &&=, +=), Object.assign
+    // into process.env, and delete — not just `=` (review: regex hardening).
+    const assignment = /(process\.env(\.\w+|\[[^\]]*\])\s*(\?\?=|\|\|=|&&=|\+=|=(?![=>]))|Object\.assign\(\s*process\.env|delete\s+process\.env)/;
     for (const file of readdirSync("core").filter((f) => f.endsWith(".ts"))) {
       const src = readFileSync(`core/${file}`, "utf8");
       expect({ file, writes: assignment.test(src) }).toEqual({ file, writes: false });

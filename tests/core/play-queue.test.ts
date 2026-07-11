@@ -194,6 +194,48 @@ describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
   });
 });
 
+describe("PlayQueue — player watchdog + liveness (enforced, not borrowed)", () => {
+  test("a hung player is timed out by the watchdog; the queue reports and advances", async () => {
+    const played: string[] = [];
+    const errors: Array<{ id: string; message: string }> = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "hung") await new Promise<never>(() => {}); // never settles
+        played.push(j.id);
+      },
+      onPlayerError: (j, e) => errors.push({ id: j.id, message: e instanceof Error ? e.message : String(e) }),
+      playerTimeoutMs: 50,
+    });
+
+    q.enqueue(job("hung", "s1"));
+    q.enqueue(job("after", "s2"));
+
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["after"]);
+    expect(errors.length).toBe(1);
+    expect(errors[0].id).toBe("hung");
+    expect(errors[0].message).toContain("watchdog");
+  });
+
+  test("inFlightMs reports the current job's age and null when idle", async () => {
+    let clock = 1_000_000;
+    let release!: () => void;
+    const blocked = new Promise<void>((r) => { release = r; });
+    const q = new PlayQueue<string>({
+      player: async () => { await blocked; },
+      now: () => clock,
+    });
+
+    expect(q.inFlightMs).toBe(null);
+    q.enqueue({ id: "j", sessionId: "s1", receivedAt: clock, payload: "j" });
+    await waitFor(() => q.inFlightMs !== null);
+    clock += 500;
+    expect(q.inFlightMs).toBe(500);
+    release();
+    await waitFor(() => q.inFlightMs === null);
+  });
+});
+
 describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
   const noopPlayer = async () => {};
 
@@ -214,11 +256,12 @@ describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
     }
   }
 
-  test("defaults: age cap 60s, depth 20 when env is unset", () => {
+  test("defaults: age cap 5min, depth 20, watchdog 2min when env is unset", () => {
     withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", undefined, () => {
       withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", undefined, () => {
         const q = new PlayQueue<string>({ player: noopPlayer });
-        expect(q.ageCapMs).toBe(60_000);
+        expect(q.ageCapMs).toBe(300_000);
+        expect(q.playerTimeoutMs).toBe(120_000);
         expect(q.maxDepth).toBe(20);
       });
     });
@@ -237,7 +280,7 @@ describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
   test("NaN / negative / zero / below-floor values fall back to the default", () => {
     for (const bad of ["garbage", "-5", "0", "999"]) { // age-cap floor is 1000
       withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", bad, () => {
-        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(60_000);
+        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(300_000);
       });
     }
     for (const bad of ["garbage", "-1", "0"]) { // depth floor is 1

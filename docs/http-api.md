@@ -64,12 +64,16 @@ Errors: `400 {"status":"error","message":"Invalid …","request_id":…}` for va
 failures (rejected **before** the line is queued), `500` otherwise.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
-validated and enqueued; synthesis and playback run asynchronously from a **global serial
-play queue** — one voice at a time across all sessions and hosts, a new line never starts
-while another plays, and the in-flight line is never interrupted. Queued lines coalesce
+validated; the macOS **banner fires immediately at accept** (it is not audio and never
+waits behind playback), while synthesis and playback of **voice lines only** run
+asynchronously from a **global serial play queue** — one voice at a time across all
+sessions and hosts, a new line never starts while another plays, and the in-flight line is
+never interrupted. A `voice_enabled: false` request is banner-only: it never enters the
+queue and can never delay or supersede a queued voice line. Queued voice lines coalesce
 newest-per-session (an older *queued* line from the same `session_id` is replaced and
-recorded `superseded`) and age out (`dropped-stale`) past `ECHO_PLAY_QUEUE_AGE_CAP_MS`
-(knobs in [`configuration.md`](configuration.md)).
+recorded `superseded` — its banner already showed) and age out (`dropped-stale`) past
+`ECHO_PLAY_QUEUE_AGE_CAP_MS`; a hung player is bounded by the queue's watchdog
+(`ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS`). Knobs in [`configuration.md`](configuration.md).
 
 *Compatibility note (pre-Phase-2 callers):* the response stays 2xx, so `response.ok`
 remains `true` and callers that treat any 2xx as success — including the shipped adapters,
@@ -139,7 +143,8 @@ In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
 
 Returns `status`, `port`, `activeProvider` (= `defaultProvider`), `fallbackOrder`, provider
 status, `macos_fallback_voice`, pronunciation rule count, emotional preset count, live
-`play_queue` (`{depth}` — queued-not-playing lines), live
+`play_queue` (`{depth, in_flight_ms, stalled}` — backlog, how long the current line has
+been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
 `reset_after_ms`), and the current mute state (`mute: {muted, muted_until}`).
 

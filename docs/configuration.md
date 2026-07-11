@@ -59,7 +59,8 @@ processes keep the configuration loaded when their Echo extension started.
 | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | `10000` | macOS notification (osascript) timeout |
 | `ECHO_MUTE_STATE_PATH` | `~/Library/Application Support/echo/mute.json` (macOS), else `$XDG_STATE_HOME`/`~/.local/state` under `echo/mute.json` | Runtime mute state file (`POST /mute`), written atomically; missing/corrupt = unmuted |
 | `ECHO_RESOLUTION_LOG` / `ECHO_RESOLUTION_LOG_MAX_BYTES` | see [`providers-observability.md`](providers-observability.md) | Voice-resolution drop-off log path / size cap |
-| `ECHO_PLAY_QUEUE_AGE_CAP_MS` | `60000` (floor `1000`; matches the playback-process timeout so one long play cannot mass-drop the queue) | Play queue (Phase 2): a queued line that has waited longer than this since receipt is dropped (`dropped-stale`) instead of played late |
+| `ECHO_PLAY_QUEUE_AGE_CAP_MS` | `300000` (floor `1000`; comfortably above one line's worst-case occupancy — synth retries + playback can approach ~2 min — so an ordinary slow line cannot mass-drop the backlog; coalescing already bounds the queue to one line per session) | Play queue (Phase 2): a queued line that has waited longer than this since receipt is dropped (`dropped-stale`) instead of played late |
+| `ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS` | `120000` (floor `1000`) | Play queue watchdog: a player exceeding this is reported (`onPlayerError` lifecycle row) and the queue advances — a hung play can never wedge global playback |
 | `ECHO_PLAY_QUEUE_MAX_DEPTH` | `20` (floor `1`) | Play queue (Phase 2): max queued lines; enqueueing beyond it drops the oldest queued line |
 | `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_TIMEOUT_MAX_MS`, `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS`, `ECHO_EDGETTS_HEALTH_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts timeout/retry knobs |
 
