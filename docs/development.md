@@ -66,6 +66,9 @@ bun test
 PORT=8889 tests/smoke-core.sh
 ```
 
+CI runs the same trio (plus the Pi adapter build) headlessly on every PR into `dev`/`master`
+and every push to those branches — see `.github/workflows/verify.yml`.
+
 ## Teardown
 
 ```bash
