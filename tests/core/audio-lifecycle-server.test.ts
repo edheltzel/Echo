@@ -47,7 +47,7 @@ process.env.ECHO_RESOLUTION_LOG ??= join(TMP, "resolution.jsonl");
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 
-const { server, voicesConfig } = await import("../../core/server.ts");
+const { server, voicesConfig, drainNotifications } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
 let savedEnabled: Record<string, boolean>;
@@ -91,7 +91,8 @@ describe("audio-lifecycle event per /notify", () => {
         session_id: "sess-abc",
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play now runs async; wait for it to finish
 
     const lines = readFileSync(LOG, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(1);
@@ -119,7 +120,8 @@ describe("audio-lifecycle event per /notify", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "muted turn", voice_enabled: true, session_id: "sess-mute" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play now runs async; wait for it to finish
 
     const lines = readFileSync(LOG, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(1);

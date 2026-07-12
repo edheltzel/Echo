@@ -55,7 +55,7 @@ process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 
 const { readMuteState, writeMuteState, setMuteState, toggleMuteState, resolveMuteStatePath } =
   await import("../../core/mute.ts");
-const { server, voicesConfig } = await import("../../core/server.ts");
+const { server, voicesConfig, drainNotifications } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
 let savedEnabled: Record<string, boolean>;
@@ -198,16 +198,19 @@ describe("issue #83 — speech-stage mute gate", () => {
     (voicesConfig.providers as any).say.enabled = true;
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play runs async; wait for the spawn
     expect(spawnedCommands).toContain("/usr/bin/say");
   });
 
   test("muted → identical response shape, zero provider invocations, muted marker in drop-off log", async () => {
     (voicesConfig.providers as any).say.enabled = true;
 
-    // Baseline: unmuted response.
+    // Baseline: unmuted response. Drain so the baseline's spawns + log write
+    // finish before we reset state — otherwise they'd leak into the muted asserts.
     const unmutedRes = await postNotify();
     const unmutedBody = await unmutedRes.json();
+    await drainNotifications();
 
     // Mute, then notify again.
     writeMuteState({ muted: true, muted_until: null });
@@ -216,6 +219,7 @@ describe("issue #83 — speech-stage mute gate", () => {
 
     const res = await postNotify();
     const body = await res.json();
+    await drainNotifications();
 
     // R2: /notify contract byte-identical (same status, keys, and values —
     // request_id is per-request by design).
@@ -246,7 +250,8 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeMuteState({ muted: true, muted_until: new Date(Date.now() - 1000).toISOString() });
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications();
     expect(spawnedCommands).toContain("/usr/bin/say");
   });
 
@@ -255,7 +260,8 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString() });
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications();
     expect(spawnedCommands).not.toContain("/usr/bin/say");
   });
 
@@ -264,7 +270,8 @@ describe("issue #83 — speech-stage mute gate", () => {
     writeFileSync(MUTE_PATH, "%%%corrupt%%%");
 
     const res = await postNotify();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications();
     expect(spawnedCommands).toContain("/usr/bin/say");
   });
 });

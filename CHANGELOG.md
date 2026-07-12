@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Startup-catchphrase latency fix (#202).** `/notify` and `/notify/personality` now
+  return **`202` on receipt** and run synthesis + playback asynchronously on a new serial
+  play-queue (`core/play-queue.ts`), so the greeting/Stop hooks no longer block ~7 s on
+  edge-tts synthesis, and concurrent notifications can never overlap (plan R7). Bad requests
+  still validate synchronously and return `4xx`.
+- **TTS synthesis cache (`core/tts-cache.ts`).** Short, repeated phrases (the startup
+  catchphrase, "standing by", …) are cached to disk keyed by `(voice, rate, processed text)`
+  and replayed straight from the file — turning edge-tts's cold 2–8 s network synth into a
+  ~0 ms disk read. Long/unique lines bypass the cache; it is size-capped with oldest-first
+  pruning. Path via `ECHO_TTS_CACHE_DIR` (default `~/Library/Caches/echo/tts-cache`).
+- **`scripts/precache-catchphrases.ts`** — warms the cache through the running daemon so even
+  the first session after a voice/phrase change plays instantly. Re-run after changing the
+  catchphrase pool or the identity voice/rate.
+
 ### Changed
+- Hook POST-abort guards (`VoiceGreeting.hook.ts`, `VoiceNotification.ts`) reduced 12 s → 5 s
+  now that the daemon returns `202` in ~tens of ms — retires the false `failed`/`aborted`
+  events the old synth-covering wait produced.
 - Clarified README and troubleshooting docs for Edge TTS diagnostic-only health checks,
   resolution-log provider diagnostics, and macOS `say` fallback investigation.
 - Documented local development worktree cleanup and ignored `.worktrees/` so temporary
