@@ -57,7 +57,7 @@ process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 // a live muted state would suppress the `say`/edgetts positive controls here.
 process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 
-const { server, voicesConfig, writeResolutionEvent } = await import("../../core/server.ts");
+const { server, voicesConfig, writeResolutionEvent, drainNotifications } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
 const CONST_TS = "1970-01-01T00:00:00.000Z";
@@ -117,7 +117,8 @@ describe("issue #24 — one resolution event per /notify", () => {
         voice_id: "zzz-nope", // unresolved → fallback with a reason
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play now runs async; wait for it to finish
 
     const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(1); // exactly one event per /notify
@@ -150,7 +151,8 @@ describe("issue #24 — one resolution event per /notify", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "say fallback path", voice_enabled: true }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play now runs async; wait for it to finish
 
     const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(1);
@@ -184,7 +186,8 @@ describe("issue #24 — one resolution event per /notify", () => {
         source: "pi",
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    await drainNotifications(); // synth+play now runs async; wait for it to finish
 
     const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(1);

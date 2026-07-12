@@ -24,8 +24,14 @@ for _ in {1..20}; do
 done
 
 curl -fsS "http://localhost:${PORT}/health" >/dev/null
-curl -fsS -X POST "http://localhost:${PORT}/notify" \
+
+# /notify returns 202 on receipt (synth+play run async on the serial queue).
+code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:${PORT}/notify" \
   -H 'Content-Type: application/json' \
-  -d '{"message":"smoke","voice_enabled":false,"source":"smoke-test","session_id":"smoke"}' >/dev/null
+  -d '{"message":"smoke","voice_enabled":false,"source":"smoke-test","session_id":"smoke"}')"
+if [ "$code" != "202" ]; then
+  echo "FAIL: expected 202 on receipt, got $code" >&2
+  exit 1
+fi
 
 echo "OK core smoke passed on :${PORT}"

@@ -138,7 +138,11 @@ async function sendNotification(payload: ElevenLabsNotificationPayload, sessionI
   };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000); // 12s: TTS gen (2-5s) + playback (3-6s) + margin
+  // The daemon returns 202 on receipt (synth+play run async), so the POST resolves
+  // in ~tens of ms. A short guard against an unreachable daemon is all that's
+  // needed now — the old 12 s wait covered synthesis+playback and produced the
+  // false `failed`/`aborted` events this retires.
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   const fetchStart = Date.now();
   console.error(`[Voice] fetch_start: "${payload.message.slice(0, 60)}..." (${payload.message.length} chars)`);
