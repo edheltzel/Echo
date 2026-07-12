@@ -98,6 +98,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Purpose | Path |
 |---|---|
 | Universal daemon | `core/server.ts` |
+| Serial play-queue (202 no-overlap) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
 | Shared Echo environment-file loader | `shared/echo-env.ts` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
