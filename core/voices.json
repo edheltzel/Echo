@@ -43,8 +43,8 @@
       "speed": 1.1
     },
     "edgetts": {
-      "voice": "en-US-AvaNeural",
-      "speed": 1.0
+      "voice": "en-GB-RyanNeural",
+      "speed": 0.92
     }
   },
   "agents": {

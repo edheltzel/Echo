@@ -23,8 +23,11 @@ describe("voices.json edgetts mappings", () => {
     }
   });
 
-  test("identity (Atlas) is pinned to the global default voice", () => {
-    expect(config.identity.edgetts.voice).toBe("en-US-AvaNeural");
+  test("identity (Atlas) uses the shared British Ryan voice (matches Pi/omp)", () => {
+    // All coding agents speak with the same en-GB-RyanNeural voice at -8% (0.92);
+    // Pi/omp reach it via voice_id "pi", Claude via the no-voice_id identity path.
+    expect(config.identity.edgetts.voice).toBe("en-GB-RyanNeural");
+    expect(config.identity.edgetts.speed).toBe(0.92);
   });
 });
 
