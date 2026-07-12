@@ -27,7 +27,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
-import { createSerialQueue } from "./play-queue";
+import { PlayQueue } from "./play-queue";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { loadEchoEnvironment } from "../shared/echo-env";
 import {
@@ -1434,115 +1434,108 @@ export async function speakWithFallback(
 }
 
 // =============================================================================
-// Notification Handler
+// Notification handlers — banner at accept time, speech via the play queue
 // =============================================================================
 
-async function sendNotification(
-  title: string,
+// Fire the macOS banner immediately, OUTSIDE the play queue: a banner is not
+// audio, must never wait behind playback, and a superseded/dropped voice line
+// keeps its visual notification. Best-effort fire-and-forget, bounded by the
+// osascript process timeout; a banner failure never affects the request.
+function showBanner(sanitizedTitle: string, sanitizedMessage: string): void {
+  try {
+    const visible = stripMarkers(extractEmotionalMarker(sanitizedMessage).cleaned);
+    const script = `display notification "${escapeForAppleScript(visible)}" with title "${escapeForAppleScript(sanitizedTitle)}" sound name ""`;
+    void spawnSafe('/usr/bin/osascript', ['-e', script])
+      .catch((error) => console.error("Notification display error:", error));
+  } catch (error) {
+    console.error("Notification display error:", error);
+  }
+}
+
+// The play queue's injected player: speak one line and record its resolution
+// + lifecycle rows. Errors propagate to the queue's onPlayerError (which logs
+// and writes the failure row) — no internal swallow.
+async function speakNotification(
   message: string,
-  voiceEnabled = true,
   voiceId: string | null = null,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   sessionId: string | null = null,
   requestId: string | null = null,
 ) {
-  const titleValidation = validateInput(title);
   const messageValidation = validateInput(message);
-
-  if (!titleValidation.valid) {
-    throw new Error(`Invalid title: ${titleValidation.error}`);
-  }
-
   if (!messageValidation.valid) {
     throw new Error(`Invalid message: ${messageValidation.error}`);
   }
 
-  const safeTitle = titleValidation.sanitized!;
-
   // Extract emotional marker before generic bracket stripping; otherwise
   // markers like [🎯 focused] are removed before they can affect TTS settings.
   const { cleaned, emotion } = extractEmotionalMarker(messageValidation.sanitized!);
-  let safeMessage = stripMarkers(cleaned);
+  const safeMessage = stripMarkers(cleaned);
 
   if (emotion) {
     console.log(`🎭 Detected emotion: ${emotion}`);
   }
 
-  if (voiceEnabled) {
-    try {
-      const voiceMapping = getVoiceMapping(voiceId);
-      if (voiceMapping?.description) {
-        console.log(`👤 Voice: ${voiceMapping.description}`);
-      }
-
-      console.log(`🎙️  Speaking...`);
-
-      // Run the speak inside an audio-capture context so the playback sites
-      // (playAudio + the inline edgetts path) deposit their measured metrics
-      // into this per-request slot (Phase 1 / U2). ALS isolates concurrent
-      // /notify requests.
-      const audioSlot: AudioCaptureSlot = {};
-      const result = await audioCapture.run(audioSlot, () =>
-        speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion));
-
-      if (result.muted) {
-        console.log('🔇 Speech suppressed (muted)');
-      } else if (result.success) {
-        console.log(`✅ Speech via ${result.provider}`);
-      } else {
-        console.warn('⚠️  All speech providers failed');
-      }
-
-      // One structured resolution drop-off event per /notify (#24). Self-swallows
-      // its own errors; never breaks the notification.
-      const { resolution, reason } = classifyResolution(voiceId, voiceMapping);
-      writeResolutionEvent({
-        ts: logTimestamp(),
-        requested_voice_id: voiceId,
-        resolution,
-        ...(reason && { resolution_reason: reason }),
-        provider: result.provider,
-        voice: result.voice,
-        hops: result.success ? result.attempts.length - 1 : result.attempts.length,
-        attempts: result.attempts,
-        success: result.success,
-        ...(result.muted && { muted: true }),
-      });
-
-      // Audio lifecycle event (Phase 1 / R1): pairs the request context with the
-      // playback metrics deposited by the playback sites, so truncation becomes
-      // visible — a short play shows play_time_ms < clip_duration_s. Correlates
-      // with the hook's voice-events.jsonl by session_id. Best-effort.
-      const event: AudioLifecycleEvent = {
-        ts: logTimestamp(),
-        session_id: sessionId,
-        request_id: requestId,
-        message_chars: safeMessage.length,
-        provider: result.provider,
-        synth_duration_ms: audioSlot.synth_duration_ms ?? null,
-        clip_duration_s: audioSlot.clip_duration_s ?? null,
-        play_started_at: audioSlot.play_started_at ?? null,
-        play_ended_at: audioSlot.play_ended_at ?? null,
-        play_time_ms: audioSlot.play_time_ms ?? null,
-        exit_reason: audioSlot.exit_reason ?? null,
-        muted: result.muted ?? false,
-        success: result.success,
-      };
-      writeAudioLifecycleEvent(event);
-    } catch (error) {
-      console.error("Failed to speak:", error);
-    }
+  const voiceMapping = getVoiceMapping(voiceId);
+  if (voiceMapping?.description) {
+    console.log(`👤 Voice: ${voiceMapping.description}`);
   }
 
-  // Display macOS notification
-  try {
-    const escapedTitle = escapeForAppleScript(safeTitle);
-    const escapedMessage = escapeForAppleScript(safeMessage);
-    const script = `display notification "${escapedMessage}" with title "${escapedTitle}" sound name ""`;
-    await spawnSafe('/usr/bin/osascript', ['-e', script]);
-  } catch (error) {
-    console.error("Notification display error:", error);
+  console.log(`🎙️  Speaking...`);
+
+  // Run the speak inside an audio-capture context so the playback sites
+  // (playAudio + the inline edgetts path) deposit their measured metrics
+  // into this per-request slot (Phase 1 / U2). ALS isolates concurrent
+  // /notify requests.
+  const audioSlot: AudioCaptureSlot = {};
+  const result = await audioCapture.run(audioSlot, () =>
+    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion));
+
+  if (result.muted) {
+    console.log('🔇 Speech suppressed (muted)');
+  } else if (result.success) {
+    console.log(`✅ Speech via ${result.provider}`);
+  } else {
+    console.warn('⚠️  All speech providers failed');
   }
+
+  // One structured resolution drop-off event per /notify (#24). Self-swallows
+  // its own errors; never breaks the notification.
+  const { resolution, reason } = classifyResolution(voiceId, voiceMapping);
+  writeResolutionEvent({
+    ts: logTimestamp(),
+    requested_voice_id: voiceId,
+    resolution,
+    ...(reason && { resolution_reason: reason }),
+    provider: result.provider,
+    voice: result.voice,
+    hops: result.success ? result.attempts.length - 1 : result.attempts.length,
+    attempts: result.attempts,
+    success: result.success,
+    ...(result.muted && { muted: true }),
+  });
+
+  // Audio lifecycle event (Phase 1 / R1): pairs the request context with the
+  // playback metrics deposited by the playback sites, so truncation becomes
+  // visible — a short play shows play_time_ms < clip_duration_s. Correlates
+  // with the hook's voice-events.jsonl by session_id. Best-effort.
+  const event: AudioLifecycleEvent = {
+    ts: logTimestamp(),
+    session_id: sessionId,
+    request_id: requestId,
+    message_chars: safeMessage.length,
+    provider: result.provider,
+    synth_duration_ms: audioSlot.synth_duration_ms ?? null,
+    clip_duration_s: audioSlot.clip_duration_s ?? null,
+    play_started_at: audioSlot.play_started_at ?? null,
+    play_ended_at: audioSlot.play_ended_at ?? null,
+    play_time_ms: audioSlot.play_time_ms ?? null,
+    exit_reason: audioSlot.exit_reason ?? null,
+    muted: result.muted ?? false,
+    success: result.success,
+    disposition: 'played', // reached the player (Phase 2 / R7)
+  };
+  writeAudioLifecycleEvent(event);
 }
 
 // =============================================================================
@@ -1571,20 +1564,134 @@ function checkRateLimit(ip: string): boolean {
 }
 
 // =============================================================================
-// Notification queue (#202 receipt + plan R7 no-overlap)
+// Play Queue — global playback serialization (#202 receipt + plan R7 no-overlap)
 // =============================================================================
-// The /notify handler returns 202 on receipt and runs synth+play async, so the
-// greeting/Stop hooks never block ~7 s on synthesis. Bare fire-and-forget would
-// let concurrent requests overlap their afplay processes ("talking over each
-// other"), so every notification is serialized through this queue: one plays to
-// completion before the next starts.
-const notificationQueue = createSerialQueue();
+//
+// One queue per daemon: /notify (and the /notify/personality shim) validate,
+// fire the banner, enqueue VOICE lines only, and ack 202 on receipt (R2); this
+// single consumer speaks one line at a time via speakNotification (R1/KTD4).
+// Queued lines coalesce newest-per-session (R4) and age out at dequeue (R5);
+// both outcomes are recorded in the audio-lifecycle log as minimal disposition
+// rows (R7). A hung player is bounded by the queue's watchdog, and liveness is
+// visible in /health. Knobs: ECHO_PLAY_QUEUE_AGE_CAP_MS /
+// ECHO_PLAY_QUEUE_MAX_DEPTH / ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS.
 
-// Test/introspection seam: resolves once every queued notification has played.
-// A no-op enqueued after the caller's /notify settles only when that /notify
-// (and everything ahead of it) has finished — the serial FIFO guarantees it.
+// Voice lines ONLY — banner-only notifications never enter the queue (the
+// banner fires at accept time in acceptNotification), so they can never
+// supersede, delay, or evict a queued voice line.
+interface NotifyJobPayload {
+  message: string;
+  voiceId: string | null;
+  voiceSettings: Partial<VoiceSettings> | null;
+  sessionId: string | null;
+  requestId: string;
+  messageChars: number; // sanitized length, for disposition rows that never play
+}
+
+const playQueue = new PlayQueue<NotifyJobPayload>({
+  player: async (job) => {
+    const p = job.payload;
+    await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
+  },
+  onDisposition: (job, disposition, reason) => {
+    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
+    // Minimal lifecycle row (R7): the line never reached the player, so there
+    // are no playback metrics — just the disposition and its reason.
+    // message_chars here is the validation-sanitized length (pre marker-strip),
+    // slightly larger than a played row's post-strip count.
+    writeAudioLifecycleEvent({
+      ts: logTimestamp(),
+      session_id: job.sessionId,
+      request_id: job.id,
+      message_chars: job.payload.messageChars,
+      provider: 'none',
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: null,
+      muted: false,
+      success: false,
+      disposition,
+      disposition_reason: reason,
+    });
+  },
+  onPlayerError: (job, error) => {
+    log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
+    // Failure row (R7): speakNotification does not swallow — a speak-path
+    // throw or a watchdog timeout lands here, and without this row the
+    // 202-acked line would vanish from the log entirely.
+    writeAudioLifecycleEvent({
+      ts: logTimestamp(),
+      session_id: job.sessionId,
+      request_id: job.id,
+      message_chars: job.payload.messageChars,
+      provider: 'none',
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: 'error',
+      muted: false,
+      success: false,
+      disposition: 'played', // it reached the player; the play itself failed
+    });
+  },
+});
+
+// Test/introspection seam: resolves once every accepted voice line has
+// settled (queue empty, nothing in flight). Banner-only notifications never
+// enqueue, so they need no draining — their osascript spawn fires at accept.
 export async function drainNotifications(): Promise<void> {
-  await notificationQueue.enqueue(async () => {});
+  await playQueue.drain();
+}
+
+// Accept one notification: validate (4xx BEFORE any side effect), fire the
+// banner immediately (never queued), and enqueue the line for speech only
+// when voice is enabled. Shared by /notify and the personality shim so their
+// validation + payload semantics cannot drift apart.
+function acceptNotification(
+  reqId: string,
+  opts: {
+    title: string;
+    message: string;
+    voiceEnabled: boolean;
+    voiceId: string | null;
+    voiceSettings: Partial<VoiceSettings> | null;
+    sessionId: string | null;
+  },
+): void {
+  const titleValidation = validateInput(opts.title);
+  if (!titleValidation.valid) {
+    throw new Error(`Invalid title: ${titleValidation.error}`);
+  }
+  const messageValidation = validateInput(opts.message);
+  if (!messageValidation.valid) {
+    throw new Error(`Invalid message: ${messageValidation.error}`);
+  }
+
+  // Banner for every accepted notification, voice or not — decoupled from
+  // the queue so it shows immediately and survives supersede/age-drop.
+  showBanner(titleValidation.sanitized!, messageValidation.sanitized!);
+
+  if (!opts.voiceEnabled) return;
+
+  playQueue.enqueue({
+    id: reqId,
+    sessionId: opts.sessionId,
+    receivedAt: Date.now(),
+    payload: {
+      message: opts.message,
+      voiceId: opts.voiceId,
+      voiceSettings: opts.voiceSettings,
+      sessionId: opts.sessionId,
+      requestId: reqId,
+      messageChars: messageValidation.sanitized!.length,
+    },
+  });
 }
 
 // =============================================================================
@@ -1644,17 +1751,15 @@ export const server = serve({
         const messageCheck = validateInput(message);
         if (!messageCheck.valid) throw new Error(`Invalid message: ${messageCheck.error}`);
 
-        log('info', `📨 Notification queued: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
+        log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
-        // 202 on receipt: synth+play runs async on the serial queue so the hook
-        // never blocks on synthesis (#202) and concurrent notifications never
-        // overlap (plan R7). ALS survives fire-and-forget (Bun keeps the pending
-        // promise alive); .catch() prevents an unhandled rejection.
-        notificationQueue
-          .enqueue(() => sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, sessionId, reqId))
-          .then(() => log('info', `✅ Notification delivered`, ctx))
-          .catch((err: any) => log('error', `Notification playback error: ${err?.message || err}`, ctx));
+        // 202 on receipt: the banner fires at accept, and synth+play runs
+        // async in the play queue's single consumer so the hook never blocks
+        // on synthesis (#202) and concurrent notifications never overlap
+        // (plan R7). True playback outcome lives in the audio-lifecycle log.
+        acceptNotification(reqId, { title, message, voiceEnabled, voiceId, voiceSettings, sessionId });
 
+        log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
         return new Response(
           JSON.stringify({ status: "accepted", message: "Notification queued", request_id: reqId }),
           {
@@ -1687,11 +1792,12 @@ export const server = serve({
 
         log('info', `🎭 Personality notification queued: "${message}"`, ctx);
 
-        // 202 on receipt + serial queue, same contract as /notify.
-        notificationQueue
-          .enqueue(() => sendNotification(DEFAULT_NOTIFICATION_TITLE, message, true, null))
-          .then(() => log('info', `✅ Personality notification delivered`, ctx))
-          .catch((err: any) => log('error', `Personality playback error: ${err?.message || err}`, ctx));
+        // Same global queue as /notify: one voice at a time across every
+        // entry point (R1). Ack 202 on receipt (R2).
+        acceptNotification(reqId, {
+          title: DEFAULT_NOTIFICATION_TITLE, message, voiceEnabled: true,
+          voiceId: null, voiceSettings: null, sessionId: data.session_id || null,
+        });
 
         return new Response(
           JSON.stringify({ status: "accepted", message: "Personality notification queued", request_id: reqId }),
@@ -1775,6 +1881,14 @@ export const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           mute: readMuteState(),
+          // Additive (Phase 2): backlog + consumer liveness. `stalled` means
+          // the current job has outlived even the queue's own watchdog —
+          // the consumer is genuinely wedged, not just playing a long line.
+          play_queue: {
+            depth: playQueue.depth,
+            in_flight_ms: playQueue.inFlightMs,
+            stalled: playQueue.inFlightMs !== null && playQueue.inFlightMs > playQueue.playerTimeoutMs,
+          },
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,

@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { parseBoundedInt } from "../../core/env";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
 
 // parseBoundedInt is the single guard behind every numeric env override in the
 // voice system (issue #25). A degenerate value (NaN / negative / below floor)
@@ -52,5 +55,54 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
       expect(parseBoundedInt("-1", 2, 1)).toBe(2);
       expect(parseBoundedInt("3", 2, 1)).toBe(3);
     });
+  });
+});
+
+// resolveEchoEnv is the import-pure replacement for the daemon's old
+// hydrate-process.env-at-import loop (the pi-adapter "Atlas" pollution):
+// live process value wins, env-file values are a read-only fallback, and
+// resolving NEVER writes to process.env.
+describe("resolveEchoEnv — import-pure env resolution", () => {
+  afterEach(() => {
+    primeEchoFileEnv(undefined); // restore lazy real-file loading
+    delete process.env.ECHO_ENV_TEST_KEY;
+  });
+
+  test("a live process value wins over the file layer", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    process.env.ECHO_ENV_TEST_KEY = "from-process";
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-process");
+  });
+
+  test("falls back to the file layer when the process value is absent", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
+  });
+
+  test("resolving never mutates process.env (import-purity contract)", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
+    expect(process.env.ECHO_ENV_TEST_KEY).toBeUndefined();
+  });
+
+  test("reads a real env file via ECHO_ENV_PATHS (quotes stripped, first wins)", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "echo-env-"));
+    try {
+      writeFileSync(join(tmp, "a.env"), 'ECHO_ENV_TEST_KEY="first"\n');
+      writeFileSync(join(tmp, "b.env"), "ECHO_ENV_TEST_KEY=second\n");
+      const saved = process.env.ECHO_ENV_PATHS;
+      process.env.ECHO_ENV_PATHS = `${join(tmp, "a.env")}:${join(tmp, "b.env")}`;
+      primeEchoFileEnv(undefined); // force a fresh lazy load with these paths
+      try {
+        expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("first");
+        expect(process.env.ECHO_ENV_TEST_KEY).toBeUndefined();
+      } finally {
+        if (saved === undefined) delete process.env.ECHO_ENV_PATHS;
+        else process.env.ECHO_ENV_PATHS = saved;
+        primeEchoFileEnv(undefined);
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

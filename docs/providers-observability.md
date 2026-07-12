@@ -39,7 +39,7 @@ appends **one structured JSONL event per voice-enabled `/notify`**. This is host
 lives entirely in `core/server.ts`: a self-contained helper block (`writeResolutionEvent` +
 rolling `pruneResolutionLog` + `classifyResolution`, just above `speakWithFallback`), plus
 `speakWithFallback` returning a per-provider `attempts` trail and the actual `voice` used,
-and a single `writeResolutionEvent` call in `sendNotification`'s voice-enabled path.
+and a single `writeResolutionEvent` call in `speakNotification` (the play queue's player).
 
 - **Path (user-owned, never `/tmp`/repo):** macOS
   `~/Library/Logs/echo/voice-resolution.jsonl`, else `$XDG_STATE_HOME`/

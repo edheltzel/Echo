@@ -120,6 +120,83 @@ describe("writeAudioLifecycleEvent — rolling size-cap prune", () => {
   });
 });
 
+describe("writeAudioLifecycleEvent — disposition (Phase 2 / R7)", () => {
+  test("a played row carries disposition and the play window", () => {
+    const path = join(TMP, "disposition-played.jsonl");
+    if (existsSync(path)) rmSync(path);
+
+    writeAudioLifecycleEvent({ ...eventFor("p1"), disposition: "played" }, path, 1_000_000);
+
+    const ev = JSON.parse(readFileSync(path, "utf-8").trim());
+    expect(ev.disposition).toBe("played");
+    expect(ev.play_started_at).not.toBe(null);
+    expect(ev.play_time_ms).toBe(3400);
+  });
+
+  test("a dropped-stale row has the reason and no playback metrics", () => {
+    const path = join(TMP, "disposition-stale.jsonl");
+    if (existsSync(path)) rmSync(path);
+
+    writeAudioLifecycleEvent({
+      ts: "1970-01-01T00:00:00.000Z",
+      session_id: "s-stale",
+      request_id: "req-stale",
+      message_chars: 42,
+      provider: "none",
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: null,
+      muted: false,
+      success: false,
+      disposition: "dropped-stale",
+      disposition_reason: "age-cap-exceeded",
+    }, path, 1_000_000);
+
+    const ev = JSON.parse(readFileSync(path, "utf-8").trim());
+    expect(ev.disposition).toBe("dropped-stale");
+    expect(ev.disposition_reason).toBe("age-cap-exceeded");
+    expect(ev.play_time_ms).toBe(null);
+    expect(ev.play_started_at).toBe(null);
+  });
+
+  test("a superseded row has the reason and no playback metrics", () => {
+    const path = join(TMP, "disposition-superseded.jsonl");
+    if (existsSync(path)) rmSync(path);
+
+    writeAudioLifecycleEvent({
+      ...eventFor("s-super"),
+      synth_duration_ms: null,
+      clip_duration_s: null,
+      play_started_at: null,
+      play_ended_at: null,
+      play_time_ms: null,
+      exit_reason: null,
+      success: false,
+      disposition: "superseded",
+      disposition_reason: "newer-line-same-session",
+    }, path, 1_000_000);
+
+    const ev = JSON.parse(readFileSync(path, "utf-8").trim());
+    expect(ev.disposition).toBe("superseded");
+    expect(ev.play_time_ms).toBe(null);
+  });
+
+  test("back-compat: a pre-Phase-2 event without disposition still writes and parses", () => {
+    const path = join(TMP, "disposition-compat.jsonl");
+    if (existsSync(path)) rmSync(path);
+
+    writeAudioLifecycleEvent(eventFor("legacy"), path, 1_000_000); // no disposition field
+
+    const ev = JSON.parse(readFileSync(path, "utf-8").trim());
+    expect(ev.session_id).toBe("legacy");
+    // Absent means 'played' to readers; the row itself simply omits the key.
+    expect("disposition" in ev).toBe(false);
+  });
+});
+
 describe("classifyPlaybackOutcome — pure exit-reason derivation (KTD6)", () => {
   test("timed-out wins over everything", () => {
     expect(classifyPlaybackOutcome({ timedOut: true, errored: true, exitCode: 0 })).toBe("timed-out");

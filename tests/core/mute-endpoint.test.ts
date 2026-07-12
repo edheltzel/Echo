@@ -7,10 +7,33 @@
 // KTD5: /health gains an additive mute block; nothing existing changes shape.
 process.env.PORT = "0";
 
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// --- spawn stub -------------------------------------------------------------
+// The /notify flood below fires an accept-time banner per request; without a
+// stub those are REAL osascript banners leaking out of the test run (and
+// draining across sibling test files). Nothing here needs a real subprocess.
+function stubSpawn(): any {
+  const child: any = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = { write() {}, end() {} };
+  child.kill = () => {};
+  child.pid = 4242;
+  queueMicrotask(() => child.emit("exit", 0));
+  return child;
+}
+
+mock.module("node:child_process", () => ({
+  ...realChildProcess,
+  default: (realChildProcess as any).default ?? realChildProcess,
+  spawn: () => stubSpawn(),
+}));
 
 const TMP = mkdtempSync(join(tmpdir(), "mute-ep-"));
 const MUTE_PATH = join(TMP, "mute.json");

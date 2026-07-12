@@ -1,63 +1,390 @@
-// Serial playback queue (#202 / plan R7): tasks run one-at-a-time, in FIFO
-// order, and a rejecting task never blocks the ones behind it.
+// Phase 2 / U1 — pure queue semantics against a fake player: global serial
+// playback (R1), FIFO across sessions, newest-per-session coalescing (R4),
+// age-cap drop at dequeue (R5), never interrupting the in-flight job (R3),
+// and advancing past player errors (R6). No afplay, no server.
 
-import { describe, expect, test } from "bun:test";
-import { createSerialQueue } from "../../core/play-queue";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { PlayQueue, type PlayJob } from "../../core/play-queue";
+import { primeEchoFileEnv } from "../../core/env";
+import { waitFor } from "./poll";
 
-const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 
-describe("createSerialQueue", () => {
-  test("runs tasks one at a time (no overlap)", async () => {
-    const q = createSerialQueue();
+function job(id: string, sessionId: string | null, receivedAt = Date.now()): PlayJob<string> {
+  return { id, sessionId, receivedAt, payload: id };
+}
+
+describe("PlayQueue — serial playback (R1)", () => {
+  test("jobs play one at a time; max observed concurrency is 1", async () => {
+    const played: string[] = [];
     let active = 0;
     let maxActive = 0;
-
-    const task = () => async () => {
-      active++;
-      maxActive = Math.max(maxActive, active);
-      await tick(10);
-      active--;
-    };
-
-    await Promise.all([q.enqueue(task()), q.enqueue(task()), q.enqueue(task())]);
-    expect(maxActive).toBe(1);
-  });
-
-  test("preserves FIFO order", async () => {
-    const q = createSerialQueue();
-    const order: number[] = [];
-    const jobs = [0, 1, 2, 3].map((i) =>
-      q.enqueue(async () => {
-        await tick(2);
-        order.push(i);
-      }),
-    );
-    await Promise.all(jobs);
-    expect(order).toEqual([0, 1, 2, 3]);
-  });
-
-  test("a rejecting task does not block subsequent tasks", async () => {
-    const q = createSerialQueue();
-    const rejected = q.enqueue(async () => {
-      throw new Error("boom");
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await Bun.sleep(20);
+        played.push(j.id);
+        active--;
+      },
     });
-    const after = q.enqueue(async () => "ok");
 
-    await expect(rejected).rejects.toThrow("boom");
-    await expect(after).resolves.toBe("ok");
+    q.enqueue(job("a", "s1"));
+    q.enqueue(job("b", "s2"));
+    q.enqueue(job("c", "s3"));
+
+    await waitFor(() => played.length === 3);
+    expect(maxActive).toBe(1);
+    expect(played).toEqual(["a", "b", "c"]); // FIFO across distinct sessions
   });
 
-  test("returns the task's resolved value", async () => {
-    const q = createSerialQueue();
-    await expect(q.enqueue(async () => 42)).resolves.toBe(42);
+  test("consumer idles when empty and wakes on a later enqueue", async () => {
+    const played: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => { played.push(j.id); },
+    });
+
+    q.enqueue(job("first", "s1"));
+    await waitFor(() => played.length === 1);
+
+    // Queue fully drained; a later enqueue must still be consumed.
+    await Bun.sleep(20);
+    q.enqueue(job("second", "s2"));
+    await waitFor(() => played.length === 2);
+    expect(played).toEqual(["first", "second"]);
+  });
+});
+
+describe("PlayQueue — newest-per-session coalescing (R4)", () => {
+  test("a newer same-session line replaces the queued one; the old emits superseded", async () => {
+    const played: string[] = [];
+    const dispositions: Array<{ id: string; disposition: string }> = [];
+    let releaseBlocker!: () => void;
+    const blocked = new Promise<void>((r) => { releaseBlocker = r; });
+
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "blocker") await blocked;
+        played.push(j.id);
+      },
+      onDisposition: (j, disposition) => dispositions.push({ id: j.id, disposition }),
+    });
+
+    q.enqueue(job("blocker", "s-block"));
+    await waitFor(() => q.depth === 0); // blocker dequeued, now in-flight
+    q.enqueue(job("old", "s1"));
+    q.enqueue(job("new", "s1")); // supersedes "old" while it is still queued
+    releaseBlocker();
+
+    await waitFor(() => played.length === 2);
+    expect(played).toEqual(["blocker", "new"]);
+    expect(dispositions).toEqual([{ id: "old", disposition: "superseded" }]);
   });
 
-  test("depth reflects outstanding tasks and drains to zero", async () => {
-    const q = createSerialQueue();
-    const a = q.enqueue(() => tick(10));
-    const b = q.enqueue(() => tick(10));
+  test("a same-session line never interrupts the in-flight job (R3)", async () => {
+    const played: string[] = [];
+    const dispositions: string[] = [];
+    let releaseBlocker!: () => void;
+    const blocked = new Promise<void>((r) => { releaseBlocker = r; });
+
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "playing") await blocked;
+        played.push(j.id);
+      },
+      onDisposition: (j) => dispositions.push(j.id),
+    });
+
+    q.enqueue(job("playing", "s1"));
+    await waitFor(() => q.depth === 0); // "playing" is in-flight
+    q.enqueue(job("later", "s1"));      // same session as the IN-FLIGHT job
+    releaseBlocker();
+
+    await waitFor(() => played.length === 2);
+    // The in-flight job finished normally and was NOT superseded.
+    expect(played).toEqual(["playing", "later"]);
+    expect(dispositions).toEqual([]);
+  });
+
+  test("lines with no session_id never coalesce with each other", async () => {
+    const played: string[] = [];
+    let releaseBlocker!: () => void;
+    const blocked = new Promise<void>((r) => { releaseBlocker = r; });
+
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "blocker") await blocked;
+        played.push(j.id);
+      },
+    });
+
+    q.enqueue(job("blocker", "s-block"));
+    await waitFor(() => q.depth === 0);
+    q.enqueue(job("anon1", null));
+    q.enqueue(job("anon2", null));
+    releaseBlocker();
+
+    await waitFor(() => played.length === 3);
+    expect(played).toEqual(["blocker", "anon1", "anon2"]);
+  });
+});
+
+describe("PlayQueue — age cap at dequeue (R5)", () => {
+  test("a job older than ageCapMs is dropped stale and never played", async () => {
+    let clock = 1_000_000;
+    const played: string[] = [];
+    const dispositions: Array<{ id: string; disposition: string }> = [];
+
+    const q = new PlayQueue<string>({
+      player: async (j) => { played.push(j.id); },
+      onDisposition: (j, disposition) => dispositions.push({ id: j.id, disposition }),
+      ageCapMs: 500,
+      now: () => clock,
+    });
+
+    q.enqueue({ id: "stale", sessionId: "s1", receivedAt: clock - 501, payload: "stale" });
+    q.enqueue({ id: "fresh", sessionId: "s2", receivedAt: clock, payload: "fresh" });
+
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["fresh"]);
+    expect(dispositions).toEqual([{ id: "stale", disposition: "dropped-stale" }]);
+  });
+
+  test("a job exactly at the cap still plays (drop is strictly older)", async () => {
+    let clock = 1_000_000;
+    const played: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => { played.push(j.id); },
+      ageCapMs: 500,
+      now: () => clock,
+    });
+
+    q.enqueue({ id: "edge", sessionId: "s1", receivedAt: clock - 500, payload: "edge" });
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["edge"]);
+  });
+});
+
+describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
+  test("enqueue beyond maxDepth drops the oldest queued job", async () => {
+    const played: string[] = [];
+    const dispositions: Array<{ id: string; disposition: string }> = [];
+    let releaseBlocker!: () => void;
+    const blocked = new Promise<void>((r) => { releaseBlocker = r; });
+
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "blocker") await blocked;
+        played.push(j.id);
+      },
+      onDisposition: (j, disposition) => dispositions.push({ id: j.id, disposition }),
+      maxDepth: 2,
+    });
+
+    q.enqueue(job("blocker", "s-block"));
+    await waitFor(() => q.depth === 0);
+    q.enqueue(job("q1", "s1"));
+    q.enqueue(job("q2", "s2"));
+    q.enqueue(job("q3", "s3")); // exceeds depth 2 → q1 (oldest queued) dropped
     expect(q.depth).toBe(2);
-    await Promise.all([a, b]);
+    releaseBlocker();
+
+    await waitFor(() => played.length === 3);
+    expect(played).toEqual(["blocker", "q2", "q3"]);
+    expect(dispositions).toEqual([{ id: "q1", disposition: "dropped-stale" }]);
+  });
+});
+
+describe("PlayQueue — player watchdog + liveness (enforced, not borrowed)", () => {
+  test("a hung player is timed out by the watchdog; the queue reports and advances", async () => {
+    const played: string[] = [];
+    const errors: Array<{ id: string; message: string }> = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "hung") await new Promise<never>(() => {}); // never settles
+        played.push(j.id);
+      },
+      onPlayerError: (j, e) => errors.push({ id: j.id, message: e instanceof Error ? e.message : String(e) }),
+      playerTimeoutMs: 50,
+    });
+
+    q.enqueue(job("hung", "s1"));
+    q.enqueue(job("after", "s2"));
+
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["after"]);
+    expect(errors.length).toBe(1);
+    expect(errors[0].id).toBe("hung");
+    expect(errors[0].message).toContain("watchdog");
+  });
+
+  test("inFlightMs reports the current job's age and null when idle", async () => {
+    let clock = 1_000_000;
+    let release!: () => void;
+    const blocked = new Promise<void>((r) => { release = r; });
+    const q = new PlayQueue<string>({
+      player: async () => { await blocked; },
+      now: () => clock,
+    });
+
+    expect(q.inFlightMs).toBe(null);
+    q.enqueue({ id: "j", sessionId: "s1", receivedAt: clock, payload: "j" });
+    await waitFor(() => q.inFlightMs !== null);
+    clock += 500;
+    expect(q.inFlightMs).toBe(500);
+    release();
+    await waitFor(() => q.inFlightMs === null);
+  });
+});
+
+describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
+  const noopPlayer = async () => {};
+
+  // Pin the env-file layer to empty so the operator's real ~/.config/echo/.env
+  // can never leak into the DEFAULTS expectations below.
+  beforeAll(() => primeEchoFileEnv({}));
+  afterAll(() => primeEchoFileEnv(undefined));
+
+  function withEnv(name: string, value: string | undefined, fn: () => void): void {
+    const saved = process.env[name];
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+    try {
+      fn();
+    } finally {
+      if (saved === undefined) delete process.env[name];
+      else process.env[name] = saved;
+    }
+  }
+
+  test("defaults: age cap 5min, depth 20, watchdog 2min when env is unset", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", undefined, () => {
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", undefined, () => {
+        const q = new PlayQueue<string>({ player: noopPlayer });
+        expect(q.ageCapMs).toBe(300_000);
+        expect(q.playerTimeoutMs).toBe(120_000);
+        expect(q.maxDepth).toBe(20);
+      });
+    });
+  });
+
+  test("valid overrides are honored", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", "5000", () => {
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", "3", () => {
+        const q = new PlayQueue<string>({ player: noopPlayer });
+        expect(q.ageCapMs).toBe(5000);
+        expect(q.maxDepth).toBe(3);
+      });
+    });
+  });
+
+  test("NaN / negative / zero / below-floor values fall back to the default", () => {
+    for (const bad of ["garbage", "-5", "0", "999"]) { // age-cap floor is 1000
+      withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", bad, () => {
+        expect(new PlayQueue<string>({ player: noopPlayer }).ageCapMs).toBe(300_000);
+      });
+    }
+    for (const bad of ["garbage", "-1", "0"]) { // depth floor is 1
+      withEnv("ECHO_PLAY_QUEUE_MAX_DEPTH", bad, () => {
+        expect(new PlayQueue<string>({ player: noopPlayer }).maxDepth).toBe(20);
+      });
+    }
+  });
+
+  test("explicit options win over env", () => {
+    withEnv("ECHO_PLAY_QUEUE_AGE_CAP_MS", "5000", () => {
+      const q = new PlayQueue<string>({ player: noopPlayer, ageCapMs: 1234 });
+      expect(q.ageCapMs).toBe(1234);
+    });
+  });
+});
+
+describe("PlayQueue — resilience (R6)", () => {
+  test("a rejecting player does not stall the queue; the next job still plays", async () => {
+    const played: string[] = [];
+    const errors: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        if (j.id === "boom") throw new Error("player exploded");
+        played.push(j.id);
+      },
+      onPlayerError: (j) => errors.push(j.id),
+    });
+
+    q.enqueue(job("boom", "s1"));
+    q.enqueue(job("after", "s2"));
+
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["after"]);
+    expect(errors).toEqual(["boom"]);
+  });
+
+  test("a throwing disposition callback does not stall the queue", async () => {
+    let clock = 1_000_000;
+    const played: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => { played.push(j.id); },
+      onDisposition: () => { throw new Error("callback exploded"); },
+      ageCapMs: 500,
+      now: () => clock,
+    });
+
+    q.enqueue({ id: "stale", sessionId: "s1", receivedAt: clock - 10_000, payload: "stale" });
+    q.enqueue({ id: "fresh", sessionId: "s2", receivedAt: clock, payload: "fresh" });
+
+    await waitFor(() => played.length === 1);
+    expect(played).toEqual(["fresh"]);
+  });
+});
+
+describe("PlayQueue — drain (test seam behind drainNotifications)", () => {
+  test("resolves immediately when the queue is idle", async () => {
+    const q = new PlayQueue<string>({ player: async () => {} });
+    await q.drain(); // no enqueue ever happened — must not hang
+  });
+
+  test("resolves only after every queued job has settled", async () => {
+    const played: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        await Bun.sleep(20);
+        played.push(j.id);
+      },
+    });
+
+    q.enqueue(job("a", "s1"));
+    q.enqueue(job("b", "s2"));
+
+    await q.drain();
+    expect(played).toEqual(["a", "b"]);
+  });
+
+  test("resolves after a rejecting player settles (errors still drain)", async () => {
+    const q = new PlayQueue<string>({
+      player: async () => { throw new Error("boom"); },
+      onPlayerError: () => {},
+    });
+
+    q.enqueue(job("a", "s1"));
+    await q.drain();
     expect(q.depth).toBe(0);
+    expect(q.inFlightMs).toBeNull();
+  });
+
+  test("concurrent drains all resolve; a later enqueue drains independently", async () => {
+    const played: string[] = [];
+    const q = new PlayQueue<string>({
+      player: async (j) => {
+        await Bun.sleep(10);
+        played.push(j.id);
+      },
+    });
+
+    q.enqueue(job("a", "s1"));
+    await Promise.all([q.drain(), q.drain(), q.drain()]);
+    expect(played).toEqual(["a"]);
+
+    q.enqueue(job("b", "s2"));
+    await q.drain();
+    expect(played).toEqual(["a", "b"]);
   });
 });
