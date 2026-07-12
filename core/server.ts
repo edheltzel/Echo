@@ -27,6 +27,8 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { createSerialQueue } from "./play-queue";
+import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { loadEchoEnvironment } from "../shared/echo-env";
 import {
   writeAudioLifecycleEvent,
@@ -770,6 +772,32 @@ class EdgeTTSProvider implements TTSProvider {
     let tmp: { dir: string; file: string } | undefined;
     this.lastDiagnostic = undefined;
 
+    // --- Cache fast-path -----------------------------------------------------
+    // A short, repeated phrase (the startup catchphrase, "standing by", …) is
+    // played straight from disk, skipping the edge-tts network synthesis that
+    // dominates startup latency (#202). On a local playback failure we fall
+    // through to a fresh synthesis below rather than staying silent.
+    const cachedFile = readTtsCache(edgettsVoice, rate, processedText);
+    if (cachedFile) {
+      const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
+      const playStart = Date.now();
+      try {
+        console.log(`⚡ Edge TTS cache hit (voice: ${edgettsVoice}, rate: ${rate}) — playing from disk`);
+        const play = spawn(player, [cachedFile]);
+        await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
+        recordPlayback(cachedFile, playStart, Date.now(), { exitCode: 0 });
+        const slot = audioCapture.getStore();
+        if (slot) slot.synth_duration_ms = 0; // cache hit → no synthesis
+        recordProviderSuccess('edgetts');
+        this.lastDiagnostic = undefined;
+        console.log('✅ Edge TTS completed (cache)');
+        return true;
+      } catch (cachePlayError: any) {
+        recordPlayback(cachedFile, playStart, Date.now(), { exitCode: null, error: cachePlayError });
+        console.warn(`🔇 Edge TTS cache-hit playback failed via ${player}; re-synthesizing:`, cachePlayError.message || cachePlayError);
+      }
+    }
+
     try {
       // --- Synthesis (the provider's responsibility → governed by the breaker).
       //     Retry transient blips with backoff before recording a failure. ---
@@ -820,6 +848,11 @@ class EdgeTTSProvider implements TTSProvider {
       recordProviderSuccess('edgetts');
       const edgeSlot = audioCapture.getStore();
       if (edgeSlot) edgeSlot.synth_duration_ms = Date.now() - synthStart;
+
+      // Persist short, repeated phrases so the next occurrence (e.g. the next
+      // session's catchphrase) skips synthesis entirely. Best-effort; the
+      // helper no-ops for long/unique text and never throws.
+      writeTtsCache(edgettsVoice, rate, processedText, tmp!.file);
 
       // --- Playback (a LOCAL concern: afplay/mpv). A playback failure must NOT
       //     open the edge-tts breaker — the provider already succeeded. ---
@@ -1538,6 +1571,23 @@ function checkRateLimit(ip: string): boolean {
 }
 
 // =============================================================================
+// Notification queue (#202 receipt + plan R7 no-overlap)
+// =============================================================================
+// The /notify handler returns 202 on receipt and runs synth+play async, so the
+// greeting/Stop hooks never block ~7 s on synthesis. Bare fire-and-forget would
+// let concurrent requests overlap their afplay processes ("talking over each
+// other"), so every notification is serialized through this queue: one plays to
+// completion before the next starts.
+const notificationQueue = createSerialQueue();
+
+// Test/introspection seam: resolves once every queued notification has played.
+// A no-op enqueued after the caller's /notify settles only when that /notify
+// (and everything ahead of it) has finished — the serial FIFO guarantees it.
+export async function drainNotifications(): Promise<void> {
+  await notificationQueue.enqueue(async () => {});
+}
+
+// =============================================================================
 // HTTP Server
 // =============================================================================
 
@@ -1588,16 +1638,28 @@ export const server = serve({
           throw new Error('Invalid voice_id');
         }
 
-        log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
+        // Validate synchronously so a bad request still gets a 4xx (not a 202).
+        const titleCheck = validateInput(title);
+        if (!titleCheck.valid) throw new Error(`Invalid title: ${titleCheck.error}`);
+        const messageCheck = validateInput(message);
+        if (!messageCheck.valid) throw new Error(`Invalid message: ${messageCheck.error}`);
 
-        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, sessionId, reqId);
+        log('info', `📨 Notification queued: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
-        log('info', `✅ Notification delivered`, ctx);
+        // 202 on receipt: synth+play runs async on the serial queue so the hook
+        // never blocks on synthesis (#202) and concurrent notifications never
+        // overlap (plan R7). ALS survives fire-and-forget (Bun keeps the pending
+        // promise alive); .catch() prevents an unhandled rejection.
+        notificationQueue
+          .enqueue(() => sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, sessionId, reqId))
+          .then(() => log('info', `✅ Notification delivered`, ctx))
+          .catch((err: any) => log('error', `Notification playback error: ${err?.message || err}`, ctx));
+
         return new Response(
-          JSON.stringify({ status: "success", message: "Notification sent", request_id: reqId }),
+          JSON.stringify({ status: "accepted", message: "Notification queued", request_id: reqId }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200
+            status: 202
           }
         );
       } catch (error: any) {
@@ -1620,16 +1682,22 @@ export const server = serve({
         const message = data.message || "Notification";
         const ctx: LogContext = { requestId: reqId, sessionId: data.session_id, source: data.source };
 
-        log('info', `🎭 Personality notification: "${message}"`, ctx);
+        const messageCheck = validateInput(message);
+        if (!messageCheck.valid) throw new Error(`Invalid message: ${messageCheck.error}`);
 
-        await sendNotification(DEFAULT_NOTIFICATION_TITLE, message, true, null);
+        log('info', `🎭 Personality notification queued: "${message}"`, ctx);
 
-        log('info', `✅ Personality notification delivered`, ctx);
+        // 202 on receipt + serial queue, same contract as /notify.
+        notificationQueue
+          .enqueue(() => sendNotification(DEFAULT_NOTIFICATION_TITLE, message, true, null))
+          .then(() => log('info', `✅ Personality notification delivered`, ctx))
+          .catch((err: any) => log('error', `Personality playback error: ${err?.message || err}`, ctx));
+
         return new Response(
-          JSON.stringify({ status: "success", message: "Personality notification sent", request_id: reqId }),
+          JSON.stringify({ status: "accepted", message: "Personality notification queued", request_id: reqId }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200
+            status: 202
           }
         );
       } catch (error: any) {

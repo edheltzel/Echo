@@ -33,7 +33,11 @@ import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
-const NOTIFY_TIMEOUT_MS = 12_000;
+// The daemon returns 202 on receipt (synth+play run async), so this POST resolves
+// in ~tens of ms. A short guard is enough to avoid hanging if the daemon is down;
+// it no longer needs to cover synthesis + playback (that was the old 12 s wait
+// that produced false `failed`/`aborted` events).
+const NOTIFY_TIMEOUT_MS = 5_000;
 
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
