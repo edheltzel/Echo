@@ -22,11 +22,18 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { parseBoundedInt } from './env';
+import { parseBoundedInt, resolveEchoEnv } from './env';
 
 // How playback ended (KTD6): clean exit → completed; the process-timeout kill →
 // timed-out; non-zero exit / signal → killed; spawn or other failure → error.
 export type PlaybackExitReason = 'completed' | 'timed-out' | 'killed' | 'error';
+
+// How the play-queue disposed of the line (Phase 2 / R7): reached the player
+// (`played`), dropped without playing (`dropped-stale` — either it waited
+// past the age cap at dequeue, or the depth cap evicted it at enqueue;
+// `disposition_reason` discriminates), or replaced by a newer same-session
+// line while queued (`superseded`).
+export type AudioDisposition = 'played' | 'dropped-stale' | 'superseded';
 
 export interface AudioLifecycleEvent {
   ts: string;
@@ -42,13 +49,20 @@ export interface AudioLifecycleEvent {
   exit_reason: PlaybackExitReason | null;
   muted: boolean;
   success: boolean;
+  // Optional so pre-Phase-2 rows stay valid: readers treat an absent
+  // disposition as 'played'. Dropped/superseded rows carry the reason and no
+  // playback metrics.
+  disposition?: AudioDisposition;
+  disposition_reason?: string;
 }
 
 export function resolveAudioLifecycleLogPath(): string {
-  return process.env.ECHO_AUDIO_LIFECYCLE_LOG ?? join(homedir(), '.agents', 'Echo', 'audio-lifecycle.jsonl');
+  return resolveEchoEnv('ECHO_AUDIO_LIFECYCLE_LOG') ?? join(homedir(), '.agents', 'Echo', 'audio-lifecycle.jsonl');
 }
 
 // ~1MB cap (floor 1KB). Override via ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES.
+// Live process env only (frozen at module load): this module initializes
+// before the daemon's config layer, matching the pre-Phase-2 behavior.
 export const AUDIO_LIFECYCLE_LOG_MAX_BYTES = parseBoundedInt(process.env.ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, 1_000_000, 1024);
 
 // Append one event, then roll the file back under the cap. Best-effort: all

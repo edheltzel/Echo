@@ -59,21 +59,46 @@ filled from server defaults: stability 0.5, similarity 0.75, style 0.0, speed 1.
 speaker-boost true), and the resolved persona mapping then contributes only the voice
 name/id. `speed` is consumed by edge-tts/kokoro; the rest by ElevenLabs.
 
-Response: `200 {"status":"success","message":"Notification sent","request_id":"req-…"}`.
+Response: `202 {"status":"accepted","message":"Notification queued","request_id":"req-…"}`.
 Errors: `400 {"status":"error","message":"Invalid …","request_id":…}` for validation
-failures, `500` otherwise.
+failures (rejected **before** the line is queued), `500` otherwise.
+
+**`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
+validated; the macOS **banner fires immediately at accept** (it is not audio and never
+waits behind playback), while synthesis and playback of **voice lines only** run
+asynchronously from a **global serial play queue** — one voice at a time across all
+sessions and hosts, a new line never starts while another plays, and the in-flight line is
+never interrupted. A `voice_enabled: false` request is banner-only: it never enters the
+queue and can never delay or supersede a queued voice line. Queued voice lines coalesce
+newest-per-session (an older *queued* line from the same `session_id` is replaced and
+recorded `superseded` — its banner already showed) and age out (`dropped-stale`) past
+`ECHO_PLAY_QUEUE_AGE_CAP_MS`; a hung player is bounded by the queue's watchdog
+(`ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS`). Knobs in [`configuration.md`](configuration.md).
+
+*Compatibility note (pre-Phase-2 callers):* the response stays 2xx, so `response.ok`
+remains `true` and callers that treat any 2xx as success — including the shipped adapters,
+which only log the status — are unaffected. The semantics shift from "delivered" to
+"accepted": a `202` no longer means the line was spoken. True playback outcome now lives in
+the audio-lifecycle log (`~/.agents/Echo/audio-lifecycle.jsonl`), where each request's row
+records a `disposition` — `played` (reached the player; carries the measured play window
+unless muted), `superseded`, or `dropped-stale` (waited past the age cap at dequeue, or
+evicted by the depth cap at enqueue — `disposition_reason` says which). Voice-disabled
+lines are not logged (the lifecycle log records spoken lines only).
 
 ## `POST /notify/personality`
 
 Compatibility endpoint for callers that only provide a `message`. Always voice-enabled,
 default title, identity voice; same validation and response shape (success message
-`"Personality notification sent"`).
+`"Personality notification queued"`). Lines feed the same global play queue and ack
+`202` on receipt; a `session_id` here coalesces against `/notify` lines from the same
+session (one queue, one key).
 
 ## `POST /mute`
 
 Global runtime mute (#83). While muted, notifications are accepted, logged, and
 voice-resolved normally — audio alone is suppressed across **every** provider, including the
-macOS `say` fallback. Nothing is queued or replayed; the `/notify` contract is unchanged.
+macOS `say` fallback. Muted lines are not held for later replay: they flow through the play
+queue as usual and are suppressed at speak time; the `/notify` contract is unchanged.
 The resolution drop-off log tags suppressed events `"muted": true`.
 
 An explicit JSON body sets state; an **empty body toggles** (a one-keystroke hotkey needs no
@@ -118,6 +143,8 @@ In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
 
 Returns `status`, `port`, `activeProvider` (= `defaultProvider`), `fallbackOrder`, provider
 status, `macos_fallback_voice`, pronunciation rule count, emotional preset count, live
+`play_queue` (`{depth, in_flight_ms, stalled}` — backlog, how long the current line has
+been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
 `reset_after_ms`), and the current mute state (`mute: {muted, muted_until}`).
 
