@@ -38,7 +38,10 @@ function stubSpawn(command: string): any {
   child.stdin = { write() {}, end() {} };
   child.kill = () => {};
   child.pid = 4242;
-  if (String(command).includes("afplay")) {
+  // The playback binary is platform-dependent (afplay on darwin, mpv
+  // elsewhere — core/server.ts speak path); delay BOTH so play windows
+  // are measurable on Linux CI too.
+  if (/afplay|mpv/.test(String(command))) {
     setTimeout(() => child.emit("exit", 0), PLAY_MS);
   } else {
     queueMicrotask(() => child.emit("exit", 0));
