@@ -27,6 +27,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { edgeRateFromSpeed } from "./edge-rate";
 import { parseBoundedInt } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { loadEchoEnvironment } from "../shared/echo-env";
@@ -1288,7 +1289,7 @@ export async function speakWithFallback(
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
-): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean }> {
+): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
   // Runtime mute gate (#83): sits before the provider loop so ONE check covers
   // every provider including the macOS `say` fallback. Lazy expiry — a timed
   // mute past its deadline reads as unmuted. Logging and voice resolution
@@ -1297,6 +1298,16 @@ export async function speakWithFallback(
   if (muteState.muted) {
     console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
     return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
+  }
+
+  // Capture guard: while an external tool has the mic open (its published
+  // recording-state file says recording/transcribing from a live pid), speaking
+  // would pollute the user's capture — skip the voice line, mute-style. Checked
+  // at speak time (queue-dequeue), so a line whose turn arrives after the
+  // capture ends plays normally. The banner already fired at accept.
+  if (isCaptureActive()) {
+    console.log('🎙️  Mic capture active — speech held (capture guard)');
+    return { success: false, provider: 'capture-held', voice: null, attempts: [], held_for_capture: true };
   }
 
   // Build provider order: primary first, then fallback order
@@ -1513,6 +1524,7 @@ async function speakNotification(
     attempts: result.attempts,
     success: result.success,
     ...(result.muted && { muted: true }),
+    ...(result.held_for_capture && { held_for_capture: true }),
   });
 
   // Audio lifecycle event (Phase 1 / R1): pairs the request context with the
@@ -1533,7 +1545,9 @@ async function speakNotification(
     exit_reason: audioSlot.exit_reason ?? null,
     muted: result.muted ?? false,
     success: result.success,
-    disposition: 'played', // reached the player (Phase 2 / R7)
+    // Reached the player (Phase 2 / R7) — unless the capture guard held it
+    // there: 'held-for-capture' keeps every 202-acked line's fate greppable.
+    disposition: result.held_for_capture ? 'held-for-capture' : 'played',
   };
   writeAudioLifecycleEvent(event);
 }
@@ -1881,6 +1895,12 @@ export const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           mute: readMuteState(),
+          // Additive: the capture guard's resolved state file and current
+          // reading (idle unless a live external mic capture is in progress).
+          capture_guard: {
+            path: resolveCaptureStatePath(),
+            state: readCaptureState(),
+          },
           // Additive (Phase 2): backlog + consumer liveness. `stalled` means
           // the current job has outlived even the queue's own watchdog —
           // the consumer is genuinely wedged, not just playing a long line.

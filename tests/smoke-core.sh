@@ -8,6 +8,10 @@ LOG="${ROOT}/.smoke-core.log"
 # (or, via lazy-expiry cleanup, rewrites) the operator's real mute.json.
 export ECHO_MUTE_STATE_PATH="$(mktemp -d)/mute.json"
 
+# Pin the capture guard to scratch so a real mic capture on the dev machine
+# (e.g. a live VoiceLayer voice_ask) can never flake the smoke.
+export ECHO_CAPTURE_STATE_PATH="$(mktemp -d)/recording-state.json"
+
 PORT="$PORT" bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {

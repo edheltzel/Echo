@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Capture guard (`core/capture-guard.ts`).** While an external voice-input tool has the
+  microphone open (its published cross-process state file — default
+  `~/.local/state/voicelayer/recording-state.json`, knob `ECHO_CAPTURE_STATE_PATH`, empty
+  string disables — reports `recording`/`transcribing` from a live pid), Echo skips voice
+  lines at speak time, mute-style, so TTS never plays into the user's capture. The banner
+  is unaffected (fires at accept). Held lines get a `held-for-capture` disposition in the
+  audio-lifecycle log; `/health` gains `capture_guard: {path, state}`. Tolerant reads
+  (missing/corrupt file = idle) and a pid-liveness check keep a crashed capture session's
+  stale file from ever silencing Echo.
 - **Play-queue hardening (salvaged from #92, Phase 2 / #91).** The serial play queue is now
   a full `PlayQueue` with: **dispositions** in the audio-lifecycle log (`played`,
   `superseded`, `dropped-stale` + `disposition_reason`) so every 202-acked line has a

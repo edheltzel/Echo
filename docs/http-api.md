@@ -81,9 +81,11 @@ which only log the status — are unaffected. The semantics shift from "delivere
 "accepted": a `202` no longer means the line was spoken. True playback outcome now lives in
 the audio-lifecycle log (`~/.agents/Echo/audio-lifecycle.jsonl`), where each request's row
 records a `disposition` — `played` (reached the player; carries the measured play window
-unless muted), `superseded`, or `dropped-stale` (waited past the age cap at dequeue, or
-evicted by the depth cap at enqueue — `disposition_reason` says which). Voice-disabled
-lines are not logged (the lifecycle log records spoken lines only).
+unless muted), `superseded`, `dropped-stale` (waited past the age cap at dequeue, or
+evicted by the depth cap at enqueue — `disposition_reason` says which), or
+`held-for-capture` (skipped at speak time because an external mic capture was live — see
+`ECHO_CAPTURE_STATE_PATH` in [`configuration.md`](configuration.md); the banner still
+showed). Voice-disabled lines are not logged (the lifecycle log records spoken lines only).
 
 ## `POST /notify/personality`
 
@@ -146,7 +148,9 @@ status, `macos_fallback_voice`, pronunciation rule count, emotional preset count
 `play_queue` (`{depth, in_flight_ms, stalled}` — backlog, how long the current line has
 been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
-`reset_after_ms`), and the current mute state (`mute: {muted, muted_until}`).
+`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), and the capture
+guard (`capture_guard: {path, state}` — the resolved recording-state file and its current
+reading; `state` is `idle` unless an external mic capture is live).
 
 Each provider entry carries an **egress audit** (`getProviderStatus` in `core/server.ts`):
 `enabled`, `healthy`, and `wouldEgress` (true only when the provider is *both* enabled and
