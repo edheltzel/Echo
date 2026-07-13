@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and never queued, and a superseded/dropped voice line keeps its banner.
   `core/env.ts` gains `resolveEchoEnv` (non-mutating env-file reads, used by the queue
   knobs and log-path resolution).
+- **CI verification gate (`.github/workflows/verify.yml`).** GitHub Actions now machine-runs
+  the canonical verification trio — `bun test`, `PORT=8889 tests/smoke-core.sh`, and the Pi
+  adapter build — on every PR into `dev`/`master` and every push to those branches
+  (`ubuntu-latest`, Bun only, no install step). The daemon smoke log is uploaded as an
+  artifact on failure.
 - **Startup-catchphrase latency fix (#202).** `/notify` and `/notify/personality` now
   return **`202` on receipt** and run synthesis + playback asynchronously on a new serial
   play-queue (`core/play-queue.ts`), so the greeting/Stop hooks no longer block ~7 s on

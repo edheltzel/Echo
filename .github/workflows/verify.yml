@@ -1,0 +1,31 @@
+name: verify
+on:
+  pull_request:
+    branches: [dev, master]
+  push:
+    branches: [dev, master]
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Unit tests
+        run: bun test
+      - name: Core smoke
+        run: PORT=8889 tests/smoke-core.sh
+      - name: Pi adapter build
+        run: bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
+      - name: Upload smoke log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-core-log
+          path: .smoke-core.log
+          if-no-files-found: ignore

@@ -57,7 +57,8 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 
 After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.echo"`
 (tail `~/Library/Logs/echo.log`). Use **Bun only** — no npm/npx/node. Run
-`bun test` + the smoke + the Pi build before shipping.
+`bun test` + the smoke + the Pi build before shipping; CI machine-runs the same trio on every
+PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 
