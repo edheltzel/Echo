@@ -14,8 +14,9 @@ launchctl kickstart -k "gui/$UID/com.echo"
 
 ## Environment files
 
-At startup the daemon and Pi/omp adapter load `KEY=VALUE` lines through `shared/echo-env.ts`
-from these files, in order:
+The daemon and the Pi/omp adapter resolve `KEY=VALUE` config from these files, in order
+(precedence lives in `shared/echo-env.ts`; the daemon reads through the non-mutating
+`resolveEchoEnv` in `core/env.ts`):
 
 1. Every path in `ECHO_ENV_PATHS` (colon-separated; legacy `VOICESYSTEM_ENV_PATHS` honored as
    a silent fallback)
@@ -25,8 +26,11 @@ from these files, in order:
 
 Precedence rules:
 
-- A key is set only if not already present, so the **first file found wins per key**, and a
-  real environment variable (e.g. set in the LaunchAgent plist) always beats every file.
+- The **first file found wins per key**, and a real environment variable (e.g. set in the
+  LaunchAgent plist) always beats every file.
+- Resolution is **read-only**: file values are layered under the live environment at read
+  time; the daemon never writes them into `process.env` (importing a core module must not
+  leak env-file identity into same-process adapter code — see the AGENTS.md invariant).
 - Surrounding single or double quotes around values are stripped.
 - Lines without `=`, keys starting with `#`, and empty values are ignored.
 - No file is required to exist.
@@ -55,6 +59,9 @@ processes keep the configuration loaded when their Echo extension started.
 | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | `10000` | macOS notification (osascript) timeout |
 | `ECHO_MUTE_STATE_PATH` | `~/Library/Application Support/echo/mute.json` (macOS), else `$XDG_STATE_HOME`/`~/.local/state` under `echo/mute.json` | Runtime mute state file (`POST /mute`), written atomically; missing/corrupt = unmuted |
 | `ECHO_RESOLUTION_LOG` / `ECHO_RESOLUTION_LOG_MAX_BYTES` | see [`providers-observability.md`](providers-observability.md) | Voice-resolution drop-off log path / size cap |
+| `ECHO_PLAY_QUEUE_AGE_CAP_MS` | `300000` (floor `1000`; comfortably above one line's worst-case occupancy — synth retries + playback can approach ~2 min — so an ordinary slow line cannot mass-drop the backlog; coalescing already bounds the queue to one line per session) | Play queue (Phase 2): a queued line that has waited longer than this since receipt is dropped (`dropped-stale`) instead of played late |
+| `ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS` | `120000` (floor `1000`) | Play queue watchdog: a player exceeding this is reported (`onPlayerError` lifecycle row) and the queue advances — a hung play can never wedge global playback |
+| `ECHO_PLAY_QUEUE_MAX_DEPTH` | `20` (floor `1`) | Play queue (Phase 2): max queued lines; enqueueing beyond it drops the oldest queued line |
 | `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_TIMEOUT_MAX_MS`, `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS`, `ECHO_EDGETTS_HEALTH_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts timeout/retry knobs |
 
 Every `ECHO_*` knob also accepts its legacy `VOICESYSTEM_*` name as a deprecated silent

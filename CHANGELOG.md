@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Play-queue hardening (salvaged from #92, Phase 2 / #91).** The serial play queue is now
+  a full `PlayQueue` with: **dispositions** in the audio-lifecycle log (`played`,
+  `superseded`, `dropped-stale` + `disposition_reason`) so every 202-acked line has a
+  recorded fate; **newest-per-session coalescing** (an older queued line from the same
+  `session_id` is replaced, never played late); an **age cap** (`ECHO_PLAY_QUEUE_AGE_CAP_MS`,
+  default 300 s — better silent than stale); a **depth cap**
+  (`ECHO_PLAY_QUEUE_MAX_DEPTH`, default 20); and a **player watchdog**
+  (`ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS`, default 120 s) with live
+  `/health play_queue {depth, in_flight_ms, stalled}`. The macOS **banner now fires at
+  accept time**, decoupled from the queue — `voice_enabled:false` requests are banner-only
+  and never queued, and a superseded/dropped voice line keeps its banner.
+  `core/env.ts` gains `resolveEchoEnv` (non-mutating env-file reads, used by the queue
+  knobs and log-path resolution).
 - **CI verification gate (`.github/workflows/verify.yml`).** GitHub Actions now machine-runs
   the canonical verification trio — `bun test`, `PORT=8889 tests/smoke-core.sh`, and the Pi
   adapter build — on every PR into `dev`/`master` and every push to those branches
