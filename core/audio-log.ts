@@ -31,9 +31,10 @@ export type PlaybackExitReason = 'completed' | 'timed-out' | 'killed' | 'error';
 // How the play-queue disposed of the line (Phase 2 / R7): reached the player
 // (`played`), dropped without playing (`dropped-stale` — either it waited
 // past the age cap at dequeue, or the depth cap evicted it at enqueue;
-// `disposition_reason` discriminates), or replaced by a newer same-session
-// line while queued (`superseded`).
-export type AudioDisposition = 'played' | 'dropped-stale' | 'superseded';
+// `disposition_reason` discriminates), replaced by a newer same-session
+// line while queued (`superseded`), or skipped at speak time because an
+// external mic capture was live (`held-for-capture`, core/capture-guard.ts).
+export type AudioDisposition = 'played' | 'dropped-stale' | 'superseded' | 'held-for-capture';
 
 export interface AudioLifecycleEvent {
   ts: string;
