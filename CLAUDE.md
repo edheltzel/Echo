@@ -1,1 +1,1 @@
-All AI Agents see @AGENTS.md
+AGENTS.md
