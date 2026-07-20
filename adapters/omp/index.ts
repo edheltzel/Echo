@@ -1,11 +1,11 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import {
   applyPersonaOverride,
-  loadPiVoiceConfig,
+  loadOmpVoiceConfig,
   loadProjectPersona,
   pickStartupCatchphrase,
   shouldSuppressVoice,
-  type PiVoiceConfig,
+  type OmpVoiceConfig,
 } from "./config.ts";
 import { loadEchoEnvironment } from "../../shared/echo-env.ts";
 import { sendNotification } from "../../shared/notify-client.ts";
@@ -21,8 +21,9 @@ function resolveSessionId(ctx: ExtensionContext): string | undefined {
   }
 }
 
-// Pi exposes the project root as ctx.cwd (documented ExtensionContext field). Read
-// defensively — the installed SDK types may predate it — and treat empty as absent.
+// omp exposes the project root as ctx.cwd (documented ExtensionContext field, pi
+// lineage). Read defensively — the installed SDK types may predate it — and treat
+// empty as absent.
 function resolveCwd(ctx: ExtensionContext): string | undefined {
   const cwd = (ctx as { cwd?: unknown }).cwd;
   return typeof cwd === "string" && cwd.length > 0 ? cwd : undefined;
@@ -37,7 +38,7 @@ function sessionStartIsUserVisible(event: unknown): boolean {
 
 function logAdapterWarning(message: string, error?: unknown): void {
   const suffix = error ? `: ${error instanceof Error ? error.message : String(error)}` : "";
-  console.error(`[echo/pi] ${message}${suffix}`);
+  console.error(`[echo/omp] ${message}${suffix}`);
 }
 
 function eventMessage(event: unknown): unknown {
@@ -58,7 +59,7 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
   return undefined;
 }
 
-/** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
+/** Instruction that makes omp's model emit the PAI-style trailing voice line. */
 function buildVoiceLineInstruction(personaName: string): string {
   return [
     "## Spoken completion (required)",
@@ -68,21 +69,20 @@ function buildVoiceLineInstruction(personaName: string): string {
   ].join("\n");
 }
 
-export default function atlasVoicePiAdapter(
-  pi: ExtensionAPI,
-  config: PiVoiceConfig = loadPiVoiceConfig(loadEchoEnvironment()),
+export default function echoVoiceOmpAdapter(
+  omp: ExtensionAPI,
+  config: OmpVoiceConfig = loadOmpVoiceConfig(loadEchoEnvironment()),
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
 
-  // Per-project config: layer a persona override from Pi's native settings.json
-  // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key —
-  // same daidentity convention as the Claude Code adapter) over the env-based
-  // `config`, resolved from ctx.cwd and memoized per cwd. A repo with no daidentity
-  // — and every omp session, since .pi/ isn't omp's dir — resolves to the base
-  // config unchanged. omp's own .omp reader lands with the #109 adapter split.
-  const configByCwd = new Map<string, PiVoiceConfig>();
-  function resolveConfig(cwd: string | undefined): PiVoiceConfig {
+  // Per-project config: layer a persona override from omp's native config
+  // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key —
+  // same daidentity convention as the Claude Code and Pi adapters) over the
+  // env-based `config`, resolved from ctx.cwd and memoized per cwd. A repo with no
+  // daidentity resolves to the base config unchanged.
+  const configByCwd = new Map<string, OmpVoiceConfig>();
+  function resolveConfig(cwd: string | undefined): OmpVoiceConfig {
     const key = cwd ?? "";
     const cached = configByCwd.get(key);
     if (cached) return cached;
@@ -101,7 +101,7 @@ export default function atlasVoicePiAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
     try {
-      const result = await sendNotification(cfg, message, "pi", resolveSessionId(ctx), ctx.signal);
+      const result = await sendNotification(cfg, message, "omp", resolveSessionId(ctx), ctx.signal);
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
         return false;
@@ -136,10 +136,10 @@ export default function atlasVoicePiAdapter(
     }
   }
 
-  // Inject the 🗣️ convention into Pi's system prompt so the model emits the
+  // Inject the 🗣️ convention into omp's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
-  pi.on("before_agent_start", (event, ctx) => {
+  omp.on("before_agent_start", (event, ctx) => {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.speakCompletions) return undefined;
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
@@ -156,36 +156,34 @@ export default function atlasVoicePiAdapter(
       // oh-my-pi: systemPrompt is string[] in and string[] out.
       return { systemPrompt: [...base, instruction] };
     }
-    // Upstream Pi: `systemPrompt` is the documented replace return;
-    // `systemPromptAppend` is the fallback for runtimes that ignore it.
     return {
       systemPrompt: `${base}\n\n${instruction}`,
       systemPromptAppend: `\n\n${instruction}`,
     };
   });
 
-  pi.on("session_start", async (event, ctx) => {
+  omp.on("session_start", async (event, ctx) => {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
     await speak(pickStartupCatchphrase(cfg.startupCatchphrases), ctx);
   });
 
-  pi.on("message_end", async (event, ctx) => {
+  omp.on("message_end", async (event, ctx) => {
     await speakAssistantCompletion(event, ctx);
   });
 
-  pi.on("turn_end", async (event, ctx) => {
+  omp.on("turn_end", async (event, ctx) => {
     await speakAssistantCompletion(event, ctx);
   });
 
-  pi.on("session_shutdown", () => {
+  omp.on("session_shutdown", () => {
     spoken.clear();
     pending.clear();
   });
 
-  pi.registerCommand("voice-status", {
-    description: "Show echo Pi adapter status",
+  omp.registerCommand("voice-status", {
+    description: "Show echo omp adapter status",
     handler: async (_args, ctx) => {
       const cfg = resolveConfig(resolveCwd(ctx));
       const state = [

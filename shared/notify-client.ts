@@ -1,39 +1,53 @@
-import type { PiVoiceConfig } from "./config.ts";
+// Host-neutral notify client for Echo host adapters (Pi, omp, …). Adapters may
+// import shared/, never core/. The `source` field is a free-form host tag the
+// daemon records for context ("pi", "omp", "claudecode").
 
-export const DEFAULT_PI_NOTIFY_TIMEOUT_MS = 10_000;
+export const DEFAULT_NOTIFY_TIMEOUT_MS = 10_000;
 
-export interface PiNotifyPayload {
+/** The subset of a host adapter's voice config the notify client needs. */
+export interface NotifyConfig {
+  endpoint: string;
+  title: string;
+  voiceEnabled: boolean;
+  voiceId?: string;
+}
+
+export interface NotifyPayload {
   message: string;
   title?: string;
   voice_id?: string;
   voice_enabled?: boolean;
   session_id?: string;
-  source: "pi";
+  source: string;
 }
 
-export interface PiNotifyResult {
+export interface NotifyResult {
   ok: boolean;
   status: number;
   body: string;
 }
 
-export function buildPiNotifyPayload(
-  config: PiVoiceConfig,
+export function buildNotifyPayload(
+  config: NotifyConfig,
   message: string,
+  source: string,
   sessionId?: string,
-): PiNotifyPayload {
-  const payload: PiNotifyPayload = {
+): NotifyPayload {
+  const payload: NotifyPayload = {
     message,
     title: config.title,
     voice_enabled: config.voiceEnabled,
-    source: "pi",
+    source,
   };
   if (config.voiceId) payload.voice_id = config.voiceId;
   if (sessionId) payload.session_id = sessionId;
   return payload;
 }
 
-function signalWithTimeout(parentSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
+function signalWithTimeout(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const abortFromParent = () => controller.abort(parentSignal?.reason);
@@ -52,19 +66,20 @@ function signalWithTimeout(parentSignal: AbortSignal | undefined, timeoutMs: num
   };
 }
 
-export async function sendPiNotification(
-  config: PiVoiceConfig,
+export async function sendNotification(
+  config: NotifyConfig,
   message: string,
+  source: string,
   sessionId?: string,
   signal?: AbortSignal,
-): Promise<PiNotifyResult> {
-  const timeout = signalWithTimeout(signal, DEFAULT_PI_NOTIFY_TIMEOUT_MS);
+): Promise<NotifyResult> {
+  const timeout = signalWithTimeout(signal, DEFAULT_NOTIFY_TIMEOUT_MS);
 
   try {
     const response = await fetch(config.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildPiNotifyPayload(config, message, sessionId)),
+      body: JSON.stringify(buildNotifyPayload(config, message, source, sessionId)),
       signal: timeout.signal,
     });
 

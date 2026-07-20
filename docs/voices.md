@@ -90,14 +90,15 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 Each host adapter reads its own **native** project config, so a repo can give itself
 its own spoken identity — **name + voice** — in that repo only:
 
-| Host | Project file | Global | 
+| Host | Project file | Global |
 |---|---|---|
 | Claude Code | `<project>/.claude/settings.json` (+ `.local.json`) | `~/.claude/settings.json` |
 | Pi | `<project>/.pi/settings.json` | `~/.pi/agent/settings.json` (see [`adapters/pi/README.md`](../adapters/pi/README.md)) |
-| omp | — | pending the dedicated `adapters/omp` split ([#109](https://github.com/edheltzel/Echo/issues/109)) |
+| omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 
-Every host reads a **`daidentity` block from its native `settings.json`**, project
-layered over global (project wins per key) — one convention, one shape to learn.
+Every host reads a **`daidentity` block from its native config**, project layered over
+global (project wins per key) — one convention, one shape to learn. Claude Code and Pi
+use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
 ### Claude Code
 
