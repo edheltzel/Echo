@@ -87,6 +87,20 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 
 ## Per-project persona & voice (local override)
 
+Each host adapter reads its own **native** project config, so a repo can give itself
+its own spoken identity — **name + voice** — in that repo only:
+
+| Host | Project file | Global | 
+|---|---|---|
+| Claude Code | `<project>/.claude/settings.json` (+ `.local.json`) | `~/.claude/settings.json` |
+| Pi | `<project>/.pi/settings.json` | `~/.pi/agent/settings.json` (see [`adapters/pi/README.md`](../adapters/pi/README.md)) |
+| omp | — | pending the dedicated `adapters/omp` split ([#109](https://github.com/edheltzel/Echo/issues/109)) |
+
+Every host reads a **`daidentity` block from its native `settings.json`**, project
+layered over global (project wins per key) — one convention, one shape to learn.
+
+### Claude Code
+
 The Claude Code adapter resolves the DA identity — **name and voice** — with layered
 precedence, tightest scope wins **per key**:
 
