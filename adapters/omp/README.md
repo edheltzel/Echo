@@ -48,9 +48,15 @@ Inside omp:
 /voice-status
 ```
 
-## Scope (persona-first slice)
+## Registration
 
-This slice delivers the omp lifecycle + native-config persona override. Still tracked
-on #109: a dedicated `adapters/omp/reconcile.ts` (idempotent registration per the #77
-contract), migrating the `~/.omp/agent/extensions/echo-voice` symlink from
-`adapters/pi` to `adapters/omp`, and the `scripts/install.sh --adapter omp` rewiring.
+`bash scripts/install.sh --adapter omp` runs `adapters/omp/reconcile.ts`, which maintains
+a single `echo-voice` symlink in `~/.omp/agent/extensions/` pointing at this adapter
+(idempotent, `--check`-aware, per the #77 reconcile-and-prune contract). It **migrates** an
+existing Echo `echo-voice` link off the pre-split shared `adapters/pi/` onto `adapters/omp/`.
+
+## Scope
+
+The lifecycle, native-config persona override, and registration are in place. The remaining
+#109 work is optional consolidation — folding the small config helpers (currently mirrored
+between `adapters/pi` and `adapters/omp`) into `shared/`.

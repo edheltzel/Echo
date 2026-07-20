@@ -39,8 +39,8 @@ A conforming registration:
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
 `~/.claude/settings.json`), `adapters/pi/reconcile.ts` (packages entry in
-`~/.pi/agent/settings.json`), and `adapters/pi/reconcile-omp.ts` (the `echo-voice` symlink in
-`~/.omp/agent/extensions/`, #18). `scripts/install.sh` re-reconciles **every installed
+`~/.pi/agent/settings.json`), and `adapters/omp/reconcile.ts` (the `echo-voice` symlink in
+`~/.omp/agent/extensions/`, #18/#109). `scripts/install.sh` re-reconciles **every installed
 adapter on every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates
 the adapters' check modes plus the LaunchAgent plist paths — a new adapter must plug its
 reconcile and check commands into both. Future hosts (Codex/OpenCode #30) inherit this
@@ -93,9 +93,10 @@ The two host differences the adapter absorbs:
   `string[]`. The injection handler feature-detects both and returns the same shape it
   received (`string[]` in → `[...base, instruction]` out). Unknown shapes still no-op safely.
 - **Registration:** omp has no `pi install`. `bash scripts/install.sh --adapter omp` runs
-  `adapters/pi/reconcile-omp.ts`, which maintains a single `echo-voice` symlink in
-  `~/.omp/agent/extensions/` pointing at `adapters/pi/` (omp loads the entries declared in
-  the package.json `pi` field through it). The script follows the reconcile-and-prune
+  `adapters/omp/reconcile.ts`, which maintains a single `echo-voice` symlink in
+  `~/.omp/agent/extensions/` pointing at the dedicated `adapters/omp/` (omp loads the entries
+  declared in the package.json `pi` field through it). It **migrates** an existing Echo
+  `echo-voice` link off the pre-split shared `adapters/pi/` onto `adapters/omp/` (#109). The script follows the reconcile-and-prune
   contract from #77 with strict ownership: Echo owns **only** the `echo-voice` name — no
   other entry is ever touched, whatever its target. The `echo-voice` entry is healed only
   when it provably belongs to Echo (a dead `*/adapters/pi` target from a renamed clone, or
