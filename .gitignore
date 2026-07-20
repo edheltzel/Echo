@@ -8,7 +8,7 @@
 # Local agent scratch / draft issues (promoted to GitHub Issues, not committed)
 .scratch/
 
-# Project-local Atlas agent artifacts (plans, handoffs, worktrees) — not committed
+# Project-local Atlas scratch artifacts and worktrees — canonical plans/handoffs live in docs/
 .agents/atlas/
 .agents/.worktrees/
 .worktrees/
