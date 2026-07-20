@@ -85,6 +85,45 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
    You should hear the new voice, and the event should read
    `"resolution":"identity-default"` with `"voice"` set to your new voice name.
 
+## Per-project persona & voice (local override)
+
+The Claude Code adapter resolves the DA identity — **name and voice** — with layered
+precedence, tightest scope wins **per key**:
+
+1. `<project>/.claude/settings.local.json` (gitignored, per-machine)
+2. `<project>/.claude/settings.json` (checked in, shared)
+3. `~/.claude/settings.json` (global)
+4. neutral defaults
+
+So a repo can give itself its own spoken identity, overriding the global persona **in
+that repo only** — at the startup greeting *and* on every per-turn line. Every other
+repo keeps the global persona. Unset keys fall through to global (set just a name +
+voice and inherit everything else).
+
+Drop a `daidentity` block into the project's `.claude/settings.json`:
+
+```jsonc
+{
+  "daidentity": {
+    "name": "Echo",
+    "voices": { "main": { "voiceId": "en-US-AndrewNeural" } }
+    // optional: "startupCatchphrases": ["Echo online."]
+    //   an array here REPLACES the global pool in this repo; omit to keep the global one
+  }
+}
+```
+
+`voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — no
+`core/voices.json` edit is needed; it flows straight through as the DA voice. The block
+takes effect on the **next** Claude Code session started in that repo. `~/.claude/settings.json`
+is never touched, so the global persona is unchanged everywhere else.
+
+**Scaffold it without hand-editing JSON:** run `/echo-voice [name] [voice]` inside the
+repo. It lists/auditions edge-tts voices, deep-merges the `daidentity` block into
+`.claude/settings.json` (preserving other settings), and can target the gitignored
+`.claude/settings.local.json` for a machine-specific voice. The command is symlinked
+into `~/.claude/commands/` by the Claude Code adapter installer.
+
 ## Change a persona's voice
 
 1. Audition and confirm the target voice name exists (`--list`, as above).

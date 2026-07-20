@@ -4,13 +4,24 @@
  *
  * Reads from settings.json - the programmatic way, not markdown parsing.
  * All hooks and tools should import from here.
+ *
+ * LAYERED RESOLUTION (per key, tightest scope wins):
+ *   1. $projectDir/.claude/settings.local.json  (gitignored, per-machine)
+ *   2. $projectDir/.claude/settings.json         (checked in, shared)
+ *   3. ~/.claude/settings.json                   (global)
+ *   4. neutral defaults
+ * A project's `daidentity` overrides the global one PER KEY (deep merge, local
+ * leaf wins) — the same "tightest source wins per key" precedence shared/echo-env.ts
+ * commits to. So a repo can set just its name + voice and inherit everything else
+ * from global. Arrays (startupCatchphrases) are atomic: a local array replaces the
+ * global one only when present. projectDir defaults to CLAUDE_PROJECT_DIR (set for
+ * every hook, incl. Stop, and pointing at the project root).
  */
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const HOME = process.env.HOME!;
-const SETTINGS_PATH = join(HOME, '.claude/settings.json');
 
 // Default identity (fallback if settings.json doesn't have identity section).
 // Neutral on purpose: never assume the user's DA name — they configure it in settings.json.
@@ -60,6 +71,10 @@ export interface Identity {
   color: string;
   voice?: VoiceProsody;
   personality?: VoicePersonality;
+  /** Startup catchphrase pool (raw; callers apply the `{name}` substitution). */
+  startupCatchphrases?: string[];
+  /** Single startup catchphrase (legacy; used when the array is empty). */
+  startupCatchphrase?: string;
 }
 
 export interface Principal {
@@ -75,34 +90,83 @@ export interface Settings {
   [key: string]: unknown;
 }
 
-let cachedSettings: Settings | null = null;
+// Merged-settings cache, keyed by `${home}\0${projectDir}` — each hook is a fresh
+// short-lived process with a stable project dir, so per-key caching is safe.
+const settingsCache = new Map<string, Settings>();
 
-/**
- * Load settings.json (cached)
- */
-function loadSettings(): Settings {
-  if (cachedSettings) return cachedSettings;
-
+/** Read+parse a single settings file; null when missing or malformed. */
+function readSettingsFile(path: string): Settings | null {
   try {
-    if (!existsSync(SETTINGS_PATH)) {
-      cachedSettings = {};
-      return cachedSettings;
-    }
-
-    const content = readFileSync(SETTINGS_PATH, 'utf-8');
-    cachedSettings = JSON.parse(content);
-    return cachedSettings!;
+    if (!existsSync(path)) return null;
+    return JSON.parse(readFileSync(path, 'utf-8')) as Settings;
   } catch {
-    cachedSettings = {};
-    return cachedSettings;
+    return null;
   }
 }
 
+function isPlainObject(v: unknown): v is Record<string, any> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 /**
- * Get DA (Digital Assistant) identity from settings.json
+ * Deep-merge `override` onto `base`, per leaf. Scalars and arrays from `override`
+ * replace `base` wholesale (arrays are atomic — so a local catchphrase array
+ * replaces the global one only when present). Nested plain objects merge
+ * recursively. `undefined` values in `override` never clobber `base`.
  */
-export function getIdentity(): Identity {
-  const settings = loadSettings();
+function deepMerge(base: any, override: any): any {
+  if (!isPlainObject(base) || !isPlainObject(override)) {
+    return override === undefined ? base : override;
+  }
+  const out: Record<string, any> = { ...base };
+  for (const [k, v] of Object.entries(override)) {
+    if (v === undefined) continue;
+    out[k] = isPlainObject(v) && isPlainObject(out[k]) ? deepMerge(out[k], v) : v;
+  }
+  return out;
+}
+
+/**
+ * The active project directory. Defaults to CLAUDE_PROJECT_DIR (set for every
+ * hook, incl. Stop, pointing at the project root). Empty string → global only.
+ */
+function resolveProjectDir(projectDir?: string): string {
+  return projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? '';
+}
+
+/**
+ * Load settings with layered precedence (global → project → project.local),
+ * deep-merged per key. Cached by (home, projectDir).
+ */
+function loadSettings(projectDir?: string, home: string = HOME): Settings {
+  const dir = resolveProjectDir(projectDir);
+  const cacheKey = `${home}\0${dir}`;
+  const cached = settingsCache.get(cacheKey);
+  if (cached) return cached;
+
+  // Lowest → highest priority; fold with deepMerge so tighter scopes win per key.
+  const layers: Array<Settings | null> = [
+    readSettingsFile(join(home, '.claude', 'settings.json')),
+  ];
+  if (dir) {
+    layers.push(readSettingsFile(join(dir, '.claude', 'settings.json')));
+    layers.push(readSettingsFile(join(dir, '.claude', 'settings.local.json')));
+  }
+
+  const merged = layers.reduce<Settings>(
+    (acc, layer) => (layer ? deepMerge(acc, layer) : acc),
+    {},
+  );
+  settingsCache.set(cacheKey, merged);
+  return merged;
+}
+
+/**
+ * Get DA (Digital Assistant) identity, resolved with layered precedence
+ * (project.local → project → global → defaults), per key.
+ */
+export function getIdentity(projectDir?: string, home: string = HOME): Identity {
+  const settings = loadSettings(projectDir, home);
 
   // Prefer settings.daidentity, fall back to env.DA for backward compat
   const daidentity = settings.daidentity || {};
@@ -112,6 +176,8 @@ export function getIdentity(): Identity {
   const voices = (daidentity as any).voices || {};
   const voiceConfig = voices.main || (daidentity as any).voice;
 
+  const catchphrases = (daidentity as any).startupCatchphrases;
+
   return {
     name: daidentity.name || envDA || DEFAULT_IDENTITY.name,
     fullName: daidentity.fullName || daidentity.name || envDA || DEFAULT_IDENTITY.fullName,
@@ -120,14 +186,16 @@ export function getIdentity(): Identity {
     color: daidentity.color || DEFAULT_IDENTITY.color,
     voice: voiceConfig as VoiceProsody | undefined,
     personality: (daidentity as any).personality as VoicePersonality | undefined,
+    startupCatchphrases: Array.isArray(catchphrases) ? catchphrases : undefined,
+    startupCatchphrase: (daidentity as any).startupCatchphrase as string | undefined,
   };
 }
 
 /**
- * Get Principal (human owner) identity from settings.json
+ * Get Principal (human owner) identity, resolved with layered precedence.
  */
-export function getPrincipal(): Principal {
-  const settings = loadSettings();
+export function getPrincipal(projectDir?: string, home: string = HOME): Principal {
+  const settings = loadSettings(projectDir, home);
 
   // Prefer settings.principal, fall back to env.PRINCIPAL for backward compat
   const principal = settings.principal || {};
@@ -144,7 +212,7 @@ export function getPrincipal(): Principal {
  * Clear cache (useful for testing or when settings.json changes)
  */
 export function clearCache(): void {
-  cachedSettings = null;
+  settingsCache.clear();
 }
 
 /**

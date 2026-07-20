@@ -220,11 +220,26 @@ reload_core_service() {
   fi
 }
 
+# Symlink the Claude Code slash commands into ~/.claude/commands. `ln -sfn` is
+# idempotent and re-points at the current repo path, so a repo move heals with a
+# rerun (#77). Repo-owned source stays the single source of truth.
+link_claudecode_commands() {
+  local commands_dir="$HOME/.claude/commands"
+  mkdir -p "$commands_dir"
+  local src
+  for src in "$REPO_ROOT/adapters/claudecode/commands/"*.md; do
+    [ -e "$src" ] || continue
+    ln -sfn "$src" "$commands_dir/$(basename "$src")"
+  done
+}
+
 install_adapter() {
   case "$ADAPTER" in
     claudecode)
       echo "> Installing Claude Code adapter hook registrations"
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts"
+      echo "> Linking Claude Code slash commands"
+      link_claudecode_commands
       ;;
     pi)
       echo "> Installing Pi adapter package"
@@ -249,6 +264,7 @@ refresh_installed_adapters() {
     echo "> Refreshing Claude Code adapter hook registrations"
     bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
       || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
+    link_claudecode_commands
   fi
   if [ "$ADAPTER" != "pi" ] && pi_installed; then
     echo "> Refreshing Pi adapter registration"
