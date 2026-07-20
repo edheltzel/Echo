@@ -63,12 +63,14 @@ ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 ## Per-project persona & voice
 
 A repo can override the persona **name + voice** (and greeting) for that project
-only, via an Echo-owned file in Pi's native config dir: **`<project>/.pi/echo-voice.json`**.
-Pi extensions read their own `.pi/` config through `ctx.cwd`; Echo never touches
-the user's `.pi/settings.json`. The file uses the same `daidentity` shape as the
-Claude Code adapter, so a persona is one shape across hosts:
+only, using the **same convention as the Claude Code adapter**: a `daidentity` block
+in the host's native `settings.json`. Pi layers config exactly like Claude Code —
+`<project>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
+project wins per key — so Echo reads the `daidentity` block from both and merges
+project-over-global:
 
 ```json
+// <project>/.pi/settings.json
 {
   "daidentity": {
     "name": "Echo",
@@ -78,11 +80,11 @@ Claude Code adapter, so a persona is one shape across hosts:
 }
 ```
 
-Resolved at `session_start` from `ctx.cwd`, layered over the env-based config above
-(override wins per key; unset keys fall through to the global config). `voiceId` is
-a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the daemon
-speaks it literally, no `core/voices.json` edit needed. Takes effect on the next Pi
-session started in that repo; every other repo keeps the global persona.
+Resolved at `session_start` from `ctx.cwd`, per key: project `.pi/settings.json` →
+global `~/.pi/agent/settings.json` → the env-based config above. `voiceId` is a real
+edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the daemon speaks it
+literally, no `core/voices.json` edit needed. Takes effect on the next Pi session
+started in that repo; every other repo keeps the global persona.
 
 > omp shares this adapter today but reads `.omp/`, not `.pi/`, so an omp session sees
 > no override yet — omp's native-config reader lands with the dedicated `adapters/omp`

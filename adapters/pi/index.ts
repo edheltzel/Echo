@@ -75,11 +75,12 @@ export default function atlasVoicePiAdapter(
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
 
-  // Per-project config: layer a project persona override (<cwd>/.pi/echo-voice.json)
-  // over the env-based global `config`, resolved from ctx.cwd and memoized per cwd
-  // (read once per project). A repo with no override — and every omp session, since
-  // .pi/ isn't omp's dir — resolves to the base config unchanged. omp's own .omp
-  // reader lands with the #109 adapter split.
+  // Per-project config: layer a persona override from Pi's native settings.json
+  // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key —
+  // same daidentity convention as the Claude Code adapter) over the env-based
+  // `config`, resolved from ctx.cwd and memoized per cwd. A repo with no daidentity
+  // — and every omp session, since .pi/ isn't omp's dir — resolves to the base
+  // config unchanged. omp's own .omp reader lands with the #109 adapter split.
   const configByCwd = new Map<string, PiVoiceConfig>();
   function resolveConfig(cwd: string | undefined): PiVoiceConfig {
     const key = cwd ?? "";

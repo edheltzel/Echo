@@ -11,31 +11,34 @@ import {
   type PiVoiceConfig,
 } from "../../../adapters/pi/config";
 
-// Pi project persona override: a repo drops <cwd>/.pi/echo-voice.json (daidentity
-// shape) and — inside that repo only — the greeting + per-turn voice use the
-// project persona name + voice. Layered over the env-based global config, resolved
-// from ctx.cwd. Mirrors the Claude Code adapter's project override for Pi.
+// Pi project persona override — SAME convention as the Claude Code adapter: a
+// `daidentity` block in the host's native settings.json, layered project over
+// global. Pi's own layering is `<cwd>/.pi/settings.json` (project) over
+// `~/.pi/agent/settings.json` (global), project wins per key. Inside a repo with
+// a project daidentity, the greeting + per-turn voice use that persona.
 
-// ── config-level unit tests (pure; injectable readFile) ──────────────────────
-describe("loadProjectPersona — reads <cwd>/.pi/echo-voice.json", () => {
-  const reader = (contents: Record<string, string>) => (path: string) => contents[path] ?? null;
+const GLOBAL_PATH = (home: string) => join(home, ".pi", "agent", "settings.json");
+const PROJECT_PATH = (cwd: string) => join(cwd, ".pi", "settings.json");
 
-  test("no cwd → null (no FS access)", () => {
-    expect(loadProjectPersona(undefined, () => "should not be read")).toBeNull();
-    expect(loadProjectPersona("", () => "should not be read")).toBeNull();
+// ── config-level unit tests (pure; injected readFile + explicit home) ────────
+describe("loadProjectPersona — daidentity from .pi/settings.json layering", () => {
+  const HOME = "/home/u";
+  const CWD = "/proj";
+  const reader = (files: Record<string, string>) => (path: string) => files[path] ?? null;
+  const daidentity = (d: unknown) => JSON.stringify({ daidentity: d });
+
+  test("no files → null", () => {
+    expect(loadProjectPersona(CWD, () => null, HOME)).toBeNull();
   });
 
-  test("wrapped daidentity block → name + voice + catchphrases", () => {
-    const path = join("/proj", ".pi", "echo-voice.json");
-    const o = loadProjectPersona("/proj", reader({
-      [path]: JSON.stringify({
-        daidentity: {
-          name: "Echo",
-          voices: { main: { voiceId: "en-US-AndrewNeural" } },
-          startupCatchphrases: ["Echo online.", "Echo here."],
-        },
+  test("project daidentity → name + voice + catchphrases", () => {
+    const o = loadProjectPersona(CWD, reader({
+      [PROJECT_PATH(CWD)]: daidentity({
+        name: "Echo",
+        voices: { main: { voiceId: "en-US-AndrewNeural" } },
+        startupCatchphrases: ["Echo online.", "Echo here."],
       }),
-    }));
+    }), HOME);
     expect(o).toEqual({
       personaName: "Echo",
       voiceId: "en-US-AndrewNeural",
@@ -43,43 +46,53 @@ describe("loadProjectPersona — reads <cwd>/.pi/echo-voice.json", () => {
     });
   });
 
-  test("unwrapped fields (no daidentity wrapper) also accepted", () => {
-    const path = join("/proj", ".pi", "echo-voice.json");
-    const o = loadProjectPersona("/proj", reader({
-      [path]: JSON.stringify({ name: "Echo", voices: { main: { voiceId: "en-GB-RyanNeural" } } }),
-    }));
-    expect(o).toEqual({ personaName: "Echo", voiceId: "en-GB-RyanNeural" });
+  test("global-only daidentity applies when no project file", () => {
+    const o = loadProjectPersona(CWD, reader({
+      [GLOBAL_PATH(HOME)]: daidentity({ name: "GlobalPi", voices: { main: { voiceId: "en-GB-RyanNeural" } } }),
+    }), HOME);
+    expect(o).toEqual({ personaName: "GlobalPi", voiceId: "en-GB-RyanNeural" });
   });
 
-  test("partial override (name only) → only that key set", () => {
-    const path = join("/proj", ".pi", "echo-voice.json");
-    const o = loadProjectPersona("/proj", reader({ [path]: JSON.stringify({ daidentity: { name: "Echo" } }) }));
-    expect(o).toEqual({ personaName: "Echo" });
+  test("project OVERRIDES global per key; unset project keys fall through to global", () => {
+    const o = loadProjectPersona(CWD, reader({
+      [GLOBAL_PATH(HOME)]: daidentity({
+        name: "GlobalPi",
+        voices: { main: { voiceId: "global-voice" } },
+        startupCatchphrases: ["Global line."],
+      }),
+      // Project sets only the voice → name + catchphrases fall through to global.
+      [PROJECT_PATH(CWD)]: daidentity({ voices: { main: { voiceId: "en-US-AndrewNeural" } } }),
+    }), HOME);
+    expect(o).toEqual({
+      personaName: "GlobalPi",              // from global
+      voiceId: "en-US-AndrewNeural",         // project wins
+      startupCatchphrases: ["Global line."], // from global
+    });
   });
 
-  test("missing file → null", () => {
-    expect(loadProjectPersona("/proj", () => null)).toBeNull();
+  test("flat voiceId (no voices.main) also accepted", () => {
+    const o = loadProjectPersona(CWD, reader({
+      [PROJECT_PATH(CWD)]: daidentity({ name: "Echo", voiceId: "en-AU-WilliamNeural" }),
+    }), HOME);
+    expect(o?.voiceId).toBe("en-AU-WilliamNeural");
   });
 
-  test("malformed JSON → null (never throws)", () => {
-    const path = join("/proj", ".pi", "echo-voice.json");
-    expect(loadProjectPersona("/proj", reader({ [path]: "{ not json " }))).toBeNull();
+  test("malformed settings.json → null (never throws)", () => {
+    expect(loadProjectPersona(CWD, reader({ [PROJECT_PATH(CWD)]: "{ not json " }), HOME)).toBeNull();
   });
 
-  test("empty override object → null", () => {
-    const path = join("/proj", ".pi", "echo-voice.json");
-    expect(loadProjectPersona("/proj", reader({ [path]: JSON.stringify({ daidentity: {} }) }))).toBeNull();
+  test("settings.json without a daidentity block → null", () => {
+    const o = loadProjectPersona(CWD, reader({
+      [PROJECT_PATH(CWD)]: JSON.stringify({ theme: "dark", defaultProvider: "anthropic" }),
+    }), HOME);
+    expect(o).toBeNull();
   });
 
-  test("reads the real file from disk when no reader injected", () => {
-    const dir = mkdtempSync(join(tmpdir(), "echo-pi-proj-"));
-    try {
-      mkdirSync(join(dir, ".pi"), { recursive: true });
-      writeFileSync(join(dir, ".pi", "echo-voice.json"), JSON.stringify({ daidentity: { name: "Echo" } }));
-      expect(loadProjectPersona(dir)).toEqual({ personaName: "Echo" });
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  test("no cwd → still reads global settings.json", () => {
+    const o = loadProjectPersona(undefined, reader({
+      [GLOBAL_PATH(HOME)]: daidentity({ name: "GlobalPi" }),
+    }), HOME);
+    expect(o).toEqual({ personaName: "GlobalPi" });
   });
 });
 
@@ -100,22 +113,18 @@ describe("applyPersonaOverride — per-key override onto the base config", () =>
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override; unset keys keep base", () => {
+  test("name + voice override; non-persona keys untouched", () => {
     const out = applyPersonaOverride(base, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
     expect(out.personaName).toBe("Echo");
     expect(out.voiceId).toBe("en-US-AndrewNeural");
-    expect(out.startupCatchphrases).toEqual(["Base ready."]); // untouched
-    expect(out.speakCompletions).toBe(true); // non-persona keys untouched
-  });
-
-  test("catchphrases replace the base pool when present", () => {
-    const out = applyPersonaOverride(base, { startupCatchphrases: ["Echo online."] });
-    expect(out.startupCatchphrases).toEqual(["Echo online."]);
-    expect(out.personaName).toBe("Pi"); // not overridden
+    expect(out.startupCatchphrases).toEqual(["Base ready."]);
+    expect(out.speakCompletions).toBe(true);
   });
 });
 
-// ── integration: greeting + completion use the project override via ctx.cwd ───
+// ── integration: greeting + completion use the override via ctx.cwd ──────────
+// HOME is redirected to a temp dir (no global ~/.pi/agent/settings.json daidentity)
+// so the test is isolated from the real user config; only the project file counts.
 type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -140,16 +149,19 @@ function ctxWithCwd(cwd: string) {
 }
 
 let projectDir: string;
+let fakeHome: string;
 
 beforeEach(() => {
   process.env = { ...originalEnv };
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
   process.env.ECHO_VOICE_ID = "pi";
+  fakeHome = mkdtempSync(join(tmpdir(), "echo-pi-home-"));
+  process.env.HOME = fakeHome; // homedir() → fakeHome (no global daidentity there)
   projectDir = mkdtempSync(join(tmpdir(), "echo-pi-int-"));
   mkdirSync(join(projectDir, ".pi"), { recursive: true });
   writeFileSync(
-    join(projectDir, ".pi", "echo-voice.json"),
+    join(projectDir, ".pi", "settings.json"),
     JSON.stringify({
       daidentity: { name: "Echo", voices: { main: { voiceId: "en-US-AndrewNeural" } }, startupCatchphrases: ["Echo online."] },
     }),
@@ -160,6 +172,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   process.env = { ...originalEnv };
   rmSync(projectDir, { recursive: true, force: true });
+  rmSync(fakeHome, { recursive: true, force: true });
 });
 
 describe("integration — project override flows through greeting + completion", () => {
@@ -175,8 +188,8 @@ describe("integration — project override flows through greeting + completion",
     await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(projectDir));
 
     expect(payloads).toHaveLength(1);
-    expect(payloads[0].message).toBe("Echo online.");       // project catchphrase
-    expect(payloads[0].voice_id).toBe("en-US-AndrewNeural"); // project voice, not "pi"
+    expect(payloads[0].message).toBe("Echo online.");        // project catchphrase
+    expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");  // project voice, not "pi"
   });
 
   test("per-turn completion uses the project voice", async () => {
@@ -197,7 +210,7 @@ describe("integration — project override flows through greeting + completion",
     expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
   });
 
-  test("no project file → base persona/voice (global stands)", async () => {
+  test("project with no daidentity → base persona/voice (global stands)", async () => {
     const payloads: any[] = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));

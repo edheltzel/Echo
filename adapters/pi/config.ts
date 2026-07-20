@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface PiVoiceConfig {
@@ -60,19 +61,17 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = proc
   };
 }
 
-// ── Project-local persona override ───────────────────────────────────────────
+// ── Project persona override (Pi-native settings.json) ───────────────────────
 // A project can override the persona name + voice (+ catchphrases) for THIS repo
-// only, via an Echo-owned file in Pi's native config dir: `<cwd>/.pi/echo-voice.json`.
-// Pi extensions read their own `.pi/` config through `ctx.cwd` (Pi exposes no
-// settings namespace for extensions and its settings.json validation is
-// undocumented — so we never touch the user's `.pi/settings.json`). The file uses
-// the SAME `daidentity` shape as the Claude Code adapter, so a persona is one shape
-// across hosts:
+// only, via the SAME convention as the Claude Code adapter: a `daidentity` block
+// in the host's native settings.json. Pi layers config exactly like Claude Code —
+// `<cwd>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
+// project wins per key — so Echo reads the `daidentity` block from both and merges
+// project-over-global:
 //   { "daidentity": { "name": "Echo",
 //                     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
 //                     "startupCatchphrases": ["Echo online."] } }
-// The block may also be written unwrapped (fields at the top level). Missing or
-// malformed → null (no override; the env-based global config stands).
+// Unset keys fall through to global settings, then to the env-based config.
 
 export interface EchoPersonaOverride {
   personaName?: string;
@@ -88,33 +87,54 @@ function defaultReadFile(path: string): string | null {
   }
 }
 
-export function loadProjectPersona(
-  cwd: string | undefined,
-  readFile: (path: string) => string | null = defaultReadFile,
-): EchoPersonaOverride | null {
-  if (!cwd) return null;
-  const raw = readFile(join(cwd, ".pi", "echo-voice.json"));
+/** Parse a settings.json file and return its `daidentity` block (or null). */
+function readDaidentity(
+  path: string,
+  readFile: (path: string) => string | null,
+): Record<string, any> | null {
+  const raw = readFile(path);
   if (!raw) return null;
-
   try {
     const json = JSON.parse(raw) as Record<string, any>;
-    const d = (json?.daidentity ?? json ?? {}) as Record<string, any>;
-    const voiceId = d?.voices?.main?.voiceId ?? d?.voiceId;
-    const phrases = Array.isArray(d?.startupCatchphrases)
-      ? (d.startupCatchphrases as unknown[]).filter(
-          (c): c is string => typeof c === "string" && c.trim().length > 0,
-        )
-      : undefined;
-
-    const override: EchoPersonaOverride = {};
-    if (typeof d?.name === "string" && d.name.trim()) override.personaName = d.name.trim();
-    if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-    if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
-
-    return Object.keys(override).length > 0 ? override : null;
+    const d = json?.daidentity;
+    return d && typeof d === "object" ? (d as Record<string, any>) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a persona override from Pi's native settings.json layering:
+ * project `<cwd>/.pi/settings.json` over global `~/.pi/agent/settings.json`,
+ * project wins per key (the same daidentity shape the Claude Code adapter reads).
+ * Returns null when neither file contributes a persona field.
+ */
+export function loadProjectPersona(
+  cwd: string | undefined,
+  readFile: (path: string) => string | null = defaultReadFile,
+  home: string = homedir(),
+): EchoPersonaOverride | null {
+  const global = readDaidentity(join(home, ".pi", "agent", "settings.json"), readFile);
+  const project = cwd ? readDaidentity(join(cwd, ".pi", "settings.json"), readFile) : null;
+  if (!global && !project) return null;
+
+  // Per-key resolution: project wins, else global. Voice supports the nested
+  // `voices.main.voiceId` shape (and a flat `voiceId`), matching Claude Code.
+  const voiceOf = (d: Record<string, any> | null): unknown =>
+    d?.voices?.main?.voiceId ?? d?.voiceId;
+  const name = project?.name ?? global?.name;
+  const voiceId = voiceOf(project) ?? voiceOf(global);
+  const rawPhrases = project?.startupCatchphrases ?? global?.startupCatchphrases;
+  const phrases = Array.isArray(rawPhrases)
+    ? (rawPhrases as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+    : undefined;
+
+  const override: EchoPersonaOverride = {};
+  if (typeof name === "string" && name.trim()) override.personaName = name.trim();
+  if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
+  if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
+
+  return Object.keys(override).length > 0 ? override : null;
 }
 
 /** Apply a project persona override onto a base config, per key (override wins when set). */
