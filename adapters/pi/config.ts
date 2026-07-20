@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 export interface PiVoiceConfig {
   endpoint: string;
   title: string;
@@ -54,6 +57,77 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = proc
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS ?? env.ATLAS_VOICE_SPEAK_COMPLETIONS, true),
     suppressInSubagents: booleanEnv(env.ECHO_VOICE_SUPPRESS_SUBAGENTS ?? env.ATLAS_VOICE_SUPPRESS_SUBAGENTS, true),
+  };
+}
+
+// ── Project-local persona override ───────────────────────────────────────────
+// A project can override the persona name + voice (+ catchphrases) for THIS repo
+// only, via an Echo-owned file in Pi's native config dir: `<cwd>/.pi/echo-voice.json`.
+// Pi extensions read their own `.pi/` config through `ctx.cwd` (Pi exposes no
+// settings namespace for extensions and its settings.json validation is
+// undocumented — so we never touch the user's `.pi/settings.json`). The file uses
+// the SAME `daidentity` shape as the Claude Code adapter, so a persona is one shape
+// across hosts:
+//   { "daidentity": { "name": "Echo",
+//                     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
+//                     "startupCatchphrases": ["Echo online."] } }
+// The block may also be written unwrapped (fields at the top level). Missing or
+// malformed → null (no override; the env-based global config stands).
+
+export interface EchoPersonaOverride {
+  personaName?: string;
+  voiceId?: string;
+  startupCatchphrases?: string[];
+}
+
+function defaultReadFile(path: string): string | null {
+  try {
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+
+export function loadProjectPersona(
+  cwd: string | undefined,
+  readFile: (path: string) => string | null = defaultReadFile,
+): EchoPersonaOverride | null {
+  if (!cwd) return null;
+  const raw = readFile(join(cwd, ".pi", "echo-voice.json"));
+  if (!raw) return null;
+
+  try {
+    const json = JSON.parse(raw) as Record<string, any>;
+    const d = (json?.daidentity ?? json ?? {}) as Record<string, any>;
+    const voiceId = d?.voices?.main?.voiceId ?? d?.voiceId;
+    const phrases = Array.isArray(d?.startupCatchphrases)
+      ? (d.startupCatchphrases as unknown[]).filter(
+          (c): c is string => typeof c === "string" && c.trim().length > 0,
+        )
+      : undefined;
+
+    const override: EchoPersonaOverride = {};
+    if (typeof d?.name === "string" && d.name.trim()) override.personaName = d.name.trim();
+    if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
+    if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
+
+    return Object.keys(override).length > 0 ? override : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Apply a project persona override onto a base config, per key (override wins when set). */
+export function applyPersonaOverride(
+  base: PiVoiceConfig,
+  override: EchoPersonaOverride | null,
+): PiVoiceConfig {
+  if (!override) return base;
+  return {
+    ...base,
+    personaName: override.personaName ?? base.personaName,
+    voiceId: override.voiceId ?? base.voiceId,
+    startupCatchphrases: override.startupCatchphrases ?? base.startupCatchphrases,
   };
 }
 

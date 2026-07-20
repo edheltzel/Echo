@@ -60,6 +60,34 @@ ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 | `ECHO_VOICE_SUPPRESS` | `false` | Global emergency suppression |
 | `ECHO_VOICE_PERSONA_NAME` | `Pi` | Spoken persona name in `🗣️` completions |
 
+## Per-project persona & voice
+
+A repo can override the persona **name + voice** (and greeting) for that project
+only, via an Echo-owned file in Pi's native config dir: **`<project>/.pi/echo-voice.json`**.
+Pi extensions read their own `.pi/` config through `ctx.cwd`; Echo never touches
+the user's `.pi/settings.json`. The file uses the same `daidentity` shape as the
+Claude Code adapter, so a persona is one shape across hosts:
+
+```json
+{
+  "daidentity": {
+    "name": "Echo",
+    "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
+    "startupCatchphrases": ["Echo online."]
+  }
+}
+```
+
+Resolved at `session_start` from `ctx.cwd`, layered over the env-based config above
+(override wins per key; unset keys fall through to the global config). `voiceId` is
+a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the daemon
+speaks it literally, no `core/voices.json` edit needed. Takes effect on the next Pi
+session started in that repo; every other repo keeps the global persona.
+
+> omp shares this adapter today but reads `.omp/`, not `.pi/`, so an omp session sees
+> no override yet — omp's native-config reader lands with the dedicated `adapters/omp`
+> split ([#109](https://github.com/edheltzel/Echo/issues/109)).
+
 ## Status command
 
 Inside Pi:

@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
+  applyPersonaOverride,
   loadPiVoiceConfig,
+  loadProjectPersona,
   pickStartupCatchphrase,
   shouldSuppressVoice,
   type PiVoiceConfig,
@@ -17,6 +19,13 @@ function resolveSessionId(ctx: ExtensionContext): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// Pi exposes the project root as ctx.cwd (documented ExtensionContext field). Read
+// defensively — the installed SDK types may predate it — and treat empty as absent.
+function resolveCwd(ctx: ExtensionContext): string | undefined {
+  const cwd = (ctx as { cwd?: unknown }).cwd;
+  return typeof cwd === "string" && cwd.length > 0 ? cwd : undefined;
 }
 
 function sessionStartIsUserVisible(event: unknown): boolean {
@@ -66,6 +75,21 @@ export default function atlasVoicePiAdapter(
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
 
+  // Per-project config: layer a project persona override (<cwd>/.pi/echo-voice.json)
+  // over the env-based global `config`, resolved from ctx.cwd and memoized per cwd
+  // (read once per project). A repo with no override — and every omp session, since
+  // .pi/ isn't omp's dir — resolves to the base config unchanged. omp's own .omp
+  // reader lands with the #109 adapter split.
+  const configByCwd = new Map<string, PiVoiceConfig>();
+  function resolveConfig(cwd: string | undefined): PiVoiceConfig {
+    const key = cwd ?? "";
+    const cached = configByCwd.get(key);
+    if (cached) return cached;
+    const resolved = applyPersonaOverride(config, loadProjectPersona(key));
+    configByCwd.set(key, resolved);
+    return resolved;
+  }
+
   function pruneSpoken(now = Date.now()): void {
     for (const [key, spokenAt] of spoken) {
       if (now - spokenAt > DEDUPE_WINDOW_MS) spoken.delete(key);
@@ -73,9 +97,10 @@ export default function atlasVoicePiAdapter(
   }
 
   async function speak(message: string, ctx: ExtensionContext): Promise<boolean> {
-    if (config.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
+    const cfg = resolveConfig(resolveCwd(ctx));
+    if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
     try {
-      const result = await sendPiNotification(config, message, resolveSessionId(ctx), ctx.signal);
+      const result = await sendPiNotification(cfg, message, resolveSessionId(ctx), ctx.signal);
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
         return false;
@@ -88,7 +113,7 @@ export default function atlasVoicePiAdapter(
   }
 
   async function speakAssistantCompletion(event: unknown, ctx: ExtensionContext): Promise<void> {
-    if (!config.speakCompletions) return;
+    if (!resolveConfig(resolveCwd(ctx)).speakCompletions) return;
     const message = eventMessage(event);
     const line = extractVoiceLineFromMessage(message);
     if (!line) return;
@@ -114,15 +139,16 @@ export default function atlasVoicePiAdapter(
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
   pi.on("before_agent_start", (event, ctx) => {
-    if (!config.speakCompletions) return undefined;
-    if (config.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
+    const cfg = resolveConfig(resolveCwd(ctx));
+    if (!cfg.speakCompletions) return undefined;
+    if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
       return undefined;
     }
 
     const base = readSystemPrompt(event);
     if (base === undefined) return undefined; // feature-detect: unknown shape → safe no-op
 
-    const instruction = buildVoiceLineInstruction(config.personaName);
+    const instruction = buildVoiceLineInstruction(cfg.personaName);
     // Always APPEND to the chained prompt (never clobber other extensions),
     // returning the same shape the host passed in.
     if (Array.isArray(base)) {
@@ -138,9 +164,10 @@ export default function atlasVoicePiAdapter(
   });
 
   pi.on("session_start", async (event, ctx) => {
-    if (!config.greetOnSessionStart) return;
+    const cfg = resolveConfig(resolveCwd(ctx));
+    if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
-    await speak(pickStartupCatchphrase(config.startupCatchphrases), ctx);
+    await speak(pickStartupCatchphrase(cfg.startupCatchphrases), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {
@@ -159,12 +186,15 @@ export default function atlasVoicePiAdapter(
   pi.registerCommand("voice-status", {
     description: "Show echo Pi adapter status",
     handler: async (_args, ctx) => {
+      const cfg = resolveConfig(resolveCwd(ctx));
       const state = [
-        `endpoint: ${config.endpoint}`,
-        `voice: ${config.voiceEnabled ? "enabled" : "silent"}`,
-        `greeting: ${config.greetOnSessionStart ? "enabled" : "disabled"}`,
-        `completions: ${config.speakCompletions ? "enabled" : "disabled"}`,
-        `subagent suppression: ${config.suppressInSubagents ? "enabled" : "disabled"}`,
+        `persona: ${cfg.personaName}`,
+        `voice_id: ${cfg.voiceId ?? "(default)"}`,
+        `endpoint: ${cfg.endpoint}`,
+        `voice: ${cfg.voiceEnabled ? "enabled" : "silent"}`,
+        `greeting: ${cfg.greetOnSessionStart ? "enabled" : "disabled"}`,
+        `completions: ${cfg.speakCompletions ? "enabled" : "disabled"}`,
+        `subagent suppression: ${cfg.suppressInSubagents ? "enabled" : "disabled"}`,
       ].join("\n");
       ctx.ui.notify(state, "info");
     },
