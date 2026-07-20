@@ -1,0 +1,13 @@
+{
+  "name": "@echo/omp-adapter",
+  "version": "0.1.0",
+  "description": "oh-my-pi (omp) host adapter for echo",
+  "type": "module",
+  "keywords": ["pi-package", "omp", "oh-my-pi", "voice", "tts", "adapter"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@oh-my-pi/pi-coding-agent": ">=0.78.0"
+  }
+}
