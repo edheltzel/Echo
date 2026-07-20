@@ -21,7 +21,7 @@ For oh-my-pi, the installer reconciles a symlink registration instead (omp has n
 `pi install`):
 
 ```bash
-bash scripts/install.sh --adapter omp   # runs adapters/pi/reconcile-omp.ts
+bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedicated omp adapter)
 ```
 
 ## Behavior
