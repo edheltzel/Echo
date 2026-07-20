@@ -28,10 +28,10 @@ describe("install script adapter support", () => {
     expect(script).toContain("--adapter none|claudecode|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("pi install");
-    expect(script).toContain("adapters/pi/reconcile-omp.ts");
+    expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
     // registration state aborts before any host state is mutated.
-    expect(script).toContain('reconcile-omp.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
@@ -109,7 +109,7 @@ describe("install script adapter support", () => {
       mkdirSync(join(extensions, "echo-voice"), { recursive: true });
       const launchctlLog = join(root, "launchctl.log");
 
-      // Real bun (the preflight actually runs reconcile-omp.ts); stub the rest.
+      // Real bun (the preflight actually runs adapters/omp/reconcile.ts); stub the rest.
       writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
       writeExecutable(join(bin, "omp"), "#!/bin/bash\nexit 0\n");
       writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
@@ -265,7 +265,8 @@ exit 0
       const first = await runInstall(["--adapter", "none"], env);
       expect(first.exitCode).toBe(0);
       expect(first.stdout).toContain("Refreshing oh-my-pi adapter registration");
-      expect(readlinkSync(join(extensions, "echo-voice"))).toBe(realpathSync(resolve("adapters/pi")));
+      // #109: the dedicated omp adapter — a dead */adapters/pi link heals onto adapters/omp.
+      expect(readlinkSync(join(extensions, "echo-voice"))).toBe(realpathSync(resolve("adapters/omp")));
 
       // After healing, --check reports clean with exit 0.
       const check = await runInstall(["--check"], env);

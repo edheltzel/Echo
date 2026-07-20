@@ -1,4 +1,4 @@
-![Echo — a voice for any agent](assets/banner.png)
+![Echo — a voice for any agent](assets/echo-banner-riso.jpg)
 
 # Echo
 
@@ -60,7 +60,7 @@ curl -X POST http://localhost:8888/notify \
 You should hear "Hello from Echo" spoken aloud and see:
 
 ```json
-{"status":"success","message":"Notification sent","request_id":"..."}
+{ "status": "success", "message": "Notification sent", "request_id": "..." }
 ```
 
 Hear nothing, or an unexpected voice? See [If you hear nothing — or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
@@ -151,7 +151,7 @@ circuit breaker is open. Details: [docs/http-api.md](docs/http-api.md),
 
 ### Voice-resolution drop-off log
 
-To make it observable *why* a `/notify` used the voice it did, the daemon appends one
+To make it observable _why_ a `/notify` used the voice it did, the daemon appends one
 structured JSONL event per voice-enabled `/notify` to
 `~/Library/Logs/echo/voice-resolution.jsonl` — separate from the human-readable daemon log
 (`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
@@ -202,19 +202,19 @@ on upgrade. The full old→new mapping table and migration steps live in
 
 ## Documentation
 
-| I want to… | Read |
-|---|---|
-| Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
-| Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
-| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
-| Look up env files, `PORT`, and `voices.json` schema | [docs/configuration.md](docs/configuration.md) |
-| Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
-| Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
-| Change or add voices; per-turn persona voice | [docs/voices.md](docs/voices.md) |
-| Understand provider egress + the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
-| Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
-| See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
-| Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
+| I want to…                                               | Read                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| Hear my first notification (guided tutorial)             | [docs/getting-started.md](docs/getting-started.md)                 |
+| Install adapters, move the repo, uninstall               | [docs/install-human.md](docs/install-human.md)                     |
+| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md)                           |
+| Look up env files, `PORT`, and `voices.json` schema      | [docs/configuration.md](docs/configuration.md)                     |
+| Install via an agent-runnable checklist                  | [docs/install-agent.md](docs/install-agent.md)                     |
+| Look up the HTTP API                                     | [docs/http-api.md](docs/http-api.md)                               |
+| Change or add voices; per-turn persona voice             | [docs/voices.md](docs/voices.md)                                   |
+| Understand provider egress + the resolution log          | [docs/providers-observability.md](docs/providers-observability.md) |
+| Tune reliability / the circuit breaker                   | [docs/reliability.md](docs/reliability.md)                         |
+| See required and optional dependencies                   | [docs/dependencies.md](docs/dependencies.md)                       |
+| Write or wire a host adapter                             | [docs/adapters.md](docs/adapters.md)                               |
 
 ## Development
 

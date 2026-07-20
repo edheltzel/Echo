@@ -86,7 +86,8 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
 | Adapter rules + registration contract (#77) + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
-| DOX procedure (read before editing docs) | [docs/dox.md](docs/dox.md) |
+| Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
+| Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
 | Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
 | Configuration (env files, `PORT`, config paths, provider toggles, deprecated env names) | [docs/configuration.md](docs/configuration.md) |
@@ -144,4 +145,8 @@ lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
 
 ### Child DOX Index
 
-This repository is single-context: the root `AGENTS.md` is the sole DOX contract — there are no child `AGENTS.md` files yet. Add one when a folder becomes a durable boundary that needs its own contract (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).
+- [`docs/AGENTS.md`](docs/AGENTS.md) owns durable documentation, including canonical plans and
+  handoffs under `docs/plans/` and `docs/handoffs/`.
+
+Add another child contract when a folder becomes a durable boundary that needs local rules
+(likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).

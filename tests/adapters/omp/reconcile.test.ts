@@ -3,10 +3,10 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const SCRIPT = resolve("adapters/pi/reconcile-omp.ts");
+const SCRIPT = resolve("adapters/omp/reconcile.ts");
 // The script canonicalizes via realpathSync; match it so the suite passes on
 // checkouts reached through a symlinked path component.
-const ADAPTER_DIR = realpathSync(resolve("adapters/pi"));
+const ADAPTER_DIR = realpathSync(resolve("adapters/omp"));
 const LINK_NAME = "echo-voice";
 
 async function runReconcile(extensionsDir: string, args: string[] = []) {
@@ -36,8 +36,8 @@ async function withExtensionsDir(fn: (dir: string) => Promise<void>) {
   }
 }
 
-describe("omp extension registration reconcile", () => {
-  test("creates the canonical symlink when absent", async () => {
+describe("omp extension registration reconcile (adapters/omp)", () => {
+  test("creates the canonical symlink → adapters/omp when absent", async () => {
     await withExtensionsDir(async (dir) => {
       const result = await runReconcile(dir);
       expect(result.exitCode).toBe(0);
@@ -58,10 +58,25 @@ describe("omp extension registration reconcile", () => {
     });
   });
 
-  test("heals a dead echo-voice link from a renamed clone", async () => {
+  // #109 migration: an existing Echo echo-voice link pointing at the pre-split
+  // shared adapters/pi (live @echo/pi-adapter) is migrated onto adapters/omp.
+  test("MIGRATES a live echo-voice link from adapters/pi (@echo/pi-adapter) to adapters/omp", async () => {
     await withExtensionsDir(async (dir) => {
       mkdirSync(dir, { recursive: true });
-      // This clone's own link from before a directory rename — target is dead.
+      const sharedPi = join(dir, "..", "echo-clone", "adapters", "pi");
+      mkdirSync(sharedPi, { recursive: true });
+      writeFileSync(join(sharedPi, "package.json"), JSON.stringify({ name: "@echo/pi-adapter" }));
+      symlinkSync(sharedPi, join(dir, LINK_NAME));
+      const result = await runReconcile(dir);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("migrating from adapters/pi");
+      expect(readlinkSync(join(dir, LINK_NAME))).toBe(ADAPTER_DIR);
+    });
+  });
+
+  test("heals a dead echo-voice link from a renamed clone (pi or omp spelling)", async () => {
+    await withExtensionsDir(async (dir) => {
+      mkdirSync(dir, { recursive: true });
       symlinkSync("/nonexistent/oldclone/adapters/pi", join(dir, LINK_NAME));
       const result = await runReconcile(dir);
       expect(result.exitCode).toBe(0);
@@ -69,13 +84,12 @@ describe("omp extension registration reconcile", () => {
     });
   });
 
-  test("re-points a live echo-voice link into another Echo clone (ownership marker)", async () => {
+  test("re-points a live echo-voice link into another omp clone (@echo/omp-adapter)", async () => {
     await withExtensionsDir(async (dir) => {
       mkdirSync(dir, { recursive: true });
-      // A second Echo checkout: adapters/pi with the @echo/pi-adapter package.json.
-      const otherClone = join(dir, "..", "otherclone", "adapters", "pi");
+      const otherClone = join(dir, "..", "otherclone", "adapters", "omp");
       mkdirSync(otherClone, { recursive: true });
-      writeFileSync(join(otherClone, "package.json"), JSON.stringify({ name: "@echo/pi-adapter" }));
+      writeFileSync(join(otherClone, "package.json"), JSON.stringify({ name: "@echo/omp-adapter" }));
       symlinkSync(otherClone, join(dir, LINK_NAME));
       const result = await runReconcile(dir);
       expect(result.exitCode).toBe(0);
@@ -83,42 +97,28 @@ describe("omp extension registration reconcile", () => {
     });
   });
 
-  // Reviewer scenario (PR #80 finding 1): a LIVE user-owned symlink under a
-  // foreign name whose target ends in adapters/pi must never be pruned.
-  test("leaves a live foreign-named link with an adapters/pi target untouched", async () => {
+  // A LIVE user-owned symlink under a foreign name whose target ends in
+  // adapters/omp must never be pruned (#77 / PR #80 finding 1).
+  test("leaves a live foreign-named link with an adapters/omp target untouched", async () => {
     await withExtensionsDir(async (dir) => {
       mkdirSync(dir, { recursive: true });
-      const otherProject = join(dir, "..", "otherproject", "adapters", "pi");
+      const otherProject = join(dir, "..", "otherproject", "adapters", "omp");
       mkdirSync(otherProject, { recursive: true });
       symlinkSync(otherProject, join(dir, "my-other-echo"));
       const result = await runReconcile(dir);
       expect(result.exitCode).toBe(0);
-      // The foreign link survives untouched; our canonical link is created beside it.
       expect(readlinkSync(join(dir, "my-other-echo"))).toBe(otherProject);
       expect(readlinkSync(join(dir, LINK_NAME))).toBe(ADAPTER_DIR);
     });
   });
 
-  test("leaves a user-created duplicate link to this clone under another name alone", async () => {
+  // A live-foreign link OCCUPYING echo-voice — adapters/omp spelling but not an
+  // Echo checkout — is FATAL, never silently replaced.
+  test("refuses a live non-Echo adapters/omp target occupying the canonical name", async () => {
     await withExtensionsDir(async (dir) => {
       mkdirSync(dir, { recursive: true });
-      symlinkSync(ADAPTER_DIR, join(dir, "echo-duplicate"));
-      symlinkSync(ADAPTER_DIR, join(dir, LINK_NAME));
-      const result = await runReconcile(dir);
-      expect(result.exitCode).toBe(0);
-      // Echo only owns the echo-voice name; the extra link is the user's business.
-      expect(readlinkSync(join(dir, "echo-duplicate"))).toBe(ADAPTER_DIR);
-    });
-  });
-
-  // Reviewer scenario (PR #80 finding 1): a live-foreign link OCCUPYING
-  // echo-voice — adapters/pi spelling but not an Echo checkout — is FATAL,
-  // never silently replaced.
-  test("refuses a live non-Echo adapters/pi target occupying the canonical name", async () => {
-    await withExtensionsDir(async (dir) => {
-      mkdirSync(dir, { recursive: true });
-      const otherProject = join(dir, "..", "otherproject", "adapters", "pi");
-      mkdirSync(otherProject, { recursive: true }); // no @echo/pi-adapter package.json
+      const otherProject = join(dir, "..", "otherproject", "adapters", "omp");
+      mkdirSync(otherProject, { recursive: true }); // no @echo/*-adapter package.json
       symlinkSync(otherProject, join(dir, LINK_NAME));
       const result = await runReconcile(dir);
       expect(result.exitCode).toBe(2);

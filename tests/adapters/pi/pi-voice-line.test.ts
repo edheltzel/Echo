@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractVoiceLineFromMessage, extractVoiceLineFromText, isValidVoiceLine, stableMessageKey } from "../../../adapters/pi/voice-line";
+import { extractVoiceLineFromMessage, extractVoiceLineFromText, isValidVoiceLine, stableMessageKey } from "../../../shared/voice-line";
 
 describe("Pi voice line extraction", () => {
   test("extracts the final voice line from assistant text", () => {

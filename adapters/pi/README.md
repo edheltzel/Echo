@@ -21,7 +21,7 @@ For oh-my-pi, the installer reconciles a symlink registration instead (omp has n
 `pi install`):
 
 ```bash
-bash scripts/install.sh --adapter omp   # runs adapters/pi/reconcile-omp.ts
+bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedicated omp adapter)
 ```
 
 ## Behavior
@@ -59,6 +59,36 @@ ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | `true` | Suppress Pi subagent voices |
 | `ECHO_VOICE_SUPPRESS` | `false` | Global emergency suppression |
 | `ECHO_VOICE_PERSONA_NAME` | `Pi` | Spoken persona name in `🗣️` completions |
+
+## Per-project persona & voice
+
+A repo can override the persona **name + voice** (and greeting) for that project
+only, using the **same convention as the Claude Code adapter**: a `daidentity` block
+in the host's native `settings.json`. Pi layers config exactly like Claude Code —
+`<project>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
+project wins per key — so Echo reads the `daidentity` block from both and merges
+project-over-global:
+
+```json
+// <project>/.pi/settings.json
+{
+  "daidentity": {
+    "name": "Echo",
+    "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
+    "startupCatchphrases": ["Echo online."]
+  }
+}
+```
+
+Resolved at `session_start` from `ctx.cwd`, per key: project `.pi/settings.json` →
+global `~/.pi/agent/settings.json` → the env-based config above. `voiceId` is a real
+edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the daemon speaks it
+literally, no `core/voices.json` edit needed. Takes effect on the next Pi session
+started in that repo; every other repo keeps the global persona.
+
+> omp shares this adapter today but reads `.omp/`, not `.pi/`, so an omp session sees
+> no override yet — omp's native-config reader lands with the dedicated `adapters/omp`
+> split ([#109](https://github.com/edheltzel/Echo/issues/109)).
 
 ## Status command
 
