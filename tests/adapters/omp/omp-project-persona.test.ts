@@ -26,6 +26,15 @@ describe("loadProjectPersona — daidentity from omp YAML config layering", () =
   const CWD = "/proj";
   const reader = (files: Record<string, string>) => (path: string) => files[path] ?? null;
 
+  // Clear any ambient PI_CODING_AGENT_DIR so ompAgentDir() falls back to the
+  // injected `home` and the global path is deterministic.
+  const savedAgentDir = process.env.PI_CODING_AGENT_DIR;
+  beforeEach(() => { delete process.env.PI_CODING_AGENT_DIR; });
+  afterEach(() => {
+    if (savedAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = savedAgentDir;
+  });
+
   test("no files → null", () => {
     expect(loadProjectPersona(CWD, () => null, HOME)).toBeNull();
   });
@@ -146,8 +155,12 @@ beforeEach(() => {
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_PERSONA_NAME = "omp";
   process.env.ECHO_VOICE_ID = "pi";
+  // Isolate the GLOBAL config read: point omp's own PI_CODING_AGENT_DIR override at
+  // an empty scratch dir so the resolver never reads Ed's real ~/.omp/agent/config.yml.
+  // (homedir() ignores $HOME on macOS, so HOME redirection would NOT isolate it.)
   fakeHome = mkdtempSync(join(tmpdir(), "echo-omp-home-"));
-  process.env.HOME = fakeHome; // homedir() → fakeHome (no global daidentity there)
+  mkdirSync(join(fakeHome, ".omp", "agent"), { recursive: true });
+  process.env.PI_CODING_AGENT_DIR = join(fakeHome, ".omp", "agent");
   projectDir = mkdtempSync(join(tmpdir(), "echo-omp-int-"));
   mkdirSync(join(projectDir, ".omp"), { recursive: true });
   writeFileSync(
@@ -172,6 +185,14 @@ afterEach(() => {
 });
 
 describe("integration — omp project override flows through greeting + completion", () => {
+  // Hermeticity guard: prove the global read is isolated to the scratch dir. With
+  // PI_CODING_AGENT_DIR pointing at an empty agent dir, loadProjectPersona with no
+  // project must resolve to null — so a green bar below reflects the project override,
+  // not Ed's real ~/.omp/agent/config.yml.
+  test("global config read is isolated (empty scratch agent dir → no override)", () => {
+    expect(loadProjectPersona(undefined)).toBeNull();
+  });
+
   test("session_start greeting uses the project catchphrase AND voice; source=omp", async () => {
     const payloads: any[] = [];
     globalThis.fetch = async (_i, init) => {

@@ -113,12 +113,21 @@ function readDaidentity(
  * project wins per key (same daidentity shape the Claude Code and Pi adapters read).
  * Returns null when neither file contributes a persona field.
  */
+/**
+ * omp's global agent dir. Honors omp's own `PI_CODING_AGENT_DIR` override (it
+ * relocates `~/.omp/agent`), so Echo reads the same global config omp does — and
+ * so tests can point it at a scratch dir for hermetic isolation.
+ */
+function ompAgentDir(home: string): string {
+  return process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent");
+}
+
 export function loadProjectPersona(
   cwd: string | undefined,
   readFile: (path: string) => string | null = defaultReadFile,
   home: string = homedir(),
 ): EchoPersonaOverride | null {
-  const global = readDaidentity(join(home, ".omp", "agent", "config.yml"), readFile);
+  const global = readDaidentity(join(ompAgentDir(home), "config.yml"), readFile);
   const project = cwd ? readDaidentity(join(cwd, ".omp", "config.yml"), readFile) : null;
   if (!global && !project) return null;
 
