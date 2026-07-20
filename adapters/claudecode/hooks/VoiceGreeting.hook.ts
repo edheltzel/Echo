@@ -192,12 +192,8 @@ function parseAgentFrontmatter(content: string): AgentFrontmatter {
 // ── Agent voice announcement ───────────────────────────────────────────────────
 if (isNamedAgent && agentType) {
   try {
-    // Read Atlas voice ID as fallback (from settings.json)
-    const settings = await Bun.file(join(CLAUDE_DIR, 'settings.json')).json();
-    const atlasVoiceId: string =
-      settings.daidentity?.voices?.main?.voiceId ||
-      settings.daidentity?.voiceId ||
-      '';
+    // Resolve the DA voice ID as fallback (layered: project → global → default).
+    const atlasVoiceId: string = getIdentity().mainDAVoiceID;
 
     // Read agent .md frontmatter
     const agentFile = join(CLAUDE_DIR, 'agents', `${agentType}.md`);
@@ -254,23 +250,21 @@ if (isNamedAgent && agentType) {
   process.exit(0);
 }
 
-// ── Atlas greeting (main session) ─────────────────────────────────────────────
+// ── DA greeting (main session) ────────────────────────────────────────────────
 try {
-  // Bun.file().json() is faster than readFileSync + JSON.parse:
-  // uses Bun's native C++ file I/O and SIMD JSON parser
-  const settings = await Bun.file(join(CLAUDE_DIR, 'settings.json')).json();
+  // Resolve identity through identity.ts (the single source of truth), layered
+  // project → global → default. Inside a repo with a project persona, name +
+  // voice + catchphrases come from the project; everywhere else, global stands.
+  const identity = getIdentity();
+  const daName = identity.displayName;
 
-  // Resolve the DA name through identity.ts (the single source of truth); it falls back to
-  // the neutral DEFAULT_IDENTITY when settings.json has no daidentity — never assuming a name.
-  const daName = getIdentity().displayName;
-
-  const catchphrases = settings.daidentity?.startupCatchphrases;
+  const catchphrases = identity.startupCatchphrases;
   const catchphrase = (
     catchphrases?.length
       ? catchphrases[Math.floor(Math.random() * catchphrases.length)]
-      : settings.daidentity?.startupCatchphrase || `${daName} standing by`
+      : identity.startupCatchphrase || `${daName} standing by`
   ).replace(/\{name\}/gi, daName);
-  const personality = settings.daidentity?.personality;
+  const personality = identity.personality;
 
   const url = personality?.baseVoice
     ? 'http://localhost:8888/notify/personality'
@@ -298,7 +292,16 @@ try {
           playfulness: personality.playfulness,
         },
       }
-    : { message: catchphrase, title: `${daName} says`, source: 'claudecode', play: true };
+    : {
+        message: catchphrase,
+        title: `${daName} says`,
+        source: 'claudecode',
+        play: true,
+        // Speak in the resolved DA voice when one is configured (e.g. a project
+        // persona's custom voice). Empty (global default) → omit so the daemon
+        // picks its default voice, byte-for-byte the previous behavior.
+        ...(identity.mainDAVoiceID ? { voice_id: identity.mainDAVoiceID } : {}),
+      };
 
   if (hookSessionId) body.session_id = hookSessionId;
 

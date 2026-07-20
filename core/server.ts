@@ -402,7 +402,7 @@ setCircuitBreakerLogger((level, message) => log(level, message));
 // Voice Configuration Lookup
 // =============================================================================
 
-function getVoiceMapping(identifier: string | null): VoiceMapping | null {
+export function getVoiceMapping(identifier: string | null): VoiceMapping | null {
   if (!identifier) {
     return voicesConfig.identity;
   }
@@ -425,6 +425,16 @@ function getVoiceMapping(identifier: string | null): VoiceMapping | null {
   }
 
   return null;
+}
+
+// An edge-tts voice name (e.g. "en-US-AndrewNeural", "en-GB-RyanNeural",
+// "zh-CN-liaoning-XiaobeiNeural"). A caller may pass one directly as voice_id
+// (e.g. a project persona's configured voice) without a voices.json agent entry;
+// the edgetts provider then speaks in it literally. Anchored on the locale prefix
+// + `Neural` suffix so a stray ElevenLabs id or agent key never matches.
+const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z-]+Neural$/;
+export function looksLikeEdgeVoice(identifier: string | null | undefined): boolean {
+  return !!identifier && EDGE_VOICE_RE.test(identifier);
 }
 
 // =============================================================================
@@ -1195,11 +1205,12 @@ interface SpeakAttempt extends ProviderDiagnostic {
 }
 
 type ResolutionResult =
-  | 'identity-default' // no voice_id requested → identity voice
-  | 'identity'         // voice_id matched the identity mapping
-  | 'agent-key'        // voice_id matched an agents[<key>] entry
-  | 'elevenlabs-id'    // voice_id matched an agent/identity by ElevenLabs voice id
-  | 'fallback';        // voice_id did not resolve → provider default voice
+  | 'identity-default'  // no voice_id requested → identity voice
+  | 'identity'          // voice_id matched the identity mapping
+  | 'agent-key'         // voice_id matched an agents[<key>] entry
+  | 'elevenlabs-id'     // voice_id matched an agent/identity by ElevenLabs voice id
+  | 'edgetts-explicit'  // voice_id is a literal edge-tts voice name → spoken as-is by edgetts
+  | 'fallback';         // voice_id did not resolve → provider default voice
 
 interface ResolutionEvent {
   ts: string;
@@ -1216,12 +1227,15 @@ interface ResolutionEvent {
 // Classify how a requested voice_id resolved. Derived from the VoiceMapping that
 // getVoiceMapping already returned (not a re-query), mirroring its branch order
 // so the log and the actual resolution can never disagree.
-function classifyResolution(
+export function classifyResolution(
   requestedVoiceId: string | null,
   mapping: VoiceMapping | null,
 ): { resolution: ResolutionResult; reason?: string } {
   if (!requestedVoiceId) return { resolution: 'identity-default' };
   if (!mapping) {
+    // A literal edge-tts voice name is honored by the edge provider (spoken
+    // as-is), so it is NOT a fallback — classify it honestly.
+    if (looksLikeEdgeVoice(requestedVoiceId)) return { resolution: 'edgetts-explicit' };
     return { resolution: 'fallback', reason: `voice_id "${requestedVoiceId}" did not match any agent or identity` };
   }
   if (mapping === voicesConfig.identity) return { resolution: 'identity' };
@@ -1410,6 +1424,14 @@ export async function speakWithFallback(
     }
 
     if (!providerVoice && providerName === 'elevenlabs' && voiceId && !voiceMapping) {
+      providerVoice = voiceId;
+    }
+
+    // An explicit edge-tts voice name passed as voice_id (no voices.json agent
+    // entry) is spoken literally by the edge provider — otherwise it would fall
+    // to the default voice. This is how a project persona's configured voice
+    // (e.g. "en-US-AndrewNeural") reaches the wire without a core/voices.json edit.
+    if (!providerVoice && providerName === 'edgetts' && !voiceMapping && looksLikeEdgeVoice(voiceId)) {
       providerVoice = voiceId;
     }
 
