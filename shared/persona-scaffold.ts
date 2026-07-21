@@ -83,18 +83,25 @@ function parseJsonConfig(raw: string | null): Record<string, any> {
   return parsed as Record<string, any>;
 }
 
-// Bun's native YAML parser/serializer (Bun >= 1.2). Cast because the installed
-// @types/bun may predate the typing. `stringify(obj, null, 2)` emits block style.
-const bunYaml = (Bun as unknown as {
-  YAML: { parse: (s: string) => unknown; stringify: (v: unknown, replacer: null, indent: number) => string };
-}).YAML;
+// Bun's native YAML parser/serializer (Bun >= 1.2). Accessed LAZILY inside functions —
+// never at module scope — because a host's extension loader may evaluate this module in
+// a context where the `Bun` global is not yet defined (a top-level reference throws
+// "Bun is not defined" at import and fails the whole extension). Mirrors omp/config.ts.
+// Cast because the installed @types/bun may predate the typing; `stringify(obj, null, 2)`
+// emits block style.
+function bunYaml(): {
+  parse: (s: string) => unknown;
+  stringify: (v: unknown, replacer: null, indent: number) => string;
+} {
+  return (Bun as unknown as { YAML: ReturnType<typeof bunYaml> }).YAML;
+}
 
 /** Parse existing YAML config text: absent/empty → `{}`; malformed → throw. */
 function parseYamlConfig(raw: string | null): Record<string, any> {
   if (raw === null || raw.trim() === "") return {};
   let parsed: unknown;
   try {
-    parsed = bunYaml.parse(raw);
+    parsed = bunYaml().parse(raw);
   } catch {
     throw new MalformedConfigError("existing config is not valid YAML");
   }
@@ -112,7 +119,7 @@ export function mergePersonaJson(raw: string | null, name: string, voiceId: stri
 
 /** Merge the persona into YAML config text (omp). Returns block-style YAML. */
 export function mergePersonaYaml(raw: string | null, name: string, voiceId: string): string {
-  return bunYaml.stringify(applyPersona(parseYamlConfig(raw), name, voiceId), null, 2);
+  return bunYaml().stringify(applyPersona(parseYamlConfig(raw), name, voiceId), null, 2);
 }
 
 // ── `/echo-voice` command factory (shared by the pi + omp adapters) ───────────
