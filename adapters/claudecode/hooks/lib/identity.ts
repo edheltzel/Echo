@@ -75,6 +75,10 @@ export interface Identity {
   startupCatchphrases?: string[];
   /** Single startup catchphrase (legacy; used when the array is empty). */
   startupCatchphrase?: string;
+  /** True when a project-scope layer set the persona name/displayName (a repo renamed the DA). */
+  personaFromProject?: boolean;
+  /** True when a project-scope layer set its own startupCatchphrases array. */
+  catchphrasesFromProject?: boolean;
 }
 
 export interface Principal {
@@ -162,6 +166,21 @@ function loadSettings(projectDir?: string, home: string = HOME): Settings {
 }
 
 /**
+ * The daidentity block from the PROJECT-scope layers only (project → project.local),
+ * with no global layer. Used to tell what a repo set for itself, so a project persona
+ * name can override an inherited global `displayName` and drive the startup greeting.
+ */
+function loadProjectDaidentity(projectDir?: string, home: string = HOME): Record<string, any> {
+  const dir = resolveProjectDir(projectDir);
+  if (!dir) return {};
+  const merged = [
+    readSettingsFile(join(dir, '.claude', 'settings.json')),
+    readSettingsFile(join(dir, '.claude', 'settings.local.json')),
+  ].reduce<Settings>((acc, layer) => (layer ? deepMerge(acc, layer) : acc), {} as Settings);
+  return (merged.daidentity as Record<string, any>) || {};
+}
+
+/**
  * Get DA (Digital Assistant) identity, resolved with layered precedence
  * (project.local → project → global → defaults), per key.
  */
@@ -172,6 +191,11 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
   const daidentity = settings.daidentity || {};
   const envDA = settings.env?.DA;
 
+  // What THIS repo set for itself (no global) — for persona-name precedence + greeting policy.
+  const projectDai = loadProjectDaidentity(projectDir, home);
+  const personaFromProject = typeof projectDai.name === 'string' || typeof projectDai.displayName === 'string';
+  const catchphrasesFromProject = Array.isArray(projectDai.startupCatchphrases);
+
   // Support both old (daidentity.voice) and new (daidentity.voices.main) structures
   const voices = (daidentity as any).voices || {};
   const voiceConfig = voices.main || (daidentity as any).voice;
@@ -181,13 +205,18 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
   return {
     name: daidentity.name || envDA || DEFAULT_IDENTITY.name,
     fullName: daidentity.fullName || daidentity.name || envDA || DEFAULT_IDENTITY.fullName,
-    displayName: daidentity.displayName || daidentity.name || envDA || DEFAULT_IDENTITY.displayName,
+    // A repo that sets its own persona name (but not displayName) must drive the spoken
+    // name — so the project's name/displayName wins over an inherited global displayName.
+    displayName: projectDai.displayName || projectDai.name
+      || daidentity.displayName || daidentity.name || envDA || DEFAULT_IDENTITY.displayName,
     mainDAVoiceID: voiceConfig?.voiceId || (daidentity as any).voiceId || daidentity.mainDAVoiceID || DEFAULT_IDENTITY.mainDAVoiceID,
     color: daidentity.color || DEFAULT_IDENTITY.color,
     voice: voiceConfig as VoiceProsody | undefined,
     personality: (daidentity as any).personality as VoicePersonality | undefined,
     startupCatchphrases: Array.isArray(catchphrases) ? catchphrases : undefined,
     startupCatchphrase: (daidentity as any).startupCatchphrase as string | undefined,
+    personaFromProject,
+    catchphrasesFromProject,
   };
 }
 

@@ -11,6 +11,7 @@ import { loadEchoEnvironment } from "../../shared/echo-env.ts";
 import { sendNotification } from "../../shared/notify-client.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "../../shared/voice-line.ts";
 import { createEchoVoiceCommand, mergePersonaJson } from "../../shared/persona-scaffold.ts";
+import { applyNameToken } from "../../shared/greeting.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -169,7 +170,7 @@ export default function atlasVoicePiAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
-    await speak(pickStartupCatchphrase(cfg.startupCatchphrases), ctx);
+    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {

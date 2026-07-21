@@ -100,6 +100,12 @@ Every host reads a **`daidentity` block from its native config**, project layere
 global (project wins per key) — one convention, one shape to learn. Claude Code and Pi
 use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
+Setting a persona **name** also changes the **startup greeting** for that repo: the
+greeting announces the persona name (e.g. "Echo online and standing by.") in the set
+voice, instead of the global/neutral greeting that names a different persona. A repo that
+sets its own `startupCatchphrases` keeps full control; a repo with no persona is
+untouched. (`{name}` in any catchphrase is substituted with the persona name.)
+
 ### Claude Code
 
 The Claude Code adapter resolves the DA identity — **name and voice** — with layered
