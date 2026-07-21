@@ -139,6 +139,25 @@ repo. It lists/auditions edge-tts voices, deep-merges the `daidentity` block int
 `.claude/settings.local.json` for a machine-specific voice. The command is symlinked
 into `~/.claude/commands/` by the Claude Code adapter installer.
 
+### Pi & omp
+
+Both `.pi/settings.json` (JSON) and `.omp/config.yml` (YAML) take the same `daidentity`
+shape as Claude Code — drop it in by hand, or scaffold it with the **same `/echo-voice`
+command** inside a Pi/omp session:
+
+```text
+/echo-voice [name] [voice]
+```
+
+Anything omitted is prompted for. The command validates the edge-tts voice, then
+merge-writes the `daidentity` block into the host's native config (Pi: JSON;
+omp: YAML via `Bun.YAML`) **preserving every other key** — a present-but-unparseable
+config aborts rather than being clobbered. Unlike Claude Code's symlinked markdown
+command, this one ships with the adapter itself, so there is no installer step. Takes
+effect on the next session in that repo. See
+[`adapters/pi/README.md`](../adapters/pi/README.md) and
+[`adapters/omp/README.md`](../adapters/omp/README.md).
+
 ## Change a persona's voice
 
 1. Audition and confirm the target voice name exists (`--list`, as above).

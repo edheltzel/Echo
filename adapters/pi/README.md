@@ -90,6 +90,21 @@ started in that repo; every other repo keeps the global persona.
 > no override yet — omp's native-config reader lands with the dedicated `adapters/omp`
 > split ([#109](https://github.com/edheltzel/Echo/issues/109)).
 
+### Scaffold it without hand-editing JSON
+
+Inside Pi, run:
+
+```text
+/echo-voice [name] [voice]
+```
+
+The cross-host analog of the Claude Code `/echo-voice` command. Both arguments are
+optional — anything missing is prompted for. It validates that the voice is a real
+edge-tts name, then **deep-merges** the `daidentity` block into `<project>/.pi/settings.json`,
+preserving every other setting. A present-but-unparseable `settings.json` **aborts** rather
+than clobbering it. The command ships with the adapter (no installer step, unlike Claude
+Code's symlinked markdown command). Takes effect on the next Pi session in that repo.
+
 ## Status command
 
 Inside Pi:
