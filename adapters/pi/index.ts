@@ -10,6 +10,7 @@ import {
 import { loadEchoEnvironment } from "../../shared/echo-env.ts";
 import { sendNotification } from "../../shared/notify-client.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "../../shared/voice-line.ts";
+import { createEchoVoiceCommand, mergePersonaJson } from "../../shared/persona-scaffold.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -200,4 +201,12 @@ export default function atlasVoicePiAdapter(
       ctx.ui.notify(state, "info");
     },
   });
+
+  // `/echo-voice [name] [voice]` — set THIS repo's persona (name + edge-tts voice)
+  // in .pi/settings.json, merged so other settings are preserved. Cross-host analog
+  // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
+  pi.registerCommand(
+    "echo-voice",
+    createEchoVoiceCommand({ configPath: [".pi", "settings.json"], merge: mergePersonaJson }),
+  );
 }

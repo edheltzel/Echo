@@ -40,6 +40,21 @@ Resolved at `session_start` from `ctx.cwd`, per key: project → global → env 
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
 omp session started in that repo.
 
+### Scaffold it without hand-editing YAML
+
+Inside omp, run:
+
+```text
+/echo-voice [name] [voice]
+```
+
+The cross-host analog of the Claude Code `/echo-voice` command. Both arguments are
+optional — anything missing is prompted for. It validates that the voice is a real
+edge-tts name, then merges the `daidentity` block into `<project>/.omp/config.yml` via
+`Bun.YAML` (parse → set → stringify), preserving every other key. A present-but-unparseable
+`config.yml` **aborts** rather than clobbering it. The command ships with the adapter (no
+installer step). Takes effect on the next omp session in that repo.
+
 ## Status command
 
 Inside omp:
