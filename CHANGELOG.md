@@ -1,284 +1,121 @@
+<!-- markdownlint-disable MD024 -->
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
-## [Unreleased]
+## [v0.7.0](https://github.com/edheltzel/Echo/tree/v0.7.0) - 2026-07-21
 
-## [0.5.0] - 2026-07-13
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.6.0...v0.7.0)
 
-### Added
-- **Capture guard (`core/capture-guard.ts`).** While an external voice-input tool has the
-  microphone open (its published cross-process state file — default
-  `~/.local/state/voicelayer/recording-state.json`, knob `ECHO_CAPTURE_STATE_PATH`, empty
-  string disables — reports `recording`/`transcribing` from a live pid), Echo skips voice
-  lines at speak time, mute-style, so TTS never plays into the user's capture. The banner
-  is unaffected (fires at accept). Held lines get a `held-for-capture` disposition in the
-  audio-lifecycle log; `/health` gains `capture_guard: {path, state}`. Tolerant reads
-  (missing/corrupt file = idle) and a pid-liveness check keep a crashed capture session's
-  stale file from ever silencing Echo.
-- **Play-queue hardening (salvaged from #92, Phase 2 / #91).** The serial play queue is now
-  a full `PlayQueue` with: **dispositions** in the audio-lifecycle log (`played`,
-  `superseded`, `dropped-stale` + `disposition_reason`) so every 202-acked line has a
-  recorded fate; **newest-per-session coalescing** (an older queued line from the same
-  `session_id` is replaced, never played late); an **age cap** (`ECHO_PLAY_QUEUE_AGE_CAP_MS`,
-  default 300 s — better silent than stale); a **depth cap**
-  (`ECHO_PLAY_QUEUE_MAX_DEPTH`, default 20); and a **player watchdog**
-  (`ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS`, default 120 s) with live
-  `/health play_queue {depth, in_flight_ms, stalled}`. The macOS **banner now fires at
-  accept time**, decoupled from the queue — `voice_enabled:false` requests are banner-only
-  and never queued, and a superseded/dropped voice line keeps its banner.
-  `core/env.ts` gains `resolveEchoEnv` (non-mutating env-file reads, used by the queue
-  knobs and log-path resolution).
-- **CI verification gate (`.github/workflows/verify.yml`).** GitHub Actions now machine-runs
-  the canonical verification trio — `bun test`, `PORT=8889 tests/smoke-core.sh`, and the Pi
-  adapter build — on every PR into `dev`/`master` and every push to those branches
-  (`ubuntu-latest`, Bun only, no install step). The daemon smoke log is uploaded as an
-  artifact on failure.
-- **Startup-catchphrase latency fix (#202).** `/notify` and `/notify/personality` now
-  return **`202` on receipt** and run synthesis + playback asynchronously on a new serial
-  play-queue (`core/play-queue.ts`), so the greeting/Stop hooks no longer block ~7 s on
-  edge-tts synthesis, and concurrent notifications can never overlap (plan R7). Bad requests
-  still validate synchronously and return `4xx`.
-- **TTS synthesis cache (`core/tts-cache.ts`).** Short, repeated phrases (the startup
-  catchphrase, "standing by", …) are cached to disk keyed by `(voice, rate, processed text)`
-  and replayed straight from the file — turning edge-tts's cold 2–8 s network synth into a
-  ~0 ms disk read. Long/unique lines bypass the cache; it is size-capped with oldest-first
-  pruning. Path via `ECHO_TTS_CACHE_DIR` (default `~/Library/Caches/echo/tts-cache`).
-- **`scripts/precache-catchphrases.ts`** — warms the cache through the running daemon so even
-  the first session after a voice/phrase change plays instantly. Re-run after changing the
-  catchphrase pool or the identity voice/rate.
+### Other
 
-### Changed
-- Hook POST-abort guards (`VoiceGreeting.hook.ts`, `VoiceNotification.ts`) reduced 12 s → 5 s
-  now that the daemon returns `202` in ~tens of ms — retires the false `failed`/`aborted`
-  events the old synth-covering wait produced.
-- Clarified README and troubleshooting docs for Edge TTS diagnostic-only health checks,
-  resolution-log provider diagnostics, and macOS `say` fallback investigation.
-- Documented local development worktree cleanup and ignored `.worktrees/` so temporary
-  feature worktrees are not reported as untracked project files.
-- Pi/omp now load adapter identity settings from Echo's standard environment-file chain
-  (including `~/.config/echo/.env`) through the same process-first precedence used by the
-  daemon; relaunching the host applies persistent persona and startup-greeting overrides.
+- fix(shared): defer Bun.YAML access in persona-scaffold (pi/omp load crash) [#119](https://github.com/edheltzel/Echo/pull/119) ([edheltzel](https://github.com/edheltzel))
+- feat(pi,omp): /echo-voice persona scaffold command [#118](https://github.com/edheltzel/Echo/pull/118) ([edheltzel](https://github.com/edheltzel))
+- chore(release): v0.6.0 — per-project persona & voice [#117](https://github.com/edheltzel/Echo/pull/117) ([edheltzel](https://github.com/edheltzel))
 
-## [0.4.0] - 2026-07-06
+## [v0.6.0](https://github.com/edheltzel/Echo/tree/v0.6.0) - 2026-07-20
 
-### Fixed
-- **Edge TTS fallback regression hardening**: `/notify` no longer lets the diagnostic
-  `python -c "import edge_tts"` health probe veto Edge TTS and fall through to macOS `say`.
-  Edge is skipped only when disabled or when its circuit breaker is open from real synthesis
-  failures. Edge synthesis now logs structured phase/reason/elapsed/timeout/exit/stderr
-  diagnostics, serializes synthesis attempts to reduce concurrent-process flakiness, and uses
-  an adaptive timeout (`base + per-character`, capped) so longer messages do not hit the same
-  fixed budget as short probes.
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.5.0...v0.6.0)
 
-### Changed
-- **Human-friendly documentation overhaul**: `README.md` slimmed to landing + quickstart +
-  routing (accurate `/notify` defaults, no more `"voice_id":"atlas"` example);
-  `docs/voices.md` is now the single voice home (resolution order, audition commands + flag
-  table, self-service how-tos incl. ElevenLabs setup); `docs/http-api.md` documents the full
-  `/notify` contract (all fields optional); install docs cover `--adapter omp`, exact
-  expected outputs, and the uninstall/deregistration caveat; `CONTRIBUTING.md` gains
-  branching/release rules and the #77 adapter-registration pointer; duplicated voice
-  audition copies in README/`docs/install-human.md`/`docs/development.md` reduced to
-  pointers. Follow-up pass: day-to-day mute usage (`scripts/mute.sh`) moved from
-  `docs/http-api.md` to `docs/operations.md` and `ECHO_MUTE_STATE_PATH` documented in
-  `docs/configuration.md` (#84 follow-up; the `/mute` endpoint contract + hotkey bindings
-  stay in `docs/http-api.md`); the deprecated env-name mapping/migration moved from
-  `README.md` to `docs/configuration.md` (README keeps a pointer); README gains the
-  `/mute` endpoint and the mute lifecycle command; oh-my-pi (omp) is now named alongside
-  Pi in README/`ARCHITECTURE.md`/getting-started prose.
-- **Pi/omp startup greeting pool + voice retune** (#81): the shared Pi adapter now greets
-  each user-visible `session_start` with a random pick from a pool of neutral catchphrases
-  (mirroring the Claude Code adapter's `startupCatchphrases` mechanism) instead of the single
-  static "Pi session ready."; setting `ECHO_VOICE_CATCHPHRASE` (or the legacy
-  `ATLAS_VOICE_CATCHPHRASE`) pins the greeting to that one line. The shared `pi` voice entry
-  in `core/voices.json` changes to `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%`);
-  the never-read `agents.pi.catchphrase` field is removed (dead data — core never reads
-  `catchphrase`, and the greeting now lives in the adapter pool). Data-only `core/` change;
-  a running daemon loads `voices.json` once at startup, so restart it
-  (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the new voice.
-- The installer now re-reconciles **every installed adapter registration on every run**,
-  regardless of `--adapter`, so a repo directory rename heals with one rerun (#77).
-- `adapters/claudecode/restore-hooks.ts` prunes stale foreign-clone Voice hook registrations
-  (non-canonical `*/adapters/claudecode/hooks/Voice*.hook.ts` paths left by a rename) (#77).
-- `docs/adapters.md` documents the mandatory reconcile-and-prune registration contract for
-  all current and future adapters (#77).
-- Capitalized the project display name to **Echo** in documentation/marketing prose only
-  (headings and descriptive text). Code, CLI/daemon output, command examples, the package
-  name `echo`, service label `com.echo`, and paths are unchanged.
+### Other
 
-### Added
-- **Runtime mute** (#83): one global mute switch on the daemon — `POST /mute` (explicit
-  JSON body sets state; an **empty body toggles**, hotkey-friendly) plus
-  `scripts/mute.sh on [minutes] | off | toggle | status`. Muted notifications are processed
-  and logged normally (echo.log + resolution drop-off log carry a `muted` marker); audio
-  alone is suppressed across every provider **including the macOS `say` fallback**, via one
-  gate before the provider loop. Mute is indefinite or timed (`duration_minutes`); timed
-  mutes expire lazily and silently. State survives daemon restarts with its deadline intact
-  in a user-owned `mute.json` (atomic writes; missing/corrupt file = unmuted; path override
-  `ECHO_MUTE_STATE_PATH`). `GET /health` exposes an additive `mute` block. Hotkey binding
-  examples (Raycast / Shortcuts / Stream Deck) in [docs/http-api.md](docs/http-api.md).
-- **New docs**: `docs/getting-started.md` (beginner tutorial, first install → first spoken
-  notification), `docs/operations.md` (start/stop/restart/status, update-after-pull,
-  repo-move recovery, logs, uninstall), and `docs/configuration.md` (env files,
-  `ECHO_ENV_PATHS`, `PORT`, `voices.json`/`pronunciations.json` reference).
-- **oh-my-pi (omp) support** (#18): the Pi adapter now serves both upstream Pi and the
-  oh-my-pi fork. `before_agent_start` voice-line injection handles omp's `string[]`
-  `systemPrompt` shape (upstream stays `string`), and `bash scripts/install.sh --adapter omp`
-  registers the adapter via `adapters/pi/reconcile-omp.ts` — an idempotent
-  reconcile-and-prune symlink (`~/.omp/agent/extensions/echo-voice` → `adapters/pi/`) per the
-  #77 contract with strict ownership (only the `echo-voice` name is ever touched, healed
-  only for provably-Echo targets, FATAL exit 2 otherwise), `--check` exiting 0 current /
-  3 pending / 2 fatal, and a preflight that surfaces FATAL states before any host mutation.
-  omp uses the same `pi` voice and persona as upstream Pi.
-- **Pi adapter distinct persona voice** (#76): new `pi` entry in `core/voices.json`
-  (`en-US-GuyNeural` / kokoro `am_puck`); the Pi adapter now defaults `voice_id` to `"pi"`
-  (override via `ECHO_VOICE_ID`) and `personaName` to `"Pi"` (override via
-  `ECHO_VOICE_PERSONA_NAME`), so Pi sessions sound distinct from the default identity voice.
-  A running daemon loads `voices.json` once at startup — restart it
-  (`launchctl kickstart -k "gui/$UID/com.echo"`) so the new `pi` entry resolves.
-- `adapters/pi/reconcile.ts`: idempotent Pi registration reconcile — replaces stale
-  `*/adapters/pi` packages entries with the canonical path in place, collapses duplicates,
-  supports `--check`, and writes through a symlinked `~/.pi/agent/settings.json` without
-  replacing the symlink (#77).
-- `scripts/install.sh --check`: reports dead echo-related paths across `com.echo.plist`,
-  `~/.claude/settings.json`, and `~/.pi/agent/settings.json` without mutating; exits 0 when
-  current, 3 when staleness was detected (adapter `--check` modes use the same codes) (#77).
+- feat(omp): dedicated reconcile + installer wiring, migrate off adapters/pi (#109) [#116](https://github.com/edheltzel/Echo/pull/116) ([edheltzel](https://github.com/edheltzel))
+- feat(omp): dedicated adapter + native-config persona override (#109 slice) [#115](https://github.com/edheltzel/Echo/pull/115) ([edheltzel](https://github.com/edheltzel))
+- feat(pi): per-project persona & voice via .pi/settings.json daidentity [#113](https://github.com/edheltzel/Echo/pull/113) ([edheltzel](https://github.com/edheltzel))
+- feat: project-directory persona & voice override (#111) [#112](https://github.com/edheltzel/Echo/pull/112) ([edheltzel](https://github.com/edheltzel))
+- chore(readme): riso-style banner [#105](https://github.com/edheltzel/Echo/pull/105) ([edheltzel](https://github.com/edheltzel))
 
-## [0.3.1] - 2026-07-01
+## [v0.5.0](https://github.com/edheltzel/Echo/tree/v0.5.0) - 2026-07-13
 
-Renamed the project **Atlas Voicesystem → Echo** (Ed's call — "Atlas" is personal). A full
-de-brand across the brand/display name, the GitHub repo slug (`edheltzel/echo`), package names
-(`echo`, `@echo/pi-adapter`), default filesystem paths, the LaunchAgent label, and the
-environment-variable knobs. The persona-name default (`Atlas`) is unchanged.
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.4.1...v0.5.0)
 
-**Versioning note:** the Breaking items below change the install contract (LaunchAgent label and
-default filesystem paths) and would normally warrant a major bump; they ship under a patch bump
-(0.3.0 → 0.3.1) by maintainer decision, since the installer migrates a running service
-automatically and no released consumer depends on the old label or paths.
+### Other
 
-### Breaking
+- release: v0.5.0 — capture guard, play-queue hardening, CI gate, instant catchphrase [#104](https://github.com/edheltzel/Echo/pull/104) ([edheltzel](https://github.com/edheltzel))
+- chore(release): v0.5.0 [#103](https://github.com/edheltzel/Echo/pull/103) ([edheltzel](https://github.com/edheltzel))
+- feat(core): capture guard — hold voice lines while an external mic capture is live [#101](https://github.com/edheltzel/Echo/pull/101) ([edheltzel](https://github.com/edheltzel))
+- feat(core): play-queue hardening — dispositions, coalescing, age cap, watchdog (salvaged from #92) [#100](https://github.com/edheltzel/Echo/pull/100) ([edheltzel](https://github.com/edheltzel))
+- ci: machine-run the verification trio on PRs and pushes to dev/master [#99](https://github.com/edheltzel/Echo/pull/99) ([edheltzel](https://github.com/edheltzel))
+- 202-on-receipt + serial play-queue + TTS cache: instant startup catchphrase (#202) [#97](https://github.com/edheltzel/Echo/pull/97) ([edheltzel](https://github.com/edheltzel))
+- fix(pi): honor Echo config for adapter identity [#93](https://github.com/edheltzel/Echo/pull/93) ([edheltzel](https://github.com/edheltzel))
+- docs: make playback overlap the first-class Phase 2 target [#90](https://github.com/edheltzel/Echo/pull/90) ([edheltzel](https://github.com/edheltzel))
+- feat: voice playback observability (Phase 1 — log before fix) [#89](https://github.com/edheltzel/Echo/pull/89) ([edheltzel](https://github.com/edheltzel))
 
-- **LaunchAgent label** renamed `com.atlas.voicesystem` → `com.echo` (plist
-  `~/Library/LaunchAgents/com.echo.plist`). A reinstall (`bash scripts/install.sh`) migrates
-  automatically: the installer now unloads and quarantines a running `com.atlas.voicesystem`
-  (alongside the existing `com.pai.voice-server` handling) before loading `com.echo`.
-- **Default filesystem paths** moved from `…/atlas-voicesystem/…` → `…/echo/…`: log
-  `~/Library/Logs/echo.log`, config dir `~/.config/echo/.env`, audio cache
-  `~/Library/Caches/echo/audio`, drop-off log `~/Library/Logs/echo/voice-resolution.jsonl`.
-  Old logs/config/cache are orphaned (harmless) — copy them over if you want history.
+## [v0.4.1](https://github.com/edheltzel/Echo/tree/v0.4.1) - 2026-07-06
 
-### Changed
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.4.0...v0.4.1)
 
-- Project renamed **Atlas Voicesystem → Echo** across all brand/display text, the GitHub repo
-  slug (`edheltzel/atlas-voicesystem` → `edheltzel/echo`), and package names (root `echo`,
-  Pi adapter `@echo/pi-adapter`).
+### Other
 
-### Deprecated
+- dev [#88](https://github.com/edheltzel/Echo/pull/88) ([edheltzel](https://github.com/edheltzel))
 
-- Environment-variable knobs renamed to a `ECHO_*` canonical scheme. The former `ATLAS_VOICE_*`
-  (Pi adapter) and `VOICESYSTEM_*` (core) names **still work as silent fallbacks** but are
-  deprecated and slated for removal in a future major. The canonical name is read first; old
-  names are the fallback. See the README's **"Deprecated environment variables"** section for the
-  full old→new mapping (23 names, two convergences) and migration directions.
+## [v0.4.0](https://github.com/edheltzel/Echo/tree/v0.4.0) - 2026-07-06
 
-## [0.3.0] - 2026-06-29
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.3.1...v0.4.0)
 
-Rename the Claude Code adapter and neutralize the public PAI surface (#59). `core/` was already
-host-neutral; this completes the public, PAI-independent repo. Pi adapter untouched.
+### Other
 
-### Breaking
+- dev [#87](https://github.com/edheltzel/Echo/pull/87) ([edheltzel](https://github.com/edheltzel))
+- fix(core): keep Edge TTS health diagnostic-only [#86](https://github.com/edheltzel/Echo/pull/86) ([edheltzel](https://github.com/edheltzel))
+- docs: human-friendly documentation pass (snapshot + conformance/accuracy refinement) [#85](https://github.com/edheltzel/Echo/pull/85) ([edheltzel](https://github.com/edheltzel))
+- feat: runtime mute — global switch (timed/indefinite) via /mute + mute.sh + hotkey contract (#83) [#84](https://github.com/edheltzel/Echo/pull/84) ([edheltzel](https://github.com/edheltzel))
+- feat(pi): startup catchphrase pool + en-GB-RyanNeural voice at -8% rate (#81) [#82](https://github.com/edheltzel/Echo/pull/82) ([edheltzel](https://github.com/edheltzel))
+- feat: oh-my-pi (omp) support via shared Pi adapter (#18) [#80](https://github.com/edheltzel/Echo/pull/80) ([edheltzel](https://github.com/edheltzel))
+- Reconcile ALL host adapter registrations — prune stale repo paths after a directory rename (#77) [#79](https://github.com/edheltzel/Echo/pull/79) ([edheltzel](https://github.com/edheltzel))
+- feat(pi): distinct Pi persona voice — en-US-GuyNeural (#76) [#78](https://github.com/edheltzel/Echo/pull/78) ([edheltzel](https://github.com/edheltzel))
+- Capitalize brand name echo → Echo in documentation prose [#75](https://github.com/edheltzel/Echo/pull/75) ([edheltzel](https://github.com/edheltzel))
+- chore(release): promote dev → master as v0.3.1 (Echo rename) [#74](https://github.com/edheltzel/Echo/pull/74) ([edheltzel](https://github.com/edheltzel))
 
-- Renamed the Claude Code adapter `adapters/pai` → `adapters/claudecode`. The install flag is now
-  `--adapter claudecode` (was `--adapter pai`). **Existing installs must repoint:** re-run
-  `bash scripts/install.sh --adapter claudecode`, or update the three voice hook command paths in
-  `~/.claude/settings.json` from `adapters/pai/hooks/` to `adapters/claudecode/hooks/`.
-- `NotifyPayload.source` emitted by the Claude Code adapter changed from `'pai'` to `'claudecode'`
-  (parity with the Pi adapter's `'pi'`). Affects only the human-readable log annotation; no
-  consumer branches on the value.
+## [v0.3.1](https://github.com/edheltzel/Echo/tree/v0.3.1) - 2026-07-01
 
-### Changed
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.3.0...v0.3.1)
 
-- Stripped the legacy/historical hook-registration machinery from the adapter registrar
-  (`restore-hooks.ts`); it now knows only `adapters/claudecode/hooks/*` and registers idempotently.
-  The reconciliation now de-dupes within a matcher block (`.find()` → `.filter()`).
-- Default adapter identity is now neutral (`'Assistant'`), with `identity.ts` as the single source
-  of truth (removed hardcoded DA-name fallbacks).
-- De-PAI'd the public documentation surface (README, AGENTS.md, ARCHITECTURE.md, docs/*).
+### Other
 
-### Removed
+- chore(release): promote dev → master as v0.3.1 (Echo rename) [#74](https://github.com/edheltzel/Echo/pull/74) ([edheltzel](https://github.com/edheltzel))
+- refactor: rename project Atlas Voicesystem → Echo [#73](https://github.com/edheltzel/Echo/pull/73) ([edheltzel](https://github.com/edheltzel))
+- dev [#72](https://github.com/edheltzel/Echo/pull/72) ([edheltzel](https://github.com/edheltzel))
+- docs(changelog): fix v0.3.0 footer compare-links + release date [#71](https://github.com/edheltzel/Echo/pull/71) ([edheltzel](https://github.com/edheltzel))
+- docs(changelog): fix v0.3.0 footer compare-links + release datef [#70](https://github.com/edheltzel/Echo/pull/70) ([edheltzel](https://github.com/edheltzel))
+- docs: rebrand Atlas Voicesystem → Atlas Echo [#69](https://github.com/edheltzel/Echo/pull/69) ([edheltzel](https://github.com/edheltzel))
+- docs(changelog): fix v0.3.0 footer compare-links + release date [#68](https://github.com/edheltzel/Echo/pull/68) ([edheltzel](https://github.com/edheltzel))
+- docs(changelog): fix v0.3.0 footer compare-links + release date [#67](https://github.com/edheltzel/Echo/pull/67) ([edheltzel](https://github.com/edheltzel))
+- Release v0.3.0 — promote dev to master (#59 + bump) [#66](https://github.com/edheltzel/Echo/pull/66) ([edheltzel](https://github.com/edheltzel))
 
-- `MIGRATIONS.md` — documented a private PAI integration; `CHANGELOG.md` serves public releases.
+## [v0.3.0](https://github.com/edheltzel/Echo/tree/v0.3.0) - 2026-06-28
 
-### Added
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.2.0...v0.3.0)
 
-- Guard test (`tests/core/architecture-invariants.test.ts`, Invariant 6): no tracked `adapters/pai/`
-  path and no `--adapter pai` in the installer, so the old adapter name cannot return.
+### Other
 
-## [0.2.0] - 2026-06-25
+- Release v0.3.0 — promote dev to master (#59 + bump) [#66](https://github.com/edheltzel/Echo/pull/66) ([edheltzel](https://github.com/edheltzel))
+- chore(release): v0.3.0 [#64](https://github.com/edheltzel/Echo/pull/64) ([edheltzel](https://github.com/edheltzel))
+- refactor(#59): rename adapters/pai → adapters/claudecode + de-PAI public surface [#62](https://github.com/edheltzel/Echo/pull/62) ([edheltzel](https://github.com/edheltzel))
+- Release v0.2.0 — retire legacy PAI stow tree [#61](https://github.com/edheltzel/Echo/pull/61) ([edheltzel](https://github.com/edheltzel))
 
-Retire the legacy PAI stow tree; host integration is adapter-only. The adapter rename and full
-PAI de-brand are tracked separately in #59.
+## [v0.2.0](https://github.com/edheltzel/Echo/tree/v0.2.0) - 2026-06-27
 
-### Added
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.1.1...v0.2.0)
 
-- Guard test (`tests/core/architecture-invariants.test.ts`, Invariant 5) pinning the retirement
-  so the legacy `claudecode/.claude/PAI/USER/Voice/` tree cannot return.
+### Other
 
-### Changed
+- Release v0.2.0 — retire legacy PAI stow tree [#61](https://github.com/edheltzel/Echo/pull/61) ([edheltzel](https://github.com/edheltzel))
+- fix(#1): retire legacy PAI stow tree (Workstream A) [#60](https://github.com/edheltzel/Echo/pull/60) ([edheltzel](https://github.com/edheltzel))
+- Release: promote v0.1.1 to master (agent-first legibility + enforcement) [#58](https://github.com/edheltzel/Echo/pull/58) ([edheltzel](https://github.com/edheltzel))
 
-- `adapters/pai/restore-hooks.ts` now migrates legacy `VoiceGate`/`VoiceGreeting` hook
-  registrations to the adapter paths idempotently.
+## [v0.1.1](https://github.com/edheltzel/Echo/tree/v0.1.1) - 2026-06-24
 
-### Removed
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.1.0...v0.1.1)
 
-- Legacy PAI stow tree `claudecode/.claude/PAI/USER/Voice/` (20 files) retired (#1).
+### Other
 
-## [0.1.1] - 2026-06-24
+- chore(release): bump version 0.1.0 → 0.1.1 [#57](https://github.com/edheltzel/Echo/pull/57) ([edheltzel](https://github.com/edheltzel))
+- docs: agent-first legibility restructure (Worker A) [#56](https://github.com/edheltzel/Echo/pull/56) ([edheltzel](https://github.com/edheltzel))
+- test(core): enforce architecture invariants as CI-failing tests [#54](https://github.com/edheltzel/Echo/pull/54) ([edheltzel](https://github.com/edheltzel))
+- Release: promote v0.1.0 to master (version + CHANGELOG + DOX) [#53](https://github.com/edheltzel/Echo/pull/53) ([edheltzel](https://github.com/edheltzel))
 
-Agent-first repository legibility + mechanical enforcement. No runtime behavior change.
+## [v0.1.0](https://github.com/edheltzel/Echo/tree/v0.1.0) - 2026-06-24
 
-### Added
-
-- `ARCHITECTURE.md` (codemap, boundaries, invariants) and `SECURITY.md` (trust boundary, egress posture, secret handling).
-- `docs/` progressive-disclosure tree — `http-api.md`, `adapters.md`, `providers-observability.md`, `reliability.md`, `voices.md`, `dox.md`, and `design-docs/` (index + pi-completion-injection).
-- Mechanical enforcement: `tests/core/architecture-invariants.test.ts` — fails CI if `core/` imports a host/adapter API, references `:31337`, uses a `/tmp` process path, or adds a host-named route.
-
-### Changed
-
-- `AGENTS.md` slimmed to a lean entry point (~130 lines) with detail relocated into `docs/` (DOX procedure → `docs/dox.md`; contract preserved).
-
-## [0.1.0] - 2026-06-23
-
-Initial release of the universal voice-system core plus PAI and Pi host adapters.
-
-### Added
-
-- Persona-aware per-turn voice — personas speak in their own voice, their own words, and show their own name in the notification title (#27, #31, #33).
-- Provider egress gating, proven and auditable via `/health` (`wouldEgress`/`egressTarget`); a disabled provider makes zero outbound calls (#26).
-- Provider circuit breaker with correct synth-vs-playback failure attribution and env-tunable thresholds/timeouts (#25).
-- Structured, size-capped voice-resolution drop-off log (JSONL) for diagnosing why a notify used a given voice (#24).
-- Pi adapter speaks per-turn completions by injecting the `🗣️` convention via `before_agent_start`; configurable persona name via `ATLAS_VOICE_PERSONA_NAME` (#15).
-- Installer wires the Stop hook idempotently (#34).
-
-### Fixed
-
-- CRLF-safe and fence-aware legacy completion fallbacks (#36).
-- Deflaked `resolution-log` test under parallel `bun test` (#47).
-
-### Tests
-
-- Behavioral edge-tts synth/playback attribution test (#38); egress-gating, circuit-breaker, env-parsing, and persona-resolution coverage.
-
-[Unreleased]: https://github.com/edheltzel/echo/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/edheltzel/echo/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/edheltzel/echo/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/edheltzel/echo/compare/v0.3.1...v0.4.0
-[0.3.1]: https://github.com/edheltzel/echo/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/edheltzel/echo/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/edheltzel/echo/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/edheltzel/echo/releases/tag/v0.1.1
-[0.1.0]: https://github.com/edheltzel/echo/releases/tag/v0.1.0
+[Full Changelog](https://github.com/edheltzel/Echo/compare/2a05a40471e1b3d3cda5c28b2999aa41130524d0...v0.1.0)
