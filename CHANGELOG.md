@@ -5,8 +5,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
-## Unreleased
+## [v0.7.0](https://github.com/edheltzel/Echo/tree/v0.7.0) - 2026-07-21
 
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.6.0...v0.7.0)
+
+### Other
+
+- fix(shared): defer Bun.YAML access in persona-scaffold (pi/omp load crash) [#119](https://github.com/edheltzel/Echo/pull/119) ([edheltzel](https://github.com/edheltzel))
+- feat(pi,omp): /echo-voice persona scaffold command [#118](https://github.com/edheltzel/Echo/pull/118) ([edheltzel](https://github.com/edheltzel))
 - chore(release): v0.6.0 — per-project persona & voice [#117](https://github.com/edheltzel/Echo/pull/117) ([edheltzel](https://github.com/edheltzel))
 
 ## [v0.6.0](https://github.com/edheltzel/Echo/tree/v0.6.0) - 2026-07-20
