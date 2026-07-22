@@ -10,6 +10,7 @@ import {
   loadProjectPersona,
   type OmpVoiceConfig,
 } from "../../../adapters/omp/config";
+import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
 
 // omp project persona override — SAME convention as the Claude Code and Pi adapters:
 // a `daidentity` block in the host's native config. omp's config is YAML, layered
@@ -114,12 +115,18 @@ describe("applyPersonaOverride — per-key override onto the base config", () =>
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override; non-persona keys untouched", () => {
+  test("name + voice override → name-default greeting pool; non-persona keys untouched", () => {
     const out = applyPersonaOverride(base, { personaName: "Libby", voiceId: "en-GB-LibbyNeural" });
     expect(out.personaName).toBe("Libby");
     expect(out.voiceId).toBe("en-GB-LibbyNeural");
-    expect(out.startupCatchphrases).toEqual(["Base ready."]);
+    // Name override with no catchphrases of its own → name-templated default pool.
+    expect(out.startupCatchphrases).toBe(DEFAULT_PERSONA_GREETINGS);
     expect(out.speakCompletions).toBe(true);
+  });
+
+  test("name override WITH its own catchphrases → keeps the custom pool", () => {
+    const out = applyPersonaOverride(base, { personaName: "Libby", startupCatchphrases: ["Libby reporting."] });
+    expect(out.startupCatchphrases).toEqual(["Libby reporting."]);
   });
 });
 
@@ -208,6 +215,32 @@ describe("integration — omp project override flows through greeting + completi
     expect(payloads[0].message).toBe("Libby here, omp British voice."); // project catchphrase
     expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");             // project voice, not "pi"
     expect(payloads[0].source).toBe("omp");                             // omp-tagged
+  });
+
+  test("name+voice persona with NO catchphrases → greeting ANNOUNCES the persona name", async () => {
+    // The /echo-voice-shaped case: daidentity has name + voice but no startupCatchphrases.
+    // Previously the greeting was a neutral pool line ("Session ready.") with no name.
+    const payloads: any[] = [];
+    globalThis.fetch = async (_i, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    };
+    const dir = mkdtempSync(join(tmpdir(), "echo-omp-nameonly-"));
+    mkdirSync(join(dir, ".omp"), { recursive: true });
+    writeFileSync(
+      join(dir, ".omp", "config.yml"),
+      "daidentity:\n  name: EchoOmp\n  voices:\n    main:\n      voiceId: en-GB-LibbyNeural\n",
+    );
+    try {
+      const { handlers, api } = createMockOmp();
+      echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
+      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");
+      expect(payloads[0].message).toContain("EchoOmp"); // NAME announced (was neutral before)
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("per-turn completion uses the project voice", async () => {

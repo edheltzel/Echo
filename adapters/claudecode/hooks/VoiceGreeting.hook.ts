@@ -31,6 +31,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
+import { resolveStartupCatchphrase } from './lib/greeting';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
@@ -258,12 +259,7 @@ try {
   const identity = getIdentity();
   const daName = identity.displayName;
 
-  const catchphrases = identity.startupCatchphrases;
-  const catchphrase = (
-    catchphrases?.length
-      ? catchphrases[Math.floor(Math.random() * catchphrases.length)]
-      : identity.startupCatchphrase || `${daName} standing by`
-  ).replace(/\{name\}/gi, daName);
+  const catchphrase = resolveStartupCatchphrase(identity);
   const personality = identity.personality;
 
   const url = personality?.baseVoice

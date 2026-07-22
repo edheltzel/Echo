@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
+## [v0.7.1](https://github.com/edheltzel/Echo/tree/v0.7.1) - 2026-07-21
+
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.7.0...v0.7.1)
+
+### Other
+
+- fix(voice): announce the project persona name in the startup greeting [#121](https://github.com/edheltzel/Echo/pull/121) ([edheltzel](https://github.com/edheltzel))
+- release: v0.7.0 — /echo-voice persona scaffold for pi & omp [#120](https://github.com/edheltzel/Echo/pull/120) ([edheltzel](https://github.com/edheltzel))
+
 ## [v0.7.0](https://github.com/edheltzel/Echo/tree/v0.7.0) - 2026-07-21
 
 [Full Changelog](https://github.com/edheltzel/Echo/compare/v0.6.0...v0.7.0)
