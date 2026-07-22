@@ -11,9 +11,10 @@ export type EndpointEnv = Record<string, string | undefined>;
 export const DEFAULT_DAEMON_BASE = "http://localhost:8888";
 
 /**
- * Origin of the Echo daemon. `ECHO_DAEMON_URL` is the explicit knob; otherwise the
- * origin is taken from a configured `ECHO_NOTIFY_URL` (and its legacy aliases) so
- * the long-standing single-URL setups keep working unchanged.
+ * Origin of the Echo daemon. `ECHO_DAEMON_URL` is the explicit knob and wins over
+ * every other name; otherwise the origin is taken from a configured `ECHO_NOTIFY_URL`
+ * (and its legacy aliases) so the long-standing single-URL setups keep working
+ * unchanged. Every endpoint below derives from this one base.
  */
 export function resolveDaemonBase(env: EndpointEnv): string {
   const explicit = env.ECHO_DAEMON_URL;
@@ -30,9 +31,20 @@ export function resolveDaemonBase(env: EndpointEnv): string {
   return DEFAULT_DAEMON_BASE;
 }
 
-/** `POST /notify` — where a host adapter sends a line to be spoken. */
+/**
+ * `POST /notify` — where a host adapter sends a line to be spoken. `ECHO_DAEMON_URL`
+ * wins here exactly as it does for every other endpoint, so one variable can never
+ * point notify at one instance and the read endpoints at another. Without it, a
+ * configured `ECHO_NOTIFY_URL` (or a legacy alias) is used verbatim, then the default.
+ */
 export function resolveNotifyUrl(env: EndpointEnv): string {
-  return configuredNotifyUrl(env) ?? `${resolveDaemonBase(env)}/notify`;
+  if (env.ECHO_DAEMON_URL) return `${resolveDaemonBase(env)}/notify`;
+  return configuredNotifyUrl(env) ?? `${DEFAULT_DAEMON_BASE}/notify`;
+}
+
+/** `POST /notify/personality` — the prosody-shaped variant of `POST /notify`. */
+export function resolvePersonalityUrl(env: EndpointEnv): string {
+  return `${resolveDaemonBase(env)}/notify/personality`;
 }
 
 /** `GET /voices` — the daemon's read-only projection of its configured personas. */

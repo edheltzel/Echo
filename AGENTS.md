@@ -74,8 +74,8 @@ is unmistakably a test.
 
 After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.echo"`
 (tail `~/Library/Logs/echo.log`). Use **Bun only** — no npm/npx/node. Run
-`bun test` + the smoke + the Pi build before shipping; CI machine-runs the same trio on every
-PR into `dev`/`master` (`.github/workflows/verify.yml`).
+`bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
+same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 

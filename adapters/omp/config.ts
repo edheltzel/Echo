@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 
 export interface OmpVoiceConfig {
   endpoint: string;
@@ -48,7 +49,7 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = pro
   // "pi" voice mapping by default; a project daidentity override (below) or env pins otherwise.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
-    endpoint: env.ECHO_NOTIFY_URL ?? env.ATLAS_VOICE_NOTIFY_URL ?? env.VOICESYSTEM_NOTIFY_URL ?? "http://localhost:8888/notify",
+    endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "omp Notification",
     startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "omp",

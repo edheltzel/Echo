@@ -61,11 +61,19 @@ function importSpecifiers(source: string): string[] {
  * Strip block and line comments so a documentation comment that merely mentions
  * a banned token (e.g. the "never /tmp" note in server.ts) is not a false
  * positive. Line-comment stripping skips `://` so URL strings survive.
+ *
+ * A block comment collapses to its own newlines rather than to nothing, so line
+ * numbers survive the strip — the scans below report `${file}:${i + 1}`, and a
+ * 10-line header comment would otherwise shift every diagnostic below it.
  */
 function stripComments(content: string): string {
   return content
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => "\n".repeat(countNewlines(block))) // block comments
     .replace(/(^|[^:])\/\/.*$/gm, "$1"); // line comments, but not `://`
+}
+
+function countNewlines(text: string): number {
+  return text.length - text.replaceAll("\n", "").length;
 }
 
 /** Route path literals declared via `url.pathname === "..."`. */

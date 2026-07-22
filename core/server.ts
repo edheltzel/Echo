@@ -1975,7 +1975,7 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health"];
+    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health", "GET /voices"];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -1990,7 +1990,7 @@ export const server = serve({
       );
     }
 
-    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status", {
+    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status, GET /voices for configured personas", {
       headers: corsHeaders,
       status: 404
     });

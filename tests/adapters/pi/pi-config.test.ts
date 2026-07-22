@@ -135,6 +135,20 @@ describe("Pi voice config", () => {
     expect(config.personaName).toBe("Echo");
   });
 
+  test("ECHO_DAEMON_URL retargets the notify endpoint, winning over ECHO_NOTIFY_URL", () => {
+    // The adapter resolves through @echo/shared/daemon-endpoints, so pointing a host
+    // at a second instance (an isolated test daemon) is one variable, not a call site.
+    expect(loadPiVoiceConfig({ ECHO_DAEMON_URL: "http://localhost:8899" }).endpoint).toBe(
+      "http://localhost:8899/notify",
+    );
+    expect(
+      loadPiVoiceConfig({
+        ECHO_DAEMON_URL: "http://localhost:8899",
+        ECHO_NOTIFY_URL: "http://echo.example/notify",
+      }).endpoint,
+    ).toBe("http://localhost:8899/notify");
+  });
+
   test("still honors deprecated legacy env names as silent fallbacks", () => {
     // Old ATLAS_VOICE_* names keep working when the canonical ECHO_* name is unset.
     const config = loadPiVoiceConfig({

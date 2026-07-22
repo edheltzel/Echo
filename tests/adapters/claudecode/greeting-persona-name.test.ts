@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
@@ -71,5 +71,29 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(id.displayName).toBe("Atlas");
     expect(id.personaFromProject).toBe(false);
     expect(resolveStartupCatchphrase(id, firstPick)).toBe("Atlas online and standing by.");
+  });
+});
+
+// The greeting hook runs its work at import time (it is a hook script, not a
+// module), so its daemon address is asserted by reading the source: both POST
+// paths must resolve through @echo/shared rather than pinning :8888 themselves.
+describe("VoiceGreeting hook resolves the daemon address, never hardcodes it", () => {
+  const source = readFileSync(
+    join("adapters", "claudecode", "hooks", "VoiceGreeting.hook.ts"),
+    "utf8",
+  );
+
+  test("both POST targets come from the shared resolver", () => {
+    expect(source).toContain("@echo/shared/daemon-endpoints.ts");
+    expect(source).toContain("resolveNotifyUrl(process.env)");
+    expect(source).toContain("resolvePersonalityUrl(process.env)");
+  });
+
+  test("no hardcoded daemon URL survives, so ECHO_DAEMON_URL retargets the greeting", () => {
+    const offenders = source
+      .split("\n")
+      .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+      .filter(({ line }) => /(['"`])https?:\/\/[^'"`]*:8888[^'"`]*\1/.test(line));
+    expect(offenders).toEqual([]);
   });
 });

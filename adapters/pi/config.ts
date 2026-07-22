@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 
 export interface PiVoiceConfig {
   endpoint: string;
@@ -47,10 +48,11 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
 export function loadPiVoiceConfig(env: Record<string, string | undefined> = process.env): PiVoiceConfig {
   // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* / VOICESYSTEM_*
   // names remain as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
-  // environment variables"). NOTIFY_URL and VOICE_ID converge two legacy names onto one canonical.
+  // environment variables"). VOICE_ID converges two legacy names onto one canonical;
+  // the notify endpoint is resolved by @echo/shared so ECHO_DAEMON_URL retargets it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
-    endpoint: env.ECHO_NOTIFY_URL ?? env.ATLAS_VOICE_NOTIFY_URL ?? env.VOICESYSTEM_NOTIFY_URL ?? "http://localhost:8888/notify",
+    endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "Pi Notification",
     startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "Pi",

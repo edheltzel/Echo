@@ -8,8 +8,8 @@ pages for per-area detail.
 
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
-(`core/server.ts`) listens on `localhost:8888` and exposes four HTTP endpoints
-(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`). Any host — a Claude Code
+(`core/server.ts`) listens on `localhost:8888` and exposes five HTTP endpoints
+(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`). Any host — a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` —
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
