@@ -1749,7 +1749,16 @@ export const server = serve({
     // /mute gets its own rate-limit bucket (#83): a burst of /notify traffic
     // must never starve the mute control — the exact moment the user wants
     // silence is when notification traffic is heaviest.
-    const rateKey = url.pathname === "/mute" ? `mute:${clientIp}` : clientIp;
+    //
+    // /voices gets its own bucket for the mirror-image reason: it is a cheap
+    // in-memory read that adapters make once per turn, immediately before the
+    // /notify for that same turn. Sharing the notification bucket would halve
+    // every host's effective notification budget and make the read starve the
+    // write it precedes — a dropped notification, the worst failure here.
+    const rateKey =
+      url.pathname === "/mute" ? `mute:${clientIp}`
+      : url.pathname === "/voices" ? `voices:${clientIp}`
+      : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
         JSON.stringify({ status: "error", message: "Rate limit exceeded" }),

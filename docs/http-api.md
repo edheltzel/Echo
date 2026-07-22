@@ -5,10 +5,14 @@ exposes five endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
-**Rate limit:** 10 requests per 60s per client, across all endpoints; exceeding it returns
+**Rate limit:** 10 requests per 60s per client; exceeding it returns
 `429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket — except `POST /mute`, which gets its own bucket so a notification
-flood can never starve the mute control (#83).
+`localhost` bucket, with two carve-outs that each get their own:
+
+- `POST /mute` — so a notification flood can never starve the mute control (#83).
+- `GET /voices` — adapters read it once per turn immediately before that turn's `/notify`.
+  On the shared bucket that would halve every host's notification budget and let the read
+  starve the write it precedes.
 
 ## `POST /notify`
 
@@ -180,7 +184,12 @@ or a different `VOICES_PATH` than the caller can see.
 | `agents` | Sorted persona **name keys** from `voices.json` — exactly the values `/notify` resolves as `voice_id`. Never a raw provider voice id |
 | `default_provider` | Same value `/health` reports as `activeProvider` |
 
-Unlike `/health`, this route probes no provider, so it is cheap enough to call per turn.
+Unlike `/health`, this route probes no provider, so it is cheap enough to call per turn, and
+it has its own rate-limit bucket (see above) so a per-turn read never spends the caller's
+notification budget. Adapters cache the answer per process — the Claude Code Stop hook is a
+fresh process each turn, so that is one GET per turn. When the daemon is down, the 2s read
+timeout precedes the notify attempt, so a fully-unreachable daemon costs the hook ~7s rather
+than ~5s before it gives up.
 The Claude Code adapter uses it to validate a `🗣️ <Name>:` persona tag before sending the
 key, so an unknown name falls back to the DA voice instead of degrading to the daemon
 default (see [`voices.md`](voices.md)). Callers must fail closed: an unreachable daemon or
