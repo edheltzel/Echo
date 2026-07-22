@@ -26,9 +26,10 @@ bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedica
 
 ## Behavior
 
-- `session_start` → speaks a greeting once for user-visible session starts, picked at
-  random from a small pool of neutral lines (mirroring the Claude Code adapter's
-  `startupCatchphrases`). Setting `ECHO_VOICE_CATCHPHRASE` pins the greeting to that one line.
+- `session_start` → speaks a greeting once for user-visible session starts. With a project
+  persona **name** set (below), the greeting **announces that name** (e.g. "Echo online and
+  standing by."); otherwise it's a neutral line from a small pool. A project's own
+  `startupCatchphrases` still win, and `ECHO_VOICE_CATCHPHRASE` pins the greeting to one line.
 - `message_end` / `turn_end` → extracts the final `🗣️` line from assistant text and speaks it once.
 - Headless run modes are suppressed: Pi spawns subagents as `pi --mode json -p`, which report `ctx.hasUI === false`. Voice fires only when a real UI is present (`tui`/`rpc`). Set `ECHO_VOICE_SUPPRESS=true` to force-mute any context.
 

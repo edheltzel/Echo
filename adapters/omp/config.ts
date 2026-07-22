@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_PERSONA_GREETINGS } from "../../shared/greeting.ts";
 
 export interface OmpVoiceConfig {
   endpoint: string;
@@ -156,11 +157,16 @@ export function applyPersonaOverride(
   override: EchoPersonaOverride | null,
 ): OmpVoiceConfig {
   if (!override) return base;
+  // When a repo sets a persona NAME but no startup lines of its own, announce that
+  // name at startup (the `{name}` default pool) instead of the neutral base pool —
+  // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
+  const startupCatchphrases = override.startupCatchphrases
+    ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
     voiceId: override.voiceId ?? base.voiceId,
-    startupCatchphrases: override.startupCatchphrases ?? base.startupCatchphrases,
+    startupCatchphrases,
   };
 }
 

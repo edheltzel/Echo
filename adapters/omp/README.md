@@ -38,7 +38,9 @@ daidentity:
 Resolved at `session_start` from `ctx.cwd`, per key: project → global → env config.
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
-omp session started in that repo.
+omp session started in that repo. With a persona **name** set, the startup greeting
+**announces that name** (e.g. "Echo online and standing by.") unless the repo provides
+its own `startupCatchphrases`.
 
 ### Scaffold it without hand-editing YAML
 
