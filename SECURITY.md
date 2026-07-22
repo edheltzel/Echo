@@ -14,14 +14,17 @@ the trust boundary, egress posture, and secret handling. For the request flow se
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
   cannot read responses.
 - **Rate limiting.** `checkRateLimit` allows 10 requests per 60s per client IP (`429` on
-  breach). Without a proxy header, all local callers share one `localhost` bucket — this is a
+  breach). Without a proxy header, all local callers share one `localhost` bucket, apart from
+  the control/read carve-outs listed in [`docs/http-api.md`](docs/http-api.md) — this is a
   flood guard against runaway loops, not an authentication mechanism.
 - **Input sanitization.** Every spoken message passes `validateInput` (non-empty string, ≤500
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.
 
 There is **no authentication** on `/notify` — any local process may request speech — and
-the same applies to `/mute` (#83): any local process may flip the global mute. Note the
+the same applies to `/mute` (#83): any local process may flip the global mute. `GET /voices`
+is likewise unauthenticated: any local process can read the configured persona keys and the
+default provider name (no API keys or voice ids). Note the
 reach is wider than "local process": a `POST` with an empty or `text/plain` body is a
 CORS **simple request**, sent without preflight, so a cross-origin web page in a local
 browser can fire it blind (e.g. `sendBeacon`) — the localhost CORS header only prevents

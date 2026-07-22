@@ -1,0 +1,10 @@
+{
+  "name": "@echo/claudecode-adapter",
+  "version": "0.1.0",
+  "description": "Claude Code host adapter for echo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}

@@ -31,6 +31,7 @@ import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./ca
 import { PlayQueue } from "./play-queue";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { loadEchoEnvironment } from "../shared/echo-env";
+import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
@@ -427,15 +428,10 @@ export function getVoiceMapping(identifier: string | null): VoiceMapping | null 
   return null;
 }
 
-// An edge-tts voice name (e.g. "en-US-AndrewNeural", "en-GB-RyanNeural",
-// "zh-CN-liaoning-XiaobeiNeural"). A caller may pass one directly as voice_id
-// (e.g. a project persona's configured voice) without a voices.json agent entry;
-// the edgetts provider then speaks in it literally. Anchored on the locale prefix
-// + `Neural` suffix so a stray ElevenLabs id or agent key never matches.
-const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z-]+Neural$/;
-export function looksLikeEdgeVoice(identifier: string | null | undefined): boolean {
-  return !!identifier && EDGE_VOICE_RE.test(identifier);
-}
+// The edge-tts voice-name grammar is owned by `shared/edge-voice.ts` — the daemon and
+// the adapters' `/echo-voice` scaffold both enforce it, so it is defined once there and
+// re-exported here for existing callers.
+export { looksLikeEdgeVoice };
 
 // =============================================================================
 // Utility Functions
@@ -1753,7 +1749,16 @@ export const server = serve({
     // /mute gets its own rate-limit bucket (#83): a burst of /notify traffic
     // must never starve the mute control — the exact moment the user wants
     // silence is when notification traffic is heaviest.
-    const rateKey = url.pathname === "/mute" ? `mute:${clientIp}` : clientIp;
+    //
+    // /voices gets its own bucket for the mirror-image reason: it is a cheap
+    // in-memory read that adapters make once per turn, immediately before the
+    // /notify for that same turn. Sharing the notification bucket would halve
+    // every host's effective notification budget and make the read starve the
+    // write it precedes — a dropped notification, the worst failure here.
+    const rateKey =
+      url.pathname === "/mute" ? `mute:${clientIp}`
+      : url.pathname === "/voices" ? `voices:${clientIp}`
+      : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
         JSON.stringify({ status: "error", message: "Rate limit exceeded" }),
@@ -1901,6 +1906,21 @@ export const server = serve({
       }
     }
 
+    // Read-only projection of the voice config a caller needs to decide whether a
+    // `voice_id` will resolve. Adapters must not read the daemon's config files off
+    // disk — a co-located checkout is not part of the contract, and the daemon may
+    // be running from a different clone or a different VOICES_PATH than the adapter
+    // sees. This is the supported way to ask "which persona keys exist?".
+    if (url.pathname === "/voices" && req.method === "GET") {
+      return new Response(
+        JSON.stringify({
+          agents: Object.keys(voicesConfig.agents ?? {}).sort(),
+          default_provider: voicesConfig.defaultProvider,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const providerStatus = await getProviderStatus();
 
@@ -1955,7 +1975,7 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health"];
+    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health", "GET /voices"];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -1970,7 +1990,7 @@ export const server = serve({
       );
     }
 
-    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status", {
+    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status, GET /voices for configured personas", {
       headers: corsHeaders,
       status: 404
     });
@@ -1996,5 +2016,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health`);
+log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);

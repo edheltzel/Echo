@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { looksLikeEdgeVoice } from "./edge-voice.ts";
 
 // Persona scaffold — the host-neutral core of the pi/omp `/echo-voice` command.
 //
@@ -23,14 +24,9 @@ export class MalformedConfigError extends Error {
   }
 }
 
-// An edge-tts voice name (e.g. "en-US-AndrewNeural", "en-GB-RyanNeural"). Mirrors
-// `EDGE_VOICE_RE` in core/server.ts — replicated, not imported, because adapters and
-// shared/ must never import core/ (the daemon ships independently). Keep in sync.
-const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z-]+Neural$/;
-
-export function looksLikeEdgeVoice(identifier: string | null | undefined): boolean {
-  return !!identifier && EDGE_VOICE_RE.test(identifier);
-}
+// The edge-tts voice grammar is owned by `./edge-voice.ts` (the daemon imports the same
+// module) and re-exported here for the scaffold's existing callers.
+export { looksLikeEdgeVoice };
 
 /** Split a raw command-argument string into an optional persona name + voice. */
 export function parsePersonaArgs(args: string): { name?: string; voice?: string } {

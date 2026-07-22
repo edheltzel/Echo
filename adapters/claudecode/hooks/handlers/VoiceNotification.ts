@@ -17,6 +17,7 @@ import { getIdentity, type Identity, type VoiceProsody } from '../lib/identity';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
+import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoints.ts';
 
 // ElevenLabs voice notification payload
 interface ElevenLabsNotificationPayload {
@@ -152,8 +153,9 @@ async function sendNotification(
   console.error(`[Voice] fetch_start: "${payload.message.slice(0, 60)}..." (${payload.message.length} chars)`);
 
   try {
-    // Use ElevenLabs voice server /notify endpoint
-    const response = await fetch('http://localhost:8888/notify', {
+    // The daemon's /notify endpoint, resolved from the shared endpoint contract so
+    // a second instance (e.g. an isolated test daemon) is reachable via env.
+    const response = await fetch(resolveNotifyUrl(process.env), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -227,27 +229,38 @@ export function resolvePersonaKey(text: string, daName: string): string | null {
   return name;
 }
 
-// Known persona keys from voices.json (same file the daemon resolves against).
-// Cached per process — the Stop hook is a fresh process each turn.
+// Known persona keys, read from the daemon over `GET /voices`.
+//
+// This deliberately does NOT read core/voices.json off disk. The adapter has no
+// claim on the daemon's config file: the daemon may run from a different clone or
+// a different VOICES_PATH, and a Claude Code install is not guaranteed to sit
+// beside a core/ directory at all. The daemon's own answer is the only correct one.
+//
+// Cached per process — the Stop hook is a fresh process each turn, so this is at
+// most one localhost GET per turn.
 let cachedAgentKeys: Set<string> | null = null;
-export function loadKnownAgentKeys(): Set<string> {
+const AGENT_KEYS_TIMEOUT_MS = 2000;
+
+export async function fetchKnownAgentKeys(): Promise<Set<string>> {
   if (cachedAgentKeys) return cachedAgentKeys;
   try {
-    // Mirror the daemon's resolution (core/server.ts): VOICES_PATH env override,
-    // else core/voices.json relative to the repo root (this file lives at
-    // adapters/claudecode/hooks/handlers/, so the root is four levels up).
-    const voicesPath = process.env.VOICES_PATH || join(import.meta.dir, '..', '..', '..', '..', 'core', 'voices.json');
-    const config = JSON.parse(readFileSync(voicesPath, 'utf-8'));
-    cachedAgentKeys = new Set(Object.keys(config.agents ?? {}));
+    const response = await fetch(resolveVoicesUrl(process.env), {
+      signal: AbortSignal.timeout(AGENT_KEYS_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = (await response.json()) as { agents?: unknown };
+    const agents = Array.isArray(body.agents) ? body.agents.filter((a) => typeof a === 'string') : [];
+    cachedAgentKeys = new Set(agents as string[]);
   } catch {
-    // Can't read config → treat as "no known personas" so we never send an
-    // unresolvable key; callers fall back to the DA voice.
+    // Daemon unreachable, slow, or answering something unexpected → treat as "no
+    // known personas" so we never send an unresolvable key; callers fall back to
+    // the DA voice. Same fail-closed outcome the on-disk read had.
     cachedAgentKeys = new Set();
   }
   return cachedAgentKeys;
 }
 
-/** Reset the voices.json key cache (test seam). */
+/** Reset the persona-key cache (test seam). */
 export function clearAgentKeysCache(): void {
   cachedAgentKeys = null;
 }
@@ -272,7 +285,9 @@ export interface VoiceSelection {
 export function selectVoice(
   parsed: ParsedTranscript,
   identity: Identity,
-  knownAgents: Set<string> = loadKnownAgentKeys(),
+  // Fail closed: with no known-agent set the only safe answer is the DA voice.
+  // `handleVoice` awaits `fetchKnownAgentKeys()` and passes the daemon's answer.
+  knownAgents: Set<string> = new Set(),
 ): VoiceSelection {
   const text = parsed.currentResponseText || parsed.lastMessage || '';
   const personaKey = resolvePersonaKey(text, identity.name);
@@ -359,7 +374,7 @@ export async function handleVoice(
   // Resolve the speaker for this turn: an active main-session persona speaks in
   // its own voice (validated name key → daemon resolves); otherwise the DA voice
   // path is byte-for-byte unchanged (mainDAVoiceID + prosody).
-  const selection = selectVoice(parsed, identity);
+  const selection = selectVoice(parsed, identity, await fetchKnownAgentKeys());
   const payload = buildVoicePayload(voiceCompletion, sessionId, selection);
 
   await sendNotification(payload, sessionId, identity.mainDAVoiceID);

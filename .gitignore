@@ -5,6 +5,9 @@
 *.log
 /tmp/
 
+# Workspace links materialized by `bun install` (bun.lock IS committed)
+node_modules/
+
 # Local agent scratch / draft issues (promoted to GitHub Issues, not committed)
 .scratch/
 

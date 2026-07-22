@@ -5,9 +5,10 @@ splitting omp off the shared Pi adapter). It listens to omp lifecycle events and
 translates them into `/notify` requests against the local voice server, tagged
 `source: "omp"`.
 
-It uses omp's own SDK (`@oh-my-pi/pi-coding-agent`) and imports only host-neutral
-helpers from `shared/` (`notify-client`, `voice-line`, `echo-env`). It never imports
-`core/` or the Pi adapter.
+It uses omp's own SDK (`@oh-my-pi/pi-coding-agent`) and imports host-neutral helpers by
+name from the `@echo/shared` workspace package it declares as a dependency. No relative
+import leaves this package root, and it never imports `core/` or the Pi adapter — the
+boundary contract is in [`docs/adapters.md`](../../docs/adapters.md).
 
 ## Configuration
 

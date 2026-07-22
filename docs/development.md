@@ -8,7 +8,18 @@
 
 ## Clone & Install
 
-This repo has no npm install step for normal development. Bun runs TypeScript directly.
+Bun runs TypeScript directly — there is no build step and no third-party dependency to
+fetch. One command is still required:
+
+```bash
+bun install
+```
+
+This is offline: every workspace member (`shared`, `adapters/*`) is local, so `bun install`
+only links them. It creates `adapters/<host>/node_modules/@echo/shared`, which is how each
+adapter resolves the shared package it declares instead of reaching up the tree. **Skip it
+and a registered adapter fails to load.** `scripts/install.sh` runs it for you, and
+`scripts/install.sh --check` reports a missing link as stale.
 
 ## Run Dev Server
 
@@ -62,12 +73,36 @@ git worktree add -b fix/example .worktrees/fix-example origin/dev
 ## Tests
 
 ```bash
+bun install                  # required before bun test — adapters import @echo/shared
 bun test
 PORT=8889 tests/smoke-core.sh
+tests/e2e-adapters.sh        # adapter boundary e2e against an isolated daemon
 ```
 
-CI runs the same trio (plus the Pi adapter build) headlessly on every PR into `dev`/`master`
-and every push to those branches — see `.github/workflows/verify.yml`.
+CI runs the same set (plus the Pi and omp adapter builds) headlessly on every PR into
+`dev`/`master` and every push to those branches — see `.github/workflows/verify.yml`.
+
+### Never test against the running daemon
+
+The installed LaunchAgent on `:8888` serves the operator's real notifications. Stopping it,
+retargeting it, overwriting its config, or speaking through it is a live-system incident, not
+a test.
+
+`tests/e2e-adapters.sh` is the safe path. It starts its own `core/server.ts` on its own port
+(`ECHO_E2E_PORT`, default `8899`) with every state path — mute, capture guard, audio cache,
+TTS cache, lifecycle log, `VOICES_PATH` — redirected into a scratch directory, points the
+adapters at it via `ECHO_DAEMON_URL`, and kills only the pid it started. It **refuses to run**
+if the chosen port is `8888` or if anything is already listening there: it never attaches to a
+daemon it does not own. Before sending anything it prints an isolation proof (pid, port,
+adapter target, scratch dir).
+
+```bash
+tests/e2e-adapters.sh              # silent — safe anywhere
+tests/e2e-adapters.sh --audible    # also speaks, on the isolated instance only
+```
+
+Every spoken test line begins `Echo Test engaged. Beep, boop, bop.` so anything audible is
+unmistakably a test and never mistaken for a real notification.
 
 ## Teardown
 

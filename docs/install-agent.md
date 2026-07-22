@@ -72,7 +72,7 @@ If FAIL: confirm `command -v pi` works, then run `pi install ./adapters/pi` and 
 bash scripts/install.sh --adapter omp
 ```
 
-Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extensions/` (created, re-pointed, or already current) and the health check passes. omp reuses the shared Pi adapter and the Pi voice — there is no separate `adapters/omp/`.
+Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extensions/` (created, re-pointed, or already current) and the health check passes. omp has its own package at `adapters/omp/`, but shares the Pi persona and voice defaults.
 
 If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually — ownership rules in `docs/adapters.md`.
 

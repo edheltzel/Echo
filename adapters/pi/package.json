@@ -7,7 +7,13 @@
   "pi": {
     "extensions": ["./index.ts"]
   },
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.78.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": { "optional": true }
   }
 }
