@@ -97,11 +97,11 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 |---|---|
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
-| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
+| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
-| Adapter rules + registration contract (#77) + Pi #15 + oh-my-pi #18 | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
@@ -172,3 +172,10 @@ lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
 
 Add another child contract when a folder becomes a durable boundary that needs local rules
 (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
