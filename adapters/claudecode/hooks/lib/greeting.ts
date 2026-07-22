@@ -1,5 +1,5 @@
 import type { Identity } from './identity';
-import { DEFAULT_PERSONA_GREETINGS } from '../../../../shared/greeting';
+import { DEFAULT_PERSONA_GREETINGS } from '@echo/shared/greeting.ts';
 
 /**
  * Resolve the spoken startup catchphrase for a DA identity.

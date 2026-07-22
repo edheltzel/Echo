@@ -1,0 +1,10 @@
+{
+  "name": "@echo/shared",
+  "version": "0.1.0",
+  "description": "Host-neutral code shared by the Echo daemon and its host adapters",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*.ts": "./*.ts"
+  }
+}

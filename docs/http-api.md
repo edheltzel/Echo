@@ -1,7 +1,7 @@
 # HTTP API
 
 The universal core (`core/server.ts`) listens on `localhost:8888` (override: `PORT`) and
-exposes four endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
+exposes five endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
@@ -163,6 +163,32 @@ just because the import probe is slow or failed. The kokoro entry adds its `endp
 elevenlabs entry adds `apiKeyConfigured` (reflects only the `voices.json` `apiKey`
 indirection, not the bare-env fallback — see [`configuration.md`](configuration.md)). Detail
 in [`providers-observability.md`](providers-observability.md).
+
+## `GET /voices`
+
+Read-only projection of the daemon's resolved voice config. This is how a caller asks
+"which persona keys exist?" without reading `core/voices.json` off disk — a co-located
+checkout is not part of the contract, and the daemon may be running from a different clone
+or a different `VOICES_PATH` than the caller can see.
+
+```json
+{ "agents": ["architect", "engineer", "themis"], "default_provider": "edgetts" }
+```
+
+| Field | Notes |
+|---|---|
+| `agents` | Sorted persona **name keys** from `voices.json` — exactly the values `/notify` resolves as `voice_id`. Never a raw provider voice id |
+| `default_provider` | Same value `/health` reports as `activeProvider` |
+
+Unlike `/health`, this route probes no provider, so it is cheap enough to call per turn.
+The Claude Code adapter uses it to validate a `🗣️ <Name>:` persona tag before sending the
+key, so an unknown name falls back to the DA voice instead of degrading to the daemon
+default (see [`voices.md`](voices.md)). Callers must fail closed: an unreachable daemon or
+an unexpected body means "no known personas", never "assume it resolves".
+
+Adapters resolve this URL through `shared/daemon-endpoints.ts` rather than hard-coding a
+port, so pointing a host at a second instance is one variable (`ECHO_DAEMON_URL`) —
+see [`configuration.md`](configuration.md).
 
 ## Unsupported paths
 

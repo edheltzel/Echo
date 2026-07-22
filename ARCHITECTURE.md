@@ -57,10 +57,23 @@ by contract — a down voice daemon never breaks an agent turn.
 the daemon. All host coupling lives in `adapters/`, which talk to the core only over the
 HTTP `/notify` contract. This is the rule that lets one daemon serve every host.
 
-The boundary is **mechanically enforced**, not just documented:
-`tests/core/no-host-strings.test.ts` greps every file under `core/` for
-`/PAI|Claude|\.claude|OpenCode|\bPi\b/` and fails CI if any appears. When you add code to
-`core/`, host-specific behavior is a test failure, not a review nit.
+**Each adapter is self-contained.** `adapters/*` are workspace packages: every relative
+import stays inside the package root, shared behavior comes from the `@echo/shared` package
+each one declares as a dependency, and configuration comes over HTTP — never by reading the
+daemon's `core/` files, which belong to a process that may run from another clone entirely.
+
+The boundary is **mechanically enforced**, not just documented, and it is enforced in *both*
+directions:
+
+- `tests/core/no-host-strings.test.ts` greps every file under `core/` for
+  `/PAI|Claude|\.claude|OpenCode|\bPi\b/` and fails CI if any appears.
+- `tests/core/architecture-invariants.test.ts` scans imports out of `core/`, then scans each
+  adapter package for relative imports that escape its root, undeclared dependencies, and
+  `core/` filesystem paths. The last check is a string scan on purpose: the violation it
+  replaced was a `readFileSync` of `core/voices.json`, which no import-based check can see.
+
+When you add code to `core/` or an adapter, a boundary violation is a test failure, not a
+review nit.
 
 ## Repo layout
 
@@ -71,7 +84,7 @@ The boundary is **mechanically enforced**, not just documented:
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` — instant replay for repeated lines (#202). |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it; `resolveEchoEnv` — non-mutating env-file reads. |
-| Shared Echo env-file loading | `shared/echo-env.ts` | Applies one process-first, first-file-per-key configuration contract in the daemon and Pi/omp adapter without crossing into `core/`. |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first, first-file-per-key env loading), `notify-client.ts`, `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |

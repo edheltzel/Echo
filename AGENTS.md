@@ -17,6 +17,9 @@ that calls `POST /notify`.
 ## Quick commands
 
 ```bash
+# Link the workspace (adapters resolve @echo/shared through it)
+bun install
+
 # Install (core only / with a host adapter)
 bash scripts/install.sh --adapter none
 bash scripts/install.sh --adapter claudecode
@@ -50,10 +53,24 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 
 ```bash
 git checkout dev
+bun install                 # links @echo/shared into each adapter package (required)
 bun test
 PORT=8889 tests/smoke-core.sh
+tests/e2e-adapters.sh       # isolated daemon on :8899; --audible to hear it
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
 ```
+
+**`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
+through their own `node_modules`; without the workspace links a registered adapter fails to
+load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale.
+
+**Never test against the running daemon.** It serves the operator's real notifications, so
+restarting it, retargeting it, or speaking through it is a live-system incident.
+`tests/e2e-adapters.sh` starts its own instance on its own port with every state path
+(mute, capture, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
+refuses to attach to a port it does not own, and prints an isolation proof before sending
+anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
+is unmistakably a test.
 
 After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.echo"`
 (tail `~/Library/Logs/echo.log`). Use **Bun only** — no npm/npx/node. Run
@@ -102,13 +119,14 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| Shared Echo environment-file loader | `shared/echo-env.ts` |
+| `@echo/shared` workspace package (env loading, notify client, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Pi extension package | `adapters/pi/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
 | Neutral install/lifecycle | `scripts/` |
-| Version · changelog | `package.json`, `CHANGELOG.md` |
+| Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
+| Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
 ## Invariants / must not do
 
@@ -119,7 +137,11 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
 - Do not broad-kill whatever owns port `8888`; it may be another service.
 - Do not commit secrets or `.env` files.
-- Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key. Adapters may import `shared/`, never `core/`.
+- Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key.
+- Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
+- Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
+- Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
+- Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.

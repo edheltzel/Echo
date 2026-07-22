@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 // Mechanical enforcement of the statically-checkable `core/` invariants that
 // AGENTS.md states as prose ("Invariants / must not do"). Prose gets ignored;
@@ -12,19 +12,26 @@ import { join } from "node:path";
 // misses) and adds the :31337, /tmp, and route-name invariants.
 
 const CORE_DIR = "core";
+const ADAPTERS_DIR = "adapters";
 
-/** Every file under core/ (recursive), so a future subdir is covered too. */
-function coreFiles(): string[] {
+/** Every file under `dir` (recursive), skipping installed/linked dependencies. */
+function filesUnder(dir: string): string[] {
   const out: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir)) {
-      const path = join(dir, entry);
+  const walk = (current: string) => {
+    for (const entry of readdirSync(current)) {
+      if (entry === "node_modules") continue;
+      const path = join(current, entry);
       if (statSync(path).isDirectory()) walk(path);
       else out.push(path);
     }
   };
-  walk(CORE_DIR);
+  walk(dir);
   return out;
+}
+
+/** Every file under core/ (recursive), so a future subdir is covered too. */
+function coreFiles(): string[] {
+  return filesUnder(CORE_DIR);
 }
 
 /** Runtime TypeScript sources under core/ (excludes JSON config). */
@@ -32,8 +39,12 @@ function coreTsFiles(): string[] {
   return coreFiles().filter((f) => f.endsWith(".ts"));
 }
 
-/** Import/require/dynamic-import module specifiers in a source file. */
-function importSpecifiers(content: string): string[] {
+/**
+ * Import/require/dynamic-import module specifiers in a source file. Comments are
+ * stripped first — prose like "distinct from 'failed'" is not an import.
+ */
+function importSpecifiers(source: string): string[] {
+  const content = stripComments(source);
   const specs: string[] = [];
   const patterns = [
     /\bfrom\s+["']([^"']+)["']/g, // import ... from "x"
@@ -187,6 +198,139 @@ describe("core architecture invariants", () => {
     assertNoOffenders(
       offenders,
       "scripts/install.sh must use the renamed adapter (claudecode), not the old 'pai' name (#59).",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adapter-side invariants.
+//
+// The `core/` block above only ever looked outward from the daemon, so two real
+// boundary violations lived here for months without turning anything red:
+//   - the Pi adapter imported five modules from `../../shared/`, outside its own
+//     package root, which no core-only import scan could see;
+//   - the Claude Code adapter `readFileSync`'d `core/voices.json`, which even an
+//     adapter-side *import* scan would have missed — a filesystem read is not an
+//     import. That one needs a string scan.
+// Both classes are covered below.
+// ---------------------------------------------------------------------------
+
+/** Adapter package roots: every `adapters/<name>/` that ships a package.json. */
+function adapterPackages(): { name: string; root: string; manifest: Record<string, any> }[] {
+  return readdirSync(ADAPTERS_DIR)
+    .map((name) => ({ name, root: join(ADAPTERS_DIR, name) }))
+    .filter(({ root }) => statSync(root).isDirectory() && existsSync(join(root, "package.json")))
+    .map(({ name, root }) => ({
+      name,
+      root,
+      manifest: JSON.parse(readFileSync(join(root, "package.json"), "utf8")),
+    }));
+}
+
+function adapterTsFiles(root: string): string[] {
+  return filesUnder(root).filter((f) => f.endsWith(".ts"));
+}
+
+/** Node/Bun builtins an adapter may import without declaring them. */
+function isBuiltin(spec: string): boolean {
+  return (
+    spec.startsWith("node:") ||
+    spec === "bun" ||
+    spec.startsWith("bun:") ||
+    ["fs", "path", "os", "url", "util", "crypto", "child_process", "process"].includes(spec)
+  );
+}
+
+/** The package name part of a specifier: `@scope/pkg/sub` → `@scope/pkg`. */
+function packageNameOf(spec: string): string {
+  const parts = spec.split("/");
+  return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
+
+describe("adapter package boundary invariants", () => {
+  test("every adapters/* package ships a manifest (so its boundary is declarable)", () => {
+    const missing = readdirSync(ADAPTERS_DIR)
+      .filter((name) => statSync(join(ADAPTERS_DIR, name)).isDirectory())
+      .filter((name) => !existsSync(join(ADAPTERS_DIR, name, "package.json")));
+    assertNoOffenders(
+      missing.map((name) => `adapters/${name}: no package.json`),
+      "Every host adapter is a package: it declares what it depends on rather than reaching " +
+        "up the tree. Add adapters/<name>/package.json and list it in the root workspaces array.",
+    );
+  });
+
+  // Invariant 7 — an adapter is self-contained: no relative import escapes its root.
+  test("no adapter imports a relative path outside its own package root", () => {
+    const offenders: string[] = [];
+    for (const { root } of adapterPackages()) {
+      const packageRoot = resolve(root);
+      for (const file of adapterTsFiles(root)) {
+        for (const spec of importSpecifiers(readFileSync(file, "utf8"))) {
+          if (!spec.startsWith(".")) continue;
+          const target = resolve(dirname(file), spec);
+          if (target === packageRoot || target.startsWith(packageRoot + "/")) continue;
+          offenders.push(`${file}: imports "${spec}" → ${relative(".", target)}, outside ${root}/`);
+        }
+      }
+    }
+    assertNoOffenders(
+      offenders,
+      "A host adapter must be self-contained: every relative import stays inside its own " +
+        "package root. Shared behavior belongs in the @echo/shared workspace package, imported " +
+        'by name ("@echo/shared/<module>.ts") and declared in the adapter\'s package.json — ' +
+        "not reached across the tree with ../../.",
+    );
+  });
+
+  // Invariant 8 — a bare specifier must be a declared dependency, not an ambient one.
+  test("every non-relative adapter import is a builtin or a declared dependency", () => {
+    const offenders: string[] = [];
+    for (const { root, manifest } of adapterPackages()) {
+      const declared = new Set([
+        ...Object.keys(manifest.dependencies ?? {}),
+        ...Object.keys(manifest.peerDependencies ?? {}),
+        ...Object.keys(manifest.devDependencies ?? {}),
+      ]);
+      for (const file of adapterTsFiles(root)) {
+        for (const spec of importSpecifiers(readFileSync(file, "utf8"))) {
+          if (spec.startsWith(".") || isBuiltin(spec)) continue;
+          const pkg = packageNameOf(spec);
+          if (!declared.has(pkg)) offenders.push(`${file}: imports "${spec}" — ${pkg} is not in ${root}/package.json`);
+        }
+      }
+    }
+    assertNoOffenders(
+      offenders,
+      "An adapter must declare every package it imports in its own package.json " +
+        "(dependencies or peerDependencies). An undeclared import resolves only by accident " +
+        "of where the checkout happens to sit.",
+    );
+  });
+
+  // Invariant 9 — adapters reach the daemon over HTTP, never through its files.
+  // This is the string-scan companion to the import scans above: the Claude Code
+  // adapter's `core/voices.json` read was a filesystem path in a string literal,
+  // invisible to any import-based check.
+  test("no adapter reads the daemon's core/ files off disk", () => {
+    const offenders: string[] = [];
+    for (const { root } of adapterPackages()) {
+      for (const file of adapterTsFiles(root)) {
+        const stripped = stripComments(readFileSync(file, "utf8"));
+        stripped.split("\n").forEach((line, i) => {
+          // A `core/…` path literal, or a path built from a 'core' segment
+          // (join(…, 'core', 'voices.json')).
+          if (/["'`][^"'`]*\bcore\/[^"'`]*["'`]/.test(line) || /["']core["']\s*,/.test(line)) {
+            offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+          }
+        });
+      }
+    }
+    assertNoOffenders(
+      offenders,
+      "Adapters talk to the daemon over the HTTP contract only — they must not read core/ " +
+        "files off disk. A co-located checkout is not part of the contract: the daemon may run " +
+        "from another clone or another VOICES_PATH. Ask the daemon instead (GET /voices for " +
+        "configured persona keys); see docs/http-api.md.",
     );
   });
 });

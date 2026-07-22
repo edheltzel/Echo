@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildVoicePayload,
   clearAgentKeysCache,
-  loadKnownAgentKeys,
+  fetchKnownAgentKeys,
   resolvePersonaKey,
   selectVoice,
 } from "../../../adapters/claudecode/hooks/handlers/VoiceNotification";
@@ -302,7 +302,8 @@ describe("integration — full Stop-hook chain (transcript → parse → selectV
         { type: "assistant", message: { content: [{ type: "text", text: "Working on it.\n🗣️ Themis: dispatching the worker now." }] } },
       ],
       (path) => {
-        const sel = selectVoice(parseTranscript(path), ATLAS);
+        // KNOWN stands in for the daemon's GET /voices answer, which handleVoice awaits.
+        const sel = selectVoice(parseTranscript(path), ATLAS, KNOWN);
         expect(sel.voiceId).toBe("themis");
         expect(sel.voiceId).not.toBe(ATLAS.mainDAVoiceID);
       },
@@ -316,51 +317,87 @@ describe("integration — full Stop-hook chain (transcript → parse → selectV
         { type: "assistant", message: { content: [{ type: "text", text: "Fixed the bug.\n🗣️ Atlas: shipped the fix." }] } },
       ],
       (path) => {
-        const sel = selectVoice(parseTranscript(path), ATLAS);
+        const sel = selectVoice(parseTranscript(path), ATLAS, KNOWN);
         expect(sel.voiceId).toBe(ATLAS.mainDAVoiceID);
       },
     );
   });
 });
 
-describe("loadKnownAgentKeys — default loader is crash-safe", () => {
-  function withVoicesPath(value: string | undefined, fn: () => void) {
-    const prev = process.env.VOICES_PATH;
-    if (value === undefined) delete process.env.VOICES_PATH;
-    else process.env.VOICES_PATH = value;
+describe("fetchKnownAgentKeys — persona keys come from the daemon, not its config file", () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrls: string[] = [];
+
+  function stubDaemon(respond: () => Response | Promise<Response>) {
+    requestedUrls = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrls.push(String(input));
+      return respond();
+    }) as typeof fetch;
     clearAgentKeysCache();
-    try {
-      fn();
-    } finally {
-      if (prev === undefined) delete process.env.VOICES_PATH;
-      else process.env.VOICES_PATH = prev;
-      clearAgentKeysCache();
-    }
   }
 
-  test("missing voices.json → empty set, no throw → selectVoice falls back to DA", () => {
-    withVoicesPath("/nonexistent/path/voices.json", () => {
-      expect(() => loadKnownAgentKeys()).not.toThrow();
-      expect(loadKnownAgentKeys().size).toBe(0);
-      // Default loader (no explicit knownAgents) → unknown → DA voice.
-      const sel = selectVoice(parsedWith("🗣️ Themis: go."), ATLAS);
-      expect(sel.voiceId).toBe(ATLAS.mainDAVoiceID);
-    });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    clearAgentKeysCache();
+    delete process.env.ECHO_DAEMON_URL;
   });
 
-  test("malformed voices.json → empty set, no throw → selectVoice falls back to DA", () => {
-    const root = mkdtempSync(join(tmpdir(), "atlas-bad-voices-"));
-    try {
-      const bad = join(root, "voices.json");
-      writeFileSync(bad, "{ not valid json ");
-      withVoicesPath(bad, () => {
-        expect(() => loadKnownAgentKeys()).not.toThrow();
-        expect(loadKnownAgentKeys().size).toBe(0);
-        const sel = selectVoice(parsedWith("🗣️ Themis: go."), ATLAS);
-        expect(sel.voiceId).toBe(ATLAS.mainDAVoiceID);
-      });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+  test("reads GET /voices and never touches core/voices.json", async () => {
+    stubDaemon(() => Response.json({ agents: ["themis", "engineer"] }));
+
+    const keys = await fetchKnownAgentKeys();
+
+    expect([...keys].sort()).toEqual(["engineer", "themis"]);
+    expect(requestedUrls).toEqual(["http://localhost:8888/voices"]);
+    // The source is the daemon's answer, so an on-disk VOICES_PATH is irrelevant.
+    expect(requestedUrls.some((u) => u.includes("voices.json"))).toBe(false);
+  });
+
+  test("honors ECHO_DAEMON_URL so a second instance is reachable", async () => {
+    process.env.ECHO_DAEMON_URL = "http://localhost:8899";
+    stubDaemon(() => Response.json({ agents: ["themis"] }));
+
+    await fetchKnownAgentKeys();
+
+    expect(requestedUrls).toEqual(["http://localhost:8899/voices"]);
+  });
+
+  test("caches per process — one GET per hook run", async () => {
+    stubDaemon(() => Response.json({ agents: ["themis"] }));
+
+    await fetchKnownAgentKeys();
+    await fetchKnownAgentKeys();
+
+    expect(requestedUrls).toHaveLength(1);
+  });
+
+  test("daemon unreachable → empty set, no throw → selectVoice falls back to DA", async () => {
+    stubDaemon(() => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    const keys = await fetchKnownAgentKeys();
+
+    expect(keys.size).toBe(0);
+    expect(selectVoice(parsedWith("🗣️ Themis: go."), ATLAS, keys).voiceId).toBe(ATLAS.mainDAVoiceID);
+  });
+
+  test("daemon error status → empty set, no throw", async () => {
+    stubDaemon(() => new Response("nope", { status: 500 }));
+
+    expect((await fetchKnownAgentKeys()).size).toBe(0);
+  });
+
+  test("malformed daemon response → empty set, no throw", async () => {
+    stubDaemon(() => new Response("{ not valid json ", { status: 200 }));
+
+    expect((await fetchKnownAgentKeys()).size).toBe(0);
+  });
+
+  test("non-string entries in agents are discarded", async () => {
+    stubDaemon(() => Response.json({ agents: ["themis", 7, null, { a: 1 }] }));
+
+    expect([...(await fetchKnownAgentKeys())]).toEqual(["themis"]);
   });
 });

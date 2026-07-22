@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PERSONA_GREETINGS } from "../../shared/greeting.ts";
+import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
 
 export interface PiVoiceConfig {
   endpoint: string;

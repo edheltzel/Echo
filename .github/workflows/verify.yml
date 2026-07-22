@@ -16,10 +16,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Link workspace packages
+        run: bun install --frozen-lockfile
       - name: Unit tests
         run: bun test
       - name: Core smoke
         run: PORT=8889 tests/smoke-core.sh
+      - name: Adapter boundary e2e (isolated daemon, silent)
+        run: ECHO_E2E_PORT=8899 tests/e2e-adapters.sh
       - name: Pi adapter build
         run: bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
       - name: omp adapter build
