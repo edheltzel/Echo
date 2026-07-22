@@ -44,7 +44,7 @@
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
 | Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
-| oh-my-pi (omp) | `adapters/pi/` (shared) | Supported — same adapter, dual-shape `before_agent_start` | `bash scripts/install.sh --adapter omp` |
+| oh-my-pi (omp) | `adapters/omp/` | Supported — sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | OpenCode | TBD | Planned | Future adapter |
 
 ## Decision matrix

@@ -134,6 +134,6 @@ the adapter absorbs:
   2 on a FATAL state, and the installer preflights `--check` (tolerating 3) so a FATAL
   state aborts before any host state is mutated.
 
-omp shares Pi's adapter configuration and default `voice_id: "pi"` / `personaName: "Pi"`;
-there is no separate omp persona. Local values from `~/.config/echo/.env` override those
-defaults for both hosts.
+omp reads the same canonical `ECHO_VOICE_*` configuration as Pi and defaults to the same
+`voice_id: "pi"`, but speaks as `personaName: "omp"`. Local values from `~/.config/echo/.env`
+override those defaults for both hosts.

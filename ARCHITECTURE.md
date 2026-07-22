@@ -91,7 +91,8 @@ review nit.
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
-| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention; the same package serves the oh-my-pi (omp) fork. |
+| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
+| omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork — its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler. |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path). |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
@@ -101,7 +102,8 @@ review nit.
 A `POST /notify` runs through `core/server.ts` roughly in this order:
 
 1. **Rate-limit** — `checkRateLimit(clientIp)`: 10 requests per 60s per client IP, 429 on
-   breach. With no proxy header, all local callers share one `localhost` bucket.
+   breach. With no proxy header, all local callers share one `localhost` bucket; the
+   per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** — `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
    input is a 4xx **before** anything is queued.
@@ -170,13 +172,15 @@ to Atlas automatically. Full mechanism: [`docs/voices.md`](docs/voices.md).
 
 ## Adapters
 
-Adapters are **fully out-of-process**, import nothing from `core/`, and speak only the HTTP
-`/notify` contract. Host lifecycle behavior remains independent: the Claude Code adapter
+Adapters are **fully out-of-process**, import nothing from `core/`, and speak only the
+daemon's HTTP contract (`POST /notify`, plus `GET /voices` to learn which persona keys
+exist). Host lifecycle behavior remains independent: the Claude Code adapter
 suppresses subagents via stdin `agent_id` and reads `~/.claude/settings.json` for identity;
 Pi suppresses via `ECHO_VOICE_SUPPRESS` plus run-context (`hasUI === false`, or mode
-`json`/`print`). The daemon and Pi/omp adapter share only the host-neutral environment-file
-loader (`shared/echo-env.ts`), so `~/.config/echo/.env` uses identical precedence in both
-processes. Adapter responsibilities and the Pi per-turn injection (#15):
+`json`/`print`). The daemon and the adapters share code only through the `@echo/shared`
+package — including the environment-file loader (`shared/echo-env.ts`), so
+`~/.config/echo/.env` uses identical precedence in every process. The package boundary,
+adapter responsibilities, and the Pi per-turn injection (#15):
 [`docs/adapters.md`](docs/adapters.md).
 
 ## Invariants (must not do)
@@ -187,8 +191,8 @@ are contract.
 - **Never import a host API into `core/`** — no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
 - **No new host-named endpoints.** The core exposes only `POST /notify`,
-  `POST /notify/personality`, `POST /mute`, `GET /health`. Unsupported POSTs return JSON 404
-  with `supported_endpoints`.
+  `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`. Unsupported POSTs
+  return JSON 404 with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan — many callers depend on the body shape and status semantics.
 - **All voice traffic is `:8888`.** No new `localhost:31337` references (the legacy Pulse

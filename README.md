@@ -7,8 +7,8 @@ Standalone, multi-provider TTS notification server for coding agents, terminals,
 The server core accepts JSON on `localhost:8888` and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
 - `adapters/claudecode/` — Claude Code hook integration.
-- `adapters/pi/` — Pi extension package integration; the same adapter also serves the
-  oh-my-pi (omp) fork.
+- `adapters/pi/` — Pi extension package integration.
+- `adapters/omp/` — oh-my-pi (omp) extension package integration.
 - direct HTTP — any process can POST to `/notify`.
 
 ## Architecture
@@ -107,7 +107,7 @@ Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md]
 
 ## API
 
-Four endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
+Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 
@@ -148,6 +148,12 @@ status-only: `/notify` still tries real Edge synthesis unless Edge is disabled o
 circuit breaker is open. Details: [docs/http-api.md](docs/http-api.md),
 [docs/providers-observability.md](docs/providers-observability.md), and
 [docs/reliability.md](docs/reliability.md).
+
+### `GET /voices`
+
+Read-only projection of the configured personas: `{"agents": [...], "default_provider": "..."}`.
+This is how a caller checks whether a `voice_id` name key will resolve without reading the
+daemon's `voices.json` off disk. Contract: [docs/http-api.md](docs/http-api.md).
 
 ### Voice-resolution drop-off log
 

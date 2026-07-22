@@ -48,7 +48,10 @@ Out of scope: speech-to-text, voice cloning UI, and unrelated coding-agent featu
 
 ## Adding a Host Adapter
 
-1. Create `adapters/<host>/`.
+1. Create `adapters/<host>/` as a workspace package: its own `package.json` declaring
+   `@echo/shared`, listed in the root `workspaces` array. Relative imports must stay inside
+   the package root, and the daemon's config is read over HTTP, never off disk — the package
+   boundary contract lives in [`docs/adapters.md`](docs/adapters.md).
 2. Translate host lifecycle events into `/notify` payloads.
 3. Include `source` and `session_id` when available.
 4. Keep host-specific settings and paths inside the adapter.
