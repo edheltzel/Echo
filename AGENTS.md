@@ -80,8 +80,10 @@ same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 ## Release & versioning
 
 Project version lives in the root `package.json` (declarative metadata only — no code reads
-it). Track notable changes in `CHANGELOG.md` ([Keep a Changelog](https://keepachangelog.com/)
-+ [SemVer](https://semver.org/)). **Flow:** work on `dev` → PR into `dev` → reviewer sign-off
+it). `CHANGELOG.md` is generated from tags and merged-PR history at release time,
+following the [Keep a Changelog](https://keepachangelog.com/) + [SemVer](https://semver.org/)
+format; do not hand-write it. Contributors and agents must not add or edit entries on a
+feature branch. **Flow:** work on `dev` → PR into `dev` → reviewer sign-off
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
 merges; never push directly to `master`** (see Invariants).
 
