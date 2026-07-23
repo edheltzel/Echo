@@ -128,6 +128,9 @@ describe("resolveCaptureStatePath — env contract", () => {
   test("override is honored at call time; empty string disables the guard", () => {
     const saved = process.env.ECHO_CAPTURE_STATE_PATH;
     try {
+      // Pin the env-file layer to empty so the operator's real
+      // ~/.config/echo/.env can never leak into the default-path expectation.
+      primeEchoFileEnv({});
       process.env.ECHO_CAPTURE_STATE_PATH = "/some/where.json";
       expect(resolveCaptureStatePath()).toBe("/some/where.json");
       process.env.ECHO_CAPTURE_STATE_PATH = "";
@@ -137,6 +140,7 @@ describe("resolveCaptureStatePath — env contract", () => {
       expect(resolveCaptureStatePath()).toContain(join(".local", "state", "voicelayer", "recording-state.json"));
     } finally {
       process.env.ECHO_CAPTURE_STATE_PATH = saved;
+      primeEchoFileEnv(undefined);
     }
   });
 
