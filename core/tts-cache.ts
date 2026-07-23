@@ -25,7 +25,7 @@ import {
   unlinkSync,
   utimesSync,
 } from "node:fs";
-import { parseBoundedInt } from "./env";
+import { parseBoundedInt, resolveEchoEnv } from "./env";
 
 // Texts longer than this bypass the cache entirely (catchphrases / "standing
 // by" lines are well under it). Canonical ECHO_* read first; legacy
@@ -49,11 +49,11 @@ export const TTS_CACHE_MAX_BYTES = parseBoundedInt(
 // Resolved at call time (not frozen at import) so a test setting the override
 // before its first call writes to the intended path regardless of import order.
 export function ttsCacheDir(): string {
-  const override = process.env.ECHO_TTS_CACHE_DIR ?? process.env.VOICESYSTEM_TTS_CACHE_DIR;
+  const override = resolveEchoEnv("ECHO_TTS_CACHE_DIR") ?? resolveEchoEnv("VOICESYSTEM_TTS_CACHE_DIR");
   if (override) return override;
   return process.platform === "darwin"
     ? join(homedir(), "Library", "Caches", "echo", "tts-cache")
-    : join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "echo", "tts-cache");
+    : join(resolveEchoEnv("XDG_CACHE_HOME") || join(homedir(), ".cache"), "echo", "tts-cache");
 }
 
 // A phrase is cacheable when it's short enough to be a recurring line.

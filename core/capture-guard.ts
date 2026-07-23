@@ -22,6 +22,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveEchoEnv } from "./env";
 
 export type CaptureState = "idle" | "recording" | "transcribing";
 
@@ -32,7 +33,7 @@ const CAPTURE_STATES: readonly CaptureState[] = ["idle", "recording", "transcrib
 // writer, not the XDG convention); empty string → guard disabled entirely.
 // Resolved at call time (not frozen at module load), like the mute path.
 export function resolveCaptureStatePath(): string | null {
-  const env = process.env.ECHO_CAPTURE_STATE_PATH;
+  const env = resolveEchoEnv("ECHO_CAPTURE_STATE_PATH");
   if (env !== undefined) return env === "" ? null : env;
   return join(homedir(), ".local", "state", "voicelayer", "recording-state.json");
 }

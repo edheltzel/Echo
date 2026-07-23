@@ -139,6 +139,12 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:8888`.
 - Do not broad-kill whatever owns port `8888`; it may be another service.
 - Do not commit secrets or `.env` files.
+- Do not write env-file config into `process.env`. Core resolves env-file values through
+  `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at
+  import leaked the operator's `ECHO_VOICE_*` identity into same-process adapter tests
+  (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
+  `tests/core/architecture-invariants.test.ts` (source scan) plus
+  `tests/core/import-purity.test.ts` (isolated import of the daemon proves nothing leaks).
 - Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key.
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
 - Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.

@@ -208,6 +208,42 @@ describe("core architecture invariants", () => {
       "scripts/install.sh must use the renamed adapter (claudecode), not the old 'pai' name (#59).",
     );
   });
+
+  // Invariant 10 — core/ never writes to process.env (config resolution is import-pure).
+  // Hydrating the operator's env files into process.env at import leaked the
+  // configured ECHO_VOICE_* identity into same-process adapter code and its
+  // tests (the pi-adapter "Atlas" pollution, a #47 class file-order hazard).
+  // Only the statically decidable write forms are scanned here — `fn(process.env)`
+  // is undecidable from source, so the whole-module proof that importing the
+  // daemon mutates nothing lives in `tests/core/import-purity.test.ts`.
+  test("core/ never writes to process.env (config resolution is import-pure)", () => {
+    const writes: { re: RegExp; what: string }[] = [
+      // The key access is optional so wholesale replacement (`process.env = {...}`)
+      // is caught too; the trailing `(?!=)` keeps a `process.env.X === "1"`
+      // comparison a read.
+      {
+        re: /process\.env(?:\.\w+|\[[^\]]*\])?\s*(?:\?\?=|\|\|=|&&=|<<=|>>>=|>>=|[+\-*/%&|^]?=)(?!=)/,
+        what: "assignment",
+      },
+      { re: /\bObject\.assign\s*\(\s*process\.env\b/, what: "Object.assign into process.env" },
+      { re: /\bdelete\s+process\.env(?:\.\w+|\[[^\]]*\])/, what: "delete" },
+    ];
+    const offenders: string[] = [];
+    for (const file of coreTsFiles()) {
+      const stripped = stripComments(readFileSync(file, "utf8"));
+      stripped.split("\n").forEach((line, i) => {
+        const hit = writes.find((w) => w.re.test(line));
+        if (hit) offenders.push(`${file}:${i + 1}: ${hit.what} — ${line.trim()}`);
+      });
+    }
+    assertNoOffenders(
+      offenders,
+      "core/ must not write to process.env. Read config through resolveEchoEnv (core/env.ts), " +
+        "which layers the env-file values UNDER the live process environment without mutating it. " +
+        "Hydrating process.env leaks the operator's env-file identity (ECHO_VOICE_*) into any " +
+        "same-process adapter code loaded afterwards.",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -52,13 +52,17 @@ logged), not an oversight; do not add network exposure without revisiting it.
   gitignored. Never commit an API key.
 - **ElevenLabs key via env.** `voices.json` carries only the placeholder
   `'${ELEVENLABS_API_KEY}'`; the daemon interpolates the real key from the environment at
-  runtime (`resolveEnvVar`, falling back to `process.env.ELEVENLABS_API_KEY`). The key is
+  runtime (`resolveEnvVar`, falling back to a bare `ELEVENLABS_API_KEY`). The key is
   read once in the provider constructor — `/health` reports only `apiKeyConfigured: true|false`,
   never the key itself.
-- **Env files load from user-owned paths** (`ECHO_ENV_PATHS`,
-  `~/.config/echo/.env`, …), first-found-wins, never overriding an
-  already-set `process.env` value. (Legacy `VOICESYSTEM_ENV_PATHS` is still
-  honored as a deprecated silent fallback — see the README.)
+- **Env files resolve from user-owned paths** (`ECHO_ENV_PATHS`,
+  `~/.config/echo/.env`, …), first-found-wins, never overriding a live
+  environment value. Resolution is read-only: the daemon layers file values under
+  the live environment at read time and never writes them into `process.env`, so an
+  env-file secret is not hydrated into the environment that same-process modules
+  and spawned helpers inherit. Precedence detail: [`docs/configuration.md`](docs/configuration.md).
+  (Legacy `VOICESYSTEM_ENV_PATHS` is still honored as a deprecated silent
+  fallback — see the README.)
 
 ## User-owned paths — never `/tmp`
 

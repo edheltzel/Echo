@@ -79,6 +79,12 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
   });
 
+  test("an empty live process value still wins over the file layer", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    process.env.ECHO_ENV_TEST_KEY = "";
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("");
+  });
+
   test("resolving never mutates process.env (import-purity contract)", () => {
     primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");

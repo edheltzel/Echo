@@ -54,7 +54,7 @@ function loadEchoFileEnv(): Record<string, string | undefined> {
  */
 export function resolveEchoEnv(key: string): string | undefined {
   const live = process.env[key];
-  if (live) return live;
+  if (live !== undefined) return live;
   fileEnv ??= loadEchoFileEnv();
   return fileEnv[key];
 }
