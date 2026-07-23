@@ -16,6 +16,7 @@ import {
   writeTtsCache,
   TTS_CACHE_MAX_TEXT_CHARS,
 } from "../../core/tts-cache";
+import { primeEchoFileEnv } from "../../core/env";
 
 let dir: string;
 let srcDir: string;
@@ -101,6 +102,19 @@ describe("pruneTtsCache", () => {
 });
 
 describe("ECHO_TTS_CACHE_DIR override", () => {
+  test("env-file override is honored when live env is absent", () => {
+    const saved = process.env.ECHO_TTS_CACHE_DIR;
+    try {
+      delete process.env.ECHO_TTS_CACHE_DIR;
+      primeEchoFileEnv({ ECHO_TTS_CACHE_DIR: "/from/file" });
+      expect(ttsCacheDir()).toBe("/from/file");
+    } finally {
+      if (saved === undefined) delete process.env.ECHO_TTS_CACHE_DIR;
+      else process.env.ECHO_TTS_CACHE_DIR = saved;
+      primeEchoFileEnv(undefined);
+    }
+  });
+
   test("ttsCacheDir honors the env override", () => {
     process.env.ECHO_TTS_CACHE_DIR = dir;
     expect(ttsCacheDir()).toBe(dir);

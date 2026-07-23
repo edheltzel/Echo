@@ -15,6 +15,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readCaptureState, isCaptureActive, resolveCaptureStatePath } from "../../core/capture-guard";
+import { primeEchoFileEnv } from "../../core/env";
 import { waitFor } from "./poll";
 
 // --- spawn stub (playback is platform-dependent: afplay on darwin, mpv else) -
@@ -109,6 +110,21 @@ describe("readCaptureState — tolerant reads", () => {
 });
 
 describe("resolveCaptureStatePath — env contract", () => {
+  test("env-file override is honored and an empty live value disables the guard", () => {
+    const saved = process.env.ECHO_CAPTURE_STATE_PATH;
+    try {
+      delete process.env.ECHO_CAPTURE_STATE_PATH;
+      primeEchoFileEnv({ ECHO_CAPTURE_STATE_PATH: "/from/file.json" });
+      expect(resolveCaptureStatePath()).toBe("/from/file.json");
+      process.env.ECHO_CAPTURE_STATE_PATH = "";
+      expect(resolveCaptureStatePath()).toBeNull();
+    } finally {
+      if (saved === undefined) delete process.env.ECHO_CAPTURE_STATE_PATH;
+      else process.env.ECHO_CAPTURE_STATE_PATH = saved;
+      primeEchoFileEnv(undefined);
+    }
+  });
+
   test("override is honored at call time; empty string disables the guard", () => {
     const saved = process.env.ECHO_CAPTURE_STATE_PATH;
     try {

@@ -15,6 +15,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { resolveEchoEnv } from "./env";
 
 export interface MuteState {
   muted: boolean;
@@ -27,10 +28,10 @@ const UNMUTED: MuteState = { muted: false, muted_until: null };
 // Resolved at call time (not frozen at module load) so tests and operators can
 // repoint ECHO_MUTE_STATE_PATH without a daemon restart ordering concern.
 export function resolveMuteStatePath(): string {
-  return process.env.ECHO_MUTE_STATE_PATH ?? (
+  return resolveEchoEnv("ECHO_MUTE_STATE_PATH") ?? (
     process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Application Support', 'echo', 'mute.json')
-      : join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'echo', 'mute.json')
+      : join(resolveEchoEnv("XDG_STATE_HOME") || join(homedir(), '.local', 'state'), 'echo', 'mute.json')
   );
 }
 
