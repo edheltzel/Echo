@@ -218,9 +218,11 @@ describe("core architecture invariants", () => {
   // daemon mutates nothing lives in `tests/core/import-purity.test.ts`.
   test("core/ never writes to process.env (config resolution is import-pure)", () => {
     const writes: { re: RegExp; what: string }[] = [
-      // The trailing `(?!=)` keeps a `process.env.X === "1"` comparison a read.
+      // The key access is optional so wholesale replacement (`process.env = {...}`)
+      // is caught too; the trailing `(?!=)` keeps a `process.env.X === "1"`
+      // comparison a read.
       {
-        re: /process\.env(?:\.\w+|\[[^\]]*\])\s*(?:\?\?=|\|\|=|&&=|<<=|>>>=|>>=|[+\-*/%&|^]?=)(?!=)/,
+        re: /process\.env(?:\.\w+|\[[^\]]*\])?\s*(?:\?\?=|\|\|=|&&=|<<=|>>>=|>>=|[+\-*/%&|^]?=)(?!=)/,
         what: "assignment",
       },
       { re: /\bObject\.assign\s*\(\s*process\.env\b/, what: "Object.assign into process.env" },

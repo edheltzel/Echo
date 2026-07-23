@@ -23,6 +23,14 @@ import { join, resolve } from "node:path";
 const ROOT = process.cwd();
 const scratch = mkdtempSync(join(tmpdir(), "echo-import-purity-"));
 
+// Importing the daemon runs its top-level `await getProviderStatus()`, which
+// spawns the edge-tts health probe. Bun.spawnSync blocks this thread, so the
+// bun-test timeout below cannot preempt it — the child must carry its own
+// deadline, kept under the test's so a stall fails readably here instead of
+// wedging the suite until the CI job dies.
+const CHILD_TIMEOUT_MS = 60_000;
+const TEST_TIMEOUT_MS = 90_000;
+
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const CHILD = `
@@ -75,13 +83,17 @@ function importCoreServer(): { added: string[]; changed: string[]; fileLayerProb
       },
       stdout: "pipe",
       stderr: "pipe",
+      timeout: CHILD_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     },
   );
 
   if (proc.exitCode !== 0) {
+    const how = proc.signalCode
+      ? `killed by ${proc.signalCode}, child deadline ${CHILD_TIMEOUT_MS}ms`
+      : `exit ${proc.exitCode}`;
     throw new Error(
-      `Importing core/server.ts in an isolated process failed (exit ${proc.exitCode}):\n` +
-        proc.stderr.toString(),
+      `Importing core/server.ts in an isolated process failed (${how}):\n` + proc.stderr.toString(),
     );
   }
   return JSON.parse(readFileSync(result, "utf8"));
@@ -96,5 +108,5 @@ describe("core import purity — importing the daemon must not mutate process.en
     expect(fileLayerProbe).toBe("leaked");
 
     expect({ added, changed }).toEqual({ added: [], changed: [] });
-  }, 60_000);
+  }, TEST_TIMEOUT_MS);
 });
