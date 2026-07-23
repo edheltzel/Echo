@@ -40,7 +40,7 @@ Confirmed by reading the adapter (grounded via codegraph `codegraph_explore` on
 - `session_shutdown` → clears dedupe state.
 
 `extractVoiceLineFromMessage` → `getAssistantText` → `extractVoiceLineFromText`
-(`adapters/pi/voice-line.ts`) **only returns a value for lines beginning with `🗣️`/`🗣`**.
+(`shared/voice-line.ts`) **only returns a value for lines beginning with `🗣️`/`🗣`**.
 Returns `null` otherwise.
 
 **Net:** Pi's own models are never told to emit a `🗣️` line (no system-prompt convention
@@ -99,7 +99,7 @@ using the configured persona name (`ECHO_VOICE_PERSONA_NAME`, default `"Atlas"`)
 (`hasUI === false`) neither emit the tag nor speak. Feature-detects `event.systemPrompt` and
 no-ops if absent (older runtime → degrade safely).
 
-### 4.2 Stop the persona name from being spoken — `adapters/pi/voice-line.ts` (REQUIRED)
+### 4.2 Stop the persona name from being spoken — `shared/voice-line.ts` (REQUIRED)
 
 The one non-obvious gotcha. The original `extractVoiceLineFromText` only stripped the `🗣️`
 emoji and a single leading `:`/`-`. For `🗣️ Atlas: Tests passed.` it would return

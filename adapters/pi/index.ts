@@ -7,11 +7,11 @@ import {
   shouldSuppressVoice,
   type PiVoiceConfig,
 } from "./config.ts";
-import { loadEchoEnvironment } from "../../shared/echo-env.ts";
-import { sendNotification } from "../../shared/notify-client.ts";
-import { extractVoiceLineFromMessage, stableMessageKey } from "../../shared/voice-line.ts";
-import { createEchoVoiceCommand, mergePersonaJson } from "../../shared/persona-scaffold.ts";
-import { applyNameToken } from "../../shared/greeting.ts";
+import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
+import { sendNotification } from "@echo/shared/notify-client.ts";
+import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
+import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
+import { applyNameToken } from "@echo/shared/greeting.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 

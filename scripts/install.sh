@@ -88,11 +88,22 @@ omp_installed() {
   [ -L "$OMP_EXTENSIONS/echo-voice" ]
 }
 
+# Materialize the workspace links every adapter depends on. Each adapter package
+# declares `@echo/shared` as a dependency instead of reaching up the tree, so
+# `bun install` must have run before a host can load one. Idempotent and offline —
+# every workspace member is local, so this makes no network request.
+link_workspace() {
+  echo "> Linking workspace packages (@echo/shared)"
+  (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
+}
+
 preflight() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "Bun is required. Install it from https://bun.sh/" >&2
     exit 1
   fi
+
+  link_workspace
 
   case "$ADAPTER" in
     claudecode)
@@ -280,6 +291,17 @@ refresh_installed_adapters() {
 
 check_installation() {
   local stale=0
+
+  # Adapters resolve `@echo/shared` through their own node_modules; without the
+  # workspace links a registered adapter fails to load. Report, never mutate.
+  local adapter
+  for adapter in claudecode omp pi; do
+    if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
+      echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
+      stale=1
+    fi
+  done
+
   if [ -f "$PLIST_PATH" ]; then
     echo "> Checking $PLIST_PATH"
     local server_path workdir path

@@ -9,7 +9,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Core only** — any process can POST to `/notify`.
 - **Claude Code adapter** — Claude Code lifecycle hooks speak.
 - **Pi adapter** — Pi session start and `🗣️` completion lines speak.
-- **oh-my-pi (omp) adapter** — the same Pi adapter registered with the oh-my-pi fork; same behavior and voice.
+- **oh-my-pi (omp) adapter** — the omp counterpart of the Pi adapter; same behavior, its own package.
 
 ## Prerequisites
 
@@ -58,7 +58,7 @@ Inside Pi, `/voice-status` shows adapter configuration.
 bash scripts/install.sh --adapter omp
 ```
 
-This installs the core server and registers the shared Pi adapter with oh-my-pi by maintaining a single `echo-voice` symlink in `~/.omp/agent/extensions/`. It requires the `omp` CLI on your PATH. omp uses the same voice and persona as Pi.
+This installs the core server and registers `adapters/omp/` with oh-my-pi by maintaining a single `echo-voice` symlink in `~/.omp/agent/extensions/`. It requires the `omp` CLI on your PATH. Per-project persona and voice overrides read omp's own `.omp/config.yml` — see [`../adapters/omp/README.md`](../adapters/omp/README.md).
 
 The installer only ever touches the `echo-voice` entry. If something other than Echo already occupies that name, the install aborts before changing anything — see `docs/adapters.md` for the ownership rules.
 

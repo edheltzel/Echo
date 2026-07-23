@@ -12,9 +12,36 @@ Adapters should:
 1. Observe host lifecycle events.
 2. Extract a short user-facing message (for Pi/Claude Code, the final `🗣️` line).
 3. Add `source` and `session_id` metadata when available.
-4. POST to `http://localhost:8888/notify`.
+4. POST to the daemon's `/notify`, resolved via `shared/daemon-endpoints.ts`.
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
+
+## Package boundary — self-contained, HTTP-only
+
+Every host adapter is a **workspace package** (`adapters/<host>/package.json`, listed in the
+root `workspaces` array). Two rules make the boundary real rather than aspirational, and
+both are machine-enforced in `tests/core/architecture-invariants.test.ts`:
+
+1. **No import escapes the package root.** Relative imports stay inside `adapters/<host>/`.
+   Shared behavior is imported by name from `@echo/shared` — the `shared/` workspace package,
+   which every adapter declares in its own `dependencies`. `bun install` links it at
+   `adapters/<host>/node_modules/@echo/shared`, so resolution works wherever the host loads
+   the adapter from (repo path, foreign cwd, symlink, or bundled). A `../../shared/...`
+   import is a boundary violation: it means the package cannot be reasoned about, moved, or
+   packaged on its own.
+2. **No adapter reads the daemon's files.** Configuration comes over the HTTP contract, never
+   off disk. `GET /voices` reports the configured persona keys; `core/voices.json` is the
+   daemon's private state. The daemon may run from a different clone or a different
+   `VOICES_PATH`, so a co-located read is wrong even when it happens to work.
+
+An import scan alone cannot enforce rule 2 — the violation it replaced was a `readFileSync`
+of a path string, not an import — so the guard pairs an import check with a string scan for
+`core/` paths in adapter sources.
+
+`@echo/shared` is also the single owner of invariants both sides enforce: the edge-tts voice
+grammar lives in `shared/edge-voice.ts` and `core/server.ts` imports it, rather than each
+keeping a copy in sync. `shared/` may never import `core/` — core imports shared, so the
+dependency runs one way only.
 
 ## Registration contract — reconcile and prune (issue #77)
 
@@ -73,7 +100,7 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   (audibly the identity voice on stock installs), logged as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
-- `extractVoiceLineFromText` (`adapters/pi/voice-line.ts`) strips an optional leading
+- `extractVoiceLineFromText` (`shared/voice-line.ts`) strips an optional leading
   `<Name>:` (mirroring the Claude Code adapter's `parseFinalVoiceLine` name grammar) so the persona name isn't
   spoken aloud.
 - The injection feature itself (#15) is adapter-only: no `core/` or daemon change; the daemon
@@ -82,12 +109,13 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
 
-## oh-my-pi (omp) — same adapter, dual host (issue #18)
+## oh-my-pi (omp) — sibling adapter, shared shape (issues #18, #109)
 
-`adapters/pi/` serves both upstream Pi and the oh-my-pi fork; there is no separate
-`adapters/omp/`. The host package import is type-only (erased at load), the lifecycle event
-surface is shape-identical, and omp subagents hard-code `hasUI: false`, so suppression holds.
-The two host differences the adapter absorbs:
+`adapters/omp/` is its own package alongside `adapters/pi/` (split in #109); the two share
+behavior through `@echo/shared`, not through one directory serving both hosts. The host
+package import is type-only (erased at load), the lifecycle event surface is shape-identical,
+and omp subagents hard-code `hasUI: false`, so suppression holds. The two host differences
+the adapter absorbs:
 
 - **`before_agent_start.systemPrompt` shape:** upstream Pi passes a `string`; omp passes a
   `string[]`. The injection handler feature-detects both and returns the same shape it
@@ -106,6 +134,6 @@ The two host differences the adapter absorbs:
   2 on a FATAL state, and the installer preflights `--check` (tolerating 3) so a FATAL
   state aborts before any host state is mutated.
 
-omp shares Pi's adapter configuration and default `voice_id: "pi"` / `personaName: "Pi"`;
-there is no separate omp persona. Local values from `~/.config/echo/.env` override those
-defaults for both hosts.
+omp reads the same canonical `ECHO_VOICE_*` configuration as Pi and defaults to the same
+`voice_id: "pi"`, but speaks as `personaName: "omp"`. Local values from `~/.config/echo/.env`
+override those defaults for both hosts.

@@ -32,6 +32,7 @@ import { join } from 'path';
 import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 import { resolveStartupCatchphrase } from './lib/greeting';
+import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
@@ -238,7 +239,7 @@ if (isNamedAgent && agentType) {
 
     console.error(`[VoiceGreeting] speaking: "${message}" (agent: ${agentType})`);
     const t0 = Date.now();
-    const resp = await fetchWithTimeout('http://localhost:8888/notify', {
+    const resp = await fetchWithTimeout(resolveNotifyUrl(process.env), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -263,8 +264,8 @@ try {
   const personality = identity.personality;
 
   const url = personality?.baseVoice
-    ? 'http://localhost:8888/notify/personality'
-    : 'http://localhost:8888/notify';
+    ? resolvePersonalityUrl(process.env)
+    : resolveNotifyUrl(process.env);
 
   const body: Record<string, unknown> = personality?.baseVoice
     ? {

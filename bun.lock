@@ -1,0 +1,55 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "echo",
+    },
+    "adapters/claudecode": {
+      "name": "@echo/claudecode-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+    },
+    "adapters/omp": {
+      "name": "@echo/omp-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+      "peerDependencies": {
+        "@oh-my-pi/pi-coding-agent": ">=0.78.0",
+      },
+      "optionalPeers": [
+        "@oh-my-pi/pi-coding-agent",
+      ],
+    },
+    "adapters/pi": {
+      "name": "@echo/pi-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+      "peerDependencies": {
+        "@earendil-works/pi-coding-agent": ">=0.78.0",
+      },
+      "optionalPeers": [
+        "@earendil-works/pi-coding-agent",
+      ],
+    },
+    "shared": {
+      "name": "@echo/shared",
+      "version": "0.1.0",
+    },
+  },
+  "packages": {
+    "@echo/claudecode-adapter": ["@echo/claudecode-adapter@workspace:adapters/claudecode"],
+
+    "@echo/omp-adapter": ["@echo/omp-adapter@workspace:adapters/omp"],
+
+    "@echo/pi-adapter": ["@echo/pi-adapter@workspace:adapters/pi"],
+
+    "@echo/shared": ["@echo/shared@workspace:shared"],
+  }
+}

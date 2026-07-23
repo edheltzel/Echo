@@ -8,8 +8,8 @@ pages for per-area detail.
 
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
-(`core/server.ts`) listens on `localhost:8888` and exposes four HTTP endpoints
-(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`). Any host — a Claude Code
+(`core/server.ts`) listens on `localhost:8888` and exposes five HTTP endpoints
+(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`). Any host — a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` —
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
@@ -57,10 +57,23 @@ by contract — a down voice daemon never breaks an agent turn.
 the daemon. All host coupling lives in `adapters/`, which talk to the core only over the
 HTTP `/notify` contract. This is the rule that lets one daemon serve every host.
 
-The boundary is **mechanically enforced**, not just documented:
-`tests/core/no-host-strings.test.ts` greps every file under `core/` for
-`/PAI|Claude|\.claude|OpenCode|\bPi\b/` and fails CI if any appears. When you add code to
-`core/`, host-specific behavior is a test failure, not a review nit.
+**Each adapter is self-contained.** `adapters/*` are workspace packages: every relative
+import stays inside the package root, shared behavior comes from the `@echo/shared` package
+each one declares as a dependency, and configuration comes over HTTP — never by reading the
+daemon's `core/` files, which belong to a process that may run from another clone entirely.
+
+The boundary is **mechanically enforced**, not just documented, and it is enforced in *both*
+directions:
+
+- `tests/core/no-host-strings.test.ts` greps every file under `core/` for
+  `/PAI|Claude|\.claude|OpenCode|\bPi\b/` and fails CI if any appears.
+- `tests/core/architecture-invariants.test.ts` scans imports out of `core/`, then scans each
+  adapter package for relative imports that escape its root, undeclared dependencies, and
+  `core/` filesystem paths. The last check is a string scan on purpose: the violation it
+  replaced was a `readFileSync` of `core/voices.json`, which no import-based check can see.
+
+When you add code to `core/` or an adapter, a boundary violation is a test failure, not a
+review nit.
 
 ## Repo layout
 
@@ -71,14 +84,15 @@ The boundary is **mechanically enforced**, not just documented:
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` — instant replay for repeated lines (#202). |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it; `resolveEchoEnv` — non-mutating env-file reads. |
-| Shared Echo env-file loading | `shared/echo-env.ts` | Applies one process-first, first-file-per-key configuration contract in the daemon and Pi/omp adapter without crossing into `core/`. |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first, first-file-per-key env loading), `notify-client.ts`, `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
-| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention; the same package serves the oh-my-pi (omp) fork. |
+| Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
+| omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork — its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler. |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path). |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
@@ -88,7 +102,8 @@ The boundary is **mechanically enforced**, not just documented:
 A `POST /notify` runs through `core/server.ts` roughly in this order:
 
 1. **Rate-limit** — `checkRateLimit(clientIp)`: 10 requests per 60s per client IP, 429 on
-   breach. With no proxy header, all local callers share one `localhost` bucket.
+   breach. With no proxy header, all local callers share one `localhost` bucket; the
+   per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** — `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
    input is a 4xx **before** anything is queued.
@@ -157,13 +172,15 @@ to Atlas automatically. Full mechanism: [`docs/voices.md`](docs/voices.md).
 
 ## Adapters
 
-Adapters are **fully out-of-process**, import nothing from `core/`, and speak only the HTTP
-`/notify` contract. Host lifecycle behavior remains independent: the Claude Code adapter
+Adapters are **fully out-of-process**, import nothing from `core/`, and speak only the
+daemon's HTTP contract (`POST /notify`, plus `GET /voices` to learn which persona keys
+exist). Host lifecycle behavior remains independent: the Claude Code adapter
 suppresses subagents via stdin `agent_id` and reads `~/.claude/settings.json` for identity;
 Pi suppresses via `ECHO_VOICE_SUPPRESS` plus run-context (`hasUI === false`, or mode
-`json`/`print`). The daemon and Pi/omp adapter share only the host-neutral environment-file
-loader (`shared/echo-env.ts`), so `~/.config/echo/.env` uses identical precedence in both
-processes. Adapter responsibilities and the Pi per-turn injection (#15):
+`json`/`print`). The daemon and the adapters share code only through the `@echo/shared`
+package — including the environment-file loader (`shared/echo-env.ts`), so
+`~/.config/echo/.env` uses identical precedence in every process. The package boundary,
+adapter responsibilities, and the Pi per-turn injection (#15):
 [`docs/adapters.md`](docs/adapters.md).
 
 ## Invariants (must not do)
@@ -174,8 +191,8 @@ are contract.
 - **Never import a host API into `core/`** — no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
 - **No new host-named endpoints.** The core exposes only `POST /notify`,
-  `POST /notify/personality`, `POST /mute`, `GET /health`. Unsupported POSTs return JSON 404
-  with `supported_endpoints`.
+  `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`. Unsupported POSTs
+  return JSON 404 with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan — many callers depend on the body shape and status semantics.
 - **All voice traffic is `:8888`.** No new `localhost:31337` references (the legacy Pulse

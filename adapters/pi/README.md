@@ -1,7 +1,8 @@
 # Pi Adapter
 
-Pi host adapter for Echo. Serves both upstream Pi and the oh-my-pi (omp) fork — see
-[docs/adapters.md](../../docs/adapters.md) for the dual-host details (#18).
+Pi host adapter for Echo. The oh-my-pi (omp) fork has its own sibling package,
+[`adapters/omp/`](../omp/README.md) — see [docs/adapters.md](../../docs/adapters.md) for what
+the two share and how (#18, #109).
 
 The adapter is a Pi package. It listens to Pi lifecycle events and translates them into `/notify` requests against the local voice server.
 
@@ -87,9 +88,8 @@ edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the daemon spea
 literally, no `core/voices.json` edit needed. Takes effect on the next Pi session
 started in that repo; every other repo keeps the global persona.
 
-> omp shares this adapter today but reads `.omp/`, not `.pi/`, so an omp session sees
-> no override yet — omp's native-config reader lands with the dedicated `adapters/omp`
-> split ([#109](https://github.com/edheltzel/Echo/issues/109)).
+> omp reads the same block from its own `.omp/config.yml` instead — see
+> [`adapters/omp/README.md`](../omp/README.md).
 
 ### Scaffold it without hand-editing JSON
 
