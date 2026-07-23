@@ -1,24 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 describe("core server route contract source", () => {
   const server = readFileSync("core/server.ts", "utf8");
 
-  test("core config reads are import-pure — no process.env writes", () => {
-    // Hydrating process.env from the user's env files at import time leaked
-    // the operator's ECHO_VOICE_* identity into same-process adapter code and
-    // its tests (the pi-adapter "Atlas" pollution; an AGENTS.md #47 class
-    // file-order hazard). Core reads config through resolveEchoEnv instead.
-    const directAssignment = /process\.env(?:\.\w+|\[[^\]]*\])\s*(?:\?\?=|\|\|=|[+\-*/%&|^]?=|<<=|>>=|>>>=)/;
-    const objectAssign = /\bObject\.assign\s*\(\s*process\.env\b/;
-    const deletion = /\bdelete\s+process\.env(?:\.\w+|\[[^\]]*\])/;
-    for (const file of readdirSync("core").filter((f) => f.endsWith(".ts"))) {
-      const source = readFileSync(`core/${file}`, "utf8");
-      expect({ file, directAssignment: directAssignment.test(source) }).toEqual({ file, directAssignment: false });
-      expect({ file, objectAssign: objectAssign.test(source) }).toEqual({ file, objectAssign: false });
-      expect({ file, deletion: deletion.test(source) }).toEqual({ file, deletion: false });
-    }
+  test("the listen port is resolved through the import-pure env resolver", () => {
+    // Core-wide enforcement of the no-process.env-writes rule lives in
+    // architecture-invariants.test.ts (static) and import-purity.test.ts
+    // (runtime); this only pins the server's own reads to resolveEchoEnv.
     expect(server).toContain('resolveEchoEnv("PORT")');
+    expect(server).not.toContain("process.env.PORT");
   });
 
   test("keeps neutral default title in core, read from canonical ECHO_* with legacy fallback", () => {
