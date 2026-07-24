@@ -89,47 +89,59 @@ on the next notification. The `/mute` endpoint contract and one-keystroke hotkey
 
 ## Update after a `git pull`
 
-Bun runs the TypeScript sources directly — there is no build step.
+Bun runs the TypeScript sources directly — there is no build step. **But the daemon runs
+from a staged payload copy** (`~/Library/Application Support/Echo/versions/<v>`), not the
+checkout, so editing `core/`/`shared/` and merely restarting keeps running the *old* payload.
+To pick up daemon-source or config changes, re-stage:
 
-- For code-only changes (`core/`, adapters), restart the daemon (either idiom above).
-- When the pull touched install or registration behavior (`scripts/`, adapter
-  registration), or when unsure, rerun the installer with your usual adapter. It is
-  idempotent and also re-reconciles every other installed adapter:
+```bash
+cli/echo update                 # re-stage the payload from this checkout + reload
+# equivalently: bash scripts/install.sh --adapter <none|claudecode|pi|omp>
+```
+
+- Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.
+- Adapter-only change (`adapters/`, registration behavior) → rerun the installer with your
+  adapter; it is idempotent and re-reconciles every other installed adapter too.
+
+## Config changes need a restart
+
+The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
+the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy
+has no effect until you re-stage. Edit, then `cli/echo update` (it re-stages and reloads).
+
+## Moved or renamed the repo?
+
+The daemon no longer cares: its LaunchAgent points at the clone-independent payload, so a
+checkout move or removal leaves the running service untouched. Only the **adapter
+registrations** still point at the checkout and get stranded by a move. Rerun the installer
+once with any `--adapter` value — it re-reconciles every installed adapter registration (and
+re-stages the payload from the new location):
 
 ```bash
 bash scripts/install.sh --adapter <none|claudecode|pi|omp>
 ```
 
-## Config changes need a restart
-
-The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup. After
-editing either, restart — the `kickstart` idiom is the usual choice.
-
-## Moved or renamed the repo?
-
-The LaunchAgent plist and the adapter registrations point at the repo's on-disk location,
-so a move or rename strands them. Rerun the installer once with any `--adapter` value —
-it rewrites the plist and re-reconciles every installed adapter registration.
-
-To audit without changing anything:
+To audit without changing anything (`cli/echo doctor` wraps this and explains each row):
 
 ```bash
-bash scripts/install.sh --check
+bash scripts/install.sh --check      # or: cli/echo doctor
 ```
 
 Exit 0 when everything is current; exit 3 with `Stale paths found` on stderr when
-anything is stale. Two caveats: `--check` verifies the plist's server path and working
-directory but not the embedded `bun` binary path (after relocating a Bun install, rerun
-the installer), and per-adapter exit codes fold into the aggregate 0/3 result — the full
-per-adapter exit-code contract lives in [`adapters.md`](adapters.md).
+anything is stale (a deleted payload shows as a dead plist path). Two caveats: `--check`
+verifies the plist's server path and working directory but not the embedded `bun` binary
+path (after relocating a Bun install, rerun the installer), and per-adapter exit codes fold
+into the aggregate 0/3 result — the full per-adapter exit-code contract lives in
+[`adapters.md`](adapters.md).
 
 ## Uninstall
 
 ```bash
-bash scripts/uninstall.sh
+bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews it)
 ```
 
-Removes the LaunchAgent and preserves logs. Adapter registrations are **not** removed:
+Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
+and persona config (`~/.config/echo/.env`). Adapter registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in
 `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in
 `~/.omp/agent/extensions/` all survive. There is no deregistration tool; remove those

@@ -42,6 +42,11 @@ ECHO_VOICE_PERSONA_NAME=Atlas
 ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 ```
 
+`cli/echo voice <name> <edge-tts-voice-id>` writes the persona name +
+`ECHO_VOICE_ID` into `~/.config/echo/.env` for you (merge-preserving, atomic, with a `.bak`
+backup), the pi/omp default persona. Claude Code reads its persona from
+`~/.claude/settings.json` instead, so that command does not affect Claude sessions.
+
 Real process variables still win. Relaunch Pi/omp after editing the file; existing host
 processes keep the configuration loaded when their Echo extension started.
 
