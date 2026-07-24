@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPT_DIR/echo-port.sh"
 SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
@@ -9,7 +12,6 @@ LOG_PATH="$HOME/Library/Logs/echo.log"
 # user's persona config are preserved.
 PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 ECHO_ENV_FILE="$HOME/.config/echo/.env"
-ECHO_PORT="${PORT:-8888}"
 
 CHECK_ONLY=0
 [ "${1:-}" = "--check" ] && CHECK_ONLY=1

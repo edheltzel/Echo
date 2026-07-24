@@ -60,7 +60,7 @@ processes keep the configuration loaded when their Echo extension started.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8888` | HTTP listen port. Settable either way: `scripts/install.sh` resolves it the same way the daemon does (real process variable first, then the env files above), and writes it into the LaunchAgent's `EnvironmentVariables` only when it came from a real process variable — so `PORT=9000 bash scripts/install.sh` actually moves the daemon, while a `PORT=` in an env file stays the daemon's own to read |
+| `PORT` | `8888` | HTTP listen port. **Set it durably in `~/.config/echo/.env`** — the LaunchAgent passes only `HOME` and `PATH`, so a shell variable never reaches the launchd-started daemon. Every shell surface (`install.sh`, `start`/`stop`/`status`/`mute`/`uninstall`, `cli/echo`) resolves it through `scripts/echo-port.sh` using the daemon's own precedence, so they all follow the env file together. A real process `PORT` still wins for those scripts, which is how you point one command at a second instance (`PORT=8899 bash scripts/status.sh`) |
 | `VOICES_PATH` | `voices.json` next to `core/server.ts` | Voice config file location |
 | `PRONUNCIATIONS_PATH` | `pronunciations.json` next to `core/server.ts` | Pronunciation rules location |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (see indirection below) |

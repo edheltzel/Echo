@@ -1,16 +1,17 @@
 #!/bin/bash
-# Sourced helper: resolve the port the daemon will ACTUALLY bind, using the
-# daemon's own precedence (shared/echo-env.ts) — a real process variable wins,
-# then the first Echo env file that assigns PORT, else 8888.
+# Sourced helper: the SINGLE source of the port every Echo shell surface talks to.
+# Resolution mirrors the daemon's own (`loadEchoEnvironment` in shared/echo-env.ts):
+# a real process variable wins, then the first Echo env file that assigns PORT,
+# else 8888.
 #
-# install.sh and cli/echo both source this so the port guard, the plist, the
-# post-install health check, and `doctor` all agree with the daemon instead of
-# assuming :8888. Assuming it made a `PORT=` in ~/.config/echo/.env look like a
-# dead daemon on every install.
+# Every lifecycle script sources this — install.sh, start.sh, stop.sh, status.sh,
+# mute.sh, uninstall.sh, and cli/echo — so a `PORT=` in ~/.config/echo/.env moves
+# all of them together. Half of them assuming :8888 is what made `echo doctor` and
+# `echo status` disagree about the same running daemon.
 #
-# Sets ECHO_PORT, HEALTH_URL, and ECHO_PORT_FROM_PROCESS (1 when a real process
-# variable supplied it — only then does install.sh write PORT into the plist,
-# since the daemon reads the env files for itself).
+# Pure bash on purpose: it is sourced by scripts that must work without Bun.
+#
+# Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
 # Every env file the daemon consults, in its precedence order.
 echo_env_files() {
@@ -44,25 +45,29 @@ EOF
   return 1
 }
 
-ECHO_PORT_FROM_PROCESS=0
+# Length is checked before the range so a huge digit string can never reach `[ -ge ]`.
+echo_port_is_valid() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 5 ] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
 if [ -n "${PORT:-}" ]; then
   ECHO_PORT="$PORT"
-  ECHO_PORT_FROM_PROCESS=1
 else
   ECHO_PORT="$(resolve_echo_port_from_files || true)"
   if [ -z "$ECHO_PORT" ]; then ECHO_PORT=8888; fi
 fi
 
-# ECHO_PORT reaches a LaunchAgent plist, so it is validated, never interpolated blind.
-case "$ECHO_PORT" in
-  ''|*[!0-9]*)
-    echo "Invalid PORT '${ECHO_PORT}' — expected an integer between 1 and 65535." >&2
-    exit 2
-    ;;
-esac
-if [ "$ECHO_PORT" -lt 1 ] || [ "$ECHO_PORT" -gt 65535 ]; then
-  echo "Invalid PORT '${ECHO_PORT}' — expected an integer between 1 and 65535." >&2
-  exit 2
+# A malformed port degrades to the default rather than aborting: this file is
+# sourced by stop.sh and uninstall.sh, where the port is only a diagnostic note
+# and a hard failure would make Echo un-removable.
+if ! echo_port_is_valid "$ECHO_PORT"; then
+  echo "Ignoring invalid PORT '${ECHO_PORT}' — expected an integer between 1 and 65535; using 8888." >&2
+  ECHO_PORT=8888
 fi
 
-HEALTH_URL="http://localhost:${ECHO_PORT}/health"
+ECHO_BASE_URL="http://localhost:${ECHO_PORT}"
+HEALTH_URL="${ECHO_BASE_URL}/health"
+export ECHO_PORT ECHO_BASE_URL HEALTH_URL

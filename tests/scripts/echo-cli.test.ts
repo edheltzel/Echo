@@ -14,7 +14,13 @@ function writeExecutable(path: string, content: string): void {
 }
 
 async function runCli(args: string[], env: Record<string, string>) {
-  const proc = Bun.spawn(["/bin/bash", CLI, ...args], { env, stdout: "pipe", stderr: "pipe" });
+  // `install` and `doctor` both reach scripts/install.sh; opting every run out of
+  // workspace-link management keeps `bun test` off the checkout's node_modules.
+  const proc = Bun.spawn(["/bin/bash", CLI, ...args], {
+    env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     proc.exited,
     new Response(proc.stdout).text(),
@@ -128,12 +134,7 @@ describe("echo doctor", () => {
         // Stub launchctl (com.echo loaded) + curl (healthy /health JSON).
         writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
         writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","providers":{"edgetts":{"enabled":true,"healthy":true}}}\'\nexit 0\n');
-        const env = {
-          HOME: home,
-          PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
-          // Never let the installer `bun install` into the checkout during a test run.
-          ECHO_SKIP_WORKSPACE_LINK: "1",
-        };
+        const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` };
 
         // Stage the payload first (install.sh runs in the same temp HOME).
         const install = await runCli(["install", "--adapter", "none"], env);

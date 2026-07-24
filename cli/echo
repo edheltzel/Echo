@@ -187,7 +187,7 @@ cmd_doctor() {
     local owner
     owner="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1" (PID "$2")"}' || true)"
     doctor_row fail "health" "port ${ECHO_PORT} held by ${owner:-another process}, not answering /health" \
-      "Stop that process or set PORT=<n> and rerun install. Echo never kills the port owner."
+      "Stop that process, or set PORT=<n> in ~/.config/echo/.env and rerun install. Echo never kills the port owner."
   else
     doctor_row fail "health" "daemon not responding on :${ECHO_PORT}" \
       "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"

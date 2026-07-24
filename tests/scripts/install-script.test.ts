@@ -13,7 +13,10 @@ const INSTALL_TIMEOUT_MS = 30_000;
 
 async function runInstall(args: string[], env: Record<string, string>) {
   const proc = Bun.spawn(["/bin/bash", "scripts/install.sh", ...args], {
-    env: { ...env, PATH: env.PATH },
+    // Set on the helper, not per call: every run through it is opted out of
+    // managing the workspace links, so no test can relink the checkout's
+    // node_modules mid-`bun test` by forgetting the flag.
+    env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env, PATH: env.PATH },
     stdout: "pipe",
     stderr: "pipe",
   });

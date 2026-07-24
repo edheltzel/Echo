@@ -19,7 +19,7 @@ Run all commands from the repo root.
 bash scripts/start.sh
 ```
 
-Prints `OK echo started on :8888`. If the service is already loaded it says so and exits;
+Prints `OK echo started on :<port>`. If the service is already loaded it says so and exits;
 if the plist is missing it tells you to run `scripts/install.sh` first.
 
 ## Stop
@@ -28,9 +28,9 @@ if the plist is missing it tells you to run `scripts/install.sh` first.
 bash scripts/stop.sh
 ```
 
-Prints `OK echo stopped`. If port 8888 is still in use afterwards, the script warns and
+Prints `OK echo stopped`. If Echo's port is still in use afterwards, the script warns and
 deliberately does **not** kill the owner — it may belong to another service. Never
-broad-kill whatever owns port 8888.
+broad-kill whatever owns that port.
 
 ## Restart — two idioms
 
@@ -58,7 +58,10 @@ runs a health check, and prints the log path with the last five log lines.
 curl -fsS http://localhost:8888/health
 ```
 
-Returns JSON containing `"status":"healthy"`.
+Returns JSON containing `"status":"healthy"`. `8888` is the default; every Echo script
+resolves the real port through `scripts/echo-port.sh` (process `PORT`, then `PORT=` in
+`~/.config/echo/.env`, then 8888 — see [`configuration.md`](configuration.md)), so
+`bash scripts/status.sh` prints the health check against whichever port is configured.
 
 ## Logs
 
@@ -70,7 +73,8 @@ Returns JSON containing `"status":"healthy"`.
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` (honors `PORT`). While muted, notifications are still
+`scripts/mute.sh` wraps `POST /mute` on the resolved port (a process `PORT`, else `PORT=` in
+`~/.config/echo/.env` — see [`configuration.md`](configuration.md)). While muted, notifications are still
 accepted, processed, and logged — only the audio is suppressed, across every provider:
 
 ```bash
@@ -106,7 +110,8 @@ cli/echo update                 # re-stage the payload from this checkout + relo
 A re-stage is reversible: the payload that was running is kept aside until the reloaded
 daemon answers `/health`. If it does not, the installer repoints `current` back at that copy
 and reloads it, so a bad update leaves you on the daemon you had rather than a crash-looping
-one, and exits 1 with the log path.
+one, and exits 1 with the log path. It re-checks health after the restore too, and says
+`ROLLBACK INCOMPLETE` rather than claiming success if even the old payload stays down.
 
 ## Config changes need a restart
 

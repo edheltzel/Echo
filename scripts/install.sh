@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-# Resolves ECHO_PORT / HEALTH_URL / ECHO_PORT_FROM_PROCESS the way the daemon does.
+# Resolves ECHO_PORT / ECHO_BASE_URL / HEALTH_URL the way the daemon does.
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPT_DIR/echo-port.sh"
 # Versioned daemon payload — a self-contained copy of core/ + shared/ under a
@@ -144,7 +144,8 @@ check_port_owner() {
   echo "Port ${ECHO_PORT} is in use by another process that is not answering Echo's /health:" >&2
   lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
   echo "Refusing to start Echo on an occupied port — Echo never kills the port owner." >&2
-  echo "Stop that process or set PORT=<n> and rerun. Diagnose with: cli/echo doctor" >&2
+  echo "Stop that process, or set PORT=<n> in ~/.config/echo/.env (the daemon reads it" >&2
+  echo "there) and rerun. Diagnose with: cli/echo doctor" >&2
   exit 1
 }
 
@@ -208,7 +209,13 @@ rollback_payload() {
   ln -sfn "$PAYLOAD_ROLLBACK" "$PAYLOAD_CURRENT"
   launchctl unload "$PLIST_PATH" 2>/dev/null || true
   launchctl load "$PLIST_PATH" 2>/dev/null || true
-  echo "Restored the payload that was running before this install. Check logs: $LOG_PATH" >&2
+  sleep 2
+  if health_ok; then
+    echo "Restored the payload that was running before this install. Check logs: $LOG_PATH" >&2
+  else
+    echo "ROLLBACK INCOMPLETE: the restored payload did not answer /health on :${ECHO_PORT} either." >&2
+    echo "Echo has no working daemon right now. Check logs: $LOG_PATH" >&2
+  fi
 }
 
 # Only the renamed-aside copy is ours to delete; a real prior version dir stays.
@@ -302,16 +309,10 @@ write_plist() {
   mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
   local tmp_plist="${PLIST_PATH}.tmp.$$"
 
-  # A PORT given as a real process variable has to reach the daemon, or
-  # `PORT=<n> bash scripts/install.sh` — the recovery this script recommends for
-  # an occupied port — probes one port while the daemon binds another. A PORT
-  # that came from an env file is deliberately NOT written: the daemon reads
-  # those files itself, and a plist entry would override the user's config.
-  local port_env=""
-  if [ "$ECHO_PORT_FROM_PROCESS" -eq 1 ]; then
-    port_env=$'\n        <key>PORT</key>\n        <string>'"${ECHO_PORT}"$'</string>'
-  fi
-
+  # EnvironmentVariables stays HOME + PATH. PORT is deliberately NOT written: the
+  # plist is rewritten wholesale on every run, so baking in an ambient shell PORT
+  # would silently move the daemon on one install and silently move it back on the
+  # next. The daemon reads ~/.config/echo/.env itself — that is the durable place.
   cat > "$tmp_plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -343,7 +344,7 @@ write_plist() {
         <key>HOME</key>
         <string>${HOME}</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${HOME}/.bun/bin</string>${port_env}
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${HOME}/.bun/bin</string>
     </dict>
 </dict>
 </plist>

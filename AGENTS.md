@@ -139,7 +139,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
-| Daemon-equivalent port resolution shared by `install.sh` + `cli/echo` | `scripts/echo-port.sh` |
+| Daemon-equivalent port resolution sourced by every lifecycle script + `cli/echo` | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer | `cli/echo`, `scripts/set-default-voice.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |

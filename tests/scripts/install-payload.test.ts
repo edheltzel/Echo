@@ -24,20 +24,17 @@ function makeHome(root: string): { home: string; env: Record<string, string> } {
   writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
   writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
   const bunDir = join(Bun.which("bun")!, "..");
-  return {
-    home,
-    env: {
-      HOME: home,
-      PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
-      // Payload staging is what's under test; the installer must not run
-      // `bun install` against the checkout's node_modules mid-`bun test`.
-      ECHO_SKIP_WORKSPACE_LINK: "1",
-    },
-  };
+  return { home, env: { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` } };
 }
 
 async function runInstall(args: string[], env: Record<string, string>) {
-  const proc = Bun.spawn(["/bin/bash", "scripts/install.sh", ...args], { env, stdout: "pipe", stderr: "pipe" });
+  // Payload staging is what's under test; the installer must never run
+  // `bun install` against the checkout's node_modules mid-`bun test`.
+  const proc = Bun.spawn(["/bin/bash", "scripts/install.sh", ...args], {
+    env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     proc.exited,
     new Response(proc.stdout).text(),
@@ -126,6 +123,41 @@ describe("install stages a clone-independent payload", () => {
       const check = await runInstall(["--check"], env);
       expect(check.exitCode).toBe(3);
       expect(check.stderr).toContain("Stale paths found");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
+
+  test("an unhealthy reload restores the payload that was running and reports it honestly", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-payload-rollback-"));
+    try {
+      const { home, env } = makeHome(root);
+      const healthyFlag = join(root, "healthy");
+      // curl answers only while the flag file exists, so health can be revoked
+      // between the two installs without touching anything else.
+      writeExecutable(
+        join(root, "bin", "curl"),
+        `#!/bin/bash\n[ -f ${JSON.stringify(healthyFlag)} ] && exit 0\nexit 7\n`,
+      );
+      writeFileSync(healthyFlag, "");
+
+      expect((await runInstall(["--adapter", "none"], env)).exitCode).toBe(0);
+      const payload = join(home, PAYLOAD_REL);
+      const current = join(payload, "current");
+      // Marks the copy that is live now; the re-stage must not destroy it.
+      writeFileSync(join(current, "sentinel.txt"), "live");
+
+      rmSync(healthyFlag);
+      const failed = await runInstall(["--adapter", "none"], env);
+      expect(failed.exitCode).toBe(1);
+      expect(failed.stderr).toContain("Rolling back payload");
+      // The restore could not be proven, so it must not claim it was.
+      expect(failed.stderr).toContain("ROLLBACK INCOMPLETE");
+      expect(failed.stderr).not.toContain("Restored the payload that was running");
+
+      // `current` resolves to the copy that was live, entrypoint and all.
+      expect(existsSync(join(current, "sentinel.txt"))).toBe(true);
+      expect(existsSync(join(current, "core", "server.ts"))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
