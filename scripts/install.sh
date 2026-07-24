@@ -10,6 +10,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
+ECHO_PORT="${PORT:-8888}"
+HEALTH_URL="http://localhost:${ECHO_PORT}/health"
+# Versioned daemon payload — a self-contained copy of core/ + shared/ under a
+# user-owned application-support directory, NOT the git clone. The LaunchAgent
+# points at ${PAYLOAD_CURRENT}, so moving or deleting the checkout never breaks
+# the running service (Stage 1). `current` is a symlink to the active version,
+# so `echo update` just re-stages + repoints it.
+PAYLOAD_HOME="$HOME/Library/Application Support/Echo"
+PAYLOAD_VERSIONS="$PAYLOAD_HOME/versions"
+PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 # adapters/omp/reconcile.ts honors the same override, so detection and reconcile agree.
@@ -68,6 +78,68 @@ esac
 
 is_loaded() {
   launchctl list 2>/dev/null | grep "$1" >/dev/null 2>&1
+}
+
+# Read the payload version from a package.json WITHOUT invoking bun — the daemon
+# payload is named by version, and install must stage it even when bun is absent.
+read_payload_version() {
+  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
+
+# True when Echo's daemon answers /health on the configured port.
+health_ok() {
+  command -v curl >/dev/null 2>&1 || return 1
+  curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" >/dev/null 2>&1
+}
+
+# Refuse to start Echo on a port already owned by a DIFFERENT process. Echo's
+# invariant forbids broad-killing the port owner: identify it and let the user
+# choose. If our own daemon already answers /health, the port is ours — reload is
+# fine. If lsof is unavailable, we cannot prove foreign ownership, so we never block.
+check_port_owner() {
+  if health_ok; then return 0; fi
+  command -v lsof >/dev/null 2>&1 || return 0
+  lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >/dev/null 2>&1 || return 0
+  echo "Port ${ECHO_PORT} is in use by another process that is not answering Echo's /health:" >&2
+  lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
+  echo "Refusing to start Echo on an occupied port — Echo never kills the port owner." >&2
+  echo "Stop that process or set PORT=<n> and rerun. Diagnose with: cli/echo doctor" >&2
+  exit 1
+}
+
+# Stage a versioned, self-contained daemon payload (core/ + shared/) under
+# ${PAYLOAD_HOME} and atomically repoint ${PAYLOAD_CURRENT} at it. The copy is
+# what lets the daemon survive a checkout move/removal. Pure cp/sed/mkdir/ln/mv —
+# no bun — so it runs before the daemon (and its runtime) even exist.
+stage_payload() {
+  local version ver_dir stage
+  version="$(read_payload_version "$REPO_ROOT/package.json")"
+  if [ -z "$version" ]; then
+    echo "Could not read version from $REPO_ROOT/package.json — cannot stage payload." >&2
+    exit 1
+  fi
+  ver_dir="$PAYLOAD_VERSIONS/$version"
+  stage="$PAYLOAD_HOME/.stage.$$"
+
+  echo "> Staging Echo payload v$version → $ver_dir"
+  mkdir -p "$PAYLOAD_VERSIONS"
+  rm -rf "$stage"
+  mkdir -p "$stage"
+  cp -R "$REPO_ROOT/core" "$stage/core"
+  cp -R "$REPO_ROOT/shared" "$stage/shared"
+  cat > "$stage/manifest.json" <<EOF
+{
+  "name": "echo",
+  "version": "$version",
+  "service": "$SERVICE_NAME",
+  "staged_from": "$REPO_ROOT"
+}
+EOF
+  # Same-version reinstall: replace the existing version dir. The running daemon
+  # holds its files open, so the inode survives this swap until the reload below.
+  rm -rf "$ver_dir"
+  mv "$stage" "$ver_dir"
+  ln -sfn "$ver_dir" "$PAYLOAD_CURRENT"
 }
 
 # Detection mirrors the reconcilers' matchers (a JSON string holding a hook command under
@@ -130,6 +202,10 @@ preflight() {
       bun run "$REPO_ROOT/adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
+
+  # Last: refuse a foreign-owned port before any host state is mutated. Placed
+  # after the adapter checks so an adapter-preflight failure surfaces first.
+  check_port_owner
 }
 
 write_plist() {
@@ -147,10 +223,10 @@ write_plist() {
     <array>
         <string>$(command -v bun)</string>
         <string>run</string>
-        <string>${REPO_ROOT}/core/server.ts</string>
+        <string>${PAYLOAD_CURRENT}/core/server.ts</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>${REPO_ROOT}</string>
+    <string>${PAYLOAD_CURRENT}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -372,6 +448,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
 fi
 
 preflight
+stage_payload
 write_plist
 migrate_legacy_service
 reload_core_service
