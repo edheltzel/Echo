@@ -18,8 +18,10 @@ SCRIPTS="$REPO_ROOT/scripts"
 SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-ECHO_PORT="${PORT:-8888}"
-HEALTH_URL="http://localhost:${ECHO_PORT}/health"
+# Resolves ECHO_PORT / HEALTH_URL exactly as the daemon resolves its port, so
+# doctor never reports a healthy daemon as dead just because PORT lives in an env file.
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPTS/echo-port.sh"
 PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 
@@ -40,6 +42,9 @@ Commands:
   voice <name> <voice-id>
                        Set the default Echo persona (name + edge-tts voice) for pi/omp.
   update [--check]     Re-stage the payload from this checkout and reload the service.
+                       --check is read-only and verifies that the plist and host
+                       adapter paths still resolve — it does NOT detect a payload
+                       staged from older source at the same version.
   uninstall [--check]  Unload ${SERVICE_NAME} and remove its payload (logs + config kept).
 EOF
 }
@@ -90,7 +95,9 @@ cmd_voice() {
 # --- update -----------------------------------------------------------------
 cmd_update() {
   # install.sh re-stages the payload and reloads the service, so update is an
-  # install from this checkout. --check just reports drift (read-only).
+  # install from this checkout. --check is read-only and reports only whether the
+  # plist and host adapter paths still resolve; it compares nothing against the
+  # staged payload's contents, so re-stage after editing core/ or shared/.
   case "${1:-}" in
     --check) exec bash "$SCRIPTS/install.sh" --check ;;
   esac
@@ -115,9 +122,19 @@ doctor_row() {
   fi
 }
 
+# True when /health reports a provider that is enabled but unhealthy. The two
+# keys are matched in either order and with any keys between them; `[^{}]` keeps
+# the match inside ONE provider object, so an enabled provider can never pair up
+# with a different provider's `"healthy":false`.
+has_unhealthy_provider() {
+  local enabled='"enabled"[[:space:]]*:[[:space:]]*true'
+  local unhealthy='"healthy"[[:space:]]*:[[:space:]]*false'
+  printf '%s' "$1" | grep -qE "${enabled}[^{}]*${unhealthy}|${unhealthy}[^{}]*${enabled}"
+}
+
 read_manifest_version() {
   [ -f "$PAYLOAD_CURRENT/manifest.json" ] || return 0
-  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1
+  { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1; } || true
 }
 
 cmd_doctor() {
@@ -178,7 +195,7 @@ cmd_doctor() {
 
   # 7. Providers (only meaningful once the daemon answered)
   if [ -n "$health" ]; then
-    if printf '%s' "$health" | grep -q '"enabled":true,"healthy":false'; then
+    if has_unhealthy_provider "$health"; then
       doctor_row warn "providers" "a configured TTS provider is unhealthy (macOS say still covers speech)" \
         "See docs/dependencies.md; check ${LOG_PATH}"
     else
@@ -191,7 +208,10 @@ cmd_doctor() {
     if bash "$SCRIPTS/install.sh" --check >/dev/null 2>&1; then
       doctor_row ok "registrations" "plist + host adapter paths current"
     else
-      doctor_row warn "registrations" "stale echo paths in plist or host adapter config" "echo install"
+      # `install.sh --check` calls this state stale and exits 3; doctor must not
+      # answer READY on the same state, or a gate that swaps one for the other
+      # silently passes on a stale install.
+      doctor_row fail "registrations" "stale echo paths in plist or host adapter config" "echo install"
     fi
   fi
 

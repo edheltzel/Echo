@@ -24,6 +24,9 @@ async function runCli(args: string[], env: Record<string, string>) {
 }
 
 const bunDir = join(Bun.which("bun")!, "..");
+// Driving install.sh costs a 2s launchd settle per run — more than bun's 5s
+// default allows once a test also runs doctor (which shells out to install --check).
+const INSTALL_TIMEOUT_MS = 30_000;
 
 describe("echo CLI dispatch", () => {
   test("no args prints usage listing every subcommand", async () => {
@@ -67,6 +70,52 @@ describe("echo doctor", () => {
     }
   });
 
+  test("flags an enabled-but-unhealthy provider whatever order /health serialized the keys in", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-providers-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      // `healthy` BEFORE `enabled`, with another key wedged between them, and a
+      // healthy provider ahead of it — the row must not depend on field order.
+      const body =
+        '{"status":"healthy","providers":' +
+        '{"edgetts":{"enabled":true,"healthy":true,"wouldEgress":true},' +
+        '"kokoro":{"healthy":false,"wouldEgress":false,"enabled":true}}}';
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\necho ${JSON.stringify(body)}\nexit 0\n`);
+
+      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+      expect(r.stdout).toContain("a configured TTS provider is unhealthy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an all-healthy /health leaves the providers row ok", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-providers-ok-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      // A DISABLED provider reports healthy:false; pairing it with a different
+      // provider's enabled:true must not be read as one unhealthy provider.
+      const body =
+        '{"status":"healthy","providers":' +
+        '{"edgetts":{"enabled":true,"healthy":true,"wouldEgress":true},' +
+        '"elevenlabs":{"enabled":false,"healthy":false,"wouldEgress":false}}}';
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\necho ${JSON.stringify(body)}\nexit 0\n`);
+
+      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+      expect(r.stdout).toContain("configured TTS providers healthy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test.skipIf(process.platform !== "darwin")(
     "reports READY once the payload is staged and the daemon answers /health",
     async () => {
@@ -79,7 +128,12 @@ describe("echo doctor", () => {
         // Stub launchctl (com.echo loaded) + curl (healthy /health JSON).
         writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
         writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","providers":{"edgetts":{"enabled":true,"healthy":true}}}\'\nexit 0\n');
-        const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` };
+        const env = {
+          HOME: home,
+          PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+          // Never let the installer `bun install` into the checkout during a test run.
+          ECHO_SKIP_WORKSPACE_LINK: "1",
+        };
 
         // Stage the payload first (install.sh runs in the same temp HOME).
         const install = await runCli(["install", "--adapter", "none"], env);
@@ -92,6 +146,7 @@ describe("echo doctor", () => {
         rmSync(root, { recursive: true, force: true });
       }
     },
+    INSTALL_TIMEOUT_MS,
   );
 });
 
@@ -174,6 +229,24 @@ describe("echo uninstall", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("exits 0 when there is no persona config to preserve", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-uninstall-noenv-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin`, PORT: "8991" };
+      mkdirSync(join(home, "Library/Application Support/echo/payload"), { recursive: true });
+
+      // Every user who never ran `echo voice` lands here; a clean uninstall is exit 0.
+      expect((await runCli(["uninstall", "--check"], env)).exitCode).toBe(0);
+      expect((await runCli(["uninstall"], env)).exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("echo voice", () => {
@@ -199,6 +272,26 @@ describe("echo voice", () => {
       // Unrelated keys and comments survive the merge.
       expect(written).toContain("UNRELATED=keepme");
       expect(written).toContain("# my config");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a persona name that would inject extra env lines", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-voice-inject-"));
+    try {
+      const envFile = join(root, "echo.env");
+      writeFileSync(envFile, "UNRELATED=keepme\n");
+      const env = {
+        HOME: join(root, "home"),
+        PATH: `${bunDir}:/bin:/usr/bin`,
+        ECHO_ENV_FILE: envFile,
+      };
+
+      const r = await runCli(["voice", 'Echo"\nELEVENLABS_API_KEY=stolen', "en-US-AndrewNeural"], env);
+      expect(r.exitCode).toBe(2);
+      // The env file the daemon parses is left untouched.
+      expect(readFileSync(envFile, "utf8")).toBe("UNRELATED=keepme\n");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -10,8 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-ECHO_PORT="${PORT:-8888}"
-HEALTH_URL="http://localhost:${ECHO_PORT}/health"
+# Resolves ECHO_PORT / HEALTH_URL / ECHO_PORT_FROM_PROCESS the way the daemon does.
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPT_DIR/echo-port.sh"
 # Versioned daemon payload — a self-contained copy of core/ + shared/ under a
 # user-owned application-support directory, NOT the git clone. The LaunchAgent
 # points at ${PAYLOAD_CURRENT}, so moving or deleting the checkout never breaks
@@ -25,6 +26,9 @@ HEALTH_URL="http://localhost:${ECHO_PORT}/health"
 PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 PAYLOAD_VERSIONS="$PAYLOAD_HOME/versions"
 PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
+# Payload copy that was live before this run; `current` is restored to it when the
+# reload cannot prove the newly staged one healthy. Empty on a first install.
+PAYLOAD_ROLLBACK=""
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 # adapters/omp/reconcile.ts honors the same override, so detection and reconcile agree.
@@ -42,7 +46,8 @@ Every run also re-reconciles all already-installed adapter registrations, so a
 repo directory rename heals with one rerun (#77).
 --check reports stale echo-related paths across the plist and host settings
 without mutating anything. Exit 0 when everything is current, 3 when stale
-paths were detected.
+paths were detected. It checks that those paths still resolve — it does not
+compare the staged payload's contents against this checkout.
 EOF
 }
 
@@ -88,7 +93,7 @@ is_loaded() {
 # Read the payload version from a package.json WITHOUT invoking bun — the daemon
 # payload is named by version, and install must stage it even when bun is absent.
 read_payload_version() {
-  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+  { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1; } || true
 }
 
 # True when Echo's daemon answers /health on the configured port.
@@ -97,14 +102,45 @@ health_ok() {
   curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" >/dev/null 2>&1
 }
 
+# PID launchd currently reports for our own service; empty when it is not running.
+# `launchctl list <label>` exits 113 for an unloaded label and `head -1` can SIGPIPE
+# its producer, so the pipeline is neutralized: under `pipefail` either would abort
+# the script at the assignment, killing the very diagnostic the caller prints.
+service_pid() {
+  { launchctl list "$SERVICE_NAME" 2>/dev/null \
+    | sed -n 's/.*"PID"[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1; } || true
+}
+
 # Refuse to start Echo on a port already owned by a DIFFERENT process. Echo's
 # invariant forbids broad-killing the port owner: identify it and let the user
-# choose. If our own daemon already answers /health, the port is ours — reload is
-# fine. If lsof is unavailable, we cannot prove foreign ownership, so we never block.
+# choose. Our OWN daemon must never trip this — a wedged daemon that holds the
+# port without answering /health is exactly the state `echo install` recovers from,
+# and reload_core_service unloads it before loading. If lsof is unavailable, we
+# cannot prove foreign ownership, so we never block.
 check_port_owner() {
   if health_ok; then return 0; fi
   command -v lsof >/dev/null 2>&1 || return 0
-  lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >/dev/null 2>&1 || return 0
+
+  local listeners
+  listeners="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
+  [ -n "$listeners" ] || return 0
+
+  # Ownership by PID is the definitive test; fall back to "our label is loaded"
+  # only when launchd reports no PID for it (e.g. a crash-loop between respawns).
+  local svc_pid pid
+  svc_pid="$(service_pid)"
+  if [ -n "$svc_pid" ]; then
+    for pid in $listeners; do
+      if [ "$pid" = "$svc_pid" ]; then
+        echo "> Port ${ECHO_PORT} is held by our own ${SERVICE_NAME} (PID $pid, not answering /health) — reloading it"
+        return 0
+      fi
+    done
+  elif is_loaded "$SERVICE_NAME"; then
+    echo "> Port ${ECHO_PORT} is occupied while ${SERVICE_NAME} is loaded without a PID — reloading it"
+    return 0
+  fi
+
   echo "Port ${ECHO_PORT} is in use by another process that is not answering Echo's /health:" >&2
   lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
   echo "Refusing to start Echo on an occupied port — Echo never kills the port owner." >&2
@@ -117,7 +153,7 @@ check_port_owner() {
 # what lets the daemon survive a checkout move/removal. Pure cp/sed/mkdir/ln/mv —
 # no bun — so it runs before the daemon (and its runtime) even exist.
 stage_payload() {
-  local version ver_dir stage
+  local version ver_dir stage keep live
   version="$(read_payload_version "$REPO_ROOT/package.json")"
   if [ -z "$version" ]; then
     echo "Could not read version from $REPO_ROOT/package.json — cannot stage payload." >&2
@@ -125,6 +161,7 @@ stage_payload() {
   fi
   ver_dir="$PAYLOAD_VERSIONS/$version"
   stage="$PAYLOAD_HOME/.stage.$$"
+  keep="$PAYLOAD_VERSIONS/.rollback.$$"
 
   echo "> Staging Echo payload v$version → $ver_dir"
   mkdir -p "$PAYLOAD_VERSIONS"
@@ -140,11 +177,46 @@ stage_payload() {
   "staged_from": "$REPO_ROOT"
 }
 EOF
-  # Same-version reinstall: replace the existing version dir. The running daemon
-  # holds its files open, so the inode survives this swap until the reload below.
+  # Preserve whatever the daemon is running today as the rollback target. On a
+  # version bump the live dir is a different version and survives untouched; a
+  # same-version re-stage (the `echo update` path) would otherwise delete the only
+  # working copy, so it is renamed aside instead of removed.
+  live=""
+  if [ -L "$PAYLOAD_CURRENT" ]; then live="$(readlink "$PAYLOAD_CURRENT")"; fi
+  if [ -n "$live" ] && [ "$live" != "$ver_dir" ] && [ -d "$live" ]; then
+    PAYLOAD_ROLLBACK="$live"
+  elif [ -d "$ver_dir" ]; then
+    rm -rf "$keep"
+    mv "$ver_dir" "$keep"
+    PAYLOAD_ROLLBACK="$keep"
+  fi
+
   rm -rf "$ver_dir"
   mv "$stage" "$ver_dir"
   ln -sfn "$ver_dir" "$PAYLOAD_CURRENT"
+}
+
+# A failed reload must never leave `current` pinned to a payload the daemon cannot
+# run, with KeepAlive respawning it: repoint `current` at the copy that was live
+# before this run and reload that, so the operator is left on a working daemon.
+rollback_payload() {
+  if [ -z "$PAYLOAD_ROLLBACK" ] || [ ! -d "$PAYLOAD_ROLLBACK" ]; then
+    echo "No previously working payload to roll back to — leaving the newly staged one in place." >&2
+    return 0
+  fi
+  echo "> Rolling back payload to $PAYLOAD_ROLLBACK" >&2
+  ln -sfn "$PAYLOAD_ROLLBACK" "$PAYLOAD_CURRENT"
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launchctl load "$PLIST_PATH" 2>/dev/null || true
+  echo "Restored the payload that was running before this install. Check logs: $LOG_PATH" >&2
+}
+
+# Only the renamed-aside copy is ours to delete; a real prior version dir stays.
+discard_rollback_copy() {
+  case "$PAYLOAD_ROLLBACK" in
+    "$PAYLOAD_VERSIONS"/.rollback.*) rm -rf "$PAYLOAD_ROLLBACK" ;;
+  esac
+  PAYLOAD_ROLLBACK=""
 }
 
 # Detection mirrors the reconcilers' matchers (a JSON string holding a hook command under
@@ -169,7 +241,20 @@ omp_installed() {
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
 # `bun install` must have run before a host can load one. Idempotent and offline —
 # every workspace member is local, so this makes no network request.
+#
+# ECHO_SKIP_WORKSPACE_LINK=1 opts a run out of managing the links entirely — it
+# neither creates them here nor verifies them in check_installation. It exists so
+# tests can drive install.sh without `bun install` mutating the checkout's
+# node_modules mid-`bun test`; it is not a supported way to install.
+skip_workspace_link() {
+  [ "${ECHO_SKIP_WORKSPACE_LINK:-0}" = "1" ]
+}
+
 link_workspace() {
+  if skip_workspace_link; then
+    echo "> Skipping workspace link (ECHO_SKIP_WORKSPACE_LINK=1)"
+    return 0
+  fi
   echo "> Linking workspace packages (@echo/shared)"
   (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
 }
@@ -217,6 +302,16 @@ write_plist() {
   mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
   local tmp_plist="${PLIST_PATH}.tmp.$$"
 
+  # A PORT given as a real process variable has to reach the daemon, or
+  # `PORT=<n> bash scripts/install.sh` — the recovery this script recommends for
+  # an occupied port — probes one port while the daemon binds another. A PORT
+  # that came from an env file is deliberately NOT written: the daemon reads
+  # those files itself, and a plist entry would override the user's config.
+  local port_env=""
+  if [ "$ECHO_PORT_FROM_PROCESS" -eq 1 ]; then
+    port_env=$'\n        <key>PORT</key>\n        <string>'"${ECHO_PORT}"$'</string>'
+  fi
+
   cat > "$tmp_plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -248,7 +343,7 @@ write_plist() {
         <key>HOME</key>
         <string>${HOME}</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${HOME}/.bun/bin</string>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${HOME}/.bun/bin</string>${port_env}
     </dict>
 </dict>
 </plist>
@@ -282,6 +377,9 @@ migrate_legacy_service() {
   done
 }
 
+# Returns non-zero (never exits) so the caller can roll the payload back first.
+# Every failure path returns explicitly — errexit is suppressed inside a function
+# used as a condition, so a bare failing command here would fall through.
 reload_core_service() {
   if is_loaded "$SERVICE_NAME"; then
     echo "> Reloading existing $SERVICE_NAME"
@@ -289,26 +387,29 @@ reload_core_service() {
   fi
 
   echo "> Loading $SERVICE_NAME"
-  launchctl load "$PLIST_PATH"
+  if ! launchctl load "$PLIST_PATH"; then
+    echo "launchctl could not load $PLIST_PATH" >&2
+    return 1
+  fi
   sleep 2
 
   if ! is_loaded "$SERVICE_NAME"; then
     echo "LaunchAgent did not remain loaded: $SERVICE_NAME" >&2
-    exit 1
+    return 1
   fi
 
   for legacy in "${LEGACY_SERVICE_NAMES[@]}"; do
     if is_loaded "$legacy"; then
       echo "Legacy service unexpectedly loaded after migration: $legacy" >&2
-      exit 1
+      return 1
     fi
   done
 
-  if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8888/health >/dev/null 2>&1; then
-    echo "OK echo is healthy on :8888"
+  if health_ok; then
+    echo "OK echo is healthy on :${ECHO_PORT}"
   else
-    echo "Voice server did not respond. Check logs: $LOG_PATH" >&2
-    exit 1
+    echo "Voice server did not respond on :${ECHO_PORT}. Check logs: $LOG_PATH" >&2
+    return 1
   fi
 }
 
@@ -376,12 +477,14 @@ check_installation() {
   # Adapters resolve `@echo/shared` through their own node_modules; without the
   # workspace links a registered adapter fails to load. Report, never mutate.
   local adapter
-  for adapter in claudecode omp pi; do
-    if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
-      echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
-      stale=1
-    fi
-  done
+  if ! skip_workspace_link; then
+    for adapter in claudecode omp pi; do
+      if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
+        echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
+        stale=1
+      fi
+    done
+  fi
 
   if [ -f "$PLIST_PATH" ]; then
     echo "> Checking $PLIST_PATH"
@@ -456,6 +559,10 @@ preflight
 stage_payload
 write_plist
 migrate_legacy_service
-reload_core_service
+if ! reload_core_service; then
+  rollback_payload
+  exit 1
+fi
+discard_rollback_copy
 install_adapter
 refresh_installed_adapters

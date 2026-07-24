@@ -103,6 +103,11 @@ cli/echo update                 # re-stage the payload from this checkout + relo
 - Adapter-only change (`adapters/`, registration behavior) → rerun the installer with your
   adapter; it is idempotent and re-reconciles every other installed adapter too.
 
+A re-stage is reversible: the payload that was running is kept aside until the reloaded
+daemon answers `/health`. If it does not, the installer repoints `current` back at that copy
+and reloads it, so a bad update leaves you on the daemon you had rather than a crash-looping
+one, and exits 1 with the log path.
+
 ## Config changes need a restart
 
 The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
@@ -128,11 +133,16 @@ bash scripts/install.sh --check      # or: cli/echo doctor
 ```
 
 Exit 0 when everything is current; exit 3 with `Stale paths found` on stderr when
-anything is stale (a deleted payload shows as a dead plist path). Two caveats: `--check`
-verifies the plist's server path and working directory but not the embedded `bun` binary
-path (after relocating a Bun install, rerun the installer), and per-adapter exit codes fold
-into the aggregate 0/3 result — the full per-adapter exit-code contract lives in
-[`adapters.md`](adapters.md).
+anything is stale (a deleted payload shows as a dead plist path). `cli/echo doctor` agrees
+on the verdict but not the number: it folds this check into its `registrations` row and
+exits **1** (`Result: DEGRADED`) for the same state, so scripts should test for non-zero
+rather than a specific code. Three caveats: `--check` verifies the plist's server path and
+working directory but not the embedded `bun` binary path (after relocating a Bun install,
+rerun the installer); it checks only that paths still *resolve*, never that the staged
+payload's contents match this checkout, so a payload staged from older source at the same
+version reports current (re-stage with `cli/echo update` after editing `core/`/`shared/`);
+and per-adapter exit codes fold into the aggregate 0/3 result — the full per-adapter
+exit-code contract lives in [`adapters.md`](adapters.md).
 
 ## Uninstall
 

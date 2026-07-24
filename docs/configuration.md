@@ -42,10 +42,16 @@ ECHO_VOICE_PERSONA_NAME=Atlas
 ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 ```
 
-`cli/echo voice <name> <edge-tts-voice-id>` writes the persona name +
-`ECHO_VOICE_ID` into `~/.config/echo/.env` for you (merge-preserving, atomic, with a `.bak`
-backup), the pi/omp default persona. Claude Code reads its persona from
-`~/.claude/settings.json` instead, so that command does not affect Claude sessions.
+`cli/echo voice <name> <edge-tts-voice-id>` writes exactly two keys —
+`ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` — into `~/.config/echo/.env` for you
+(merge-preserving, atomic, with a `.bak` backup), the pi/omp default persona. Claude Code
+reads its persona from `~/.claude/settings.json` instead, so that command does not affect
+Claude sessions. The name is rejected if it contains control characters or a double quote,
+since it is written as `KEY="<name>"` into a file parsed line by line.
+
+`ECHO_ENV_FILE` redirects **that write only** — it is a writer-side override for
+`cli/echo voice` (and its tests), not a daemon knob. The daemon and adapters never consult
+it; to point them at another file use `ECHO_ENV_PATHS`.
 
 Real process variables still win. Relaunch Pi/omp after editing the file; existing host
 processes keep the configuration loaded when their Echo extension started.
@@ -54,7 +60,7 @@ processes keep the configuration loaded when their Echo extension started.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8888` | HTTP listen port |
+| `PORT` | `8888` | HTTP listen port. Settable either way: `scripts/install.sh` resolves it the same way the daemon does (real process variable first, then the env files above), and writes it into the LaunchAgent's `EnvironmentVariables` only when it came from a real process variable — so `PORT=9000 bash scripts/install.sh` actually moves the daemon, while a `PORT=` in an env file stays the daemon's own to read |
 | `VOICES_PATH` | `voices.json` next to `core/server.ts` | Voice config file location |
 | `PRONUNCIATIONS_PATH` | `pronunciations.json` next to `core/server.ts` | Pronunciation rules location |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (see indirection below) |

@@ -24,7 +24,16 @@ function makeHome(root: string): { home: string; env: Record<string, string> } {
   writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
   writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
   const bunDir = join(Bun.which("bun")!, "..");
-  return { home, env: { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` } };
+  return {
+    home,
+    env: {
+      HOME: home,
+      PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      // Payload staging is what's under test; the installer must not run
+      // `bun install` against the checkout's node_modules mid-`bun test`.
+      ECHO_SKIP_WORKSPACE_LINK: "1",
+    },
+  };
 }
 
 async function runInstall(args: string[], env: Record<string, string>) {
@@ -41,6 +50,11 @@ const version = (() => {
   const pkg = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
   return pkg.version;
 })();
+
+// Every install.sh run sleeps 2s waiting for launchd to settle, so a test that
+// drives two of them plus a --check exceeds bun's 5s default and dies at SIGTERM.
+// Budget for the real work instead of racing the default.
+const INSTALL_TIMEOUT_MS = 30_000;
 
 describe("install stages a clone-independent payload", () => {
   test("copies core/ + shared/ into a versioned application-support payload and points the plist at it", async () => {
@@ -77,7 +91,7 @@ describe("install stages a clone-independent payload", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   test("re-staging the same version is idempotent (exit 0, current still resolves)", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-payload-idem-"));
@@ -98,7 +112,7 @@ describe("install stages a clone-independent payload", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   test("--check flags a removed payload as a dead plist path", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-payload-removed-"));
@@ -115,5 +129,5 @@ describe("install stages a clone-independent payload", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 });

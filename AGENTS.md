@@ -70,7 +70,10 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
 through their own `node_modules`; without the workspace links a registered adapter fails to
-load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale.
+load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale. A test
+that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` — the flag opts that run out
+of both creating and verifying the links, so `bun test` never relinks the checkout's
+`node_modules` underneath itself.
 
 **Never test against the running daemon.** It serves the operator's real notifications, so
 restarting it, retargeting it, or speaking through it is a live-system incident.
@@ -135,7 +138,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
-| Neutral install/lifecycle · clone-independent payload staging | `scripts/` (`install.sh` `stage_payload`) |
+| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
+| Daemon-equivalent port resolution shared by `install.sh` + `cli/echo` | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer | `cli/echo`, `scripts/set-default-voice.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |

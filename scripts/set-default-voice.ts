@@ -16,6 +16,10 @@ import { looksLikeEdgeVoice } from "../shared/edge-voice";
 const ENV_FILE = process.env.ECHO_ENV_FILE ?? join(homedir(), ".config", "echo", ".env");
 const NAME_KEY = "ECHO_VOICE_PERSONA_NAME";
 const VOICE_KEY = "ECHO_VOICE_ID";
+// The name is written as KEY="<name>" into a file the daemon parses line by line:
+// a control character (a newline above all) would inject further config lines, and
+// a double quote would not survive the daemon's quote stripping intact.
+const ILLEGAL_IN_NAME = /[\u0000-\u001f\u007f"]/;
 
 function fail(message: string): never {
   console.error(message);
@@ -25,6 +29,9 @@ function fail(message: string): never {
 const [name, voice] = process.argv.slice(2);
 if (!name || !voice) {
   fail("Usage: echo voice <name> <edge-tts-voice-id>   e.g. echo voice Echo en-US-AndrewNeural");
+}
+if (ILLEGAL_IN_NAME.test(name)) {
+  fail(`Persona name must not contain control characters or double quotes: ${JSON.stringify(name)}`);
 }
 if (!looksLikeEdgeVoice(voice)) {
   console.error(`"${voice}" doesn't look like an edge-tts voice (e.g. en-US-AndrewNeural).`);

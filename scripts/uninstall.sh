@@ -19,7 +19,9 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   [ -f "$PLIST_PATH" ] && echo "would remove LaunchAgent: $PLIST_PATH" || echo "= no LaunchAgent at $PLIST_PATH"
   [ -d "$PAYLOAD_HOME" ] && echo "would remove payload: $PAYLOAD_HOME" || echo "= no payload at $PAYLOAD_HOME"
   echo "= would preserve logs: $LOG_PATH"
-  [ -f "$ECHO_ENV_FILE" ] && echo "= would preserve persona config: $ECHO_ENV_FILE"
+  if [ -f "$ECHO_ENV_FILE" ]; then
+    echo "= would preserve persona config: $ECHO_ENV_FILE"
+  fi
   exit 0
 fi
 
@@ -40,4 +42,9 @@ if lsof -i :"${ECHO_PORT}" >/dev/null 2>&1; then
 fi
 
 echo "Logs preserved at $LOG_PATH"
-[ -f "$ECHO_ENV_FILE" ] && echo "Persona config preserved at $ECHO_ENV_FILE"
+if [ -f "$ECHO_ENV_FILE" ]; then
+  echo "Persona config preserved at $ECHO_ENV_FILE"
+fi
+
+# A successful uninstall exits 0 regardless of which optional notes were printed.
+exit 0
