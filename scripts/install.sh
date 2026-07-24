@@ -410,6 +410,11 @@ reload_core_service() {
     echo "OK echo is healthy on :${ECHO_PORT}"
   else
     echo "Voice server did not respond on :${ECHO_PORT}. Check logs: $LOG_PATH" >&2
+    if [ -n "${PORT:-}" ]; then
+      echo "PORT=${PORT} is exported in this shell, so this check probed :${ECHO_PORT}. The" >&2
+      echo "daemon takes its port from ~/.config/echo/.env, not from your shell — if it is" >&2
+      echo "serving on a different port, unset PORT and rerun." >&2
+    fi
     return 1
   fi
 }

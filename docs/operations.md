@@ -58,10 +58,10 @@ runs a health check, and prints the log path with the last five log lines.
 curl -fsS http://localhost:8888/health
 ```
 
-Returns JSON containing `"status":"healthy"`. `8888` is the default; every Echo script
-resolves the real port through `scripts/echo-port.sh` (process `PORT`, then `PORT=` in
-`~/.config/echo/.env`, then 8888 — see [`configuration.md`](configuration.md)), so
-`bash scripts/status.sh` prints the health check against whichever port is configured.
+Returns JSON containing `"status":"healthy"`. `8888` is the default the scripts assume
+(`scripts/echo-port.sh`); the daemon's own port comes from `~/.config/echo/.env`, which the
+scripts do not read. If you moved the daemon, export a matching `PORT` — `PORT=9000 bash
+scripts/status.sh` — see [`configuration.md`](configuration.md).
 
 ## Logs
 
@@ -73,9 +73,9 @@ resolves the real port through `scripts/echo-port.sh` (process `PORT`, then `POR
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on the resolved port (a process `PORT`, else `PORT=` in
-`~/.config/echo/.env` — see [`configuration.md`](configuration.md)). While muted, notifications are still
-accepted, processed, and logged — only the audio is suppressed, across every provider:
+`scripts/mute.sh` wraps `POST /mute` on `:8888`, or on `PORT` when you export it to target
+another daemon. While muted, notifications are still accepted, processed, and logged — only
+the audio is suppressed, across every provider:
 
 ```bash
 bash scripts/mute.sh status    # prints the current state, e.g. {"mute":{"muted":false,"muted_until":null}}
