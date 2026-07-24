@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { looksLikeEdgeVoice } from "../shared/persona-scaffold";
+import { looksLikeEdgeVoice } from "../shared/edge-voice";
 
 const ENV_FILE = process.env.ECHO_ENV_FILE ?? join(homedir(), ".config", "echo", ".env");
 const NAME_KEY = "ECHO_VOICE_PERSONA_NAME";
