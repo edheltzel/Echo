@@ -4,8 +4,10 @@ SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
 # Versioned daemon payload staged by install.sh (Stage 1) — Echo-owned, so
-# uninstall removes it. Logs and the user's persona config are preserved.
-PAYLOAD_HOME="$HOME/Library/Application Support/Echo"
+# uninstall removes it. Its own `payload/` subdir keeps this removal off sibling
+# daemon state (mute.json in the same case-insensitive `echo` dir). Logs and the
+# user's persona config are preserved.
+PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 ECHO_ENV_FILE="$HOME/.config/echo/.env"
 ECHO_PORT="${PORT:-8888}"
 

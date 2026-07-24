@@ -17,7 +17,12 @@ HEALTH_URL="http://localhost:${ECHO_PORT}/health"
 # points at ${PAYLOAD_CURRENT}, so moving or deleting the checkout never breaks
 # the running service (Stage 1). `current` is a symlink to the active version,
 # so `echo update` just re-stages + repoints it.
-PAYLOAD_HOME="$HOME/Library/Application Support/Echo"
+#
+# It lives in its OWN `payload/` subdir under `.../Application Support/echo` (the
+# lowercase state dir that also holds mute.json). The case-insensitive default
+# volume means `Echo` and `echo` are the same directory, so isolating the payload
+# in a subdir is what lets uninstall remove it without touching sibling state.
+PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 PAYLOAD_VERSIONS="$PAYLOAD_HOME/versions"
 PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"

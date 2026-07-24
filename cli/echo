@@ -20,7 +20,7 @@ PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
 ECHO_PORT="${PORT:-8888}"
 HEALTH_URL="http://localhost:${ECHO_PORT}/health"
-PAYLOAD_HOME="$HOME/Library/Application Support/Echo"
+PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
 PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 
 usage() {

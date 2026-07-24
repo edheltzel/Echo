@@ -48,7 +48,7 @@ Service identity:
 - LaunchAgent label: `com.echo`
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
-- Daemon payload: `~/Library/Application Support/Echo/versions/<v>` (a self-contained copy of
+- Daemon payload: `~/Library/Application Support/echo/payload/versions/<v>` (a self-contained copy of
   `core/` + `shared/`); the plist points at the `current` symlink, **not** the git checkout, so
   moving or deleting the clone never breaks the running service. Adapters still run from the
   checkout and heal on the next `install` (#77).

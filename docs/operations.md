@@ -90,7 +90,7 @@ on the next notification. The `/mute` endpoint contract and one-keystroke hotkey
 ## Update after a `git pull`
 
 Bun runs the TypeScript sources directly — there is no build step. **But the daemon runs
-from a staged payload copy** (`~/Library/Application Support/Echo/versions/<v>`), not the
+from a staged payload copy** (`~/Library/Application Support/echo/payload/versions/<v>`), not the
 checkout, so editing `core/`/`shared/` and merely restarting keeps running the *old* payload.
 To pick up daemon-source or config changes, re-stage:
 

@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // Stage 1: the daemon runs from a versioned payload under
-// ~/Library/Application Support/Echo, NOT the git clone, so moving/deleting the
-// checkout never breaks the running service. These tests run install.sh in a
+// ~/Library/Application Support/echo/payload, NOT the git clone, so moving/deleting
+// the checkout never breaks the running service. These tests run install.sh in a
 // temp HOME with stubbed launchctl/curl — they never touch the real daemon.
 
 const REPO_ROOT = resolve(".");
-const PAYLOAD_REL = "Library/Application Support/Echo";
+const PAYLOAD_REL = "Library/Application Support/echo/payload";
 
 function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o755 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // The `echo` CLI is a thin bash wrapper over scripts/*.sh + the daemon API.
 // Every test runs in a temp HOME with stubbed launchctl/curl — it never touches
@@ -125,6 +125,51 @@ describe("echo mute", () => {
       const { env } = muteEnv(root);
       expect((await runCli(["mute", "banana"], env)).exitCode).toBe(2);
       expect((await runCli(["mute"], env)).exitCode).toBe(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("echo uninstall", () => {
+  test("removes only the payload, preserving mute state, logs, and persona config", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-uninstall-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      // PORT points at an unused port so uninstall.sh's lsof note stays quiet.
+      const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin`, PORT: "8991" };
+
+      // The payload lives in its own subdir under the case-insensitive `echo`
+      // state dir; mute.json is a SIBLING that must survive uninstall.
+      const stateDir = join(home, "Library/Application Support/echo");
+      const payload = join(stateDir, "payload");
+      const muteState = join(stateDir, "mute.json");
+      const plist = join(home, "Library/LaunchAgents/com.echo.plist");
+      const log = join(home, "Library/Logs/echo.log");
+      const envFile = join(home, ".config/echo/.env");
+      for (const f of [join(payload, "versions/0.0.0/core/server.ts"), muteState, plist, log, envFile]) {
+        mkdirSync(dirname(f), { recursive: true });
+        writeFileSync(f, "x");
+      }
+
+      // --check mutates nothing.
+      const check = await runCli(["uninstall", "--check"], env);
+      expect(check.exitCode).toBe(0);
+      expect(existsSync(payload)).toBe(true);
+      expect(existsSync(plist)).toBe(true);
+
+      const r = await runCli(["uninstall"], env);
+      expect(r.exitCode).toBe(0);
+      // Payload + LaunchAgent removed…
+      expect(existsSync(payload)).toBe(false);
+      expect(existsSync(plist)).toBe(false);
+      // …but sibling daemon state, logs, and persona config are preserved.
+      expect(existsSync(muteState)).toBe(true);
+      expect(existsSync(log)).toBe(true);
+      expect(existsSync(envFile)).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
