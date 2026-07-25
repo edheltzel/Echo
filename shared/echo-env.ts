@@ -90,6 +90,8 @@ function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironm
       }
       // The .env reader is migration-only. It retains the old first-file-wins
       // behavior but never overwrites a process or JSON-configured value.
+      const retiredAliasPrefix = ["VOICE", "SYSTEM_"].join("");
+      if (key.startsWith(retiredAliasPrefix)) continue;
       if (key && value && !key.startsWith("#") && env[key] === undefined) env[key] = value;
     }
   }

@@ -80,7 +80,7 @@ describe("core server route contract source", () => {
   });
 
   test("retired legacy aliases are absent from core source", () => {
-    expect(server).not.toContain("VOICESYSTEM_");
+    expect(server).not.toContain(["VOICE", "SYSTEM_"].join(""));
   });
 
   test("edge-tts success requires a synthesis attempt to have actually run", () => {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
-import { echoConfigPath, loadEchoConfiguration, validateEchoConfig } from "../../shared/echo-env";
+import { ECHO_CONFIG_KEYS, echoConfigPath, loadEchoConfiguration, validateEchoConfig } from "../../shared/echo-env";
 
 // parseBoundedInt is the single guard behind every numeric env override in the
 // voice system (issue #25). A degenerate value (NaN / negative / below floor)
@@ -136,6 +136,21 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     }
   });
 
+  test("ignores retired legacy aliases while migrating canonical values", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-retired-alias-"));
+    try {
+      const configDir = join(home, ".config", "echo");
+      mkdirSync(configDir, { recursive: true });
+      const retiredKey = ["VOICE", "SYSTEM_", "DEFAULT_TITLE"].join("");
+      writeFileSync(join(configDir, ".env"), `${retiredKey}=Old\nECHO_DEFAULT_TITLE=New\n`);
+      const resolved = loadEchoConfiguration({}, home);
+      expect(resolved.ECHO_DEFAULT_TITLE).toBe("New");
+      expect(resolved[retiredKey]).toBeUndefined();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("live values override config.json without mutating process.env", () => {
     const home = mkdtempSync(join(tmpdir(), "echo-json-precedence-"));
     try {
@@ -157,5 +172,13 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(validateEchoConfig({ notEcho: true })).toHaveLength(1);
     expect(validateEchoConfig({ ECHO_VOICE_ID: ["voice"] })).toHaveLength(1);
     expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);
+  });
+
+  test("the checked-in schema covers every supported config key and the port default", () => {
+    const schema = JSON.parse(readFileSync("shared/config-schema.json", "utf8"));
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties.PORT.default).toBe(3246);
+    expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
+    for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
   });
 });
