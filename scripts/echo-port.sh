@@ -5,18 +5,28 @@
 #
 # Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
 # cli/echo all target 3246 and make no attempt to discover a daemon listening
-# anywhere else. Nothing here reads ~/.config/echo/.env or any other env file —
-# the daemon owns that parsing, and a second parser in bash could only drift from
-# it. Exporting PORT aims one command at one specific daemon (an isolated test
-# instance); it does not configure the installed LaunchAgent, whose environment
-# is HOME and PATH only.
+# anywhere else. It does not read legacy dotenv files — the daemon owns that
+# migration parsing, and a second parser in bash could only drift from it. With
+# no live PORT override, the helper reads the flat JSON PORT property
+# so the CLI and lifecycle scripts follow the daemon's documented config.
 #
 # Pure bash on purpose: sourced by scripts that must work without Bun. Values stay
 # script-local — every script sources this for itself, nothing is exported.
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
-ECHO_PORT="${PORT:-3246}"
+config_port() {
+  local config_path="$HOME/.config/echo/config.json"
+  [ -f "$config_path" ] || return 0
+  sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([0-9]+)"?[[:space:]]*,?.*/\1/p' "$config_path" | head -1
+}
+
+if [ -n "${PORT:-}" ]; then
+  ECHO_PORT="$PORT"
+else
+  ECHO_PORT="$(config_port)"
+  ECHO_PORT="${ECHO_PORT:-3246}"
+fi
 ECHO_BASE_URL="http://localhost:${ECHO_PORT}"
 # shellcheck disable=SC2034  # read by the scripts that source this file, not here
 HEALTH_URL="${ECHO_BASE_URL}/health"

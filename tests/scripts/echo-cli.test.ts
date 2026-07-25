@@ -48,6 +48,26 @@ describe("echo CLI dispatch", () => {
     expect(r.exitCode).toBe(2);
     expect(r.stderr).toContain("Unknown command");
   });
+
+  test("uses the configured JSON port when PORT is not exported", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-cli-config-port-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({ PORT: 3457 }));
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","port":3457}\'\nexit 0\n');
+
+      const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("Health: OK on :3457");
+      expect(r.stdout).toContain('"port":3457');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("echo doctor", () => {
@@ -257,8 +277,8 @@ describe("echo uninstall", () => {
       const muteState = join(stateDir, "mute.json");
       const plist = join(home, "Library/LaunchAgents/com.echo.plist");
       const log = join(home, "Library/Logs/echo.log");
-      const envFile = join(home, ".config/echo/.env");
-      for (const f of [join(payload, "versions/0.0.0/core/server.ts"), muteState, plist, log, envFile]) {
+      const configFile = join(home, ".config/echo/config.json");
+      for (const f of [join(payload, "versions/0.0.0/core/server.ts"), muteState, plist, log, configFile]) {
         mkdirSync(dirname(f), { recursive: true });
         writeFileSync(f, "x");
       }
@@ -277,7 +297,7 @@ describe("echo uninstall", () => {
       // …but sibling daemon state, logs, and persona config are preserved.
       expect(existsSync(muteState)).toBe(true);
       expect(existsSync(log)).toBe(true);
-      expect(existsSync(envFile)).toBe(true);
+      expect(existsSync(configFile)).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -303,28 +323,24 @@ describe("echo uninstall", () => {
 });
 
 describe("echo voice", () => {
-  test("merge-writes the default persona env, preserving unrelated keys", async () => {
+  test("merge-writes the default persona JSON config, preserving unrelated keys", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-voice-"));
     try {
-      const envFile = join(root, "echo.env");
-      writeFileSync(envFile, "# my config\nUNRELATED=keepme\nECHO_VOICE_ID=old-value\n");
+      const configFile = join(root, "config.json");
+      writeFileSync(configFile, JSON.stringify({ unrelated: "keepme", ECHO_VOICE_ID: "old-value" }));
       const env = {
         HOME: join(root, "home"),
         PATH: `${bunDir}:/bin:/usr/bin`,
-        ECHO_ENV_FILE: envFile,
+        ECHO_CONFIG_FILE: configFile,
       };
 
       const r = await runCli(["voice", "Echo", "en-US-AndrewNeural"], env);
       expect(r.exitCode).toBe(0);
 
-      const written = readFileSync(envFile, "utf8");
-      expect(written).toContain('ECHO_VOICE_PERSONA_NAME="Echo"');
-      expect(written).toContain('ECHO_VOICE_ID="en-US-AndrewNeural"');
-      // The prior ECHO_VOICE_ID assignment is replaced, not duplicated.
-      expect(written).not.toContain("old-value");
-      // Unrelated keys and comments survive the merge.
-      expect(written).toContain("UNRELATED=keepme");
-      expect(written).toContain("# my config");
+      const written = JSON.parse(readFileSync(configFile, "utf8"));
+      expect(written.ECHO_VOICE_PERSONA_NAME).toBe("Echo");
+      expect(written.ECHO_VOICE_ID).toBe("en-US-AndrewNeural");
+      expect(written.unrelated).toBe("keepme");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -333,18 +349,18 @@ describe("echo voice", () => {
   test("rejects a persona name that would inject extra env lines", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-voice-inject-"));
     try {
-      const envFile = join(root, "echo.env");
-      writeFileSync(envFile, "UNRELATED=keepme\n");
+      const configFile = join(root, "config.json");
+      writeFileSync(configFile, JSON.stringify({ unrelated: "keepme" }));
       const env = {
         HOME: join(root, "home"),
         PATH: `${bunDir}:/bin:/usr/bin`,
-        ECHO_ENV_FILE: envFile,
+        ECHO_CONFIG_FILE: configFile,
       };
 
       const r = await runCli(["voice", 'Echo"\nELEVENLABS_API_KEY=stolen', "en-US-AndrewNeural"], env);
       expect(r.exitCode).toBe(2);
-      // The env file the daemon parses is left untouched.
-      expect(readFileSync(envFile, "utf8")).toBe("UNRELATED=keepme\n");
+      // The JSON config is left untouched.
+      expect(readFileSync(configFile, "utf8")).toBe(JSON.stringify({ unrelated: "keepme" }));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -356,7 +372,7 @@ describe("echo voice", () => {
       const env = {
         HOME: join(root, "home"),
         PATH: `${bunDir}:/bin:/usr/bin`,
-        ECHO_ENV_FILE: join(root, "echo.env"),
+        ECHO_CONFIG_FILE: join(root, "config.json"),
       };
       const r = await runCli(["voice", "Echo", "not-a-voice"], env);
       expect(r.exitCode).toBe(2);
