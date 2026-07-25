@@ -79,7 +79,7 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 
 1. Audition candidates: `bun scripts/preview-voices.ts --list` / `--locale en-GB` (see above).
 2. Edit `identity.edgetts.voice` (and optional `speed`) in `core/voices.json`.
-3. Restart the daemon (command above).
+3. Re-stage and reload: `cli/echo update`.
 4. Verify:
 
    ```bash
@@ -166,7 +166,12 @@ merge-writes the `daidentity` block into the host's native config (Pi: JSON;
 omp: YAML via `Bun.YAML`) **preserving every other key** — a present-but-unparseable
 config aborts rather than being clobbered. Unlike Claude Code's symlinked markdown
 command, this one ships with the adapter itself, so there is no installer step. Takes
-effect on the next session in that repo. See
+effect on the next session in that repo.
+
+For the **global** pi/omp default rather than one repo's, `cli/echo voice <name> <voice-id>`
+writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config.json`
+(validating the edge-tts voice first). Claude Code ignores it; its persona comes from
+`~/.claude/settings.json`, above. See
 [`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
 
@@ -174,7 +179,7 @@ effect on the next session in that repo. See
 
 1. Audition and confirm the target voice name exists (`--list`, as above).
 2. Edit that agent's `edgetts.voice` (and optional `speed`) in `core/voices.json`.
-3. Restart the daemon.
+3. Re-stage and reload: `cli/echo update`.
 4. Verify with `-d '{"message":"voice check","voice_id":"<key>"}'` — the resolution event
    should read `"resolution":"agent-key"` with the new voice.
 
@@ -182,7 +187,7 @@ effect on the next session in that repo. See
 
 1. Add a keyed entry to `agents` in `core/voices.json` — mirror an existing one:
    `description`, optional `catchphrase`, at least an `edgetts` block (validate the voice
-   name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Restart the daemon.
+   name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Then `cli/echo update`.
 2. Bind the persona to that key in its `atlas-config` brief (`~/.claude/agents/<Name>.md`):
    set frontmatter `voiceId: <key>` and make every self-voice `curl` POST
    `http://localhost:3246/notify` with `"voice_id":"<key>"`. The self-voice instruction must
@@ -211,7 +216,8 @@ JSON); an ElevenLabs API key.
 
 2. In `core/voices.json`, set `providers.elevenlabs.enabled` to `true`. Leave
    `apiKey: "${ELEVENLABS_API_KEY}"` as shipped — it expands from the env at startup.
-3. Restart the daemon so it re-reads both files.
+3. Run `cli/echo update`, which re-stages the edited `voices.json` and reloads, so the daemon
+   re-reads both files.
 4. Verify configuration:
 
    ```bash

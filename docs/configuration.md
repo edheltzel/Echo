@@ -25,11 +25,14 @@ string-only ambiguity. Paths beginning with ~ are passed through to the existing
 handling; use an absolute path when a tool does not expand it.
 
 The file is optional. Missing or invalid files leave the documented defaults in effect, and
-Echo logs a warning rather than failing startup. Restart the daemon after changing it:
+Echo logs a warning rather than failing startup. It is read from your home directory, never
+from the daemon payload, so a plain reload picks up an edit, with no re-staging:
 
-    cli/echo update
-    # or, for an installed LaunchAgent:
     launchctl kickstart -k "gui/$UID/com.echo"
+    # or: bash scripts/restart.sh
+
+(A `core/voices.json` edit is the case that also needs `cli/echo update`; see
+[`operations.md`](operations.md#which-config-changes-need-a-re-stage).)
 
 ## Precedence and secrets
 
@@ -94,8 +97,9 @@ PAI_DIR, PAI_SETTINGS_PATH, PI_SETTINGS_PATH, PI_CODING_AGENT_DIR, OMP_EXTENSION
 and CLAUDE_PROJECT_DIR remain host-owned runtime context. They describe where a host keeps
 its own settings or project, so they are not Echo settings and are not copied into this file.
 ECHO_ENV_PATHS and ECHO_CONFIG_FILE are likewise not settings but path selectors, read only
-from the live process environment: the first picks extra dotenv locations for migration, the
-second retargets config.json itself and is honored identically by the daemon and by
+from the live process environment: the first prepends extra dotenv locations to the layer-3
+read fallback (those files are read as configuration but never drained by the migration
+below), the second retargets config.json itself and is honored identically by the daemon and by
 `echo voice`, so a test or development instance can never write where the reader will not look.
 
 ## Schema reference
@@ -151,7 +155,7 @@ fallback — lives in [`voices.md`](voices.md#reference-corevoicesjson).
 An upgrade does not silently discard existing settings. Echo still reads the old dotenv
 locations as the lowest-priority layer:
 
-    paths in ECHO_ENV_PATHS (migration selector only)
+    paths in ECHO_ENV_PATHS (read, but never migrated; see below)
     ~/.config/echo/.env
     ~/.config/voicesystem/.env
     ~/.env
