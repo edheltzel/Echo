@@ -72,10 +72,18 @@ function isConfigPrimitive(value: unknown): value is EchoConfigValue {
 export const MIN_CONFIG_PORT = 1;
 export const MAX_CONFIG_PORT = 65535;
 
+// The only spelling all three readers agree on. The daemon parses base 10
+// (`parseInt(_, 10)`), scripts/echo-port.sh captures `[0-9]+` and compares with
+// bash arithmetic, and each understands a different superset: `Number()` reads
+// `0x0C9E` as 3230 where base-10 parsing stops at 0, and bash reads a
+// leading-zero operand as octal (`03246` → 1702). Anything outside canonical
+// decimal is therefore a value two readers would resolve to different ports.
+const CANONICAL_DECIMAL = /^[1-9][0-9]*$/;
+
 function parseConfigPort(entry: EchoConfigValue): number | null {
   if (typeof entry === "boolean") return null;
-  const port = typeof entry === "number" ? entry : Number(entry.trim());
-  return Number.isInteger(port) ? port : null;
+  const text = String(entry).trim();
+  return CANONICAL_DECIMAL.test(text) ? Number(text) : null;
 }
 
 /** The single per-key rule; both validation and loading go through it. */

@@ -69,24 +69,52 @@ describe("echo CLI dispatch", () => {
     }
   });
 
-  // The daemon clamps PORT to the same range, so a value it would reject must
-  // send the CLI to 3246 too — otherwise the shell surfaces probe a port the
-  // daemon never bound.
-  test("falls back to 3246 when the configured JSON port is out of range", async () => {
-    const root = mkdtempSync(join(tmpdir(), "echo-cli-bad-port-"));
+  // The daemon drops a PORT it would resolve differently, so every such value
+  // must send the CLI to 3246 too — otherwise the shell surfaces probe a port the
+  // daemon never bound. `03246` and `1e4` are the sharp ones: reading only the
+  // leading digits would put the CLI on :03246 (octal 1702 to bash) and :1.
+  test.each(["99999", "0", "03246", "1e4", "0x0C9E"])(
+    "falls back to 3246 when the configured JSON port is %s",
+    async (port) => {
+      const root = mkdtempSync(join(tmpdir(), "echo-cli-bad-port-"));
+      try {
+        const home = join(root, "home");
+        const bin = join(root, "bin");
+        mkdirSync(join(home, ".config", "echo"), { recursive: true });
+        mkdirSync(bin, { recursive: true });
+        writeFileSync(join(home, ".config", "echo", "config.json"), `{"PORT": "${port}"}`);
+        writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+        writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
+
+        const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toContain("Health: OK on :3246");
+        expect(r.stdout).not.toContain(`:${port}`);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  // A last property carries no trailing comma, so the value token has to be
+  // readable without one — that is how migrate-config.ts pretty-prints.
+  test("reads the configured port from multi-line JSON", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-cli-multiline-port-"));
     try {
       const home = join(root, "home");
       const bin = join(root, "bin");
       mkdirSync(join(home, ".config", "echo"), { recursive: true });
       mkdirSync(bin, { recursive: true });
-      writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({ PORT: 99999 }));
+      writeFileSync(
+        join(home, ".config", "echo", "config.json"),
+        JSON.stringify({ ECHO_DEFAULT_TITLE: "First", PORT: 3457 }, null, 2) + "\n",
+      );
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
       writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
 
       const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("Health: OK on :3246");
-      expect(r.stdout).not.toContain("99999");
+      expect(r.stdout).toContain("Health: OK on :3457");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

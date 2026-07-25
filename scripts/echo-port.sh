@@ -16,18 +16,25 @@
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
-# The configured port, or empty when it is absent or outside the range config.json
-# accepts. The bounds must match the ones config.json validation enforces
-# (MIN/MAX_CONFIG_PORT in shared/echo-env.ts) and the schema declares, or a value
-# the daemon drops (falling back to 3246) would send every shell surface probing a
-# port nothing serves. That is also why 0 is out of range on both sides: it means
-# an ephemeral bind, which no CLI can address, and it reaches the daemon only as a
-# live process value in tests.
+# The configured port, or empty when it is absent or in any form config.json
+# validation would reject. Grammar AND bounds must match what that validation
+# enforces (CANONICAL_DECIMAL and MIN/MAX_CONFIG_PORT in shared/echo-env.ts) and
+# what the schema declares, or a value the daemon drops (falling back to 3246)
+# would send every shell surface probing a port nothing serves.
+#
+# The whole value token is captured, not just its leading digits, so a spelling
+# the three readers disagree about is rejected here rather than silently
+# truncated: `"1e4"` would otherwise read as port 1, and bash arithmetic treats a
+# leading-zero operand as octal (`03246` → 1702). 0 is out of range on both sides
+# too — it means an ephemeral bind, which no CLI can address, and it reaches the
+# daemon only as a live process value in tests.
 config_port() {
   local config_path="$HOME/.config/echo/config.json" port
   [ -f "$config_path" ] || return 0
-  port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([0-9]+)"?[[:space:]]*,?.*/\1/p' "$config_path" | head -1)"
-  [ -n "$port" ] || return 0
+  port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([^",}[:space:]]*)"?[[:space:]]*[,}]?.*/\1/p' "$config_path" | head -1)"
+  case "$port" in
+    "" | *[!0-9]* | 0*) return 0 ;;
+  esac
   [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] || return 0
   echo "$port"
 }

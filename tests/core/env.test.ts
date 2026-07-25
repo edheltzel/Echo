@@ -268,6 +268,33 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(validateEchoConfig({ PORT: 65535 })).toEqual([]);
   });
 
+  // Every spelling below is in range for at least one reader and a different
+  // port (or 0) for another: Number() reads the radix prefixes that base-10
+  // parsing stops at, and bash reads a leading-zero operand as octal. Only
+  // canonical decimal resolves identically in all three.
+  test("a configured PORT must be canonical decimal, not another numeric spelling", () => {
+    for (const port of ["0x0C9E", "0b1100100", "0o6246", "1e4", "03246", "+3246", "3246.5", " ", ""]) {
+      expect(validateEchoConfig({ PORT: port })).toHaveLength(1);
+    }
+    expect(validateEchoConfig({ PORT: " 3246 " })).toEqual([]);
+    expect(validateEchoConfig({ PORT: 3246 })).toEqual([]);
+  });
+
+  test("a PORT spelled in a radix the daemon cannot parse is dropped, not silently bound", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-hex-port-"));
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(echoConfigPath(home), JSON.stringify({ PORT: "0x0C9E", ECHO_DEFAULT_TITLE: "Kept" }));
+
+      const { env, config } = loadEchoConfigurationWithStatus({}, home);
+      expect(env.PORT).toBeUndefined();
+      expect(env.ECHO_DEFAULT_TITLE).toBe("Kept");
+      expect(config.ignored).toEqual(["PORT"]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("a configured PORT of 0 is dropped and reported, leaving the daemon on 3246", () => {
     const home = mkdtempSync(join(tmpdir(), "echo-zero-port-"));
     try {
@@ -298,5 +325,14 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
     for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
     for (const key of Object.keys(schema.properties)) expect(ECHO_CONFIG_KEYS.has(key)).toBe(true);
+  });
+
+  // The third home for the same bounds. The shell helper cannot import them, so
+  // pin its literals here: a range only two of the three readers agree on is the
+  // daemon and the CLI landing on different ports.
+  test("scripts/echo-port.sh enforces the same port range", () => {
+    const helper = readFileSync("scripts/echo-port.sh", "utf8");
+    expect(helper).toContain(`[ "$port" -ge ${MIN_CONFIG_PORT} ]`);
+    expect(helper).toContain(`[ "$port" -le ${MAX_CONFIG_PORT} ]`);
   });
 });
