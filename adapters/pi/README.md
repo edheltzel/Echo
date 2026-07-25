@@ -40,13 +40,16 @@ Environment variables (the legacy `ATLAS_VOICE_*` names still work as deprecated
 silent fallbacks — see
 [`docs/configuration.md`](../../docs/configuration.md#deprecated-environment-variables)):
 
-Pi and omp load these values from the real process environment and Echo's standard
-environment-file chain. For durable local settings, use `~/.config/echo/.env`; process
-variables take precedence. Relaunch the host after editing the file:
+Pi and omp resolve these values exactly as the daemon does: the real process environment
+first, then Echo's JSON configuration file. For durable local settings, use
+`~/.config/echo/config.json`; process variables take precedence. Relaunch the host after
+editing the file:
 
-```dotenv
-ECHO_VOICE_PERSONA_NAME=Atlas
-ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
+```json
+{
+  "ECHO_VOICE_PERSONA_NAME": "Atlas",
+  "ECHO_VOICE_CATCHPHRASE": "Atlas online and standing by."
+}
 ```
 
 | Variable | Default | Purpose |

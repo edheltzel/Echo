@@ -25,7 +25,7 @@ cli/echo install [--adapter none|claudecode|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
-cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/.env
+cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
 
@@ -116,7 +116,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
-| Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
+| Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
@@ -141,8 +141,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
-| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else 3246; never parses the daemon's config) | `scripts/echo-port.sh` |
-| Stable `echo` control/diagnostic CLI · default-persona writer | `cli/echo`, `scripts/set-default-voice.ts` |
+| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else the `config.json` port, else 3246; never parses dotenv files) | `scripts/echo-port.sh` |
+| Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
@@ -161,7 +161,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
   (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
   `tests/core/architecture-invariants.test.ts` (source scan) plus
   `tests/core/import-purity.test.ts` (isolated import of the daemon proves nothing leaks).
-- Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key.
+- Keep daemon and adapter configuration precedence in `shared/echo-env.ts`; real process values win, then `~/.config/echo/config.json`, then the first legacy dotenv file per key. Two carve-outs live there and nowhere else: `PORT` is never read from a dotenv file (the bash surfaces cannot see it, and `scripts/migrate-config.ts` moves it into `config.json` at install time), and `ELEVENLABS_API_KEY` is never accepted from `config.json` (a dotenv file stays its permanent home).
+- Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
 - Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.

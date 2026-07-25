@@ -180,8 +180,8 @@ exist). Host lifecycle behavior remains independent: the Claude Code adapter
 suppresses subagents via stdin `agent_id` and reads `~/.claude/settings.json` for identity;
 Pi suppresses via `ECHO_VOICE_SUPPRESS` plus run-context (`hasUI === false`, or mode
 `json`/`print`). The daemon and the adapters share code only through the `@echo/shared`
-package — including the environment-file loader (`shared/echo-env.ts`), so
-`~/.config/echo/.env` uses identical precedence in every process. The package boundary,
+package — including the configuration loader (`shared/echo-env.ts`), so
+`~/.config/echo/config.json` uses identical precedence in every process. The package boundary,
 adapter responsibilities, and the Pi per-turn injection (#15):
 [`docs/adapters.md`](docs/adapters.md).
 

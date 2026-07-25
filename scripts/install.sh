@@ -242,12 +242,26 @@ link_workspace() {
   (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
 }
 
+# Drain legacy dotenv Echo settings into ~/.config/echo/config.json before
+# anything resolves a port. A dotenv PORT is invisible to every bash surface (and
+# to the daemon, which no longer honors it there), so migrating first is what
+# keeps an upgrading user on the port they configured instead of failing the
+# health probe on :3246. Reporting, non-destructive scope, and the
+# ELEVENLABS_API_KEY carve-out live in the script; re-source echo-port.sh after
+# it so ECHO_PORT reflects a freshly migrated value.
+migrate_legacy_config() {
+  bun run "$REPO_ROOT/scripts/migrate-config.ts"
+  # shellcheck source=scripts/echo-port.sh
+  . "$SCRIPT_DIR/echo-port.sh"
+}
+
 preflight() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "Bun is required. Install it from https://bun.sh/" >&2
     exit 1
   fi
 
+  migrate_legacy_config
   link_workspace
 
   case "$ADAPTER" in

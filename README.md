@@ -215,9 +215,9 @@ Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/v
 Persistent settings live in `~/.config/echo/config.json`, including persona identity, port,
 timeouts, cache limits, and log paths. JSON values are typed and validated against
 [`shared/config-schema.json`](shared/config-schema.json). Live process values remain a
-compatibility override, and an existing `~/.config/echo/.env` is read only as a migration
-fallback. `ELEVENLABS_API_KEY` is the only secret and never belongs in JSON. See
-[docs/configuration.md](docs/configuration.md).
+compatibility override; installing migrates an existing `~/.config/echo/.env` into the JSON
+file and leaves the old one in place, since `ELEVENLABS_API_KEY` — the only secret, never
+accepted in JSON — keeps living there. See [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 

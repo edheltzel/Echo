@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
-import { ECHO_CONFIG_KEYS, echoConfigPath, loadEchoConfiguration, validateEchoConfig } from "../../shared/echo-env";
+import {
+  ECHO_CONFIG_KEYS,
+  echoConfigPath,
+  loadEchoConfiguration,
+  loadEchoConfigurationWithStatus,
+  validateEchoConfig,
+} from "../../shared/echo-env";
 
 // parseBoundedInt is the single guard behind every numeric env override in the
 // voice system (issue #25). A degenerate value (NaN / negative / below floor)
@@ -25,6 +31,17 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
   test("values below the floor fall back (negative always rejected)", () => {
     expect(parseBoundedInt("-5", 15000, 1)).toBe(15000);
     expect(parseBoundedInt("-1", 2, 1)).toBe(2);
+  });
+
+  // PORT's ceiling: an out-of-range value would throw inside Bun.serve and leave
+  // launchd crash-looping the daemon. Floor 0 is deliberate — PORT=0 is the
+  // tests' ephemeral-bind mode and must never fall back to the real :3246.
+  test("values above the max fall back; no max means unbounded", () => {
+    expect(parseBoundedInt("99999", 3246, 0, 65535)).toBe(3246);
+    expect(parseBoundedInt("65535", 3246, 0, 65535)).toBe(65535);
+    expect(parseBoundedInt("0", 3246, 0, 65535)).toBe(0);
+    expect(parseBoundedInt("-1", 3246, 0, 65535)).toBe(3246);
+    expect(parseBoundedInt("99999", 15000, 1)).toBe(99999);
   });
 
   describe("call-site floors", () => {
@@ -166,6 +183,64 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     }
   });
 
+  // PORT is the one key the dotenv layer must not carry: the bash surfaces read
+  // only config.json + a live PORT, so a dotenv PORT would move the daemon
+  // somewhere every CLI and health probe reports as down.
+  test("PORT is not migrated from the legacy dotenv layer", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-dotenv-port-"));
+    try {
+      const configDir = join(home, ".config", "echo");
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(join(configDir, ".env"), "PORT=8888\nECHO_DEFAULT_TITLE=From dotenv\n");
+      const resolved = loadEchoConfiguration({}, home);
+      expect(resolved.PORT).toBeUndefined();
+      expect(resolved.ECHO_DEFAULT_TITLE).toBe("From dotenv");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // A typo or a key written by a newer Echo must cost the user that one key,
+  // never every other setting in the file.
+  test("an invalid key is dropped while the rest of config.json still applies", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-partial-config-"));
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(echoConfigPath(home), JSON.stringify({
+        ECHO_DEFAULT_TITLE: "Kept",
+        ECHO_VOICE_PERSONA_NAME: "Kept too",
+        NOT_AN_ECHO_KEY: "dropped",
+        ELEVENLABS_API_KEY: "secret",
+      }));
+
+      const { env, config } = loadEchoConfigurationWithStatus({}, home);
+      expect(env.ECHO_DEFAULT_TITLE).toBe("Kept");
+      expect(env.ECHO_VOICE_PERSONA_NAME).toBe("Kept too");
+      expect(env.NOT_AN_ECHO_KEY).toBeUndefined();
+      expect(env.ELEVENLABS_API_KEY).toBeUndefined();
+      expect(config.present).toBe(true);
+      expect(config.ignored.sort()).toEqual(["ELEVENLABS_API_KEY", "NOT_AN_ECHO_KEY"]);
+      expect(config.errors).toHaveLength(2);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("ECHO_CONFIG_FILE retargets the same file the writer resolves", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-config-file-"));
+    try {
+      const custom = join(home, "elsewhere.json");
+      writeFileSync(custom, JSON.stringify({ ECHO_DEFAULT_TITLE: "From override" }));
+      expect(echoConfigPath(home, { ECHO_CONFIG_FILE: custom })).toBe(custom);
+      expect(loadEchoConfiguration({ ECHO_CONFIG_FILE: custom }, home).ECHO_DEFAULT_TITLE).toBe("From override");
+      // Default resolution stays deterministic — an ambient override in the
+      // operator's environment must not reach a caller that did not pass it.
+      expect(echoConfigPath(home)).toBe(join(home, ".config", "echo", "config.json"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("schema rejects secrets, retired aliases, unknown keys, and compound values", () => {
     expect(validateEchoConfig({ ELEVENLABS_API_KEY: "secret" })).toHaveLength(1);
     expect(validateEchoConfig({ RETIRED_ECHO_DEFAULT_TITLE: "old" })).toHaveLength(1);
@@ -174,11 +249,16 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);
   });
 
-  test("the checked-in schema covers every supported config key and the port default", () => {
+  // Lockstep in BOTH directions. A schema key missing from ECHO_CONFIG_KEYS is
+  // the worse half: the daemon would call the user's own documented setting "not
+  // an Echo configuration key" and drop it at runtime.
+  test("the checked-in schema and ECHO_CONFIG_KEYS describe exactly the same keys", () => {
     const schema = JSON.parse(readFileSync("shared/config-schema.json", "utf8"));
     expect(schema.additionalProperties).toBe(false);
     expect(schema.properties.PORT.default).toBe(3246);
+    expect(schema.properties.PORT.maximum).toBe(65535);
     expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
     for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
+    for (const key of Object.keys(schema.properties)) expect(ECHO_CONFIG_KEYS.has(key)).toBe(true);
   });
 });

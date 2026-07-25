@@ -116,11 +116,16 @@ and reloads it, so a bad update leaves you on the daemon you had rather than a c
 one, and exits 1 with the log path. It re-checks health after the restore too, and says
 `ROLLBACK INCOMPLETE` rather than claiming success if even the old payload stays down.
 
-## Config changes need a re-stage
+## Which config changes need a re-stage
 
-The daemon loads `~/.config/echo/config.json`, `core/voices.json`, and `core/pronunciations.json` once at startup — **from
-the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy
-has no effect until you re-stage. Edit, then `cli/echo update` (it re-stages and reloads).
+The daemon reads all three of its config files once at startup, but they do **not** live in the
+same place:
+
+- `~/.config/echo/config.json` is resolved from your home directory, never from the payload.
+  Edit it and reload — `launchctl kickstart -k "gui/$UID/com.echo"` is enough; no re-stage.
+- `core/voices.json` and `core/pronunciations.json` are resolved next to the running
+  `core/server.ts`, which is **the payload copy**. Editing the checkout's copy has no effect
+  until you re-stage: edit, then `cli/echo update` (it re-stages and reloads).
 
 ## Moved or renamed the repo?
 
@@ -159,7 +164,7 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 ```
 
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
-and persona config (`~/.config/echo/.env`). Adapter registrations are **not** removed:
+and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in
 `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in
 `~/.omp/agent/extensions/` all survive. There is no deregistration tool; remove those

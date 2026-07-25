@@ -27,12 +27,49 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_DAEMON_URL", "ECHO_NOTIFY_URL", "ECHO_VOICE_SURFACES",
 ]);
 
-export function echoConfigPath(homeDir: string = homedir()): string {
-  return join(homeDir, ...ECHO_CONFIG_PATH_PARTS);
+// Retired in this release: an old alias left in a dotenv file is ignored rather
+// than migrated, so the canonical name is the only thing that can configure Echo.
+const RETIRED_ALIAS_PREFIX = "VOICESYSTEM_";
+
+// PORT is deliberately NOT migrated from the dotenv layer. The bash surfaces
+// (scripts/echo-port.sh) read only config.json and a live PORT, and a second
+// dotenv parser in bash could only drift from this one — so honoring a dotenv
+// PORT here would put the daemon on a port every CLI, lifecycle script and
+// health probe reports as down. scripts/migrate-config.ts moves an existing
+// dotenv PORT into config.json, where both sides read it.
+const DOTENV_EXCLUDED_KEYS = new Set(["PORT"]);
+
+/** Reported by GET /health so an ignored key is visible without reading the log. */
+export interface EchoConfigStatus {
+  path: string;
+  present: boolean;
+  /** Keys dropped from an otherwise-usable file; every other key still applies. */
+  ignored: string[];
+  errors: string[];
+}
+
+/**
+ * Resolve the configuration file path. `env` defaults to an EMPTY object, not
+ * process.env, so the default answer is deterministic; pass process.env at the
+ * call site that wants the ECHO_CONFIG_FILE test/dev override honored. Reader
+ * and writer share this one resolver so they can never target different files.
+ */
+export function echoConfigPath(homeDir: string = homedir(), env: EchoEnvironment = {}): string {
+  return env.ECHO_CONFIG_FILE || join(homeDir, ...ECHO_CONFIG_PATH_PARTS);
 }
 
 function isConfigPrimitive(value: unknown): value is EchoConfigValue {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+/** The single per-key rule; both validation and loading go through it. */
+function validateEchoConfigEntry(key: string, entry: unknown): string | null {
+  if (key === "ELEVENLABS_API_KEY") {
+    return "ELEVENLABS_API_KEY is a secret and must not be stored in config.json";
+  }
+  if (!ECHO_CONFIG_KEYS.has(key)) return `${key} is not an Echo configuration key`;
+  if (!isConfigPrimitive(entry)) return `${key} must be a string, number, or boolean`;
+  return null;
 }
 
 /** Return schema violations without throwing, so a bad user file cannot stop startup. */
@@ -43,77 +80,130 @@ export function validateEchoConfig(value: unknown): string[] {
 
   const errors: string[] = [];
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "ELEVENLABS_API_KEY") {
-      errors.push("ELEVENLABS_API_KEY is a secret and must not be stored in config.json");
-    } else if (!ECHO_CONFIG_KEYS.has(key)) {
-      errors.push(`${key} is not an Echo configuration key`);
-    } else if (!isConfigPrimitive(entry)) {
-      errors.push(`${key} must be a string, number, or boolean`);
-    }
+    const error = validateEchoConfigEntry(key, entry);
+    if (error) errors.push(error);
   }
   return errors;
 }
 
-function readJsonConfig(path: string): Record<string, EchoConfigValue> {
-  if (!existsSync(path)) return {};
+/**
+ * Read config.json, dropping ONLY the keys that fail validation. An unknown key
+ * (a typo, or a setting written by a newer Echo) must not revert every other
+ * setting to its built-in default — the ignored keys and their reasons are
+ * reported through EchoConfigStatus and surfaced in GET /health.
+ */
+function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>; status: EchoConfigStatus } {
+  const status: EchoConfigStatus = { path, present: false, ignored: [], errors: [] };
+  if (!existsSync(path)) return { values: {}, status };
+  status.present = true;
+
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    const errors = validateEchoConfig(parsed);
-    if (errors.length > 0) {
-      console.warn(`⚠️  Invalid Echo config at ${path}: ${errors.join("; ")}`);
-      return {};
-    }
-    return parsed as Record<string, EchoConfigValue>;
+    parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch {
+    status.errors.push("file is not valid JSON");
     console.warn(`⚠️  Failed to load Echo config at ${path}; using defaults`);
-    return {};
+    return { values: {}, status };
   }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    status.errors.push("configuration must be a JSON object");
+    console.warn(`⚠️  Invalid Echo config at ${path}: ${status.errors[0]}`);
+    return { values: {}, status };
+  }
+
+  const values: Record<string, EchoConfigValue> = {};
+  for (const [key, entry] of Object.entries(parsed as Record<string, unknown>)) {
+    const error = validateEchoConfigEntry(key, entry);
+    if (error) {
+      status.ignored.push(key);
+      status.errors.push(error);
+      continue;
+    }
+    values[key] = entry as EchoConfigValue;
+  }
+
+  if (status.errors.length > 0) {
+    console.warn(
+      `⚠️  Ignoring ${status.ignored.length} key(s) in ${path}: ${status.errors.join("; ")}. ` +
+        "Every other setting in the file still applies.",
+    );
+  }
+  return { values, status };
+}
+
+/** The one dotenv parser: the daemon's fallback layer and the migration tool share it. */
+export function parseDotenvFile(path: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  if (!existsSync(path)) return parsed;
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const eqIndex = line.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = line.slice(0, eqIndex).trim();
+    let value = line.slice(eqIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!key || !value || key.startsWith("#") || parsed[key] !== undefined) continue;
+    parsed[key] = value;
+  }
+  return parsed;
+}
+
+/** The dotenv locations scripts/migrate-config.ts drains into config.json, in precedence order. */
+export function legacyEchoEnvPaths(homeDir: string = homedir()): string[] {
+  return [
+    join(homeDir, ".config", "echo", ".env"),
+    join(homeDir, ".config", "voicesystem", ".env"),
+  ];
 }
 
 function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironment {
   const envPaths = [
     ...(env.ECHO_ENV_PATHS?.split(":").filter(Boolean) ?? []),
-    join(homeDir, ".config", "echo", ".env"),
-    join(homeDir, ".config", "voicesystem", ".env"),
+    ...legacyEchoEnvPaths(homeDir),
     join(homeDir, ".env"),
   ];
 
   for (const envPath of envPaths) {
-    if (!existsSync(envPath)) continue;
-    for (const line of readFileSync(envPath, "utf8").split("\n")) {
-      const eqIndex = line.indexOf("=");
-      if (eqIndex === -1) continue;
-      const key = line.slice(0, eqIndex).trim();
-      let value = line.slice(eqIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      // The .env reader is migration-only. It retains the old first-file-wins
-      // behavior but never overwrites a process or JSON-configured value.
-      const retiredAliasPrefix = ["VOICE", "SYSTEM_"].join("");
-      if (key.startsWith(retiredAliasPrefix)) continue;
-      if (key && value && !key.startsWith("#") && env[key] === undefined) env[key] = value;
+    // The .env reader is migration-only (plus the permanent home for
+    // ELEVENLABS_API_KEY, the one secret config.json rejects). It retains the
+    // old first-file-wins behavior but never overwrites a process or
+    // JSON-configured value.
+    for (const [key, value] of Object.entries(parseDotenvFile(envPath))) {
+      if (key.startsWith(RETIRED_ALIAS_PREFIX)) continue;
+      if (DOTENV_EXCLUDED_KEYS.has(key)) continue;
+      if (env[key] === undefined) env[key] = value;
     }
   }
   return env;
 }
 
 /**
- * Resolve Echo configuration without mutating process.env.
+ * Resolve Echo configuration and report what the config file contributed.
  * Precedence: live process/explicit env object, config.json, then legacy .env.
- * The final layer exists only to keep an upgrade from silently changing behavior;
- * migrate those values to config.json and remove the old file when convenient.
+ * The final layer exists to keep an upgrade from silently changing behavior and
+ * to hold ELEVENLABS_API_KEY; scripts/migrate-config.ts moves everything else
+ * into config.json.
  */
-export function loadEchoConfiguration(
+export function loadEchoConfigurationWithStatus(
   env: EchoEnvironment = { ...process.env },
   homeDir: string = homedir(),
-): EchoEnvironment {
+): { env: EchoEnvironment; config: EchoConfigStatus } {
   const resolved: EchoEnvironment = { ...env };
-  const config = readJsonConfig(echoConfigPath(homeDir));
-  for (const [key, value] of Object.entries(config)) {
+  const { values, status } = readJsonConfig(echoConfigPath(homeDir, env));
+  for (const [key, value] of Object.entries(values)) {
     if (resolved[key] === undefined) resolved[key] = String(value);
   }
-  return loadLegacyEnvFiles(resolved, homeDir);
+  return { env: loadLegacyEnvFiles(resolved, homeDir), config: status };
+}
+
+/** Resolve Echo configuration without mutating process.env. */
+export function loadEchoConfiguration(
+  env?: EchoEnvironment,
+  homeDir?: string,
+): EchoEnvironment {
+  return loadEchoConfigurationWithStatus(env, homeDir).env;
 }
 
 // Compatibility name for adapters and extensions written against the Stage 1

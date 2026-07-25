@@ -5,9 +5,10 @@
 #
 # Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
 # cli/echo all target 3246 and make no attempt to discover a daemon listening
-# anywhere else. It does not read legacy dotenv files — the daemon owns that
-# migration parsing, and a second parser in bash could only drift from it. With
-# no live PORT override, the helper reads the flat JSON PORT property
+# anywhere else. It does not read legacy dotenv files — and neither does the
+# daemon, for PORT specifically (shared/echo-env.ts), so the two sides cannot
+# disagree; scripts/install.sh migrates an existing dotenv PORT into config.json
+# first. With no live PORT override, the helper reads the flat JSON PORT property
 # so the CLI and lifecycle scripts follow the daemon's documented config.
 #
 # Pure bash on purpose: sourced by scripts that must work without Bun. Values stay
@@ -15,10 +16,19 @@
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
+# The configured port, or empty when it is absent or outside the range the daemon
+# accepts. The bounds must match core/server.ts's bounded parse, or a value the
+# daemon rejects (falling back to 3246) would send every shell surface probing a
+# port nothing serves. `0` is the daemon's test-only ephemeral-bind mode: there is
+# no fixed port to talk to, so the CLI falls back to the default rather than
+# building a URL for :0.
 config_port() {
-  local config_path="$HOME/.config/echo/config.json"
+  local config_path="$HOME/.config/echo/config.json" port
   [ -f "$config_path" ] || return 0
-  sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([0-9]+)"?[[:space:]]*,?.*/\1/p' "$config_path" | head -1
+  port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([0-9]+)"?[[:space:]]*,?.*/\1/p' "$config_path" | head -1)"
+  [ -n "$port" ] || return 0
+  [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] || return 0
+  echo "$port"
 }
 
 if [ -n "${PORT:-}" ]; then

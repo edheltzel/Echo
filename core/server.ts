@@ -25,7 +25,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
-import { parseBoundedInt, resolveEchoEnv } from "./env";
+import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
@@ -179,7 +179,12 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // operator's env-file identity (ECHO_VOICE_*) into same-process adapter code
 // or its tests (the pi-adapter "Atlas" pollution; AGENTS.md #47 class hazard).
 
-const PORT = parseInt(resolveEchoEnv("PORT") || "3246");
+// Floor 0, not 1: `PORT=0` is the tests' ephemeral-bind mode, and rejecting it
+// would silently point every importing test at the operator's real :3246 daemon.
+// Ceiling 65535 keeps a typo in the user-editable config.json from throwing
+// inside Bun.serve and leaving launchd to crash-loop the daemon.
+const PORT = parseBoundedInt(resolveEchoEnv("PORT"), 3246, 0, 65535);
+const CONFIG_STATUS = echoConfigStatus();
 const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voices.json');
 const DEFAULT_MACOS_VOICE = 'Daniel (Enhanced)';
 const ELEVENLABS_TIMEOUT_MS = 10_000;
@@ -1930,6 +1935,16 @@ export const server = serve({
           port: PORT,
           voice_system: `Multi-provider TTS (${voicesConfig.fallbackOrder.join(" → ")})`,
           config_source: "voices.json",
+          // Additive: config.json's contribution. `ignored_keys` non-empty means
+          // the file loaded but those keys failed validation and were dropped —
+          // every other setting still applied. Visible without reading the log.
+          config: {
+            path: CONFIG_STATUS.path,
+            present: CONFIG_STATUS.present,
+            valid: CONFIG_STATUS.errors.length === 0,
+            ignored_keys: CONFIG_STATUS.ignored,
+            errors: CONFIG_STATUS.errors,
+          },
           activeProvider: voicesConfig.defaultProvider,
           providers: providerStatus,
           fallbackOrder: voicesConfig.fallbackOrder,

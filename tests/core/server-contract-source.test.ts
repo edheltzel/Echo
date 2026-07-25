@@ -77,6 +77,11 @@ describe("core server route contract source", () => {
     expect(server).toContain('parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1)');
     // Raw parseInt on these would let NaN/0/negative through.
     expect(server).not.toContain('parseInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MS")');
+    // PORT comes from a user-editable config file: floor 0 keeps the tests'
+    // ephemeral-bind mode working, the 65535 ceiling keeps a typo from throwing
+    // inside Bun.serve and crash-looping the daemon.
+    expect(server).toContain('parseBoundedInt(resolveEchoEnv("PORT"), 3246, 0, 65535)');
+    expect(server).not.toContain('parseInt(resolveEchoEnv("PORT")');
   });
 
   test("retired legacy aliases are absent from core source", () => {

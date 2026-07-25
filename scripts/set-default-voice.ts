@@ -4,10 +4,13 @@
 // reads its persona from ~/.claude/settings.json instead.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { echoConfigPath } from "../shared/echo-env";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 
-const CONFIG_FILE = process.env.ECHO_CONFIG_FILE ?? join(homedir(), ".config", "echo", "config.json");
+// One resolver for reader and writer, so `echo voice` can never report success
+// after writing to a file the daemon does not read.
+const CONFIG_FILE = echoConfigPath(process.env.HOME ?? homedir(), process.env);
 const NAME_KEY = "ECHO_VOICE_PERSONA_NAME";
 const VOICE_KEY = "ECHO_VOICE_ID";
 const ILLEGAL_IN_NAME = /[\u0000-\u001f\u007f"]/;

@@ -7,13 +7,15 @@ the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page needs the daemon reloaded** — `voices.json` and the env files are
-read once at startup. Editing the checkout's `core/voices.json` is not enough on its own: the
-daemon runs from a staged copy, so that edit has to be re-staged before it can take effect.
+**Every change on this page needs the daemon reloaded** — `voices.json` and the configuration
+file are read once at startup. Editing the checkout's `core/voices.json` is not enough on its
+own: the daemon runs from a staged copy, so that edit has to be re-staged before it can take
+effect. `~/.config/echo/config.json` is read from your home directory, so a plain reload
+applies it.
 
 ```bash
 cli/echo update                              # after editing core/voices.json — re-stage + reload
-launchctl kickstart -k "gui/$UID/com.echo"   # enough for env-file edits, which are read in place
+launchctl kickstart -k "gui/$UID/com.echo"   # enough for config.json, which is read in place
 ```
 
 Why the copy exists, and what a failed re-stage does: [`operations.md`](operations.md).
@@ -198,8 +200,9 @@ by `bun test`.
 Prerequisites: Echo installed and running (`curl -fsS http://localhost:3246/health` returns
 JSON); an ElevenLabs API key.
 
-1. Put the key where the daemon reads it (see [`configuration.md`](configuration.md) for all
-   accepted locations):
+1. Put the key where the daemon reads it. `config.json` rejects secrets, so this one setting
+   stays in a dotenv file — see
+   [`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives):
 
    ```bash
    mkdir -p ~/.config/echo
@@ -261,6 +264,79 @@ Three signals, in order:
 
 After any config change: reload the daemon as described at the top of this page, then re-send
 the test notify.
+
+## Reference: `core/voices.json`
+
+Location: `core/voices.json`, or wherever `VOICES_PATH` points. Top-level keys:
+
+| Key | Meaning |
+|---|---|
+| `providers` | Per-provider config blocks (below) |
+| `defaultProvider` | Provider tried first (shipped: `edgetts`) |
+| `fallbackOrder` | Full chain (shipped: `edgetts → elevenlabs → kokoro → say`) |
+| `default_volume` | `0.8` — playback volume, applied unevenly (caveat below) |
+| `default_rate` | `175` — words/min for the `say` provider only |
+| `identity` | The default ("Atlas") voice mapping, used when `voice_id` is omitted |
+| `agents` | Named persona mappings keyed by short lowercase name (`kai`, `themis`, …) |
+
+### Provider order
+
+Per notification, `speakWithFallback` walks `defaultProvider` first, then `fallbackOrder`
+minus the duplicate — a single pass. A **disabled** provider is skipped before any network or
+health path (the structural egress gate —
+[`providers-observability.md`](providers-observability.md)). For edge-tts specifically, the
+`/notify` hot path does not run the diagnostic Python-import health probe; it tries synthesis
+unless edge-tts is disabled or its circuit breaker is open ([`reliability.md`](reliability.md)).
+Other unhealthy or circuit-open providers are skipped; a failed provider falls through to the
+next.
+
+### Provider blocks
+
+| Provider | Keys |
+|---|---|
+| `edgetts` | `enabled`, `defaultVoice` (`en-US-AvaNeural`), `rate` (global edge-tts rate, `"+0%"`) |
+| `elevenlabs` | `enabled` (shipped `false`), `apiKey`, `defaultVoiceId` |
+| `kokoro` | `enabled` (shipped `false`), `endpoint` (`http://127.0.0.1:8880/v1`), `defaultVoice` |
+| `say` | `enabled`, `voice` (`Daniel (Enhanced)`) |
+
+**ElevenLabs `apiKey` indirection:** the shipped value `"${ELEVENLABS_API_KEY}"` is expanded
+from the resolved configuration at startup (`resolveEnvVar`); a bare `ELEVENLABS_API_KEY` is
+also accepted as a constructor fallback. The provider is enabled only when `enabled: true`
+**and** a key resolved. Caveat: `/health`'s `apiKeyConfigured` field reflects only the
+config-file indirection, not the bare fallback — the provider can work while
+`apiKeyConfigured` reads `false`. Where the key itself belongs:
+[`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives).
+
+### Identity and agent mappings
+
+`identity` and each `agents.<key>` entry carry per-provider voice blocks: `edgetts.voice` +
+optional `speed` (multiplier → edge-tts rate, `1.08 → +8%`; `1.0` or absent uses the global
+`providers.edgetts.rate`), `elevenlabs.voice_id` + optional stability/similarity/style/
+speaker-boost, `kokoro.voice` + optional `speed`. Resolution order is at the top of this page.
+
+### `default_volume` / `default_rate` caveats
+
+`default_volume` is applied via `afplay -v` to **ElevenLabs and Kokoro playback only**;
+edge-tts playback spawns afplay without `-v`, so the default provider ignores it. `say` uses
+`default_rate` (words/min) instead and ignores volume. An out-of-range `default_volume` falls
+back to `1.0`.
+
+### Parse-error fallback
+
+A missing or malformed `voices.json` does not stop the daemon: it logs one
+`⚠️ Failed to load voices.json` warning at startup and uses **built-in defaults that differ
+from the shipped file** — kokoro `enabled: true` and an empty `agents` map, so every persona
+`voice_id` then resolves as `fallback`. If all persona voices break at once, check the top of
+`~/Library/Logs/echo.log` for that warning. When the file does parse, it is merged over the
+defaults: top-level keys shallowly, `providers` one level deep — `identity`, `agents`, and
+`fallbackOrder` are taken wholesale from your file.
+
+## Reference: `core/pronunciations.json`
+
+Location: `core/pronunciations.json`, or wherever `PRONUNCIATIONS_PATH` points. Shape:
+`{"replacements": [{"term", "phonetic", "note"?}]}`. Each term is replaced whole-word before
+synthesis by the edge-tts, ElevenLabs, and Kokoro providers (`say` does not apply them). The
+loaded rule count is surfaced in `GET /health` as `pronunciation_rules`.
 
 ## Per-turn persona voice (Stop hook)
 

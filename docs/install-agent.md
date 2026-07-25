@@ -101,6 +101,6 @@ bash scripts/uninstall.sh --check  # preview: prints what would be removed, muta
 bash scripts/uninstall.sh
 ```
 
-Expected: exits 0; the LaunchAgent and the staged daemon payload are removed. Logs and `~/.config/echo/.env` are preserved.
+Expected: exits 0; the LaunchAgent and the staged daemon payload are removed. Logs and `~/.config/echo/config.json` are preserved.
 
 Caveat: adapter registrations are **not** removed and no deregistration tooling exists; remove them manually before deleting the repo directory. The full list is in `docs/operations.md`.

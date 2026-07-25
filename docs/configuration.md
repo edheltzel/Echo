@@ -37,20 +37,66 @@ For a canonical setting, resolution is:
 
 1. A value already present in the live process environment (compatibility override).
 2. The matching property in config.json.
-3. A matching value in a legacy dotenv file, during migration only.
+3. A matching value in a legacy dotenv file — the migration fallback, plus the permanent
+   home of the one secret below.
 
 Resolution is read-only: Echo never copies file values into process.env. This preserves
 the import-purity boundary that prevents a daemon import from leaking one user's persona
 into same-process adapter code.
 
-ELEVENLABS_API_KEY is the only Echo secret. It is never accepted by config.json; provide
-it through the process environment or a secret manager/file used to launch the daemon. The
-core/voices.json value "\${ELEVENLABS_API_KEY}" is only an indirection. Do not commit
-.env files or put API keys in config.json.
+**PORT is the one exception to layer 3.** It is read from the live environment and
+config.json only, never from a dotenv file. `cli/echo`, the lifecycle scripts, and the
+health probes resolve the port in pure bash and read only config.json (`scripts/echo-port.sh`),
+so honoring a dotenv PORT would move the daemon somewhere every one of those surfaces
+reports as down. `scripts/install.sh` migrates an existing dotenv PORT into config.json
+before it probes anything, so an upgrading user keeps the port they configured.
+
+### ELEVENLABS_API_KEY: the one secret, and where it lives
+
+ELEVENLABS_API_KEY is the only Echo secret, and config.json **rejects** it — a config.json
+containing it has that one key dropped (see [Invalid keys](#invalid-keys)).
+
+Its permanent home is a dotenv file, normally `~/.config/echo/.env`:
+
+    mkdir -p ~/.config/echo
+    echo 'ELEVENLABS_API_KEY=sk_…' >> ~/.config/echo/.env
+
+That is not a migration leftover — it is the supported mechanism. The installed LaunchAgent
+deliberately writes only HOME and PATH into `EnvironmentVariables` (`scripts/install.sh`
+`write_plist`), so the daemon gets nothing from a login shell; a dotenv file is how the key
+reaches it. **Do not delete `~/.config/echo/.env` after migrating** — migration moves the
+non-secret settings out of it and leaves the file, and the key, alone. The only alternative
+is a real process environment value, which means launching the daemon yourself instead of
+through the LaunchAgent.
+
+The core/voices.json value "\${ELEVENLABS_API_KEY}" is only an indirection to that value.
+Do not commit .env files or put API keys in config.json.
+
+### Invalid keys
+
+A key that fails validation — an unknown name, a typo, a compound value, or the secret above
+— is **dropped on its own**; every other setting in the file still applies. The daemon logs
+one warning naming each dropped key, and reports the same thing in `GET /health`:
+
+    curl -fsS http://localhost:3246/health | jq '.config'
+    {
+      "path": "/Users/you/.config/echo/config.json",
+      "present": true,
+      "valid": false,
+      "ignored_keys": ["ECHO_VOICE_PERSONNA_NAME"],
+      "errors": ["ECHO_VOICE_PERSONNA_NAME is not an Echo configuration key"]
+    }
+
+A file that is not valid JSON, or not a JSON object, cannot be partially applied: the whole
+file is skipped, `valid` reads false, and the built-in defaults are used.
 
 PAI_DIR, PAI_SETTINGS_PATH, PI_SETTINGS_PATH, PI_CODING_AGENT_DIR, OMP_EXTENSIONS_DIR,
 and CLAUDE_PROJECT_DIR remain host-owned runtime context. They describe where a host keeps
 its own settings or project, so they are not Echo settings and are not copied into this file.
+ECHO_ENV_PATHS and ECHO_CONFIG_FILE are likewise not settings but path selectors, read only
+from the live process environment: the first picks extra dotenv locations for migration, the
+second retargets config.json itself and is honored identically by the daemon and by
+`echo voice`, so a test or development instance can never write where the reader will not look.
 
 ## Schema reference
 
@@ -68,30 +114,103 @@ at runtime; invalid values use the defaults below.
 | State and logs | ECHO_MUTE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths; log caps default to 1 MB |
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL, ECHO_VOICE_SURFACES | Adapter-side endpoint overrides; otherwise adapters use http://localhost:3246 |
 
+Settings whose behavior is not obvious from the name:
+
+- **PORT** is clamped to 0–65535; anything outside that range (or non-numeric) falls back to
+  3246. `0` binds an ephemeral port and exists for tests — the CLI and lifecycle scripts
+  treat it as "no fixed port" and target 3246.
+- **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
+  (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
+  `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`
+  from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition;
+  the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
+  disables the guard entirely**.
+- **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
+  `GET /voices` at once — and wins over `ECHO_NOTIFY_URL` for all of them — so pointing a host
+  at a second instance can never split notify from the read endpoints
+  (`shared/daemon-endpoints.ts`).
+- **ECHO_PLAY_QUEUE_AGE_CAP_MS** sits comfortably above one line's worst-case occupancy
+  (synth retries plus playback can approach ~2 min), so an ordinary slow line cannot
+  mass-drop the backlog. Floors for every reliability knob:
+  [`reliability.md`](reliability.md).
+
 Voice provider mappings remain in core/voices.json, and pronunciation rules remain in
 core/pronunciations.json. The configuration file controls the daemon and host-neutral
-tuning around those files; it does not duplicate their provider schema.
+tuning around those files; it does not duplicate their provider schema. Their own reference
+— the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
+fallback — lives in [`voices.md`](voices.md#reference-corevoicesjson).
 
 ## Migrating from ~/.config/echo/.env
 
-An upgrade does not silently discard existing settings. Echo reads the old dotenv locations
-as the lowest-priority compatibility layer:
+An upgrade does not silently discard existing settings. Echo still reads the old dotenv
+locations as the lowest-priority layer:
 
     paths in ECHO_ENV_PATHS (migration selector only)
     ~/.config/echo/.env
     ~/.config/voicesystem/.env
     ~/.env
 
-Move each non-secret Echo setting into ~/.config/echo/config.json, move
-ELEVENLABS_API_KEY to the daemon's secret environment/file mechanism, then restart Echo.
-Keep the old file temporarily if desired; JSON wins over it, and a live process value wins
-over both. Once the migration is confirmed, remove the old config entries and keep only the
-secret outside JSON.
+**The installer migrates for you.** `scripts/install.sh` (and `cli/echo install` /
+`cli/echo update`) runs `scripts/migrate-config.ts` before anything else, which copies every
+canonical Echo setting out of `~/.config/echo/.env` and `~/.config/voicesystem/.env` into
+config.json and prints exactly which keys it moved. It is:
 
-The former voice-system-prefixed aliases were retired in this release. Use the canonical property names
-shown in the schema; an old alias in a dotenv file is ignored. The old
-~/.config/voicesystem/.env location is still read only so its remaining canonical keys can
-be migrated without a behavior change.
+- **Non-destructive.** A key already in config.json is never overwritten, and the dotenv file
+  is never edited or deleted. A `.bak` of the previous config.json is written on every change.
+- **Idempotent.** A second run finds nothing to move and prints nothing.
+- **Narrow.** Only canonical schema keys move. `ELEVENLABS_API_KEY` stays put (and the report
+  says so), the retired aliases below are ignored, and host-owned variables are left alone.
+- **Limited to Echo's own dotenv locations.** `~/.env` and `ECHO_ENV_PATHS` are never drained:
+  `~/.env` is a shared user dotfile, not Echo's to rewrite. Move those keys by hand. Every
+  other key there is still read as before, so only PORT needs action — and a PORT in one of
+  those files is named on every install run until you move it into config.json.
+
+Nothing is required of you afterwards. If you want to tidy up, delete the migrated lines from
+`~/.config/echo/.env` — but keep the file itself whenever it holds `ELEVENLABS_API_KEY`.
+
+### Deprecated environment variables
+
+Echo reads its configuration from canonical `ECHO_*` names. Two generations of older names
+exist, and they are **not** in the same state:
+
+| Family | Status | Behavior |
+|---|---|---|
+| `VOICESYSTEM_*` (core) | **Retired** in this release | Ignored everywhere. A `VOICESYSTEM_*` line in a dotenv file is skipped, not migrated. Rename it to the canonical `ECHO_*` name. |
+| `ATLAS_VOICE_*` (Pi/omp adapters) | **Deprecated**, still honored | Read as a silent fallback when the canonical name is unset (`adapters/pi/config.ts`, `adapters/omp/config.ts`). Slated for removal in a future major release. |
+
+`ATLAS_VOICE_*` → canonical, in the priority order the adapters read them
+(`ECHO_*` → `ATLAS_VOICE_*`):
+
+| Old name | New canonical |
+|---|---|
+| `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` |
+| `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` |
+| `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` |
+| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` |
+| `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` |
+| `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` |
+| `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` |
+| `ATLAS_VOICE_SPEAK_COMPLETIONS` | `ECHO_VOICE_SPEAK_COMPLETIONS` |
+| `ATLAS_VOICE_SUPPRESS` | `ECHO_VOICE_SUPPRESS` |
+| `ATLAS_VOICE_SUPPRESS_SUBAGENTS` | `ECHO_VOICE_SUPPRESS_SUBAGENTS` |
+
+Every `VOICESYSTEM_*` name maps to the `ECHO_*` name with the prefix swapped
+(`VOICESYSTEM_DEFAULT_TITLE` → `ECHO_DEFAULT_TITLE`, and so on), with two convergences:
+`VOICESYSTEM_NOTIFY_URL` → `ECHO_NOTIFY_URL` and `VOICESYSTEM_VOICE_ID` → `ECHO_VOICE_ID`.
+
+To find both families across your own config:
+
+```bash
+rg -l 'ATLAS_VOICE_|VOICESYSTEM_' ~/.zshrc ~/.bashrc ~/.config/echo/.env 2>/dev/null
+```
+
+Rewrite each match to its canonical name, put it in config.json, and restart the daemon
+(`bash scripts/restart.sh`).
+
+> Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and the
+> LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A reinstall
+> (`bash scripts/install.sh`) migrates the running service automatically — see the
+> [CHANGELOG](../CHANGELOG.md).
 
 ## Port and CLI
 
@@ -99,6 +218,11 @@ The default daemon port is 3246 (E=3, C=2, H=4, O=6 on a phone keypad). The daem
 cli/echo, lifecycle scripts, adapters, smoke checks, and docs all use that default. An
 explicit live PORT override remains useful for an isolated development daemon; the normal
 installed LaunchAgent reads config.json.
+
+Both sides read the port from the same two places, in the same order, with the same bounds —
+that is what keeps `cli/echo doctor`, `status`, `mute` and the installer's health probe
+talking to the port the daemon actually bound. A value either side would reject falls back to
+3246 on both.
 
     curl -fsS http://localhost:3246/health
     curl -fsS -X POST http://localhost:3246/notify \
