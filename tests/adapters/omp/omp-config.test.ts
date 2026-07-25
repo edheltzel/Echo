@@ -3,7 +3,7 @@ import { loadOmpVoiceConfig } from "../../../adapters/omp/config";
 
 describe("omp voice config — notify endpoint resolution", () => {
   test("defaults to the local daemon", () => {
-    expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:8888/notify");
+    expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:3246/notify");
   });
 
   test("honors ECHO_NOTIFY_URL and its legacy aliases verbatim", () => {
@@ -13,9 +13,6 @@ describe("omp voice config — notify endpoint resolution", () => {
     expect(
       loadOmpVoiceConfig({ ATLAS_VOICE_NOTIFY_URL: "http://legacy.example/notify" }).endpoint,
     ).toBe("http://legacy.example/notify");
-    expect(
-      loadOmpVoiceConfig({ VOICESYSTEM_NOTIFY_URL: "http://older.example/notify" }).endpoint,
-    ).toBe("http://older.example/notify");
   });
 
   test("ECHO_DAEMON_URL retargets the notify endpoint, winning over ECHO_NOTIFY_URL", () => {

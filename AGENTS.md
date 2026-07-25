@@ -6,7 +6,7 @@ detail live behind the pointers below — load them on demand (progressive discl
 
 ## Architecture in one breath
 
-A host-neutral daemon (`core/server.ts`, listening on `localhost:8888`) speaks text POSTed to
+A host-neutral daemon (`core/server.ts`, listening on `localhost:3246` by default) speaks text POSTed to
 `POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/claudecode/`,
 `adapters/pi/`) that never import `core/`. Full codemap,
 boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
@@ -20,21 +20,25 @@ that calls `POST /notify`.
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
-# Install (core only / with a host adapter)
-bash scripts/install.sh --adapter none
-bash scripts/install.sh --adapter claudecode
-bash scripts/install.sh --adapter pi
-bash scripts/install.sh --adapter omp
+# Stable human surface — cli/echo wraps the scripts + daemon API (never reimplements them)
+cli/echo install [--adapter none|claudecode|pi|omp] [--check]
+cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
+cli/echo status
+cli/echo mute on|off|toggle|status | 30m|1h
+cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
+cli/echo update [--check]    # re-stage payload + reload
+cli/echo uninstall [--check]
 
-# Lifecycle
+# Underlying scripts (cli/echo delegates to these)
+bash scripts/install.sh --adapter none        # or claudecode|pi|omp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)
 bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
 
 # Health / silent smoke
-curl -fsS http://localhost:8888/health
-curl -fsS -X POST http://localhost:8888/notify \
+curl -fsS http://localhost:3246/health
+curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
@@ -44,6 +48,10 @@ Service identity:
 - LaunchAgent label: `com.echo`
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
+- Daemon payload: `~/Library/Application Support/echo/payload/versions/<v>` (a self-contained copy of
+  `core/` + `shared/`); the plist points at the `current` symlink, **not** the git checkout, so
+  moving or deleting the clone never breaks the running service. Adapters still run from the
+  checkout and heal on the next `install` (#77).
 
 The installer unloads and quarantines the legacy `com.pai.voice-server` and
 `com.atlas.voicesystem` plists if found (a reinstall migrates a running legacy service onto
@@ -62,7 +70,10 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
 through their own `node_modules`; without the workspace links a registered adapter fails to
-load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale.
+load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale. A test
+that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` — the flag opts that run out
+of both creating and verifying the links, so `bun test` never relinks the checkout's
+`node_modules` underneath itself.
 
 **Never test against the running daemon.** It serves the operator's real notifications, so
 restarting it, retargeting it, or speaking through it is a live-system incident.
@@ -72,18 +83,21 @@ refuses to attach to a port it does not own, and prints an isolation proof befor
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
 is unmistakably a test.
 
-After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.echo"`
-(tail `~/Library/Logs/echo.log`). Use **Bun only** — no npm/npx/node. Run
+After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
+A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
+restarts the old code; it only applies changes the daemon reads from outside the payload,
+such as the JSON config file. Use **Bun only** — no npm/npx/node. Run
 `bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
 same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 
-Project version lives in the root `package.json` (declarative metadata only — no code reads
-it). `CHANGELOG.md` is generated from tags and merged-PR history at release time,
-following the [Keep a Changelog](https://keepachangelog.com/) + [SemVer](https://semver.org/)
-format; do not hand-write it. Contributors and agents must not add or edit entries on a
-feature branch. **Flow:** work on `dev` → PR into `dev` → reviewer sign-off
+Project version lives in the root `package.json`. `scripts/install.sh` reads it (via `sed`,
+no bun) to name the versioned daemon payload dir; nothing at daemon runtime reads it.
+`CHANGELOG.md` is generated from tags and merged-PR history at release time, following the
+[Keep a Changelog](https://keepachangelog.com/) + [SemVer](https://semver.org/) format; do not
+hand-write it. Contributors and agents must not add or edit entries on a feature branch.
+**Flow:** work on `dev` → PR into `dev` → reviewer sign-off
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
 merges; never push directly to `master`** (see Invariants).
 
@@ -102,14 +116,14 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
-| Voices, audition + per-turn persona voice (Stop hook) | [docs/voices.md](docs/voices.md) |
+| Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
 | Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
-| Configuration (env files, `PORT`, config paths, provider toggles, deprecated env names) | [docs/configuration.md](docs/configuration.md) |
+| Configuration (`~/.config/echo/config.json`, schema, migration, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
 ## Repo map
@@ -126,7 +140,9 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
-| Neutral install/lifecycle | `scripts/` |
+| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
+| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else the `config.json` port, else 3246; never parses dotenv files) | `scripts/echo-port.sh` |
+| Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
@@ -136,8 +152,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new host-named endpoints to the universal server.
 - Do not change the `/notify` request/response contract without an explicit compatibility plan.
 - Do not write process state to `/tmp`; use user-owned cache/log/config paths.
-- Do not add new `localhost:31337` references; voice server traffic is `:8888`.
-- Do not broad-kill whatever owns port `8888`; it may be another service.
+- Do not add new `localhost:31337` references; voice server traffic is `:3246`.
+- Do not broad-kill whatever owns port `3246`; it may be another service.
 - Do not commit secrets or `.env` files.
 - Do not write env-file config into `process.env`. Core resolves env-file values through
   `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at
@@ -145,7 +161,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
   (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
   `tests/core/architecture-invariants.test.ts` (source scan) plus
   `tests/core/import-purity.test.ts` (isolated import of the daemon proves nothing leaks).
-- Keep daemon and adapter environment-file precedence in `shared/echo-env.ts`; real process values win, then the first configured file per key.
+- Keep daemon and adapter configuration precedence in `shared/echo-env.ts`; real process values win, then `~/.config/echo/config.json`, then the first legacy dotenv file per key. Two carve-outs live there and nowhere else: `PORT` is never read from a dotenv file (the bash surfaces cannot see it, and `scripts/migrate-config.ts` moves it into `config.json` at install time), and `ELEVENLABS_API_KEY` is never accepted from `config.json` (a dotenv file stays its permanent home).
+- Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
 - Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.

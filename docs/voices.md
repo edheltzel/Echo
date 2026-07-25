@@ -7,12 +7,18 @@ the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page requires a daemon restart** — `voices.json` and the env files are
-read once at startup:
+**Every change on this page needs the daemon reloaded** — `voices.json` and the configuration
+file are read once at startup. Editing the checkout's `core/voices.json` is not enough on its
+own: the daemon runs from a staged copy, so that edit has to be re-staged before it can take
+effect. `~/.config/echo/config.json` is read from your home directory, so a plain reload
+applies it.
 
 ```bash
-launchctl kickstart -k "gui/$UID/com.echo"
+cli/echo update                              # after editing core/voices.json — re-stage + reload
+launchctl kickstart -k "gui/$UID/com.echo"   # enough for config.json, which is read in place
 ```
+
+Why the copy exists, and what a failed re-stage does: [`operations.md`](operations.md).
 
 ## How a `voice_id` resolves
 
@@ -73,11 +79,11 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 
 1. Audition candidates: `bun scripts/preview-voices.ts --list` / `--locale en-GB` (see above).
 2. Edit `identity.edgetts.voice` (and optional `speed`) in `core/voices.json`.
-3. Restart the daemon (command above).
+3. Re-stage and reload: `cli/echo update`.
 4. Verify:
 
    ```bash
-   curl -fsS -X POST http://localhost:8888/notify -H 'Content-Type: application/json' \
+   curl -fsS -X POST http://localhost:3246/notify -H 'Content-Type: application/json' \
      -d '{"message":"default voice check"}'
    tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq
    ```
@@ -160,7 +166,12 @@ merge-writes the `daidentity` block into the host's native config (Pi: JSON;
 omp: YAML via `Bun.YAML`) **preserving every other key** — a present-but-unparseable
 config aborts rather than being clobbered. Unlike Claude Code's symlinked markdown
 command, this one ships with the adapter itself, so there is no installer step. Takes
-effect on the next session in that repo. See
+effect on the next session in that repo.
+
+For the **global** pi/omp default rather than one repo's, `cli/echo voice <name> <voice-id>`
+writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config.json`
+(validating the edge-tts voice first). Claude Code ignores it; its persona comes from
+`~/.claude/settings.json`, above. See
 [`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
 
@@ -168,7 +179,7 @@ effect on the next session in that repo. See
 
 1. Audition and confirm the target voice name exists (`--list`, as above).
 2. Edit that agent's `edgetts.voice` (and optional `speed`) in `core/voices.json`.
-3. Restart the daemon.
+3. Re-stage and reload: `cli/echo update`.
 4. Verify with `-d '{"message":"voice check","voice_id":"<key>"}'` — the resolution event
    should read `"resolution":"agent-key"` with the new voice.
 
@@ -176,26 +187,27 @@ effect on the next session in that repo. See
 
 1. Add a keyed entry to `agents` in `core/voices.json` — mirror an existing one:
    `description`, optional `catchphrase`, at least an `edgetts` block (validate the voice
-   name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Restart the daemon.
+   name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Then `cli/echo update`.
 2. Bind the persona to that key in its `atlas-config` brief (`~/.claude/agents/<Name>.md`):
    set frontmatter `voiceId: <key>` and make every self-voice `curl` POST
-   `http://localhost:8888/notify` with `"voice_id":"<key>"`. The self-voice instruction must
+   `http://localhost:3246/notify` with `"voice_id":"<key>"`. The self-voice instruction must
    be in the brief **body** — frontmatter isn't visible to the agent.
 
 Gotchas that cause silence: the frontmatter-visibility rule above; sending a raw ElevenLabs
 id instead of the name key won't resolve while ElevenLabs is disabled; and port `31337` is
-wrong — voice traffic is `:8888`.
+wrong — voice traffic is `:3246`.
 
 `tests/core/voices-config.test.ts` iterates every `agents` entry, so new voices are validated
 by `bun test`.
 
 ## Set up ElevenLabs
 
-Prerequisites: Echo installed and running (`curl -fsS http://localhost:8888/health` returns
+Prerequisites: Echo installed and running (`curl -fsS http://localhost:3246/health` returns
 JSON); an ElevenLabs API key.
 
-1. Put the key where the daemon reads it (see [`configuration.md`](configuration.md) for all
-   accepted locations):
+1. Put the key where the daemon reads it. `config.json` rejects secrets, so this one setting
+   stays in a dotenv file — see
+   [`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives):
 
    ```bash
    mkdir -p ~/.config/echo
@@ -204,11 +216,12 @@ JSON); an ElevenLabs API key.
 
 2. In `core/voices.json`, set `providers.elevenlabs.enabled` to `true`. Leave
    `apiKey: "${ELEVENLABS_API_KEY}"` as shipped — it expands from the env at startup.
-3. Restart the daemon so it re-reads both files.
+3. Run `cli/echo update`, which re-stages the edited `voices.json` and reloads, so the daemon
+   re-reads both files.
 4. Verify configuration:
 
    ```bash
-   curl -fsS http://localhost:8888/health | jq '.providers.elevenlabs'
+   curl -fsS http://localhost:3246/health | jq '.providers.elevenlabs'
    ```
 
    You should see `"enabled": true`, `"healthy": true`, `"apiKeyConfigured": true`,
@@ -216,7 +229,7 @@ JSON); an ElevenLabs API key.
 5. Verify synthesis — `/health` does not test the key against the API; a real request does:
 
    ```bash
-   curl -fsS -X POST http://localhost:8888/notify -H 'Content-Type: application/json' \
+   curl -fsS -X POST http://localhost:3246/notify -H 'Content-Type: application/json' \
      -d '{"message":"ElevenLabs check","voice_id":"kai"}'
    ```
 
@@ -227,7 +240,7 @@ JSON); an ElevenLabs API key.
    prefer it (next section).
 
 **Prefer ElevenLabs as the primary voice:** set `"defaultProvider": "elevenlabs"` in
-`voices.json`, restart, and confirm `curl -fsS http://localhost:8888/health | jq -r
+`voices.json`, run `cli/echo update`, and confirm `curl -fsS http://localhost:3246/health | jq -r
 .activeProvider` prints `elevenlabs`. Note ElevenLabs egresses to `api.elevenlabs.io` —
 see [`providers-observability.md`](providers-observability.md).
 
@@ -241,7 +254,7 @@ Three signals, in order:
      valid keys with `jq -r '.agents | keys[]' core/voices.json`, fix the key or add the
      persona.
    - `agent-key` but the wrong `provider` spoke → read `attempts[]`: `disabled` = enable it
-     in `voices.json` + restart; `circuit-open` = see `/health` `.circuit_breakers` and
+     in `voices.json` + `cli/echo update`; `circuit-open` = see `/health` `.circuit_breakers` and
      [`reliability.md`](reliability.md) (auto-retests after 60s); `unhealthy`/`failed` =
      provider-specific. Additive attempt fields (`phase`, `reason`, `stderr`, `timeout_ms`)
      narrow the branch: edge-tts `synthesis` means the real provider failed; edge-tts
@@ -250,12 +263,86 @@ Three signals, in order:
    - No new event at all → the request was `voice_enabled:false` (which skips both voice and
      the log write), rate-limited (`429`), or rejected (`400`) — check the HTTP response and
      the daemon log.
-2. **`/health`** — `curl -fsS http://localhost:8888/health | jq` for the config/state
+2. **`/health`** — `curl -fsS http://localhost:3246/health | jq` for the config/state
    snapshot: `activeProvider`, per-provider `enabled`/`healthy`, breaker state.
 3. **Daemon log** — `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).
 
-After any config change: restart, then re-send the test notify.
+After any config change: reload the daemon as described at the top of this page, then re-send
+the test notify.
+
+## Reference: `core/voices.json`
+
+Location: `core/voices.json`, or wherever `VOICES_PATH` points. Top-level keys:
+
+| Key | Meaning |
+|---|---|
+| `providers` | Per-provider config blocks (below) |
+| `defaultProvider` | Provider tried first (shipped: `edgetts`) |
+| `fallbackOrder` | Full chain (shipped: `edgetts → elevenlabs → kokoro → say`) |
+| `default_volume` | `0.8` — playback volume, applied unevenly (caveat below) |
+| `default_rate` | `175` — words/min for the `say` provider only |
+| `identity` | The default ("Atlas") voice mapping, used when `voice_id` is omitted |
+| `agents` | Named persona mappings keyed by short lowercase name (`kai`, `themis`, …) |
+
+### Provider order
+
+Per notification, `speakWithFallback` walks `defaultProvider` first, then `fallbackOrder`
+minus the duplicate — a single pass. A **disabled** provider is skipped before any network or
+health path (the structural egress gate —
+[`providers-observability.md`](providers-observability.md)). For edge-tts specifically, the
+`/notify` hot path does not run the diagnostic Python-import health probe; it tries synthesis
+unless edge-tts is disabled or its circuit breaker is open ([`reliability.md`](reliability.md)).
+Other unhealthy or circuit-open providers are skipped; a failed provider falls through to the
+next.
+
+### Provider blocks
+
+| Provider | Keys |
+|---|---|
+| `edgetts` | `enabled`, `defaultVoice` (`en-US-AvaNeural`), `rate` (global edge-tts rate, `"+0%"`) |
+| `elevenlabs` | `enabled` (shipped `false`), `apiKey`, `defaultVoiceId` |
+| `kokoro` | `enabled` (shipped `false`), `endpoint` (`http://127.0.0.1:8880/v1`), `defaultVoice` |
+| `say` | `enabled`, `voice` (`Daniel (Enhanced)`) |
+
+**ElevenLabs `apiKey` indirection:** the shipped value `"${ELEVENLABS_API_KEY}"` is expanded
+from the resolved configuration at startup (`resolveEnvVar`); a bare `ELEVENLABS_API_KEY` is
+also accepted as a constructor fallback. The provider is enabled only when `enabled: true`
+**and** a key resolved. Caveat: `/health`'s `apiKeyConfigured` field reflects only the
+config-file indirection, not the bare fallback — the provider can work while
+`apiKeyConfigured` reads `false`. Where the key itself belongs:
+[`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives).
+
+### Identity and agent mappings
+
+`identity` and each `agents.<key>` entry carry per-provider voice blocks: `edgetts.voice` +
+optional `speed` (multiplier → edge-tts rate, `1.08 → +8%`; `1.0` or absent uses the global
+`providers.edgetts.rate`), `elevenlabs.voice_id` + optional stability/similarity/style/
+speaker-boost, `kokoro.voice` + optional `speed`. Resolution order is at the top of this page.
+
+### `default_volume` / `default_rate` caveats
+
+`default_volume` is applied via `afplay -v` to **ElevenLabs and Kokoro playback only**;
+edge-tts playback spawns afplay without `-v`, so the default provider ignores it. `say` uses
+`default_rate` (words/min) instead and ignores volume. An out-of-range `default_volume` falls
+back to `1.0`.
+
+### Parse-error fallback
+
+A missing or malformed `voices.json` does not stop the daemon: it logs one
+`⚠️ Failed to load voices.json` warning at startup and uses **built-in defaults that differ
+from the shipped file** — kokoro `enabled: true` and an empty `agents` map, so every persona
+`voice_id` then resolves as `fallback`. If all persona voices break at once, check the top of
+`~/Library/Logs/echo.log` for that warning. When the file does parse, it is merged over the
+defaults: top-level keys shallowly, `providers` one level deep — `identity`, `agents`, and
+`fallbackOrder` are taken wholesale from your file.
+
+## Reference: `core/pronunciations.json`
+
+Location: `core/pronunciations.json`, or wherever `PRONUNCIATIONS_PATH` points. Shape:
+`{"replacements": [{"term", "phonetic", "note"?}]}`. Each term is replaced whole-word before
+synthesis by the edge-tts, ElevenLabs, and Kokoro providers (`say` does not apply them). The
+loaded rule count is surfaced in `GET /health` as `pronunciation_rules`.
 
 ## Per-turn persona voice (Stop hook)
 

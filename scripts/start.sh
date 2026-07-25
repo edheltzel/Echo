@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPT_DIR/echo-port.sh"
 SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
@@ -16,8 +19,8 @@ fi
 
 launchctl load "$PLIST_PATH"
 sleep 2
-if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8888/health >/dev/null 2>&1; then
-  echo "OK echo started on :8888"
+if curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+  echo "OK echo started on :${ECHO_PORT}"
 else
   echo "Service loaded but health check failed. Check logs: $LOG_PATH" >&2
   exit 1

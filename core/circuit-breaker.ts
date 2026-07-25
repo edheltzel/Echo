@@ -11,7 +11,7 @@
 // and must never be passed to recordProviderFailure — a local audio problem
 // must not disable a healthy online provider.
 
-import { parseBoundedInt } from "./env";
+import { parseBoundedInt, resolveEchoEnv } from "./env";
 
 export interface CircuitBreakerState {
   failures: number;
@@ -27,12 +27,11 @@ export type CircuitBreakerLogger = (
 // Recorded provider failures required to open the breaker. SHARED across every
 // provider (edgetts/elevenlabs/kokoro). Default 2 tolerates one isolated
 // post-retry failure; a second consecutive failure still opens the breaker, so
-// sustained outages are never masked. Override with ECHO_CIRCUIT_BREAKER_THRESHOLD
-// (legacy VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD kept as a silent fallback; floor 1 —
-// a bad/zero/negative override falls back to 2, never to a value that would open the
-// breaker on the first failure).
+// sustained outages are never masked. Override with ECHO_CIRCUIT_BREAKER_THRESHOLD;
+// a bad/zero/negative override falls back to 2, never to a value that would open
+// the breaker on the first failure.
 export const CIRCUIT_BREAKER_THRESHOLD = parseBoundedInt(
-  process.env.ECHO_CIRCUIT_BREAKER_THRESHOLD ?? process.env.VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD,
+  resolveEchoEnv("ECHO_CIRCUIT_BREAKER_THRESHOLD"),
   2,
   1,
 );

@@ -2,8 +2,9 @@
 # Runtime mute control (#83) — thin curl wrapper over POST /mute + GET /health.
 #   mute.sh on [minutes] | off | toggle | status
 set -euo pipefail
-PORT="${PORT:-8888}"
-BASE_URL="http://localhost:${PORT}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPT_DIR/echo-port.sh"
 CURL=(curl --connect-timeout 2 --max-time 5 -fsS)
 
 usage() {
@@ -16,9 +17,9 @@ usage() {
 fail_from_curl() {
   local rc="$1"
   if [ "$rc" -eq 22 ]; then
-    echo "echo daemon rejected the request (HTTP error on :${PORT})" >&2
+    echo "echo daemon rejected the request (HTTP error on :${ECHO_PORT})" >&2
   else
-    echo "echo daemon not reachable on :${PORT}" >&2
+    echo "echo daemon not reachable on :${ECHO_PORT}" >&2
   fi
   exit 1
 }
@@ -39,7 +40,7 @@ case "$cmd" in
   off) body='{"muted": false}' ;;
   toggle) ;; # empty body = toggle (KTD4)
   status)
-    rc=0; health="$("${CURL[@]}" "$BASE_URL/health" 2>/dev/null)" || rc=$?
+    rc=0; health="$("${CURL[@]}" "$ECHO_BASE_URL/health" 2>/dev/null)" || rc=$?
     [ "$rc" -eq 0 ] || fail_from_curl "$rc"
     # The mute block is flat ({muted, muted_until}), so a non-greedy brace match
     # extracts it without a JSON parser dependency; re-wrap in braces so the
@@ -54,6 +55,6 @@ case "$cmd" in
   *) usage ;;
 esac
 
-rc=0; response="$("${CURL[@]}" -X POST "$BASE_URL/mute" -H 'Content-Type: application/json' -d "$body" 2>/dev/null)" || rc=$?
+rc=0; response="$("${CURL[@]}" -X POST "$ECHO_BASE_URL/mute" -H 'Content-Type: application/json' -d "$body" 2>/dev/null)" || rc=$?
 [ "$rc" -eq 0 ] || fail_from_curl "$rc"
 echo "$response"

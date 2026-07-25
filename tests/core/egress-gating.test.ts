@@ -10,7 +10,7 @@
 // `enabled` is the only gate).
 //
 // PORT=0 binds an ephemeral port so importing the daemon never collides with a
-// running :8888 instance. The shared singleton server is intentionally not stopped
+// running :3246 instance. The shared singleton server is intentionally not stopped
 // here — it's cached across test files and stopping it would break siblings that
 // fetch it (see resolution-log.test.ts / #47); the process exit reclaims the port.
 process.env.PORT = "0";

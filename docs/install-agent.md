@@ -18,14 +18,14 @@ If FAIL: install Bun from <https://bun.sh/>.
 bash scripts/install.sh --adapter none
 ```
 
-Expected: exits 0 and prints `OK echo is healthy on :8888`.
+Expected: exits 0 and prints `OK echo is healthy on :3246`.
 
-If FAIL: inspect `~/Library/Logs/echo.log`.
+If FAIL: run `cli/echo doctor` — it names the degraded state and a recovery command per row — then inspect `~/Library/Logs/echo.log`. An install that refuses because port 3246 is occupied but not serving Echo wrote nothing to that log.
 
 ## 3. Verify health
 
 ```bash
-curl -fsS http://localhost:8888/health
+curl -fsS http://localhost:3246/health
 ```
 
 Expected: JSON with `"status":"healthy"`.
@@ -35,7 +35,7 @@ If FAIL: run `bash scripts/status.sh`.
 ## 4. Verify silent notification
 
 ```bash
-curl -fsS -X POST http://localhost:8888/notify \
+curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"install verification","voice_enabled":false}'
 ```
@@ -97,9 +97,10 @@ Expected: neutral service `com.echo` is listed or health returns OK.
 ## 10. Uninstall
 
 ```bash
+bash scripts/uninstall.sh --check  # preview: prints what would be removed, mutates nothing
 bash scripts/uninstall.sh
 ```
 
-Expected: LaunchAgent is removed. Logs are preserved.
+Expected: exits 0; the LaunchAgent and the staged daemon payload are removed. Logs and `~/.config/echo/config.json` are preserved.
 
-Caveat: adapter registrations are **not** removed — Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive uninstall. No deregistration tooling exists; remove those entries manually before deleting the repo directory.
+Caveat: adapter registrations are **not** removed and no deregistration tooling exists; remove them manually before deleting the repo directory. The full list is in `docs/operations.md`.

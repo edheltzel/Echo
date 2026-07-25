@@ -8,7 +8,7 @@ the trust boundary, egress posture, and secret handling. For the request flow se
 
 ## Trust boundary
 
-- **Localhost only.** The daemon binds `localhost:8888` (`PORT`, default 8888). It is meant
+- **Localhost only.** The daemon binds `localhost:3246` (`PORT`, default 3246). It is meant
   to be reachable only by other processes on the same machine; do not expose it to a network.
 - **CORS restricted to localhost.** `Access-Control-Allow-Origin` is hard-set to
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
@@ -55,14 +55,15 @@ logged), not an oversight; do not add network exposure without revisiting it.
   runtime (`resolveEnvVar`, falling back to a bare `ELEVENLABS_API_KEY`). The key is
   read once in the provider constructor — `/health` reports only `apiKeyConfigured: true|false`,
   never the key itself.
-- **Env files resolve from user-owned paths** (`ECHO_ENV_PATHS`,
-  `~/.config/echo/.env`, …), first-found-wins, never overriding a live
-  environment value. Resolution is read-only: the daemon layers file values under
-  the live environment at read time and never writes them into `process.env`, so an
-  env-file secret is not hydrated into the environment that same-process modules
-  and spawned helpers inherit. Precedence detail: [`docs/configuration.md`](docs/configuration.md).
-  (Legacy `VOICESYSTEM_ENV_PATHS` is still honored as a deprecated silent
-  fallback — see the README.)
+- **Config resolves from user-owned paths** — `~/.config/echo/config.json` first,
+  then the legacy dotenv locations (`ECHO_ENV_PATHS`, `~/.config/echo/.env`, …)
+  first-found-wins — never overriding a live environment value. Resolution is
+  read-only: the daemon layers file values under the live environment at read time
+  and never writes them into `process.env`, so a secret in either file is not
+  hydrated into the environment that same-process modules and spawned helpers
+  inherit. `config.json` **rejects** `ELEVENLABS_API_KEY`, which keeps the one
+  secret in a dotenv file that is never staged into the daemon payload. Precedence
+  detail: [`docs/configuration.md`](docs/configuration.md).
 
 ## User-owned paths — never `/tmp`
 

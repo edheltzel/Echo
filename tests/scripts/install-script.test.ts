@@ -7,9 +7,16 @@ function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o755 });
 }
 
+// install.sh sleeps 2s per run waiting for launchd; a test driving three runs
+// blows bun's 5s default and dies at SIGTERM rather than on an assertion.
+const INSTALL_TIMEOUT_MS = 30_000;
+
 async function runInstall(args: string[], env: Record<string, string>) {
   const proc = Bun.spawn(["/bin/bash", "scripts/install.sh", ...args], {
-    env: { ...env, PATH: env.PATH },
+    // Set on the helper, not per call: every run through it is opted out of
+    // managing the workspace links, so no test can relink the checkout's
+    // node_modules mid-`bun test` by forgetting the flag.
+    env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env, PATH: env.PATH },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -230,7 +237,7 @@ exit 0
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   // Reviewer finding 3 on PR #80: omp must inherit #77's every-run heal and
   // --check aggregation, detected only when actually registered (echo-voice link).
@@ -275,7 +282,7 @@ exit 0
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   test("refresh-all never touches host configs that merely contain lookalike substrings", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-lookalike-"));

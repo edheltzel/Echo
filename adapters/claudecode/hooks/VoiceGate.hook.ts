@@ -4,7 +4,7 @@
  *
  * PURPOSE:
  * Prevents background agents / subagents from sending voice notifications.
- * Only the main terminal session is allowed to curl the voice server at localhost:8888.
+ * Only the main terminal session is allowed to curl the voice server at localhost:3246.
  *
  * ROOT CAUSE THIS FIXES:
  * Subagents inherit full host context (CLAUDE.md → SKILL.md → Algorithm),
@@ -20,9 +20,9 @@
  * var check was unreliable/broken (that env var doesn't exist).
  *
  * DECISION LOGIC:
- * 1. Command doesn't contain "localhost:8888" → PASS (not a voice curl)
- * 2. Command contains "localhost:8888" AND no agent_id in stdin → PASS (main session)
- * 3. Command contains "localhost:8888" AND agent_id present → BLOCK (subagent)
+ * 1. Command doesn't contain "localhost:3246" → PASS (not a voice curl)
+ * 2. Command contains "localhost:3246" AND no agent_id in stdin → PASS (main session)
+ * 3. Command contains "localhost:3246" AND agent_id present → BLOCK (subagent)
  *
  * PERFORMANCE: <5ms. Fast-path exit for non-voice commands.
  */
@@ -54,7 +54,7 @@ async function main() {
   const command = input.tool_input?.command || '';
 
   // Fast path: not a voice curl → allow immediately
-  const isVoiceCurl = command.includes('localhost:8888') || command.includes('127.0.0.1:8888');
+  const isVoiceCurl = command.includes('localhost:3246') || command.includes('127.0.0.1:3246');
   if (!isVoiceCurl) {
     console.log(JSON.stringify({ continue: true }));
     return;

@@ -4,7 +4,7 @@
 
 Standalone, multi-provider TTS notification server for coding agents, terminals, and scripts.
 
-The server core accepts JSON on `localhost:8888` and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
+The server core accepts JSON on `localhost:3246` by default and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
 - `adapters/claudecode/` — Claude Code hook integration.
 - `adapters/pi/` — Pi extension package integration.
@@ -46,13 +46,13 @@ bash scripts/install.sh --adapter none
 The installer output ends with:
 
 ```
-OK echo is healthy on :8888
+OK echo is healthy on :3246
 ```
 
 Send your first spoken notification:
 
 ```bash
-curl -X POST http://localhost:8888/notify \
+curl -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"Hello from Echo"}'
 ```
@@ -81,6 +81,17 @@ Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/insta
 
 ## Operation
 
+`cli/echo` is the stable wrapper over the scripts and the daemon API:
+
+```bash
+cli/echo doctor                # is my install healthy? one recovery command per failed check
+cli/echo status
+cli/echo update                # after a git pull — restarting alone keeps the old daemon
+cli/echo mute 30m              # or: on | off | toggle | status
+```
+
+The underlying scripts stay available:
+
 ```bash
 bash scripts/status.sh
 bash scripts/restart.sh
@@ -92,13 +103,13 @@ bash scripts/mute.sh status    # runtime mute: on [minutes] | off | toggle | sta
 Manual health check:
 
 ```bash
-curl -fsS http://localhost:8888/health
+curl -fsS http://localhost:3246/health
 ```
 
 Silent smoke request:
 
 ```bash
-curl -fsS -X POST http://localhost:8888/notify \
+curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
@@ -193,18 +204,20 @@ by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 - Unexpected macOS `say` usually means Edge is disabled, the Edge circuit is open, or real
   Edge synthesis failed. Check `attempts[]` in the resolution log; the diagnostic health
   probe alone no longer forces `say` fallback.
-- Port `31337` causes silence — voice traffic is `:8888`.
+- Port `31337` causes silence — voice traffic is `:3246`.
 
 ### Auditioning edge voices
 
 Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/voices.json`. Commands and the full flag table live in [docs/voices.md](docs/voices.md).
 
-## Deprecated environment variables
+## Configuration
 
-Echo reads `ECHO_*` environment variables. The former names — `ATLAS_VOICE_*` (Pi adapter)
-and `VOICESYSTEM_*` (core) — still work as deprecated silent fallbacks, so nothing breaks
-on upgrade. The full old→new mapping table and migration steps live in
-[docs/configuration.md](docs/configuration.md#deprecated-environment-variables).
+Persistent settings live in `~/.config/echo/config.json`, including persona identity, port,
+timeouts, cache limits, and log paths. JSON values are typed and validated against
+[`shared/config-schema.json`](shared/config-schema.json). Live process values remain a
+compatibility override; installing migrates an existing `~/.config/echo/.env` into the JSON
+file and leaves the old one in place, since `ELEVENLABS_API_KEY` — the only secret, never
+accepted in JSON — keeps living there. See [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
@@ -213,7 +226,7 @@ on upgrade. The full old→new mapping table and migration steps live in
 | Hear my first notification (guided tutorial)             | [docs/getting-started.md](docs/getting-started.md)                 |
 | Install adapters, move the repo, uninstall               | [docs/install-human.md](docs/install-human.md)                     |
 | Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md)                           |
-| Look up env files, `PORT`, and `voices.json` schema      | [docs/configuration.md](docs/configuration.md)                     |
+| Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md)              |
 | Install via an agent-runnable checklist                  | [docs/install-agent.md](docs/install-agent.md)                     |
 | Look up the HTTP API                                     | [docs/http-api.md](docs/http-api.md)                               |
 | Change or add voices; per-turn persona voice             | [docs/voices.md](docs/voices.md)                                   |
