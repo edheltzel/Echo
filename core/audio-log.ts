@@ -64,7 +64,11 @@ export function resolveAudioLifecycleLogPath(): string {
 // ~1MB cap (floor 1KB). Override via ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES.
 // Live process env only (frozen at module load): this module initializes
 // before the daemon's config layer, matching the pre-Phase-2 behavior.
-export const AUDIO_LIFECYCLE_LOG_MAX_BYTES = parseBoundedInt(process.env.ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, 1_000_000, 1024);
+export const AUDIO_LIFECYCLE_LOG_MAX_BYTES = parseBoundedInt(
+  resolveEchoEnv('ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES'),
+  1_000_000,
+  1024,
+);
 
 // Append one event, then roll the file back under the cap. Best-effort: all
 // failures are swallowed so logging can never break a notification.

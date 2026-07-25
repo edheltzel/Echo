@@ -2,7 +2,7 @@
 // Environment parsing helpers — host-neutral
 // =============================================================================
 
-import { loadEchoEnvironment } from "../shared/echo-env";
+import { loadEchoConfiguration } from "../shared/echo-env";
 
 // Parse a numeric environment variable, falling back to `fallback` when the
 // value is missing, non-numeric, or below `min`. Guards against degenerate
@@ -19,11 +19,11 @@ export function parseBoundedInt(
   return Number.isFinite(n) && n >= min ? n : fallback;
 }
 
-// --- Echo env-file resolution (import-pure) ---------------------------------
+// --- Echo configuration resolution (import-pure) ----------------------------
 //
-// The daemon reads config from the user-owned env files (ECHO_ENV_PATHS, then
-// ~/.config/echo/.env, ~/.config/voicesystem/.env, ~/.env — first file wins
-// per key) with a real process value always beating every file.
+// The daemon reads config from ~/.config/echo/config.json, with a real process
+// value always beating the JSON file. Legacy dotenv files are a lower-priority
+// migration fallback; see shared/echo-env.ts.
 //
 // IMPORT-PURITY CONTRACT: resolving config must NEVER write to process.env.
 // Host adapters (and their tests) read identity config (ECHO_VOICE_*) from
@@ -37,19 +37,19 @@ export function parseBoundedInt(
 
 let fileEnv: Record<string, string | undefined> | undefined;
 
-// File layer only: delegate the file walk + per-key precedence to the shared
-// loader (the single home for that contract — AGENTS.md), seeded with just
-// the env-path config so no live process values leak into the cached layer.
+// File layer only: delegate config-file and migration fallback resolution to the
+// shared loader (the single home for that contract), seeded with just path
+// selection values so no live process values leak into the cached layer.
 function loadEchoFileEnv(): Record<string, string | undefined> {
   const seed: Record<string, string | undefined> = {};
   if (process.env.ECHO_ENV_PATHS) seed.ECHO_ENV_PATHS = process.env.ECHO_ENV_PATHS;
   if (process.env.VOICESYSTEM_ENV_PATHS) seed.VOICESYSTEM_ENV_PATHS = process.env.VOICESYSTEM_ENV_PATHS;
-  return loadEchoEnvironment(seed);
+  return loadEchoConfiguration(seed);
 }
 
 /**
  * Resolve one config key with the daemon's precedence — live process value
- * first, then the first configured env file per key — without mutating
+ * first, then config.json, then the legacy dotenv fallback — without mutating
  * process.env. File contents are read once per process and cached.
  */
 export function resolveEchoEnv(key: string): string | undefined {

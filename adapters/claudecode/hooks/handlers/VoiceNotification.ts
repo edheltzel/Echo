@@ -18,6 +18,7 @@ import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
 import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoints.ts';
+import { loadEchoConfiguration } from '@echo/shared/echo-env.ts';
 
 // ElevenLabs voice notification payload
 interface ElevenLabsNotificationPayload {
@@ -58,7 +59,7 @@ interface VoiceEvent {
 // Overridable via ECHO_VOICE_EVENTS_LOG; resolved at write time so a test can
 // redirect it. User-owned, never /tmp.
 export function resolveVoiceEventsLogPath(): string {
-  return process.env.ECHO_VOICE_EVENTS_LOG ?? join(homedir(), '.agents', 'Echo', 'voice-events.jsonl');
+  return loadEchoConfiguration().ECHO_VOICE_EVENTS_LOG ?? join(homedir(), '.agents', 'Echo', 'voice-events.jsonl');
 }
 
 // True when a fetch was aborted (the 12s client timeout), vs. a genuine failure.

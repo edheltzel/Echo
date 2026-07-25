@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
+import { echoConfigPath, loadEchoConfiguration, validateEchoConfig } from "../../shared/echo-env";
 
 // parseBoundedInt is the single guard behind every numeric env override in the
 // voice system (issue #25). A degenerate value (NaN / negative / below floor)
@@ -110,5 +111,51 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  test("reads config.json before the legacy .env migration layer", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-json-config-"));
+    try {
+      const configDir = join(home, ".config", "echo");
+      const configPath = echoConfigPath(home);
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(configPath, JSON.stringify({
+        PORT: 3246,
+        ECHO_VOICE_PERSONA_NAME: "Configured Echo",
+        ECHO_TTS_CACHE_MAX_BYTES: 123456,
+      }));
+      writeFileSync(join(configDir, ".env"), "PORT=8888\nECHO_VOICE_PERSONA_NAME=Legacy\n");
+
+      const resolved = loadEchoConfiguration({}, home);
+      expect(resolved.PORT).toBe("3246");
+      expect(resolved.ECHO_VOICE_PERSONA_NAME).toBe("Configured Echo");
+      expect(resolved.ECHO_TTS_CACHE_MAX_BYTES).toBe("123456");
+      expect(process.env.ECHO_VOICE_PERSONA_NAME).toBeUndefined();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("live values override config.json without mutating process.env", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-json-precedence-"));
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(echoConfigPath(home), JSON.stringify({ PORT: 3246, ECHO_VOICE_PERSONA_NAME: "File" }));
+      const resolved = loadEchoConfiguration({ PORT: "9999", ECHO_VOICE_PERSONA_NAME: "Live" }, home);
+      expect(resolved.PORT).toBe("9999");
+      expect(resolved.ECHO_VOICE_PERSONA_NAME).toBe("Live");
+      expect(process.env.PORT).not.toBe("9999");
+      expect(process.env.ECHO_VOICE_PERSONA_NAME).toBeUndefined();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("schema rejects secrets, retired aliases, unknown keys, and compound values", () => {
+    expect(validateEchoConfig({ ELEVENLABS_API_KEY: "secret" })).toHaveLength(1);
+    expect(validateEchoConfig({ VOICESYSTEM_DEFAULT_TITLE: "old" })).toHaveLength(1);
+    expect(validateEchoConfig({ notEcho: true })).toHaveLength(1);
+    expect(validateEchoConfig({ ECHO_VOICE_ID: ["voice"] })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);
   });
 });

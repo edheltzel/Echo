@@ -11,7 +11,7 @@
 // and must never be passed to recordProviderFailure — a local audio problem
 // must not disable a healthy online provider.
 
-import { parseBoundedInt } from "./env";
+import { parseBoundedInt, resolveEchoEnv } from "./env";
 
 export interface CircuitBreakerState {
   failures: number;
@@ -32,7 +32,7 @@ export type CircuitBreakerLogger = (
 // a bad/zero/negative override falls back to 2, never to a value that would open the
 // breaker on the first failure).
 export const CIRCUIT_BREAKER_THRESHOLD = parseBoundedInt(
-  process.env.ECHO_CIRCUIT_BREAKER_THRESHOLD ?? process.env.VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD,
+  resolveEchoEnv("ECHO_CIRCUIT_BREAKER_THRESHOLD") ?? resolveEchoEnv("VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD"),
   2,
   1,
 );
