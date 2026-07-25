@@ -276,7 +276,13 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     for (const port of ["0x0C9E", "0b1100100", "0o6246", "1e4", "03246", "+3246", "3246.5", " ", ""]) {
       expect(validateEchoConfig({ PORT: port })).toHaveLength(1);
     }
-    expect(validateEchoConfig({ PORT: " 3246 " })).toEqual([]);
+    // Padding is rejected in both positions. The shell reader captures the value
+    // whole and cannot trim, so tolerating it on this side is what put the daemon
+    // on a port every CLI surface reported as down.
+    for (const port of [" 3246 ", "3246 ", " 3246", "\t3246"]) {
+      expect(validateEchoConfig({ PORT: port })).toHaveLength(1);
+    }
+    expect(validateEchoConfig({ PORT: "3246" })).toEqual([]);
     expect(validateEchoConfig({ PORT: 3246 })).toEqual([]);
   });
 
@@ -317,11 +323,13 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     const schema = JSON.parse(readFileSync("shared/config-schema.json", "utf8"));
     expect(schema.additionalProperties).toBe(false);
     expect(schema.properties.PORT.default).toBe(3246);
-    // The declared range is what config.json validation enforces and what
+    // The declared grammar is what config.json validation enforces and what
     // scripts/echo-port.sh accepts — all three must agree or the daemon and the
-    // CLI end up on different ports.
-    expect(schema.properties.PORT.minimum).toBe(MIN_CONFIG_PORT);
-    expect(schema.properties.PORT.maximum).toBe(MAX_CONFIG_PORT);
+    // CLI end up on different ports. `minimum`/`maximum` are numeric keywords
+    // and say nothing about the string form, so that branch carries the pattern.
+    const [numeric, text] = schema.properties.PORT.anyOf;
+    expect(numeric).toEqual({ type: "integer", minimum: MIN_CONFIG_PORT, maximum: MAX_CONFIG_PORT });
+    expect(text).toEqual({ type: "string", pattern: "^[1-9][0-9]*$" });
     expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
     for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
     for (const key of Object.keys(schema.properties)) expect(ECHO_CONFIG_KEYS.has(key)).toBe(true);

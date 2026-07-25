@@ -93,11 +93,15 @@ const config: Record<string, unknown> = existing ?? {};
 // Only canonical Echo keys move. That drops the retired VOICESYSTEM_* aliases,
 // the host-owned variables, and the secret — writing any of them would produce a
 // config.json the daemon's own validation rejects.
+//
+// PORT is written trimmed: a dotenv `PORT=" 8888 "` keeps its padding through
+// quote stripping, and the JSON port grammar accepts no surrounding whitespace,
+// so migrating it verbatim would silently drop the port the user had.
 const migrated: string[] = [];
 for (const [key, entry] of Object.entries(legacy)) {
   if (!ECHO_CONFIG_KEYS.has(key)) continue;
   if (config[key] !== undefined) continue;
-  config[key] = entry.value;
+  config[key] = key === "PORT" ? entry.value.trim() : entry.value;
   migrated.push(key);
 }
 

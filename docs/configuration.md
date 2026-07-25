@@ -116,12 +116,14 @@ at runtime; invalid values use the defaults below.
 
 Settings whose behavior is not obvious from the name:
 
-- **PORT** must be plain decimal, from 1 to 65535 — `3246` or `"3246"`. Anything else is
-  dropped as an invalid key (see [Invalid keys](#invalid-keys)) and Echo uses 3246. That
-  includes other numeric spellings (`"0x0C9E"`, `"1e4"`, a leading zero like `"03246"`),
-  because the daemon and the pure-bash CLI resolve those to different ports. `0` means an
-  ephemeral bind, which no CLI can address, so it is accepted only as a live process value
-  and only for tests.
+- **PORT** must be canonical decimal, from 1 to 65535 — `3246` or `"3246"`. Digits only: no
+  sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an
+  invalid key (see [Invalid keys](#invalid-keys)) and Echo uses 3246. That covers other
+  numeric spellings (`"0x0C9E"`, `"1e4"`, `"03246"`) and padded ones (`" 3246 "`), because
+  the daemon and the pure-bash CLI resolve those to different ports, which would leave the
+  daemon listening somewhere every CLI surface reports as down. `0` means an ephemeral bind,
+  which no CLI can address, so it is accepted only as a live process value and only for
+  tests. Installing normalizes a padded dotenv PORT, so migrating never loses your port.
 - **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
   (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
   `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`

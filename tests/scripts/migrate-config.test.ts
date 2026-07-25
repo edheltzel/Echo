@@ -123,6 +123,23 @@ describe("scripts/migrate-config.ts", () => {
     }),
   );
 
+  // Quote stripping keeps padding inside the quotes, and the JSON port grammar
+  // accepts none — migrating verbatim would drop the port the user had.
+  test(
+    "migrates a padded dotenv PORT into a canonical config value",
+    withHome("echo-migrate-padded-port-", async (home, configDir) => {
+      writeFileSync(join(configDir, ".env"), 'PORT=" 8888 "\nECHO_VOICE_CATCHPHRASE=" spaced "\n');
+
+      const r = await runMigration(home);
+      expect(r.exitCode).toBe(0);
+
+      const written = JSON.parse(readFileSync(join(configDir, "config.json"), "utf8"));
+      expect(written.PORT).toBe("8888");
+      // Only PORT is normalized; every other value migrates byte for byte.
+      expect(written.ECHO_VOICE_CATCHPHRASE).toBe(" spaced ");
+    }),
+  );
+
   // Naming the wrong file is how the user deletes the one the daemon reads the
   // key from — the exact outcome this notice exists to prevent.
   test(

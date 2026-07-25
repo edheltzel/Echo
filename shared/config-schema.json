@@ -6,7 +6,14 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "PORT": { "type": ["string", "integer"], "minimum": 1, "maximum": 65535, "default": 3246 },
+    "PORT": {
+      "default": 3246,
+      "description": "Canonical decimal only: digits, no sign, no leading zero, no surrounding whitespace.",
+      "anyOf": [
+        { "type": "integer", "minimum": 1, "maximum": 65535 },
+        { "type": "string", "pattern": "^[1-9][0-9]*$" }
+      ]
+    },
     "VOICES_PATH": { "type": "string" },
     "PRONUNCIATIONS_PATH": { "type": "string" },
     "ECHO_VOICE_PERSONA_NAME": { "type": "string" },

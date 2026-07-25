@@ -17,21 +17,26 @@
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
 # The configured port, or empty when it is absent or in any form config.json
-# validation would reject. Grammar AND bounds must match what that validation
+# validation would reject. Grammar AND bounds mirror what that validation
 # enforces (CANONICAL_DECIMAL and MIN/MAX_CONFIG_PORT in shared/echo-env.ts) and
-# what the schema declares, or a value the daemon drops (falling back to 3246)
-# would send every shell surface probing a port nothing serves.
+# what the schema declares: digits only, no sign, no leading zero, no surrounding
+# whitespace, 1-65535. A value only one reader accepts would send every shell
+# surface probing a port the daemon never bound.
 #
-# The whole value token is captured, not just its leading digits, so a spelling
-# the three readers disagree about is rejected here rather than silently
-# truncated: `"1e4"` would otherwise read as port 1, and bash arithmetic treats a
-# leading-zero operand as octal (`03246` → 1702). 0 is out of range on both sides
-# too — it means an ephemeral bind, which no CLI can address, and it reaches the
-# daemon only as a live process value in tests.
+# The value is read WHOLE — everything between the quotes, or the bare token —
+# never just its leading digits, so a spelling the readers would resolve
+# differently is rejected here instead of silently truncated: `"1e4"` would
+# otherwise read as port 1, `" 3457 "` as nothing at all, and bash arithmetic
+# treats a leading-zero operand as octal (`03246` → 1702). 0 is out of range on
+# every side too — it means an ephemeral bind, which no CLI can address, and it
+# reaches the daemon only as a live process value in tests.
 config_port() {
   local config_path="$HOME/.config/echo/config.json" port
   [ -f "$config_path" ] || return 0
-  port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"?([^",}[:space:]]*)"?[[:space:]]*[,}]?.*/\1/p' "$config_path" | head -1)"
+  port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$config_path" | head -1)"
+  if [ -z "$port" ]; then
+    port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*([^",}[:space:]]+).*/\1/p' "$config_path" | head -1)"
+  fi
   case "$port" in
     "" | *[!0-9]* | 0*) return 0 ;;
   esac

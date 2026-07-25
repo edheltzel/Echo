@@ -72,17 +72,21 @@ function isConfigPrimitive(value: unknown): value is EchoConfigValue {
 export const MIN_CONFIG_PORT = 1;
 export const MAX_CONFIG_PORT = 65535;
 
-// The only spelling all three readers agree on. The daemon parses base 10
-// (`parseInt(_, 10)`), scripts/echo-port.sh captures `[0-9]+` and compares with
-// bash arithmetic, and each understands a different superset: `Number()` reads
-// `0x0C9E` as 3230 where base-10 parsing stops at 0, and bash reads a
-// leading-zero operand as octal (`03246` → 1702). Anything outside canonical
-// decimal is therefore a value two readers would resolve to different ports.
+// One value, three readers: this validator, `parseInt(_, 10)` in core/server.ts,
+// and the sed capture plus bash arithmetic in scripts/echo-port.sh. Each
+// understands a different superset — `Number()` reads `0x0C9E` as 3230 where
+// base-10 parsing stops at 0, bash reads a leading-zero operand as octal
+// (`03246` → 1702), and a padded `" 3457 "` is a port to one reader and nothing
+// to another — so the grammar is kept small enough that all three can mirror it
+// exactly: digits only, no sign, no leading zero, no surrounding whitespace.
+// Anything else resolves to 3246 everywhere. The same rule is spelled out in
+// shared/config-schema.json and scripts/echo-port.sh, and every reader is held
+// to it by tests/scripts/port-grammar.test.ts.
 const CANONICAL_DECIMAL = /^[1-9][0-9]*$/;
 
 function parseConfigPort(entry: EchoConfigValue): number | null {
   if (typeof entry === "boolean") return null;
-  const text = String(entry).trim();
+  const text = String(entry);
   return CANONICAL_DECIMAL.test(text) ? Number(text) : null;
 }
 
@@ -96,7 +100,8 @@ function validateEchoConfigEntry(key: string, entry: unknown): string | null {
   if (key === "PORT") {
     const port = parseConfigPort(entry);
     if (port === null || port < MIN_CONFIG_PORT || port > MAX_CONFIG_PORT) {
-      return `PORT must be an integer between ${MIN_CONFIG_PORT} and ${MAX_CONFIG_PORT}`;
+      return `PORT must be plain digits from ${MIN_CONFIG_PORT} to ${MAX_CONFIG_PORT} ` +
+        "(no sign, leading zero, or surrounding whitespace)";
     }
   }
   return null;
