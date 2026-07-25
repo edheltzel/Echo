@@ -6,7 +6,7 @@ detail live behind the pointers below — load them on demand (progressive discl
 
 ## Architecture in one breath
 
-A host-neutral daemon (`core/server.ts`, listening on `localhost:8888`) speaks text POSTed to
+A host-neutral daemon (`core/server.ts`, listening on `localhost:3246` by default) speaks text POSTed to
 `POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/claudecode/`,
 `adapters/pi/`) that never import `core/`. Full codemap,
 boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
@@ -37,8 +37,8 @@ bash scripts/{status,start,stop,restart,uninstall}.sh
 bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
 
 # Health / silent smoke
-curl -fsS http://localhost:8888/health
-curl -fsS -X POST http://localhost:8888/notify \
+curl -fsS http://localhost:3246/health
+curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
@@ -86,7 +86,7 @@ is unmistakably a test.
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
-such as the env files. Use **Bun only** — no npm/npx/node. Run
+such as the JSON config file. Use **Bun only** — no npm/npx/node. Run
 `bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
 same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
@@ -123,7 +123,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
 | Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
-| Configuration (env files, `PORT`, config paths, provider toggles, deprecated env names) | [docs/configuration.md](docs/configuration.md) |
+| Configuration (`~/.config/echo/config.json`, schema, migration, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
 ## Repo map
@@ -141,7 +141,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
-| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else 8888; never parses the daemon's env files) | `scripts/echo-port.sh` |
+| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else 3246; never parses the daemon's config) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer | `cli/echo`, `scripts/set-default-voice.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
@@ -152,8 +152,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new host-named endpoints to the universal server.
 - Do not change the `/notify` request/response contract without an explicit compatibility plan.
 - Do not write process state to `/tmp`; use user-owned cache/log/config paths.
-- Do not add new `localhost:31337` references; voice server traffic is `:8888`.
-- Do not broad-kill whatever owns port `8888`; it may be another service.
+- Do not add new `localhost:31337` references; voice server traffic is `:3246`.
+- Do not broad-kill whatever owns port `3246`; it may be another service.
 - Do not commit secrets or `.env` files.
 - Do not write env-file config into `process.env`. Core resolves env-file values through
   `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at

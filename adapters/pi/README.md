@@ -51,7 +51,7 @@ ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ECHO_NOTIFY_URL` | `http://localhost:8888/notify` | Core notify endpoint |
+| `ECHO_NOTIFY_URL` | `http://localhost:3246/notify` | Core notify endpoint |
 | `ECHO_VOICE_TITLE` | `Pi Notification` | Notification title |
 | `ECHO_VOICE_CATCHPHRASE` | random from built-in pool | Session-start greeting; setting it pins one line |
 | `ECHO_VOICE_ID` | `pi` | Voice mapping/id (resolves to `agents.pi` in `core/voices.json`) |

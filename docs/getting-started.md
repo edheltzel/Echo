@@ -10,7 +10,7 @@ This takes about 5 minutes.
 
 A voice daemon running as a macOS LaunchAgent that:
 
-- Speaks any JSON message POSTed to `localhost:8888/notify`
+- Speaks any JSON message POSTed to `localhost:3246/notify`
 - Starts automatically when you log in
 - Speaks in different persona voices when you ask for them
 
@@ -53,7 +53,7 @@ bash scripts/install.sh --adapter none
 The output ends with:
 
 ```
-OK echo is healthy on :8888
+OK echo is healthy on :3246
 ```
 
 If you instead see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`,
@@ -65,13 +65,13 @@ safe to run repeatedly.
 Ask the daemon how it's doing:
 
 ```bash
-curl -fsS http://localhost:8888/health
+curl -fsS http://localhost:3246/health
 ```
 
 You should see a JSON response starting with:
 
 ```json
-{"status":"healthy","port":8888,...}
+{"status":"healthy","port":3246,...}
 ```
 
 ## Step 4: Send your first spoken notification
@@ -79,7 +79,7 @@ You should see a JSON response starting with:
 Turn your volume up, then run:
 
 ```bash
-curl -X POST http://localhost:8888/notify \
+curl -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"Hello from Echo"}'
 ```
@@ -92,14 +92,14 @@ If edge-tts is installed for `/opt/homebrew/bin/python3`, you should hear the de
 ```
 
 That's it — Echo is working. Anything on your machine can now speak by POSTing to
-`localhost:8888/notify`.
+`localhost:3246/notify`.
 
 ## Step 5: Try a persona voice
 
 Echo ships with named persona voices. Ask for one with `voice_id`:
 
 ```bash
-curl -X POST http://localhost:8888/notify \
+curl -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"Themis here. Ready to coordinate.","voice_id":"themis"}'
 ```
@@ -119,7 +119,7 @@ Work through these checks in order:
 
    You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
    `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`. Should the
-   installer refuse because port 8888 is occupied but not answering, run `cli/echo doctor` —
+   installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` —
    it names each degraded check and the command that fixes it.
 
 2. **Check the daemon log for errors:**

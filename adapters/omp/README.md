@@ -12,9 +12,9 @@ boundary contract is in [`docs/adapters.md`](../../docs/adapters.md).
 
 ## Configuration
 
-omp loads the same canonical `ECHO_VOICE_*` env vars as the Pi adapter (legacy
-`ATLAS_VOICE_*` / `VOICESYSTEM_*` kept as silent deprecated fallbacks), via Echo's
-environment-file chain. Durable local settings: `~/.config/echo/.env`. Defaults:
+omp loads the same canonical `ECHO_VOICE_*` settings as the Pi adapter (the legacy
+`ATLAS_VOICE_*` name remains a silent fallback), via Echo's JSON configuration. Durable
+local settings: `~/.config/echo/config.json`. Defaults:
 persona `omp`, voice `pi`.
 
 ## Per-project persona & voice

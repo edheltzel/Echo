@@ -8,7 +8,7 @@ the trust boundary, egress posture, and secret handling. For the request flow se
 
 ## Trust boundary
 
-- **Localhost only.** The daemon binds `localhost:8888` (`PORT`, default 8888). It is meant
+- **Localhost only.** The daemon binds `localhost:3246` (`PORT`, default 3246). It is meant
   to be reachable only by other processes on the same machine; do not expose it to a network.
 - **CORS restricted to localhost.** `Access-Control-Allow-Origin` is hard-set to
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
@@ -61,8 +61,7 @@ logged), not an oversight; do not add network exposure without revisiting it.
   the live environment at read time and never writes them into `process.env`, so an
   env-file secret is not hydrated into the environment that same-process modules
   and spawned helpers inherit. Precedence detail: [`docs/configuration.md`](docs/configuration.md).
-  (Legacy `VOICESYSTEM_ENV_PATHS` is still honored as a deprecated silent
-  fallback — see the README.)
+  Legacy dotenv files are read only as a migration fallback; see the configuration guide.
 
 ## User-owned paths — never `/tmp`
 

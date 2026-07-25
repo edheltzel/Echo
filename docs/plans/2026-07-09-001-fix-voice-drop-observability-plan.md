@@ -185,7 +185,7 @@ Two phases, in order. Phase 2's mechanism is chosen from Phase 1's data.
   - `tests/core/audio-lifecycle-log.test.ts` (new).
 - **Approach:** Copy `writeResolutionEvent`'s structure (append + size-cap rotation +
   swallowed errors). `classifyPlaybackOutcome(exitCode, timedOut)` → the exit-reason enum
-  (KTD6). Env resolution follows the `ECHO_* ?? VOICESYSTEM_* ?? default` convention used
+  (KTD6). Configuration resolution follows the canonical Echo property then default
   across `core/`.
 - **Patterns to follow:** `core/server.ts:1094-1190` (resolution-log constants + writer),
   `tests/core/resolution-log.test.ts`, `core/env.ts` `parseBoundedInt`.

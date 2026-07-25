@@ -19,7 +19,7 @@ Run all commands from the repo root.
 bash scripts/start.sh
 ```
 
-Prints `OK echo started on :8888`. If the service is already loaded it says so and exits;
+Prints `OK echo started on :3246`. If the service is already loaded it says so and exits;
 if the plist is missing it tells you to run `scripts/install.sh` first.
 
 ## Stop
@@ -57,14 +57,13 @@ runs a health check, and prints the log path with the last five log lines.
 ## Health
 
 ```bash
-curl -fsS http://localhost:8888/health
+curl -fsS http://localhost:3246/health
 ```
 
-Returns JSON containing `"status":"healthy"`. Every command on this page targets `8888`
-(`scripts/echo-port.sh`) — Stage 1's CLI is single-port and does not discover a daemon
-listening anywhere else, so a daemon moved off the default is not supported by these
-commands yet. Exporting `PORT` aims one command at one specific daemon (an isolated test
-instance), nothing more. See [`configuration.md`](configuration.md).
+Returns JSON containing `"status":"healthy"`. Every command on this page uses the port
+from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT`
+override is available for one isolated command or test. The CLI does not discover arbitrary
+listeners. See [`configuration.md`](configuration.md).
 
 ## Logs
 
@@ -76,8 +75,9 @@ instance), nothing more. See [`configuration.md`](configuration.md).
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on `:8888` (exporting `PORT` aims it at one specific
-daemon, e.g. an isolated test instance). While muted, notifications are still accepted,
+`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`; exporting
+`PORT` aims it at one specific daemon, e.g. an isolated test instance). While muted,
+notifications are still accepted,
 processed, and logged — only the audio is suppressed, across every provider:
 
 ```bash
@@ -118,7 +118,7 @@ one, and exits 1 with the log path. It re-checks health after the restore too, a
 
 ## Config changes need a re-stage
 
-The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
+The daemon loads `~/.config/echo/config.json`, `core/voices.json`, and `core/pronunciations.json` once at startup — **from
 the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy
 has no effect until you re-stage. Edit, then `cli/echo update` (it re-stages and reloads).
 

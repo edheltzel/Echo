@@ -81,7 +81,7 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 4. Verify:
 
    ```bash
-   curl -fsS -X POST http://localhost:8888/notify -H 'Content-Type: application/json' \
+   curl -fsS -X POST http://localhost:3246/notify -H 'Content-Type: application/json' \
      -d '{"message":"default voice check"}'
    tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq
    ```
@@ -183,19 +183,19 @@ effect on the next session in that repo. See
    name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Restart the daemon.
 2. Bind the persona to that key in its `atlas-config` brief (`~/.claude/agents/<Name>.md`):
    set frontmatter `voiceId: <key>` and make every self-voice `curl` POST
-   `http://localhost:8888/notify` with `"voice_id":"<key>"`. The self-voice instruction must
+   `http://localhost:3246/notify` with `"voice_id":"<key>"`. The self-voice instruction must
    be in the brief **body** — frontmatter isn't visible to the agent.
 
 Gotchas that cause silence: the frontmatter-visibility rule above; sending a raw ElevenLabs
 id instead of the name key won't resolve while ElevenLabs is disabled; and port `31337` is
-wrong — voice traffic is `:8888`.
+wrong — voice traffic is `:3246`.
 
 `tests/core/voices-config.test.ts` iterates every `agents` entry, so new voices are validated
 by `bun test`.
 
 ## Set up ElevenLabs
 
-Prerequisites: Echo installed and running (`curl -fsS http://localhost:8888/health` returns
+Prerequisites: Echo installed and running (`curl -fsS http://localhost:3246/health` returns
 JSON); an ElevenLabs API key.
 
 1. Put the key where the daemon reads it (see [`configuration.md`](configuration.md) for all
@@ -212,7 +212,7 @@ JSON); an ElevenLabs API key.
 4. Verify configuration:
 
    ```bash
-   curl -fsS http://localhost:8888/health | jq '.providers.elevenlabs'
+   curl -fsS http://localhost:3246/health | jq '.providers.elevenlabs'
    ```
 
    You should see `"enabled": true`, `"healthy": true`, `"apiKeyConfigured": true`,
@@ -220,7 +220,7 @@ JSON); an ElevenLabs API key.
 5. Verify synthesis — `/health` does not test the key against the API; a real request does:
 
    ```bash
-   curl -fsS -X POST http://localhost:8888/notify -H 'Content-Type: application/json' \
+   curl -fsS -X POST http://localhost:3246/notify -H 'Content-Type: application/json' \
      -d '{"message":"ElevenLabs check","voice_id":"kai"}'
    ```
 
@@ -231,7 +231,7 @@ JSON); an ElevenLabs API key.
    prefer it (next section).
 
 **Prefer ElevenLabs as the primary voice:** set `"defaultProvider": "elevenlabs"` in
-`voices.json`, run `cli/echo update`, and confirm `curl -fsS http://localhost:8888/health | jq -r
+`voices.json`, run `cli/echo update`, and confirm `curl -fsS http://localhost:3246/health | jq -r
 .activeProvider` prints `elevenlabs`. Note ElevenLabs egresses to `api.elevenlabs.io` —
 see [`providers-observability.md`](providers-observability.md).
 
@@ -254,7 +254,7 @@ Three signals, in order:
    - No new event at all → the request was `voice_enabled:false` (which skips both voice and
      the log write), rate-limited (`429`), or rejected (`400`) — check the HTTP response and
      the daemon log.
-2. **`/health`** — `curl -fsS http://localhost:8888/health | jq` for the config/state
+2. **`/health`** — `curl -fsS http://localhost:3246/health | jq` for the config/state
    snapshot: `activeProvider`, per-provider `enabled`/`healthy`, breaker state.
 3. **Daemon log** — `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).

@@ -1,6 +1,6 @@
 # HTTP API
 
-The universal core (`core/server.ts`) listens on `localhost:8888` (override: `PORT`) and
+The universal core (`core/server.ts`) listens on `localhost:3246` by default (override: `PORT`) and
 exposes five endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
 [`configuration.md`](configuration.md) for the config the server reads at startup.
@@ -133,17 +133,17 @@ Stream Deck — anything that can run a command or make an HTTP request):
 
 ```bash
 # Raycast Script Command / Stream Deck "System: Open" / any shell binding
-curl -fsS -X POST http://localhost:8888/mute
+curl -fsS -X POST http://localhost:3246/mute
 
 # Explicit variants
-curl -fsS -X POST http://localhost:8888/mute -H 'Content-Type: application/json' \
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
   -d '{"muted": true, "duration_minutes": 30}'   # mute for 30 minutes
-curl -fsS -X POST http://localhost:8888/mute -H 'Content-Type: application/json' \
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
   -d '{"muted": false}'                           # unmute now
 ```
 
 In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
-`http://localhost:8888/mute` (leave the request body empty to toggle).
+`http://localhost:3246/mute` (leave the request body empty to toggle).
 
 ## `GET /health`
 
