@@ -170,7 +170,7 @@ cmd_doctor() {
   fi
 
   # 5. Service loaded
-  if launchctl list 2>/dev/null | grep -q "$SERVICE_NAME"; then
+  if launchctl list 2>/dev/null | grep "$SERVICE_NAME" >/dev/null 2>&1; then
     doctor_row ok "service" "${SERVICE_NAME} loaded"
   else
     doctor_row fail "service" "${SERVICE_NAME} not loaded" "echo install    # or: bash $SCRIPTS/start.sh"
@@ -183,11 +183,19 @@ cmd_doctor() {
   fi
   if [ -n "$health" ]; then
     doctor_row ok "health" "daemon healthy on :${ECHO_PORT}"
-  elif command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
-    local owner
-    owner="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1" (PID "$2")"}' || true)"
-    doctor_row fail "health" "port ${ECHO_PORT} held by ${owner:-another process}, which is not Echo" \
-      "Stop that process and rerun install. Echo never kills the port owner."
+  elif command -v lsof >/dev/null 2>&1 && [ -n "$(port_listener_pids)" ]; then
+    # Same ownership test install.sh refuses on, so the two never disagree about
+    # whose daemon this is — telling an operator to stop their own wedged service
+    # would be the worst possible answer in the state doctor exists to diagnose.
+    if service_owns_port "$SERVICE_NAME"; then
+      doctor_row fail "health" "${SERVICE_NAME} holds :${ECHO_PORT} but is not answering /health" \
+        "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"
+    else
+      local owner
+      owner="$(port_owner)"
+      doctor_row fail "health" "port ${ECHO_PORT} held by ${owner:-another process}, which is not Echo" \
+        "Stop that process and rerun install. Echo never kills the port owner."
+    fi
   else
     doctor_row fail "health" "daemon not responding on :${ECHO_PORT}" \
       "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"

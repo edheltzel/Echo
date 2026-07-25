@@ -102,47 +102,25 @@ health_ok() {
   curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" >/dev/null 2>&1
 }
 
-# PID launchd currently reports for our own service; empty when it is not running.
-# `launchctl list <label>` exits 113 for an unloaded label and `head -1` can SIGPIPE
-# its producer, so the pipeline is neutralized: under `pipefail` either would abort
-# the script at the assignment, killing the very diagnostic the caller prints.
-service_pid() {
-  { launchctl list "$SERVICE_NAME" 2>/dev/null \
-    | sed -n 's/.*"PID"[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1; } || true
-}
-
 # Refuse to start Echo on a port already owned by a DIFFERENT process. Echo's
 # invariant forbids broad-killing the port owner: identify it and let the user
 # choose. Our OWN daemon must never trip this — a wedged daemon that holds the
 # port without answering /health is exactly the state `echo install` recovers from,
 # and reload_core_service unloads it before loading. If lsof is unavailable, we
-# cannot prove foreign ownership, so we never block.
+# cannot prove foreign ownership, so we never block. Ownership comes from
+# service_owns_port (scripts/echo-port.sh) so doctor reaches the same verdict.
 check_port_owner() {
   if health_ok; then return 0; fi
   command -v lsof >/dev/null 2>&1 || return 0
+  [ -n "$(port_listener_pids)" ] || return 0
 
-  local listeners
-  listeners="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
-  [ -n "$listeners" ] || return 0
-
-  # Ownership by PID is the definitive test; fall back to "our label is loaded"
-  # only when launchd reports no PID for it (e.g. a crash-loop between respawns).
-  local svc_pid pid
-  svc_pid="$(service_pid)"
-  if [ -n "$svc_pid" ]; then
-    for pid in $listeners; do
-      if [ "$pid" = "$svc_pid" ]; then
-        echo "> Port ${ECHO_PORT} is held by our own ${SERVICE_NAME} (PID $pid, not answering /health) — reloading it"
-        return 0
-      fi
-    done
-  elif is_loaded "$SERVICE_NAME"; then
-    echo "> Port ${ECHO_PORT} is occupied while ${SERVICE_NAME} is loaded without a PID — reloading it"
+  if service_owns_port "$SERVICE_NAME"; then
+    echo "> Port ${ECHO_PORT} is held by our own ${SERVICE_NAME}, which is not answering /health — reloading it"
     return 0
   fi
 
   local owner
-  owner="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1" (PID "$2")"}' || true)"
+  owner="$(port_owner)"
   echo "Port ${ECHO_PORT} is held by ${owner:-another process}, which is not Echo:" >&2
   lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
   if [ -n "${PORT:-}" ]; then
