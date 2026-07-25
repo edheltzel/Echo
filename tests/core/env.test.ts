@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
 import {
   ECHO_CONFIG_KEYS,
+  MAX_CONFIG_PORT,
+  MIN_CONFIG_PORT,
   echoConfigPath,
   loadEchoConfiguration,
   loadEchoConfigurationWithStatus,
@@ -34,8 +36,10 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
   });
 
   // PORT's ceiling: an out-of-range value would throw inside Bun.serve and leave
-  // launchd crash-looping the daemon. Floor 0 is deliberate — PORT=0 is the
-  // tests' ephemeral-bind mode and must never fall back to the real :3246.
+  // launchd crash-looping the daemon. Floor 0 is deliberate for the LIVE process
+  // value — PORT=0 is the tests' ephemeral-bind mode and must never fall back to
+  // the real :3246. A configured 0 never reaches here; config.json validation
+  // rejects it (see the PORT range test below).
   test("values above the max fall back; no max means unbounded", () => {
     expect(parseBoundedInt("99999", 3246, 0, 65535)).toBe(3246);
     expect(parseBoundedInt("65535", 3246, 0, 65535)).toBe(65535);
@@ -249,6 +253,36 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);
   });
 
+  // A configured port the bash surfaces cannot target is a permanent split-brain:
+  // the daemon binds it, every CLI and health probe stays on 3246. 0 is the
+  // sharpest case — an ephemeral bind has no address to hand a CLI at all.
+  test("a configured PORT outside 1-65535 is rejected, including 0", () => {
+    expect(validateEchoConfig({ PORT: 0 })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: "0" })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: 65536 })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: -1 })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: true })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: "not-a-port" })).toHaveLength(1);
+    expect(validateEchoConfig({ PORT: 1 })).toEqual([]);
+    expect(validateEchoConfig({ PORT: "8888" })).toEqual([]);
+    expect(validateEchoConfig({ PORT: 65535 })).toEqual([]);
+  });
+
+  test("a configured PORT of 0 is dropped and reported, leaving the daemon on 3246", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-zero-port-"));
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(echoConfigPath(home), JSON.stringify({ PORT: 0, ECHO_DEFAULT_TITLE: "Kept" }));
+
+      const { env, config } = loadEchoConfigurationWithStatus({}, home);
+      expect(env.PORT).toBeUndefined();
+      expect(env.ECHO_DEFAULT_TITLE).toBe("Kept");
+      expect(config.ignored).toEqual(["PORT"]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Lockstep in BOTH directions. A schema key missing from ECHO_CONFIG_KEYS is
   // the worse half: the daemon would call the user's own documented setting "not
   // an Echo configuration key" and drop it at runtime.
@@ -256,7 +290,11 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     const schema = JSON.parse(readFileSync("shared/config-schema.json", "utf8"));
     expect(schema.additionalProperties).toBe(false);
     expect(schema.properties.PORT.default).toBe(3246);
-    expect(schema.properties.PORT.maximum).toBe(65535);
+    // The declared range is what config.json validation enforces and what
+    // scripts/echo-port.sh accepts — all three must agree or the daemon and the
+    // CLI end up on different ports.
+    expect(schema.properties.PORT.minimum).toBe(MIN_CONFIG_PORT);
+    expect(schema.properties.PORT.maximum).toBe(MAX_CONFIG_PORT);
     expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
     for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
     for (const key of Object.keys(schema.properties)) expect(ECHO_CONFIG_KEYS.has(key)).toBe(true);

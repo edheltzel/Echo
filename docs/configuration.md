@@ -116,9 +116,10 @@ at runtime; invalid values use the defaults below.
 
 Settings whose behavior is not obvious from the name:
 
-- **PORT** is clamped to 0–65535; anything outside that range (or non-numeric) falls back to
-  3246. `0` binds an ephemeral port and exists for tests — the CLI and lifecycle scripts
-  treat it as "no fixed port" and target 3246.
+- **PORT** must be an integer from 1 to 65535 here. Anything else — non-numeric, out of
+  range, or `0` — is dropped as an invalid key (see [Invalid keys](#invalid-keys)) and Echo
+  uses 3246. `0` means an ephemeral bind, which no CLI can address, so it is accepted only as
+  a live process value and only for tests.
 - **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
   (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
   `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`

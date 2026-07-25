@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,6 +99,44 @@ describe("scripts/migrate-config.ts", () => {
       expect(r.exitCode).toBe(0);
       expect(r.stderr).toContain("Skipping config migration");
       expect(readFileSync(join(configDir, "config.json"), "utf8")).toBe("{ not json");
+    }),
+  );
+
+  // install.sh runs this in preflight under `set -euo pipefail`, so an unreadable
+  // config.json has to report and step aside — a throw here fails the install.
+  test(
+    "reports and skips when config.json cannot be read",
+    withHome("echo-migrate-unreadable-", async (home, configDir) => {
+      writeFileSync(join(configDir, ".env"), "ECHO_DEFAULT_TITLE=From dotenv\n");
+      const configFile = join(configDir, "config.json");
+      writeFileSync(configFile, JSON.stringify({ PORT: 3246 }));
+      chmodSync(configFile, 0o000);
+
+      try {
+        const r = await runMigration(home);
+        expect(r.exitCode).toBe(0);
+        expect(r.stderr).toContain("Skipping config migration");
+        expect(r.stderr).toContain("could not be read");
+      } finally {
+        chmodSync(configFile, 0o600);
+      }
+    }),
+  );
+
+  // Naming the wrong file is how the user deletes the one the daemon reads the
+  // key from — the exact outcome this notice exists to prevent.
+  test(
+    "names the file the secret actually lives in",
+    withHome("echo-migrate-secret-source-", async (home, configDir) => {
+      const voicesystemDir = join(home, ".config", "voicesystem");
+      mkdirSync(voicesystemDir, { recursive: true });
+      writeFileSync(join(configDir, ".env"), "ECHO_DEFAULT_TITLE=From echo\n");
+      writeFileSync(join(voicesystemDir, ".env"), "ELEVENLABS_API_KEY=sk_secret\n");
+
+      const r = await runMigration(home);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain(`ELEVENLABS_API_KEY stays in ${join(voicesystemDir, ".env")}`);
+      expect(r.stdout).not.toContain(`stays in ${join(configDir, ".env")}`);
     }),
   );
 

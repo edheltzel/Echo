@@ -152,9 +152,23 @@ status, `macos_fallback_voice`, pronunciation rule count, emotional preset count
 `play_queue` (`{depth, in_flight_ms, stalled}` — backlog, how long the current line has
 been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
-`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), and the capture
+`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), the capture
 guard (`capture_guard: {path, state}` — the resolved recording-state file and its current
-reading; `state` is `idle` unless an external mic capture is live).
+reading; `state` is `idle` unless an external mic capture is live), and the configuration
+audit below.
+
+`config: {path, present, valid, ignored_keys, errors}` reports what
+`~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
+existed, and — because a key that fails validation is dropped on its own rather than
+discarding the file — exactly which keys were ignored and why. `valid: false` with a
+non-empty `ignored_keys` is the machine-readable form of "your config partly applied", so a
+typo is discoverable without reading `~/Library/Logs/echo.log`:
+
+```bash
+curl -fsS http://localhost:3246/health | jq '.config'
+```
+
+Full key reference and the validation rules: [`configuration.md`](configuration.md).
 
 Each provider entry carries an **egress audit** (`getProviderStatus` in `core/server.ts`):
 `enabled`, `healthy`, and `wouldEgress` (true only when the provider is *both* enabled and

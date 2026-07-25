@@ -6,7 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "PORT": { "type": ["string", "integer"], "minimum": 0, "maximum": 65535, "default": 3246 },
+    "PORT": { "type": ["string", "integer"], "minimum": 1, "maximum": 65535, "default": 3246 },
     "VOICES_PATH": { "type": "string" },
     "PRONUNCIATIONS_PATH": { "type": "string" },
     "ECHO_VOICE_PERSONA_NAME": { "type": "string" },

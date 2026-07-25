@@ -45,17 +45,30 @@ for (const path of [
 
 if (legacyPaths.length === 0) process.exit(0);
 
-// First file wins per key, matching the daemon's dotenv precedence.
-const legacy: Record<string, string> = {};
+// First file wins per key, matching the daemon's dotenv precedence. The winning
+// file is tracked per key so a report can name the file the value actually came
+// from — telling a user to keep the wrong one is how the secret gets deleted.
+const legacy: Record<string, { value: string; source: string }> = {};
 for (const path of legacyPaths) {
   for (const [key, value] of Object.entries(parseDotenvFile(path))) {
-    if (legacy[key] === undefined) legacy[key] = value;
+    if (legacy[key] === undefined) legacy[key] = { value, source: path };
   }
 }
 
-const raw = existsSync(configFile) ? readFileSync(configFile, "utf8") : "{}";
+// Every filesystem step below is fault-tolerant: install.sh runs this inside
+// preflight under `set -euo pipefail`, so an unreadable config.json or a
+// read-only config dir must report and step aside, not abort the install with a
+// stack trace.
+function readRawConfig(): string | null {
+  if (!existsSync(configFile)) return "{}";
+  try {
+    return readFileSync(configFile, "utf8");
+  } catch {
+    return null;
+  }
+}
 
-function readConfigObject(): Record<string, unknown> | null {
+function parseConfigObject(raw: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
@@ -65,21 +78,26 @@ function readConfigObject(): Record<string, unknown> | null {
   }
 }
 
-const existing = readConfigObject();
-if (existing === null) {
-  console.error(`> Skipping config migration: ${configFile} is not a JSON object. Fix it and rerun the installer.`);
+function skip(reason: string): never {
+  console.error(`> Skipping config migration: ${configFile} ${reason}. Fix it and rerun the installer.`);
   process.exit(0);
 }
+
+const raw = readRawConfig();
+if (raw === null) skip("exists but could not be read");
+
+const existing = parseConfigObject(raw ?? "{}");
+if (existing === null) skip("is not a JSON object");
 const config: Record<string, unknown> = existing ?? {};
 
 // Only canonical Echo keys move. That drops the retired VOICESYSTEM_* aliases,
 // the host-owned variables, and the secret — writing any of them would produce a
 // config.json the daemon's own validation rejects.
 const migrated: string[] = [];
-for (const [key, value] of Object.entries(legacy)) {
+for (const [key, entry] of Object.entries(legacy)) {
   if (!ECHO_CONFIG_KEYS.has(key)) continue;
   if (config[key] !== undefined) continue;
-  config[key] = value;
+  config[key] = entry.value;
   migrated.push(key);
 }
 
@@ -87,18 +105,24 @@ for (const [key, value] of Object.entries(legacy)) {
 // reprinting the same report on every reinstall.
 if (migrated.length === 0) process.exit(0);
 
-mkdirSync(dirname(configFile), { recursive: true });
-if (existsSync(configFile)) writeFileSync(`${configFile}.bak`, raw);
-const tmp = `${configFile}.tmp.${process.pid}`;
-writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
-renameSync(tmp, configFile);
+try {
+  mkdirSync(dirname(configFile), { recursive: true });
+  if (existsSync(configFile)) writeFileSync(`${configFile}.bak`, raw ?? "{}");
+  const tmp = `${configFile}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
+  renameSync(tmp, configFile);
+} catch {
+  skip("could not be written");
+}
 
 console.log(`> Migrated ${migrated.length} setting(s) into ${configFile}: ${migrated.sort().join(", ")}`);
 console.log(`  Source: ${legacyPaths.join(", ")} (left in place, unchanged)`);
 
 // Said at the one moment the user might otherwise "finish" the migration by
-// deleting the file the daemon still reads the key from.
-if (legacy[SECRET_KEY] !== undefined) {
-  console.log(`> ${SECRET_KEY} stays in ${legacyPaths[0]} — it is a secret and config.json rejects it.`);
+// deleting the file the daemon still reads the key from — so it has to name the
+// file that actually holds it, not just the first location searched.
+const secret = legacy[SECRET_KEY];
+if (secret !== undefined) {
+  console.log(`> ${SECRET_KEY} stays in ${secret.source} — it is a secret and config.json rejects it.`);
   console.log("  Do not delete that file: it is where the daemon reads the key from.");
 }

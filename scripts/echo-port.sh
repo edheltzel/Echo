@@ -16,12 +16,13 @@
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
-# The configured port, or empty when it is absent or outside the range the daemon
-# accepts. The bounds must match core/server.ts's bounded parse, or a value the
-# daemon rejects (falling back to 3246) would send every shell surface probing a
-# port nothing serves. `0` is the daemon's test-only ephemeral-bind mode: there is
-# no fixed port to talk to, so the CLI falls back to the default rather than
-# building a URL for :0.
+# The configured port, or empty when it is absent or outside the range config.json
+# accepts. The bounds must match the ones config.json validation enforces
+# (MIN/MAX_CONFIG_PORT in shared/echo-env.ts) and the schema declares, or a value
+# the daemon drops (falling back to 3246) would send every shell surface probing a
+# port nothing serves. That is also why 0 is out of range on both sides: it means
+# an ephemeral bind, which no CLI can address, and it reaches the daemon only as a
+# live process value in tests.
 config_port() {
   local config_path="$HOME/.config/echo/config.json" port
   [ -f "$config_path" ] || return 0

@@ -62,6 +62,22 @@ function isConfigPrimitive(value: unknown): value is EchoConfigValue {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
+// A configured port has to be one the pure-bash surfaces can target too: they
+// resolve it without any of the daemon's fallback logic, so a value only the
+// daemon accepts leaves every CLI, lifecycle script and health probe on 3246
+// while the daemon listens elsewhere — permanently. `0` (ephemeral bind) is the
+// clearest case, which is why it is rejected here and stays a live-process-only
+// test mode. Keep these bounds in step with shared/config-schema.json and the
+// range check in scripts/echo-port.sh.
+export const MIN_CONFIG_PORT = 1;
+export const MAX_CONFIG_PORT = 65535;
+
+function parseConfigPort(entry: EchoConfigValue): number | null {
+  if (typeof entry === "boolean") return null;
+  const port = typeof entry === "number" ? entry : Number(entry.trim());
+  return Number.isInteger(port) ? port : null;
+}
+
 /** The single per-key rule; both validation and loading go through it. */
 function validateEchoConfigEntry(key: string, entry: unknown): string | null {
   if (key === "ELEVENLABS_API_KEY") {
@@ -69,6 +85,12 @@ function validateEchoConfigEntry(key: string, entry: unknown): string | null {
   }
   if (!ECHO_CONFIG_KEYS.has(key)) return `${key} is not an Echo configuration key`;
   if (!isConfigPrimitive(entry)) return `${key} must be a string, number, or boolean`;
+  if (key === "PORT") {
+    const port = parseConfigPort(entry);
+    if (port === null || port < MIN_CONFIG_PORT || port > MAX_CONFIG_PORT) {
+      return `PORT must be an integer between ${MIN_CONFIG_PORT} and ${MAX_CONFIG_PORT}`;
+    }
+  }
   return null;
 }
 
@@ -97,9 +119,18 @@ function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>
   if (!existsSync(path)) return { values: {}, status };
   status.present = true;
 
+  let contents: string;
+  try {
+    contents = readFileSync(path, "utf8");
+  } catch {
+    status.errors.push("file exists but could not be read");
+    console.warn(`⚠️  Could not read Echo config at ${path}; using defaults`);
+    return { values: {}, status };
+  }
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
+    parsed = JSON.parse(contents);
   } catch {
     status.errors.push("file is not valid JSON");
     console.warn(`⚠️  Failed to load Echo config at ${path}; using defaults`);
@@ -132,11 +163,24 @@ function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>
   return { values, status };
 }
 
-/** The one dotenv parser: the daemon's fallback layer and the migration tool share it. */
+/**
+ * The one dotenv parser: the daemon's fallback layer and the migration tool
+ * share it. Best-effort by contract — a file that exists but cannot be read
+ * (permissions, or a directory at that path) yields no keys rather than
+ * throwing, because this runs during daemon startup and inside install
+ * preflight, where an exception is a dead service or a failed install.
+ */
 export function parseDotenvFile(path: string): Record<string, string> {
   const parsed: Record<string, string> = {};
   if (!existsSync(path)) return parsed;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  let contents: string;
+  try {
+    contents = readFileSync(path, "utf8");
+  } catch {
+    console.warn(`⚠️  Could not read ${path}; skipping it`);
+    return parsed;
+  }
+  for (const line of contents.split("\n")) {
     const eqIndex = line.indexOf("=");
     if (eqIndex === -1) continue;
     const key = line.slice(0, eqIndex).trim();

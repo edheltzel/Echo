@@ -179,10 +179,12 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // operator's env-file identity (ECHO_VOICE_*) into same-process adapter code
 // or its tests (the pi-adapter "Atlas" pollution; AGENTS.md #47 class hazard).
 
-// Floor 0, not 1: `PORT=0` is the tests' ephemeral-bind mode, and rejecting it
-// would silently point every importing test at the operator's real :3246 daemon.
-// Ceiling 65535 keeps a typo in the user-editable config.json from throwing
-// inside Bun.serve and leaving launchd to crash-loop the daemon.
+// Floor 0, not 1, because this also parses the LIVE process value, where `PORT=0`
+// is the tests' ephemeral-bind mode; rejecting it would silently point every
+// importing test at the operator's real :3246 daemon. A configured port cannot
+// reach 0 — config.json validation bounds it to 1-65535 (shared/echo-env.ts), the
+// range the pure-bash surfaces can follow. The ceiling here is the last guard
+// against a live value throwing inside Bun.serve and crash-looping the daemon.
 const PORT = parseBoundedInt(resolveEchoEnv("PORT"), 3246, 0, 65535);
 const CONFIG_STATUS = echoConfigStatus();
 const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voices.json');
