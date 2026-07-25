@@ -140,6 +140,31 @@ describe("scripts/migrate-config.ts", () => {
     }),
   );
 
+  // Writing a value the daemon then drops at startup is the worst outcome here:
+  // the setting stops working and the report claims it moved. An inline comment
+  // is the everyday way to reach it — dotenv keeps it in the value.
+  test(
+    "names a dotenv value the daemon would reject instead of reporting it migrated",
+    withHome("echo-migrate-invalid-port-", async (home, configDir) => {
+      writeFileSync(join(configDir, ".env"), "PORT=8888 # dev\nECHO_DEFAULT_TITLE=Valid\n");
+
+      const r = await runMigration(home);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("is not a valid Echo setting");
+      expect(r.stdout).toContain("NOT migrated");
+      expect(r.stdout).toContain(join(configDir, ".env"));
+      // The valid sibling still moves; only the offending key is held back.
+      expect(r.stdout).toContain("Migrated 1 setting(s)");
+
+      const written = JSON.parse(readFileSync(join(configDir, "config.json"), "utf8"));
+      expect(written.PORT).toBeUndefined();
+      expect(written.ECHO_DEFAULT_TITLE).toBe("Valid");
+
+      // Still in the dotenv, still not in effect: say so again next install.
+      expect((await runMigration(home)).stdout).toContain("is not a valid Echo setting");
+    }),
+  );
+
   // Naming the wrong file is how the user deletes the one the daemon reads the
   // key from — the exact outcome this notice exists to prevent.
   test(

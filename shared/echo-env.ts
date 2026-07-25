@@ -82,7 +82,7 @@ export const MAX_CONFIG_PORT = 65535;
 // Anything else resolves to 3246 everywhere. The same rule is spelled out in
 // shared/config-schema.json and scripts/echo-port.sh, and every reader is held
 // to it by tests/scripts/port-grammar.test.ts.
-const CANONICAL_DECIMAL = /^[1-9][0-9]*$/;
+export const CANONICAL_DECIMAL = /^[1-9][0-9]*$/;
 
 function parseConfigPort(entry: EchoConfigValue): number | null {
   if (typeof entry === "boolean") return null;

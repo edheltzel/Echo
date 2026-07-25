@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBoundedInt, primeEchoFileEnv, resolveEchoEnv } from "../../core/env";
 import {
+  CANONICAL_DECIMAL,
   ECHO_CONFIG_KEYS,
   MAX_CONFIG_PORT,
   MIN_CONFIG_PORT,
@@ -327,9 +328,12 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     // scripts/echo-port.sh accepts — all three must agree or the daemon and the
     // CLI end up on different ports. `minimum`/`maximum` are numeric keywords
     // and say nothing about the string form, so that branch carries the pattern.
+    // Compared against the live regex, not a copy of it: the schema is what a
+    // user validating their config with a standard tool sees, so widening the
+    // grammar without widening the schema has to fail here.
     const [numeric, text] = schema.properties.PORT.anyOf;
     expect(numeric).toEqual({ type: "integer", minimum: MIN_CONFIG_PORT, maximum: MAX_CONFIG_PORT });
-    expect(text).toEqual({ type: "string", pattern: "^[1-9][0-9]*$" });
+    expect(text).toEqual({ type: "string", pattern: CANONICAL_DECIMAL.source });
     expect(schema.properties.ELEVENLABS_API_KEY).toBeUndefined();
     for (const key of ECHO_CONFIG_KEYS) expect(schema.properties[key]).toBeDefined();
     for (const key of Object.keys(schema.properties)) expect(ECHO_CONFIG_KEYS.has(key)).toBe(true);

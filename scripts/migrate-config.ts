@@ -19,6 +19,7 @@ import {
   echoConfigPath,
   legacyEchoEnvPaths,
   parseDotenvFile,
+  validateEchoConfig,
 } from "../shared/echo-env";
 
 const SECRET_KEY = "ELEVENLABS_API_KEY";
@@ -96,13 +97,33 @@ const config: Record<string, unknown> = existing ?? {};
 //
 // PORT is written trimmed: a dotenv `PORT=" 8888 "` keeps its padding through
 // quote stripping, and the JSON port grammar accepts no surrounding whitespace,
-// so migrating it verbatim would silently drop the port the user had.
+// so migrating it verbatim would drop the port the user had.
+//
+// Every candidate then goes through the daemon's OWN validator before it is
+// written. A value this tool accepts but the daemon drops at startup is the
+// worst outcome available here: the setting stops working and the report says it
+// moved. Anything that fails is named instead, like the ~/.env PORT above.
 const migrated: string[] = [];
+const rejected: { key: string; value: string; source: string; reason: string }[] = [];
 for (const [key, entry] of Object.entries(legacy)) {
   if (!ECHO_CONFIG_KEYS.has(key)) continue;
   if (config[key] !== undefined) continue;
-  config[key] = key === "PORT" ? entry.value.trim() : entry.value;
+  const value = key === "PORT" ? entry.value.trim() : entry.value;
+  const [reason] = validateEchoConfig({ [key]: value });
+  if (reason !== undefined) {
+    rejected.push({ key, value, source: entry.source, reason });
+    continue;
+  }
+  config[key] = value;
   migrated.push(key);
+}
+
+// Reported on every run, not just the one that migrates something: the value is
+// still in the dotenv file and still not in effect until the user acts on it.
+for (const { key, value, source, reason } of rejected) {
+  console.log(`> ${key}=${JSON.stringify(value)} in ${source} is not a valid Echo setting: ${reason}.`);
+  console.log(`  It was NOT migrated and is not in effect. Correct it there, or set ${key} in`);
+  console.log(`  ${configFile} by hand.`);
 }
 
 // Nothing moved means an already-migrated install: stay silent rather than

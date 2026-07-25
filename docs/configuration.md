@@ -123,7 +123,8 @@ Settings whose behavior is not obvious from the name:
   the daemon and the pure-bash CLI resolve those to different ports, which would leave the
   daemon listening somewhere every CLI surface reports as down. `0` means an ephemeral bind,
   which no CLI can address, so it is accepted only as a live process value and only for
-  tests. Installing normalizes a padded dotenv PORT, so migrating never loses your port.
+  tests. Installing normalizes a padded dotenv PORT; any other spelling the grammar rejects
+  is reported by name and left unmigrated rather than written and then dropped at startup.
 - **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
   (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
   `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`
