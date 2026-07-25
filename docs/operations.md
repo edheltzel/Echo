@@ -28,9 +28,9 @@ if the plist is missing it tells you to run `scripts/install.sh` first.
 bash scripts/stop.sh
 ```
 
-Prints `OK echo stopped`. If port 8888 is still in use afterwards, the script warns and
+Prints `OK echo stopped`. If Echo's port is still in use afterwards, the script warns and
 deliberately does **not** kill the owner — it may belong to another service. Never
-broad-kill whatever owns port 8888.
+broad-kill whatever owns that port.
 
 ## Restart — two idioms
 
@@ -40,8 +40,10 @@ launchctl kickstart -k "gui/$UID/com.echo"     # one-shot in-place restart
 ```
 
 Both work. `restart.sh` unloads and reloads the LaunchAgent and verifies health;
-`kickstart -k` is the quick one-liner after editing `core/server.ts` or a config file —
-follow it with the health check below if you want confirmation.
+`kickstart -k` is the quick one-liner — follow it with the health check below if you want
+confirmation. Neither picks up an edit to `core/` or `shared/` in your checkout: both reload
+the staged payload, so a source or `voices.json` change needs `cli/echo update` (see
+[Update after a `git pull`](#update-after-a-git-pull)).
 
 ## Status
 
@@ -58,7 +60,11 @@ runs a health check, and prints the log path with the last five log lines.
 curl -fsS http://localhost:8888/health
 ```
 
-Returns JSON containing `"status":"healthy"`.
+Returns JSON containing `"status":"healthy"`. Every command on this page targets `8888`
+(`scripts/echo-port.sh`) — Stage 1's CLI is single-port and does not discover a daemon
+listening anywhere else, so a daemon moved off the default is not supported by these
+commands yet. Exporting `PORT` aims one command at one specific daemon (an isolated test
+instance), nothing more. See [`configuration.md`](configuration.md).
 
 ## Logs
 
@@ -70,8 +76,9 @@ Returns JSON containing `"status":"healthy"`.
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` (honors `PORT`). While muted, notifications are still
-accepted, processed, and logged — only the audio is suppressed, across every provider:
+`scripts/mute.sh` wraps `POST /mute` on `:8888` (exporting `PORT` aims it at one specific
+daemon, e.g. an isolated test instance). While muted, notifications are still accepted,
+processed, and logged — only the audio is suppressed, across every provider:
 
 ```bash
 bash scripts/mute.sh status    # prints the current state, e.g. {"mute":{"muted":false,"muted_until":null}}
@@ -89,47 +96,70 @@ on the next notification. The `/mute` endpoint contract and one-keystroke hotkey
 
 ## Update after a `git pull`
 
-Bun runs the TypeScript sources directly — there is no build step.
+Bun runs the TypeScript sources directly — there is no build step. **But the daemon runs
+from a staged payload copy** (`~/Library/Application Support/echo/payload/versions/<v>`), not the
+checkout, so editing `core/`/`shared/` and merely restarting keeps running the *old* payload.
+To pick up daemon-source or config changes, re-stage:
 
-- For code-only changes (`core/`, adapters), restart the daemon (either idiom above).
-- When the pull touched install or registration behavior (`scripts/`, adapter
-  registration), or when unsure, rerun the installer with your usual adapter. It is
-  idempotent and also re-reconciles every other installed adapter:
+```bash
+cli/echo update                 # re-stage the payload from this checkout + reload
+# equivalently: bash scripts/install.sh --adapter <none|claudecode|pi|omp>
+```
+
+- Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.
+- Adapter-only change (`adapters/`, registration behavior) → rerun the installer with your
+  adapter; it is idempotent and re-reconciles every other installed adapter too.
+
+A re-stage is reversible: the payload that was running is kept aside until the reloaded
+daemon answers `/health`. If it does not, the installer repoints `current` back at that copy
+and reloads it, so a bad update leaves you on the daemon you had rather than a crash-looping
+one, and exits 1 with the log path. It re-checks health after the restore too, and says
+`ROLLBACK INCOMPLETE` rather than claiming success if even the old payload stays down.
+
+## Config changes need a re-stage
+
+The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
+the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy
+has no effect until you re-stage. Edit, then `cli/echo update` (it re-stages and reloads).
+
+## Moved or renamed the repo?
+
+The daemon no longer cares: its LaunchAgent points at the clone-independent payload, so a
+checkout move or removal leaves the running service untouched. Only the **adapter
+registrations** still point at the checkout and get stranded by a move. Rerun the installer
+once with any `--adapter` value — it re-reconciles every installed adapter registration (and
+re-stages the payload from the new location):
 
 ```bash
 bash scripts/install.sh --adapter <none|claudecode|pi|omp>
 ```
 
-## Config changes need a restart
-
-The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup. After
-editing either, restart — the `kickstart` idiom is the usual choice.
-
-## Moved or renamed the repo?
-
-The LaunchAgent plist and the adapter registrations point at the repo's on-disk location,
-so a move or rename strands them. Rerun the installer once with any `--adapter` value —
-it rewrites the plist and re-reconciles every installed adapter registration.
-
-To audit without changing anything:
+To audit without changing anything (`cli/echo doctor` wraps this and explains each row):
 
 ```bash
-bash scripts/install.sh --check
+bash scripts/install.sh --check      # or: cli/echo doctor
 ```
 
 Exit 0 when everything is current; exit 3 with `Stale paths found` on stderr when
-anything is stale. Two caveats: `--check` verifies the plist's server path and working
-directory but not the embedded `bun` binary path (after relocating a Bun install, rerun
-the installer), and per-adapter exit codes fold into the aggregate 0/3 result — the full
-per-adapter exit-code contract lives in [`adapters.md`](adapters.md).
+anything is stale (a deleted payload shows as a dead plist path). `cli/echo doctor` agrees
+on the verdict but not the number: it folds this check into its `registrations` row and
+exits **1** (`Result: DEGRADED`) for the same state, so scripts should test for non-zero
+rather than a specific code. Three caveats: `--check` verifies the plist's server path and
+working directory but not the embedded `bun` binary path (after relocating a Bun install,
+rerun the installer); it checks only that paths still *resolve*, never that the staged
+payload's contents match this checkout, so a payload staged from older source at the same
+version reports current (re-stage with `cli/echo update` after editing `core/`/`shared/`);
+and per-adapter exit codes fold into the aggregate 0/3 result — the full per-adapter
+exit-code contract lives in [`adapters.md`](adapters.md).
 
 ## Uninstall
 
 ```bash
-bash scripts/uninstall.sh
+bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews it)
 ```
 
-Removes the LaunchAgent and preserves logs. Adapter registrations are **not** removed:
+Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
+and persona config (`~/.config/echo/.env`). Adapter registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in
 `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in
 `~/.omp/agent/extensions/` all survive. There is no deregistration tool; remove those

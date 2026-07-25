@@ -7,12 +7,16 @@ the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page requires a daemon restart** — `voices.json` and the env files are
-read once at startup:
+**Every change on this page needs the daemon reloaded** — `voices.json` and the env files are
+read once at startup. Editing the checkout's `core/voices.json` is not enough on its own: the
+daemon runs from a staged copy, so that edit has to be re-staged before it can take effect.
 
 ```bash
-launchctl kickstart -k "gui/$UID/com.echo"
+cli/echo update                              # after editing core/voices.json — re-stage + reload
+launchctl kickstart -k "gui/$UID/com.echo"   # enough for env-file edits, which are read in place
 ```
+
+Why the copy exists, and what a failed re-stage does: [`operations.md`](operations.md).
 
 ## How a `voice_id` resolves
 
@@ -227,7 +231,7 @@ JSON); an ElevenLabs API key.
    prefer it (next section).
 
 **Prefer ElevenLabs as the primary voice:** set `"defaultProvider": "elevenlabs"` in
-`voices.json`, restart, and confirm `curl -fsS http://localhost:8888/health | jq -r
+`voices.json`, run `cli/echo update`, and confirm `curl -fsS http://localhost:8888/health | jq -r
 .activeProvider` prints `elevenlabs`. Note ElevenLabs egresses to `api.elevenlabs.io` —
 see [`providers-observability.md`](providers-observability.md).
 
@@ -241,7 +245,7 @@ Three signals, in order:
      valid keys with `jq -r '.agents | keys[]' core/voices.json`, fix the key or add the
      persona.
    - `agent-key` but the wrong `provider` spoke → read `attempts[]`: `disabled` = enable it
-     in `voices.json` + restart; `circuit-open` = see `/health` `.circuit_breakers` and
+     in `voices.json` + `cli/echo update`; `circuit-open` = see `/health` `.circuit_breakers` and
      [`reliability.md`](reliability.md) (auto-retests after 60s); `unhealthy`/`failed` =
      provider-specific. Additive attempt fields (`phase`, `reason`, `stderr`, `timeout_ms`)
      narrow the branch: edge-tts `synthesis` means the real provider failed; edge-tts
@@ -255,7 +259,8 @@ Three signals, in order:
 3. **Daemon log** — `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).
 
-After any config change: restart, then re-send the test notify.
+After any config change: reload the daemon as described at the top of this page, then re-send
+the test notify.
 
 ## Per-turn persona voice (Stop hook)
 

@@ -31,9 +31,9 @@
 
   Without it, notifications still speak — Edge synthesis fails with diagnostics and the chain falls back to macOS `say`, which uses a noticeably different voice. If you hear the wrong voice, check the latest `attempts[]` in `~/Library/Logs/echo/voice-resolution.jsonl`; `phase:"synthesis"` plus Python stderr usually points here.
 
-- **ElevenLabs** — nothing to install locally. Set `ELEVENLABS_API_KEY` in an env file the daemon reads, enable the provider in `core/voices.json`, then restart the daemon.
+- **ElevenLabs** — nothing to install locally. Set `ELEVENLABS_API_KEY` in an env file the daemon reads, enable the provider in `core/voices.json`, then run `cli/echo update` (a plain restart does not pick up a `voices.json` edit — see `docs/configuration.md`).
 
-- **Kokoro** — run any Kokoro-compatible server on `127.0.0.1:8880` (default endpoint `http://127.0.0.1:8880/v1`), enable the provider in `core/voices.json`, then restart the daemon.
+- **Kokoro** — run any Kokoro-compatible server on `127.0.0.1:8880` (default endpoint `http://127.0.0.1:8880/v1`), enable the provider in `core/voices.json`, then run `cli/echo update`.
 
 - **macOS `say`** — built into macOS; nothing to install.
 

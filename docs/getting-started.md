@@ -118,7 +118,9 @@ Work through these checks in order:
    ```
 
    You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
-   `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`.
+   `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`. Should the
+   installer refuse because port 8888 is occupied but not answering, run `cli/echo doctor` —
+   it names each degraded check and the command that fixes it.
 
 2. **Check the daemon log for errors:**
 

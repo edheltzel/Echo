@@ -1,0 +1,247 @@
+#!/bin/bash
+# echo — stable control & diagnostic CLI for the Echo voice daemon.
+#
+# A thin wrapper over scripts/*.sh and the daemon HTTP API — it reimplements no
+# daemon logic. Written in bash on purpose: `echo doctor` must still diagnose a
+# MISSING Bun prerequisite, so the entry point cannot itself require Bun.
+#
+# Stage 1 tool: it ships inside the checkout and resolves the scripts relative to
+# itself. The DAEMON it controls runs from a clone-independent payload, so the
+# service survives even when this CLI's checkout is moved (install/update re-stage
+# from a checkout; doctor/status/mute/uninstall operate on the installed service).
+set -euo pipefail
+
+CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$CLI_DIR/.." && pwd)"
+SCRIPTS="$REPO_ROOT/scripts"
+
+SERVICE_NAME="com.echo"
+PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
+LOG_PATH="$HOME/Library/Logs/echo.log"
+# Sets ECHO_PORT (PORT when exported, else 8888) and its URLs. Stage 1 is
+# single-port: this CLI does not discover a daemon listening anywhere else.
+# shellcheck source=scripts/echo-port.sh
+. "$SCRIPTS/echo-port.sh"
+PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
+PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
+
+usage() {
+  cat <<EOF
+echo — control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${ECHO_PORT})
+
+Usage: echo <command> [args]
+
+Commands:
+  install [--adapter none|claudecode|pi|omp] [--check]
+                       Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
+                       wait for /health, and reconcile installed host adapters.
+  doctor               Diagnose every degraded state with a concrete recovery command.
+  status               Service + health snapshot with recent logs.
+  mute on|off|toggle|status | <duration, e.g. 30m or 1h>
+                       Runtime mute (audio off; notifications still processed + logged).
+  voice <name> <voice-id>
+                       Set the default Echo persona (name + edge-tts voice) for pi/omp.
+  update [--check]     Re-stage the payload from this checkout and reload the service.
+                       --check is read-only and verifies that the plist and host
+                       adapter paths still resolve — it does NOT detect a payload
+                       staged from older source at the same version.
+  uninstall [--check]  Unload ${SERVICE_NAME} and remove its payload (logs + config kept).
+EOF
+}
+
+# --- mute -------------------------------------------------------------------
+# Translate a duration (30m / 1h / bare minutes) to mute.sh's "on <minutes>".
+parse_duration_minutes() {
+  local d="$1"
+  [[ "$d" =~ ^([0-9]+)([mh]?)$ ]] || return 1
+  local n="${BASH_REMATCH[1]}" unit="${BASH_REMATCH[2]}"
+  [ "$n" -gt 0 ] || return 1
+  case "$unit" in
+    h) echo $(( n * 60 )) ;;
+    *) echo "$n" ;;
+  esac
+}
+
+cmd_mute() {
+  local arg="${1:-}"
+  case "$arg" in
+    ""|-h|--help)
+      echo "Usage: echo mute on|off|toggle|status | <duration, e.g. 30m or 1h>" >&2
+      exit 2
+      ;;
+    on|off|toggle|status)
+      exec bash "$SCRIPTS/mute.sh" "$@"
+      ;;
+    *)
+      local minutes
+      if ! minutes="$(parse_duration_minutes "$arg")"; then
+        echo "Unrecognized duration: '$arg' — use 30m, 1h, or a positive number of minutes." >&2
+        exit 2
+      fi
+      exec bash "$SCRIPTS/mute.sh" on "$minutes"
+      ;;
+  esac
+}
+
+# --- voice ------------------------------------------------------------------
+cmd_voice() {
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "echo voice requires Bun. Install it: curl -fsSL https://bun.sh/install | bash" >&2
+    exit 1
+  fi
+  exec bun run "$SCRIPTS/set-default-voice.ts" "$@"
+}
+
+# --- update -----------------------------------------------------------------
+cmd_update() {
+  # install.sh re-stages the payload and reloads the service, so update is an
+  # install from this checkout. --check is read-only and reports only whether the
+  # plist and host adapter paths still resolve; it compares nothing against the
+  # staged payload's contents, so re-stage after editing core/ or shared/.
+  case "${1:-}" in
+    --check) exec bash "$SCRIPTS/install.sh" --check ;;
+  esac
+  echo "> Updating Echo from $REPO_ROOT"
+  exec bash "$SCRIPTS/install.sh" "$@"
+}
+
+# --- doctor -----------------------------------------------------------------
+DOCTOR_FAILED=0
+
+doctor_row() {
+  # $1 ok|warn|fail  $2 label  $3 detail  $4 recovery (optional)
+  local status="$1" label="$2" detail="$3" recovery="${4:-}" sym
+  case "$status" in
+    ok)   sym="✓" ;;
+    warn) sym="!" ;;
+    fail) sym="✗"; DOCTOR_FAILED=1 ;;
+  esac
+  printf '  %s  %-14s %s\n' "$sym" "$label" "$detail"
+  if [ "$status" != "ok" ] && [ -n "$recovery" ]; then
+    printf '%s\n' "$recovery" | while IFS= read -r line; do
+      printf '        ↳ %s\n' "$line"
+    done
+  fi
+}
+
+# True when /health reports a provider that is enabled but unhealthy. The two
+# keys are matched in either order and with any keys between them; `[^{}]` keeps
+# the match inside ONE provider object, so an enabled provider can never pair up
+# with a different provider's `"healthy":false`.
+has_unhealthy_provider() {
+  local enabled='"enabled"[[:space:]]*:[[:space:]]*true'
+  local unhealthy='"healthy"[[:space:]]*:[[:space:]]*false'
+  printf '%s' "$1" | grep -qE "${enabled}[^{}]*${unhealthy}|${unhealthy}[^{}]*${enabled}"
+}
+
+read_manifest_version() {
+  [ -f "$PAYLOAD_CURRENT/manifest.json" ] || return 0
+  { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1; } || true
+}
+
+cmd_doctor() {
+  echo "Echo doctor — ${SERVICE_NAME} on :${ECHO_PORT}"
+  echo
+
+  # 1. Platform
+  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    doctor_row ok "platform" "macOS $(uname -r), launchctl present"
+  else
+    doctor_row fail "platform" "Echo requires macOS with launchctl" "Run Echo on a macOS host."
+  fi
+
+  # 2. Bun prerequisite
+  if command -v bun >/dev/null 2>&1; then
+    doctor_row ok "bun" "$(bun --version 2>/dev/null || echo '?') at $(command -v bun)"
+  else
+    doctor_row fail "bun" "Bun not found on PATH" "Install Bun: curl -fsSL https://bun.sh/install | bash"
+  fi
+
+  # 3. Payload
+  if [ -e "$PAYLOAD_CURRENT/core/server.ts" ]; then
+    doctor_row ok "payload" "v$(read_manifest_version) at ${PAYLOAD_CURRENT}"
+  else
+    doctor_row fail "payload" "no staged daemon payload under ${PAYLOAD_HOME}" "echo install"
+  fi
+
+  # 4. LaunchAgent
+  if [ -f "$PLIST_PATH" ]; then
+    doctor_row ok "launchagent" "$PLIST_PATH"
+  else
+    doctor_row fail "launchagent" "${SERVICE_NAME} LaunchAgent not installed" "echo install"
+  fi
+
+  # 5. Service loaded
+  if launchctl list 2>/dev/null | grep "$SERVICE_NAME" >/dev/null 2>&1; then
+    doctor_row ok "service" "${SERVICE_NAME} loaded"
+  else
+    doctor_row fail "service" "${SERVICE_NAME} not loaded" "echo install    # or: bash $SCRIPTS/start.sh"
+  fi
+
+  # 6. Health + port ownership
+  local health=""
+  if command -v curl >/dev/null 2>&1; then
+    health="$(curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" 2>/dev/null || true)"
+  fi
+  if [ -n "$health" ]; then
+    doctor_row ok "health" "daemon healthy on :${ECHO_PORT}"
+  elif command -v lsof >/dev/null 2>&1 && [ -n "$(port_listener_pids)" ]; then
+    # The exact lines install.sh refuses with. Neither claims whose daemon this
+    # is: a foreign owner is what crash-loops ours, so the two states are not
+    # distinguishable here, and naming the wrong one hands out a recovery that
+    # cannot work.
+    doctor_row fail "health" "$(port_occupied_summary)" "$(port_occupied_advice)"
+  else
+    doctor_row fail "health" "daemon not responding on :${ECHO_PORT}" \
+      "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"
+  fi
+
+  # 7. Providers (only meaningful once the daemon answered)
+  if [ -n "$health" ]; then
+    if has_unhealthy_provider "$health"; then
+      doctor_row warn "providers" "a configured TTS provider is unhealthy (macOS say still covers speech)" \
+        "See docs/dependencies.md; check ${LOG_PATH}"
+    else
+      doctor_row ok "providers" "configured TTS providers healthy"
+    fi
+  fi
+
+  # 8. Paths + host adapter registrations (reuses install --check; needs bun)
+  if command -v bun >/dev/null 2>&1 && [ -f "$PLIST_PATH" ]; then
+    if bash "$SCRIPTS/install.sh" --check >/dev/null 2>&1; then
+      doctor_row ok "registrations" "plist + host adapter paths current"
+    else
+      # `install.sh --check` calls this state stale and exits 3; doctor must not
+      # answer READY on the same state, or a gate that swaps one for the other
+      # silently passes on a stale install.
+      doctor_row fail "registrations" "stale echo paths in plist or host adapter config" "echo install"
+    fi
+  fi
+
+  echo
+  if [ "$DOCTOR_FAILED" -eq 1 ]; then
+    echo "Result: DEGRADED — fix the ✗ rows above, then rerun: echo doctor"
+    exit 1
+  fi
+  echo "Result: READY"
+}
+
+# --- dispatch ---------------------------------------------------------------
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  install)    exec bash "$SCRIPTS/install.sh" "$@" ;;
+  update)     cmd_update "$@" ;;
+  uninstall)  exec bash "$SCRIPTS/uninstall.sh" "$@" ;;
+  status)     exec bash "$SCRIPTS/status.sh" "$@" ;;
+  mute)       cmd_mute "$@" ;;
+  voice)      cmd_voice "$@" ;;
+  doctor)     cmd_doctor "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

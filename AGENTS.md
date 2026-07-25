@@ -20,13 +20,17 @@ that calls `POST /notify`.
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
-# Install (core only / with a host adapter)
-bash scripts/install.sh --adapter none
-bash scripts/install.sh --adapter claudecode
-bash scripts/install.sh --adapter pi
-bash scripts/install.sh --adapter omp
+# Stable human surface — cli/echo wraps the scripts + daemon API (never reimplements them)
+cli/echo install [--adapter none|claudecode|pi|omp] [--check]
+cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
+cli/echo status
+cli/echo mute on|off|toggle|status | 30m|1h
+cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/.env
+cli/echo update [--check]    # re-stage payload + reload
+cli/echo uninstall [--check]
 
-# Lifecycle
+# Underlying scripts (cli/echo delegates to these)
+bash scripts/install.sh --adapter none        # or claudecode|pi|omp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)
@@ -44,6 +48,10 @@ Service identity:
 - LaunchAgent label: `com.echo`
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
+- Daemon payload: `~/Library/Application Support/echo/payload/versions/<v>` (a self-contained copy of
+  `core/` + `shared/`); the plist points at the `current` symlink, **not** the git checkout, so
+  moving or deleting the clone never breaks the running service. Adapters still run from the
+  checkout and heal on the next `install` (#77).
 
 The installer unloads and quarantines the legacy `com.pai.voice-server` and
 `com.atlas.voicesystem` plists if found (a reinstall migrates a running legacy service onto
@@ -62,7 +70,10 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
 through their own `node_modules`; without the workspace links a registered adapter fails to
-load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale.
+load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale. A test
+that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` — the flag opts that run out
+of both creating and verifying the links, so `bun test` never relinks the checkout's
+`node_modules` underneath itself.
 
 **Never test against the running daemon.** It serves the operator's real notifications, so
 restarting it, retargeting it, or speaking through it is a live-system incident.
@@ -72,18 +83,21 @@ refuses to attach to a port it does not own, and prints an isolation proof befor
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
 is unmistakably a test.
 
-After changing `core/server.ts`, restart: `launchctl kickstart -k "gui/$UID/com.echo"`
-(tail `~/Library/Logs/echo.log`). Use **Bun only** — no npm/npx/node. Run
+After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
+A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
+restarts the old code; it only applies changes the daemon reads from outside the payload,
+such as the env files. Use **Bun only** — no npm/npx/node. Run
 `bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
 same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 
-Project version lives in the root `package.json` (declarative metadata only — no code reads
-it). `CHANGELOG.md` is generated from tags and merged-PR history at release time,
-following the [Keep a Changelog](https://keepachangelog.com/) + [SemVer](https://semver.org/)
-format; do not hand-write it. Contributors and agents must not add or edit entries on a
-feature branch. **Flow:** work on `dev` → PR into `dev` → reviewer sign-off
+Project version lives in the root `package.json`. `scripts/install.sh` reads it (via `sed`,
+no bun) to name the versioned daemon payload dir; nothing at daemon runtime reads it.
+`CHANGELOG.md` is generated from tags and merged-PR history at release time, following the
+[Keep a Changelog](https://keepachangelog.com/) + [SemVer](https://semver.org/) format; do not
+hand-write it. Contributors and agents must not add or edit entries on a feature branch.
+**Flow:** work on `dev` → PR into `dev` → reviewer sign-off
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
 merges; never push directly to `master`** (see Invariants).
 
@@ -126,7 +140,9 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
-| Neutral install/lifecycle | `scripts/` |
+| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
+| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else 8888; never parses the daemon's env files) | `scripts/echo-port.sh` |
+| Stable `echo` control/diagnostic CLI · default-persona writer | `cli/echo`, `scripts/set-default-voice.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 

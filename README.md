@@ -81,6 +81,17 @@ Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/insta
 
 ## Operation
 
+`cli/echo` is the stable wrapper over the scripts and the daemon API:
+
+```bash
+cli/echo doctor                # is my install healthy? one recovery command per failed check
+cli/echo status
+cli/echo update                # after a git pull — restarting alone keeps the old daemon
+cli/echo mute 30m              # or: on | off | toggle | status
+```
+
+The underlying scripts stay available:
+
 ```bash
 bash scripts/status.sh
 bash scripts/restart.sh

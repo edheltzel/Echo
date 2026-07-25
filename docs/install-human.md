@@ -34,6 +34,8 @@ OK echo is healthy on :8888
 
 If the installer prints `Voice server did not respond` instead, open the log at `~/Library/Logs/echo.log`.
 
+If it refuses with `Port 8888 is occupied but not answering Echo's /health`, something is holding the port without serving Echo — either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
+
 ## Add the Claude Code adapter
 
 ```bash
@@ -64,11 +66,13 @@ The installer only ever touches the `echo-voice` entry. If something other than 
 
 ## Moved or renamed the repo directory?
 
-Rerun the installer once (any `--adapter` value). It rewrites the LaunchAgent and re-reconciles every installed adapter registration, removing paths that point at the old location. To see what's stale without changing anything:
+The daemon is unaffected — it runs from a staged copy under `~/Library/Application Support/echo/payload`, not from the checkout. Only adapter registrations still point at the repo, so rerun the installer once (any `--adapter` value) to re-reconcile them. To see what's stale without changing anything:
 
 ```bash
-bash scripts/install.sh --check
+bash scripts/install.sh --check      # or: cli/echo doctor
 ```
+
+Full detail, including what `--check` does and does not verify: `docs/operations.md`.
 
 ## Verify manually
 
@@ -96,12 +100,12 @@ Pick voices by ear with `bun scripts/preview-voices.ts` before editing `core/voi
 ## Uninstall
 
 ```bash
-bash scripts/uninstall.sh
+bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews it)
 ```
 
-The uninstall script removes the neutral LaunchAgent but preserves logs and repo files.
+This removes the neutral LaunchAgent and the staged daemon payload, preserving logs, your persona config, and repo files.
 
-It does **not** remove adapter registrations: Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive uninstall. There is no deregistration tool; if you are deleting the repo directory, remove those entries by hand first so hosts don't keep calling paths that no longer exist.
+It does **not** remove adapter registrations — they survive uninstall, and there is no deregistration tool, so remove them by hand before deleting the repo directory. Which entries, and where: `docs/operations.md`.
 
 ## Operations
 

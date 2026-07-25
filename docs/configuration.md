@@ -5,12 +5,16 @@ variables, `core/voices.json`, and `core/pronunciations.json`. For voice customi
 how-tos (change a voice, add a persona, enable ElevenLabs) see [`voices.md`](voices.md); for
 the request contract see [`http-api.md`](http-api.md).
 
-The daemon and each Pi/omp host process read configuration once. Restart the daemon after
+The daemon and each Pi/omp host process read configuration once. Reload the daemon after
 changing daemon settings; fully relaunch Pi/omp after changing adapter settings:
 
 ```bash
-launchctl kickstart -k "gui/$UID/com.echo"
+launchctl kickstart -k "gui/$UID/com.echo"   # env-file changes — the daemon reads those in place
+cli/echo update                              # changes to core/voices.json or core/pronunciations.json
 ```
+
+The second form is required for the JSON config because the daemon loads it from a staged
+copy of `core/`, not from your checkout — see [`operations.md`](operations.md).
 
 ## Environment files
 
@@ -42,6 +46,17 @@ ECHO_VOICE_PERSONA_NAME=Atlas
 ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
 ```
 
+`cli/echo voice <name> <edge-tts-voice-id>` writes exactly two keys —
+`ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` — into `~/.config/echo/.env` for you
+(merge-preserving, atomic, with a `.bak` backup), the pi/omp default persona. Claude Code
+reads its persona from `~/.claude/settings.json` instead, so that command does not affect
+Claude sessions. The name is rejected if it contains control characters or a double quote,
+since it is written as `KEY="<name>"` into a file parsed line by line.
+
+`ECHO_ENV_FILE` redirects **that write only** — it is a writer-side override for
+`cli/echo voice` (and its tests), not a daemon knob. The daemon and adapters never consult
+it; to point them at another file use `ECHO_ENV_PATHS`.
+
 Real process variables still win. Relaunch Pi/omp after editing the file; existing host
 processes keep the configuration loaded when their Echo extension started.
 
@@ -49,7 +64,7 @@ processes keep the configuration loaded when their Echo extension started.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8888` | HTTP listen port |
+| `PORT` | `8888` | HTTP listen port. **Stage 1: the CLI and the lifecycle scripts are single-port.** `cli/echo` and `scripts/*.sh` target `8888` and do not discover a daemon listening anywhere else, so **running the daemon on a non-default port is not supported by them in this stage** — `install`, `doctor`, `status`, `mute`, and `stop` would all act on `8888` while the daemon served elsewhere. Exporting `PORT` aims one command at one specific daemon, which is how the tests reach an isolated instance (`PORT=8899 bash scripts/status.sh`); it never configures the installed LaunchAgent, whose environment is `HOME` and `PATH` only |
 | `VOICES_PATH` | `voices.json` next to `core/server.ts` | Voice config file location |
 | `PRONUNCIATIONS_PATH` | `pronunciations.json` next to `core/server.ts` | Pronunciation rules location |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (see indirection below) |
