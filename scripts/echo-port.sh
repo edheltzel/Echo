@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sourced helper: the port these shell surfaces talk to — `PORT` when exported,
-# else 8888 — plus the port-ownership questions install.sh and cli/echo both ask
-# about it.
+# else 8888 — plus the one report install.sh and cli/echo both give when that
+# port is occupied by something that will not answer /health.
 #
 # Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
 # cli/echo all target 8888 and make no attempt to discover a daemon listening
@@ -19,11 +19,15 @@
 ECHO_PORT="${PORT:-8888}"
 ECHO_BASE_URL="http://localhost:${ECHO_PORT}"
 HEALTH_URL="${ECHO_BASE_URL}/health"
+ECHO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# --- port ownership ---------------------------------------------------------
-# install.sh (refusing to install over a foreign owner) and cli/echo doctor
-# (diagnosing the same state) must answer "whose port is this?" identically, or
-# one of them tells the operator to stop a process the other calls Echo's own.
+# --- occupied port ----------------------------------------------------------
+# Echo deliberately does NOT classify who owns the port. A foreign process on
+# :8888 is what makes our own service fail to bind, so launchd respawns it and
+# reports no stable PID — the two states co-occur, and every "is it ours" test
+# is guesswork in exactly the case that matters. So: name what lsof saw, give
+# both recoveries, let the operator decide. install.sh and cli/echo print these
+# same lines so they can never disagree about the same port.
 
 # Identity of whatever listens on ECHO_PORT, e.g. `bun (PID 4242)`; empty when
 # nothing holds it or lsof is unavailable.
@@ -37,28 +41,13 @@ port_listener_pids() {
   { lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN -t 2>/dev/null; } || true
 }
 
-# PID launchd reports for label $1; empty when it is not running. `launchctl list
-# <label>` exits 113 for an unloaded label and `head -1` can SIGPIPE its producer,
-# so the pipeline is neutralized — under `pipefail` either would abort the caller
-# at the assignment, killing the very diagnostic it was about to print.
-service_pid() {
-  { launchctl list "$1" 2>/dev/null \
-    | sed -n 's/.*"PID"[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1; } || true
+port_occupied_summary() {
+  local owner
+  owner="$(port_owner)"
+  echo "Port ${ECHO_PORT} is occupied but not answering Echo's /health. Owner: ${owner:-unknown}"
 }
 
-# True when the launchd service $1 is what holds ECHO_PORT. Matching the listener
-# against launchd's reported PID is the definitive test; "the label is loaded" is
-# the fallback for a crash-looping service launchd reports without a PID. grep
-# reads all of its input on purpose: `grep -q` exits early and can SIGPIPE
-# launchctl, which `pipefail` would then read as "not loaded".
-service_owns_port() {
-  local label="$1" svc_pid pid
-  svc_pid="$(service_pid "$label")"
-  if [ -n "$svc_pid" ]; then
-    for pid in $(port_listener_pids); do
-      if [ "$pid" = "$svc_pid" ]; then return 0; fi
-    done
-    return 1
-  fi
-  launchctl list 2>/dev/null | grep "$label" >/dev/null 2>&1
+port_occupied_advice() {
+  echo "If this is Echo's own daemon it may be wedged or crash-looping — check ${LOG_PATH:-$HOME/Library/Logs/echo.log}, then: bash ${ECHO_SCRIPTS_DIR}/restart.sh"
+  echo "If another process owns the port, stop it and rerun — Echo never kills the port owner."
 }

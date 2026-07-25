@@ -118,7 +118,9 @@ doctor_row() {
   esac
   printf '  %s  %-14s %s\n' "$sym" "$label" "$detail"
   if [ "$status" != "ok" ] && [ -n "$recovery" ]; then
-    printf '        ↳ %s\n' "$recovery"
+    printf '%s\n' "$recovery" | while IFS= read -r line; do
+      printf '        ↳ %s\n' "$line"
+    done
   fi
 }
 
@@ -184,18 +186,11 @@ cmd_doctor() {
   if [ -n "$health" ]; then
     doctor_row ok "health" "daemon healthy on :${ECHO_PORT}"
   elif command -v lsof >/dev/null 2>&1 && [ -n "$(port_listener_pids)" ]; then
-    # Same ownership test install.sh refuses on, so the two never disagree about
-    # whose daemon this is — telling an operator to stop their own wedged service
-    # would be the worst possible answer in the state doctor exists to diagnose.
-    if service_owns_port "$SERVICE_NAME"; then
-      doctor_row fail "health" "${SERVICE_NAME} holds :${ECHO_PORT} but is not answering /health" \
-        "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"
-    else
-      local owner
-      owner="$(port_owner)"
-      doctor_row fail "health" "port ${ECHO_PORT} held by ${owner:-another process}, which is not Echo" \
-        "Stop that process and rerun install. Echo never kills the port owner."
-    fi
+    # The exact lines install.sh refuses with. Neither claims whose daemon this
+    # is: a foreign owner is what crash-loops ours, so the two states are not
+    # distinguishable here, and naming the wrong one hands out a recovery that
+    # cannot work.
+    doctor_row fail "health" "$(port_occupied_summary)" "$(port_occupied_advice)"
   else
     doctor_row fail "health" "daemon not responding on :${ECHO_PORT}" \
       "bash $SCRIPTS/restart.sh    # then check ${LOG_PATH}"

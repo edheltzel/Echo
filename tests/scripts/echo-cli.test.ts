@@ -76,12 +76,12 @@ describe("echo doctor", () => {
     }
   });
 
-  // The port is occupied and /health is silent. Whose daemon it is decides the
-  // whole answer, so doctor must reach the same verdict install.sh refuses on.
-  // `launchctl list <label>` reports a PID for a running service and exits 113
-  // when the label is not loaded — the real tool's shape, which the ownership
-  // fallback depends on. The three states differ only in what launchctl says.
-  type PortOwnerState = "ours-pid" | "ours-crashlooping" | "foreign";
+  // The port is occupied and /health is silent. These three launchd states are
+  // indistinguishable from outside — a foreign owner on :8888 is what stops our
+  // service binding, so launchd respawns it and reports no stable PID. Doctor
+  // must therefore give the same, non-committal answer in all three, naming the
+  // listener and offering both recoveries rather than guessing.
+  type PortOwnerState = "echo-pid-matches" | "echo-crashlooping" | "echo-not-loaded";
 
   function occupiedPortEnv(root: string, state: PortOwnerState) {
     const home = join(root, "home");
@@ -94,47 +94,39 @@ describe("echo doctor", () => {
       '#!/bin/bash\nfor a in "$@"; do [ "$a" = "-t" ] && { echo 4242; exit 0; }; done\n' +
         'echo "COMMAND   PID USER"\necho "bun      4242 ed"\nexit 0\n',
     );
+    // `launchctl list <label>` reports a PID for a running service and exits 113
+    // when the label has none — the real tool's shape.
     const launchctl = {
-      // The listener's PID is the one launchd reports for com.echo.
-      "ours-pid":
+      "echo-pid-matches":
         '#!/bin/bash\nif [ "$1" = "list" ] && [ -n "$2" ]; then echo \'{ "PID" = 4242; };\'; exit 0; fi\ncase "$1" in list) echo "4242 0 com.echo" ;; esac\nexit 0\n',
-      // Loaded but between respawns: no PID for the label, still in the list.
-      "ours-crashlooping":
+      "echo-crashlooping":
         '#!/bin/bash\nif [ "$1" = "list" ] && [ -n "$2" ]; then exit 113; fi\ncase "$1" in list) echo "- 1 com.echo" ;; esac\nexit 0\n',
-      // Not loaded at all, so the listener cannot be ours.
-      foreign: '#!/bin/bash\nif [ "$1" = "list" ] && [ -n "$2" ]; then exit 113; fi\nexit 0\n',
+      "echo-not-loaded": '#!/bin/bash\nif [ "$1" = "list" ] && [ -n "$2" ]; then exit 113; fi\nexit 0\n',
     }[state];
     writeExecutable(join(bin, "launchctl"), launchctl);
     return { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` };
   }
 
-  for (const state of ["ours-pid", "ours-crashlooping"] as const) {
-    test(`a wedged com.echo holding the port (${state}) is reported as ours, with a restart`, async () => {
+  for (const state of ["echo-pid-matches", "echo-crashlooping", "echo-not-loaded"] as const) {
+    test(`an occupied port names its listener and claims no owner (${state})`, async () => {
       const root = mkdtempSync(join(tmpdir(), `echo-doctor-${state}-`));
       try {
         const r = await runCli(["doctor"], occupiedPortEnv(root, state));
-        expect(r.stdout).toContain("com.echo holds :8888 but is not answering /health");
+        expect(r.exitCode).toBe(1);
+        expect(r.stdout).toContain("Port 8888 is occupied but not answering Echo's /health");
+        expect(r.stdout).toContain("Owner: bun (PID 4242)");
+        // Both recoveries, because which one applies cannot be determined here.
         expect(r.stdout).toContain("restart.sh");
-        // Never tell the operator to stop their own service.
+        expect(r.stdout).toContain("stop it and rerun");
+        expect(r.stdout).toContain("never kills the port owner");
+        // No ownership verdict in either direction.
         expect(r.stdout).not.toContain("which is not Echo");
-        expect(r.stdout).not.toContain("Stop that process");
+        expect(r.stdout).not.toContain("com.echo holds :8888");
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
     });
   }
-
-  test("a genuinely foreign port owner is named and left alone", async () => {
-    const root = mkdtempSync(join(tmpdir(), "echo-doctor-foreign-"));
-    try {
-      const r = await runCli(["doctor"], occupiedPortEnv(root, "foreign"));
-      expect(r.stdout).toContain("port 8888 held by bun (PID 4242), which is not Echo");
-      expect(r.stdout).toContain("Stop that process and rerun install");
-      expect(r.stdout).toContain("never kills the port owner");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
 
   test("flags an enabled-but-unhealthy provider whatever order /health serialized the keys in", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-doctor-providers-"));

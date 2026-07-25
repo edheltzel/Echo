@@ -23,6 +23,10 @@ function makeHome(root: string): { home: string; env: Record<string, string> } {
   mkdirSync(bin, { recursive: true });
   writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
   writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+  // Stub lsof as "nothing is listening". Without it the installer's port guard
+  // consults the real machine's :8888 — the operator's live daemon — and any
+  // test that makes curl report unhealthy would then depend on that state.
+  writeExecutable(join(bin, "lsof"), "#!/bin/bash\nexit 1\n");
   const bunDir = join(Bun.which("bun")!, "..");
   return { home, env: { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` } };
 }

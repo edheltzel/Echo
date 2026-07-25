@@ -102,33 +102,26 @@ health_ok() {
   curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" >/dev/null 2>&1
 }
 
-# Refuse to start Echo on a port already owned by a DIFFERENT process. Echo's
-# invariant forbids broad-killing the port owner: identify it and let the user
-# choose. Our OWN daemon must never trip this — a wedged daemon that holds the
-# port without answering /health is exactly the state `echo install` recovers from,
-# and reload_core_service unloads it before loading. If lsof is unavailable, we
-# cannot prove foreign ownership, so we never block. Ownership comes from
-# service_owns_port (scripts/echo-port.sh) so doctor reaches the same verdict.
+# Refuse to install onto a port that is occupied by something not answering
+# /health, whoever owns it. Echo's invariant forbids broad-killing the port
+# owner, and it does not guess whether the owner is its own daemon — it reports
+# what lsof saw and both recoveries (scripts/echo-port.sh), which doctor prints
+# verbatim too. A healthy daemon short-circuits at health_ok, so an ordinary
+# reinstall never reaches here; if lsof is unavailable we cannot see the port at
+# all, so we never block.
 check_port_owner() {
   if health_ok; then return 0; fi
   command -v lsof >/dev/null 2>&1 || return 0
   [ -n "$(port_listener_pids)" ] || return 0
 
-  if service_owns_port "$SERVICE_NAME"; then
-    echo "> Port ${ECHO_PORT} is held by our own ${SERVICE_NAME}, which is not answering /health — reloading it"
-    return 0
-  fi
-
-  local owner
-  owner="$(port_owner)"
-  echo "Port ${ECHO_PORT} is held by ${owner:-another process}, which is not Echo:" >&2
+  port_occupied_summary >&2
   lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
   if [ -n "${PORT:-}" ]; then
     echo "PORT=${PORT} is exported in this shell, so this checked :${ECHO_PORT} instead of" >&2
     echo "Echo's default. Unset PORT and rerun to target the default." >&2
   fi
-  echo "Stop that process and rerun — Echo never kills the port owner." >&2
-  echo "Diagnose with: cli/echo doctor" >&2
+  port_occupied_advice >&2
+  echo "Refusing to install over it. Diagnose with: cli/echo doctor" >&2
   exit 1
 }
 
