@@ -1,6 +1,6 @@
 import type { NotifyPayload, NotifyResult } from "./types";
 
-export const DEFAULT_NOTIFY_ENDPOINT = "http://localhost:8888/notify";
+export const DEFAULT_NOTIFY_ENDPOINT = "http://localhost:3246/notify";
 export const DEFAULT_NOTIFY_TIMEOUT_MS = 10_000;
 
 export function normalizeNotifyPayload(payload: NotifyPayload): NotifyPayload {

@@ -77,7 +77,7 @@ describe("echo doctor", () => {
   });
 
   // The port is occupied and /health is silent. These three launchd states are
-  // indistinguishable from outside — a foreign owner on :8888 is what stops our
+  // indistinguishable from outside — a foreign owner on :3246 is what stops our
   // service binding, so launchd respawns it and reports no stable PID. Doctor
   // must therefore give the same, non-committal answer in all three, naming the
   // listener and offering both recoveries rather than guessing.
@@ -113,7 +113,7 @@ describe("echo doctor", () => {
       try {
         const r = await runCli(["doctor"], occupiedPortEnv(root, state));
         expect(r.exitCode).toBe(1);
-        expect(r.stdout).toContain("Port 8888 is occupied but not answering Echo's /health");
+        expect(r.stdout).toContain("Port 3246 is occupied but not answering Echo's /health");
         expect(r.stdout).toContain("Owner: bun (PID 4242)");
         // Both recoveries, because which one applies cannot be determined here.
         expect(r.stdout).toContain("restart.sh");
@@ -121,7 +121,7 @@ describe("echo doctor", () => {
         expect(r.stdout).toContain("never kills the port owner");
         // No ownership verdict in either direction.
         expect(r.stdout).not.toContain("which is not Echo");
-        expect(r.stdout).not.toContain("com.echo holds :8888");
+        expect(r.stdout).not.toContain("com.echo holds :3246");
       } finally {
         rmSync(root, { recursive: true, force: true });
       }

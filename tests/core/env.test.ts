@@ -124,7 +124,7 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
         ECHO_VOICE_PERSONA_NAME: "Configured Echo",
         ECHO_TTS_CACHE_MAX_BYTES: 123456,
       }));
-      writeFileSync(join(configDir, ".env"), "PORT=8888\nECHO_VOICE_PERSONA_NAME=Legacy\n");
+      writeFileSync(join(configDir, ".env"), "PORT=7777\nECHO_VOICE_PERSONA_NAME=Legacy\n");
 
       const resolved = loadEchoConfiguration({}, home);
       expect(resolved.PORT).toBe("3246");

@@ -6,7 +6,7 @@
 // returned null and the request fell to Tier-3 defaults (silent wrong voice); the
 // raw pass-through existed for elevenlabs only.
 // PORT=0 binds an ephemeral port so importing the daemon never collides with a
-// running :8888. Must be set BEFORE the daemon module evaluates — hence the
+// running :3246. Must be set BEFORE the daemon module evaluates — hence the
 // dynamic import below (a static import is hoisted above this assignment).
 process.env.PORT = "0";
 

@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-# Sets ECHO_PORT (PORT when exported, else 8888) and its URLs. No env-file reading.
+# Sets ECHO_PORT (PORT when exported, else 3246) and its URLs. No env-file reading.
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPT_DIR/echo-port.sh"
 # Versioned daemon payload — a self-contained copy of core/ + shared/ under a

@@ -8,7 +8,7 @@
 //      write so the file never exceeds the cap and always keeps the newest line.
 //
 // PORT=0 binds an ephemeral port so importing the daemon never collides with a
-// running :8888 instance. ECHO_RESOLUTION_LOG is set before the first
+// running :3246 instance. ECHO_RESOLUTION_LOG is set before the first
 // /notify; the daemon resolves the log path at write time (not frozen at module
 // load), so this test reads its own temp file regardless of sibling import order.
 process.env.PORT = "0";

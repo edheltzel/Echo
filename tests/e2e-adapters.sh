@@ -20,7 +20,7 @@ export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # The production daemon's port. The test instance must never use it, and this
 # script must never send anything there.
-PRODUCTION_PORT=8888
+PRODUCTION_PORT=3246
 PORT="${ECHO_E2E_PORT:-8899}"
 AUDIBLE=0
 [ "${1:-}" = "--audible" ] && AUDIBLE=1
@@ -55,7 +55,7 @@ cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
 
 # Adapters address the daemon through this base, so both hosts under test point
-# at the isolated instance rather than the default :8888.
+# at the isolated instance rather than the default :3246.
 export ECHO_DAEMON_URL="http://localhost:${PORT}"
 
 PORT="$PORT" bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &

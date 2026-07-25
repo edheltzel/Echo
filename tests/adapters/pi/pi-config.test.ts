@@ -14,7 +14,7 @@ import { loadEchoEnvironment } from "../../../shared/echo-env";
 describe("Pi voice config", () => {
   test("uses safe defaults without host-specific settings", () => {
     const config = loadPiVoiceConfig({});
-    expect(config.endpoint).toBe("http://localhost:8888/notify");
+    expect(config.endpoint).toBe("http://localhost:3246/notify");
     expect(config.title).toBe("Pi Notification");
     expect(config.startupCatchphrases).toEqual(DEFAULT_STARTUP_CATCHPHRASES);
     expect(config.voiceEnabled).toBe(true);

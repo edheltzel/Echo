@@ -179,7 +179,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // operator's env-file identity (ECHO_VOICE_*) into same-process adapter code
 // or its tests (the pi-adapter "Atlas" pollution; AGENTS.md #47 class hazard).
 
-const PORT = parseInt(resolveEchoEnv("PORT") || "8888");
+const PORT = parseInt(resolveEchoEnv("PORT") || "3246");
 const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voices.json');
 const DEFAULT_MACOS_VOICE = 'Daniel (Enhanced)';
 const ELEVENLABS_TIMEOUT_MS = 10_000;

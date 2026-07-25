@@ -120,8 +120,8 @@ describe("core architecture invariants", () => {
     );
   });
 
-  // Invariant 2 — no :31337 references (voice traffic is :8888).
-  test("core/ has no :31337 references (voice traffic is :8888)", () => {
+  // Invariant 2 — no :31337 references (voice traffic is :3246).
+  test("core/ has no :31337 references (voice traffic is :3246)", () => {
     const offenders: string[] = [];
     for (const file of coreFiles()) {
       const lines = readFileSync(file, "utf8").split("\n");
@@ -132,7 +132,7 @@ describe("core architecture invariants", () => {
     assertNoOffenders(
       offenders,
       "core/ must not reference port :31337 (that was the old Pulse port). " +
-        "Voice server traffic is :8888 — use that port.",
+        "Voice server traffic is :3246 — use that port.",
     );
   });
 

@@ -16,13 +16,13 @@
  * Usage:
  *   bun scripts/precache-catchphrases.ts "Atlas, standing by" "Atlas online"
  *   bun scripts/precache-catchphrases.ts --settings ~/.claude/settings.json
- *   ECHO_NOTIFY_URL=http://localhost:8888/notify bun scripts/precache-catchphrases.ts ...
+ *   ECHO_NOTIFY_URL=http://localhost:3246/notify bun scripts/precache-catchphrases.ts ...
  */
 
 import { loadEchoConfiguration } from "../shared/echo-env.ts";
 
 const args = process.argv.slice(2);
-const ECHO_URL = loadEchoConfiguration().ECHO_NOTIFY_URL ?? "http://localhost:8888/notify";
+const ECHO_URL = loadEchoConfiguration().ECHO_NOTIFY_URL ?? "http://localhost:3246/notify";
 
 // Mirror the hook's catchphrase extraction: single `startupCatchphrase` plus the
 // `startupCatchphrases` pool, `{name}` expanded to the DA display name.

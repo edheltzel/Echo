@@ -14,9 +14,9 @@ import {
 describe("daemon endpoint resolution", () => {
   test("defaults to the local daemon when nothing is configured", () => {
     expect(resolveDaemonBase({})).toBe(DEFAULT_DAEMON_BASE);
-    expect(resolveNotifyUrl({})).toBe("http://localhost:8888/notify");
-    expect(resolvePersonalityUrl({})).toBe("http://localhost:8888/notify/personality");
-    expect(resolveVoicesUrl({})).toBe("http://localhost:8888/voices");
+    expect(resolveNotifyUrl({})).toBe("http://localhost:3246/notify");
+    expect(resolvePersonalityUrl({})).toBe("http://localhost:3246/notify/personality");
+    expect(resolveVoicesUrl({})).toBe("http://localhost:3246/voices");
   });
 
   test("ECHO_DAEMON_URL retargets every endpoint at once", () => {
@@ -68,6 +68,6 @@ describe("daemon endpoint resolution", () => {
   test("a malformed ECHO_NOTIFY_URL does not crash the read endpoints", () => {
     const env = { ECHO_NOTIFY_URL: "not-a-url" };
     expect(resolveNotifyUrl(env)).toBe("not-a-url");
-    expect(resolveVoicesUrl(env)).toBe("http://localhost:8888/voices");
+    expect(resolveVoicesUrl(env)).toBe("http://localhost:3246/voices");
   });
 });

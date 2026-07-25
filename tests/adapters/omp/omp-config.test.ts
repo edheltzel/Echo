@@ -3,7 +3,7 @@ import { loadOmpVoiceConfig } from "../../../adapters/omp/config";
 
 describe("omp voice config — notify endpoint resolution", () => {
   test("defaults to the local daemon", () => {
-    expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:8888/notify");
+    expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:3246/notify");
   });
 
   test("honors ECHO_NOTIFY_URL and its legacy aliases verbatim", () => {
