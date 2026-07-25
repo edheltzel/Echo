@@ -157,8 +157,6 @@ describe("Pi voice config", () => {
     });
     expect(config.endpoint).toBe("http://legacy.example/notify");
     expect(config.title).toBe("Legacy Title");
-    // Convergence: VOICESYSTEM_VOICE_ID is the lowest-priority fallback for voiceId.
-    expect(loadPiVoiceConfig({ VOICESYSTEM_VOICE_ID: "vs-id" }).voiceId).toBe("vs-id");
     // Canonical wins over a legacy name when both are present.
     expect(
       loadPiVoiceConfig({ ECHO_VOICE_ID: "echo-id", ATLAS_VOICE_ID: "atlas-id" }).voiceId,

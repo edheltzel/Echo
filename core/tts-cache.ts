@@ -28,10 +28,9 @@ import {
 import { parseBoundedInt, resolveEchoEnv } from "./env";
 
 // Texts longer than this bypass the cache entirely (catchphrases / "standing
-// by" lines are well under it). Canonical ECHO_* read first; legacy
-// VOICESYSTEM_* kept as a silent fallback, matching the rest of core/.
+// by" lines are well under it). The canonical Echo key is resolved at runtime.
 export const TTS_CACHE_MAX_TEXT_CHARS = parseBoundedInt(
-  resolveEchoEnv("ECHO_TTS_CACHE_MAX_TEXT_CHARS") ?? resolveEchoEnv("VOICESYSTEM_TTS_CACHE_MAX_TEXT_CHARS"),
+  resolveEchoEnv("ECHO_TTS_CACHE_MAX_TEXT_CHARS"),
   80,
   1,
 );
@@ -39,7 +38,7 @@ export const TTS_CACHE_MAX_TEXT_CHARS = parseBoundedInt(
 // Total cache-size cap; oldest-by-mtime files are pruned first. ~20 MB default
 // (floor 64 KB) — thousands of short clips.
 export const TTS_CACHE_MAX_BYTES = parseBoundedInt(
-  resolveEchoEnv("ECHO_TTS_CACHE_MAX_BYTES") ?? resolveEchoEnv("VOICESYSTEM_TTS_CACHE_MAX_BYTES"),
+  resolveEchoEnv("ECHO_TTS_CACHE_MAX_BYTES"),
   20_000_000,
   65_536,
 );
@@ -49,7 +48,7 @@ export const TTS_CACHE_MAX_BYTES = parseBoundedInt(
 // Resolved at call time (not frozen at import) so a test setting the override
 // before its first call writes to the intended path regardless of import order.
 export function ttsCacheDir(): string {
-  const override = resolveEchoEnv("ECHO_TTS_CACHE_DIR") ?? resolveEchoEnv("VOICESYSTEM_TTS_CACHE_DIR");
+  const override = resolveEchoEnv("ECHO_TTS_CACHE_DIR");
   if (override) return override;
   return process.platform === "darwin"
     ? join(homedir(), "Library", "Caches", "echo", "tts-cache")

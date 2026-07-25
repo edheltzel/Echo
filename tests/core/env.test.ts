@@ -153,7 +153,7 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
 
   test("schema rejects secrets, retired aliases, unknown keys, and compound values", () => {
     expect(validateEchoConfig({ ELEVENLABS_API_KEY: "secret" })).toHaveLength(1);
-    expect(validateEchoConfig({ VOICESYSTEM_DEFAULT_TITLE: "old" })).toHaveLength(1);
+    expect(validateEchoConfig({ RETIRED_ECHO_DEFAULT_TITLE: "old" })).toHaveLength(1);
     expect(validateEchoConfig({ notEcho: true })).toHaveLength(1);
     expect(validateEchoConfig({ ECHO_VOICE_ID: ["voice"] })).toHaveLength(1);
     expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);

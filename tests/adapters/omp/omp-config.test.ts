@@ -13,9 +13,6 @@ describe("omp voice config — notify endpoint resolution", () => {
     expect(
       loadOmpVoiceConfig({ ATLAS_VOICE_NOTIFY_URL: "http://legacy.example/notify" }).endpoint,
     ).toBe("http://legacy.example/notify");
-    expect(
-      loadOmpVoiceConfig({ VOICESYSTEM_NOTIFY_URL: "http://older.example/notify" }).endpoint,
-    ).toBe("http://older.example/notify");
   });
 
   test("ECHO_DAEMON_URL retargets the notify endpoint, winning over ECHO_NOTIFY_URL", () => {

@@ -43,7 +43,6 @@ let fileEnv: Record<string, string | undefined> | undefined;
 function loadEchoFileEnv(): Record<string, string | undefined> {
   const seed: Record<string, string | undefined> = {};
   if (process.env.ECHO_ENV_PATHS) seed.ECHO_ENV_PATHS = process.env.ECHO_ENV_PATHS;
-  if (process.env.VOICESYSTEM_ENV_PATHS) seed.VOICESYSTEM_ENV_PATHS = process.env.VOICESYSTEM_ENV_PATHS;
   return loadEchoConfiguration(seed);
 }
 

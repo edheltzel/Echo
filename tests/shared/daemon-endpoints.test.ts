@@ -43,10 +43,7 @@ describe("daemon endpoint resolution", () => {
     expect(resolveNotifyUrl({ ATLAS_VOICE_NOTIFY_URL: "http://legacy.example/notify" })).toBe(
       "http://legacy.example/notify",
     );
-    expect(resolveNotifyUrl({ VOICESYSTEM_NOTIFY_URL: "http://older.example/notify" })).toBe(
-      "http://older.example/notify",
-    );
-    // Canonical wins over the legacy names.
+    // Canonical wins over the remaining legacy name.
     expect(
       resolveNotifyUrl({
         ECHO_NOTIFY_URL: "http://echo.example/notify",

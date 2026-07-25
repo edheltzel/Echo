@@ -184,10 +184,10 @@ const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voic
 const DEFAULT_MACOS_VOICE = 'Daniel (Enhanced)';
 const ELEVENLABS_TIMEOUT_MS = 10_000;
 const KOKORO_TIMEOUT_MS = 10_000;
-const DEFAULT_NOTIFICATION_TITLE = resolveEchoEnv("ECHO_DEFAULT_TITLE") ?? resolveEchoEnv("VOICESYSTEM_DEFAULT_TITLE") ?? "Voice Notification";
-const AUDIO_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_AUDIO_PROCESS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS") ?? "60000");
-const NOTIFICATION_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS") ?? "10000");
-const AUDIO_CACHE_DIR = resolveEchoEnv("ECHO_AUDIO_CACHE_DIR") ?? resolveEchoEnv("VOICESYSTEM_AUDIO_CACHE_DIR") ?? (
+const DEFAULT_NOTIFICATION_TITLE = resolveEchoEnv("ECHO_DEFAULT_TITLE") ?? "Voice Notification";
+const AUDIO_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_AUDIO_PROCESS_TIMEOUT_MS") ?? "60000");
+const NOTIFICATION_PROCESS_TIMEOUT_MS = parseInt(resolveEchoEnv("ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS") ?? "10000");
+const AUDIO_CACHE_DIR = resolveEchoEnv("ECHO_AUDIO_CACHE_DIR") ?? (
   process.platform === 'darwin'
     ? join(homedir(), 'Library', 'Caches', 'echo', 'audio')
     : join(resolveEchoEnv("XDG_CACHE_HOME") || join(homedir(), '.cache'), 'echo', 'audio')
@@ -610,13 +610,13 @@ function spawnSafe(command: string, args: string[], timeoutMs = NOTIFICATION_PRO
 // Bounded parses: a NaN/negative/zero override must fall back to the default,
 // never to a degenerate value (0ms timeout = instant fail; 0 retries from NaN
 // would zero the loop → false success). retries floor 0, timeout/backoff floor 1.
-// Canonical ECHO_* read first; legacy VOICESYSTEM_* kept as a silent fallback.
-const EDGETTS_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_MS"), 15000, 1);
-const EDGETTS_TIMEOUT_MAX_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MAX_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS"), 60000, 1);
-const EDGETTS_TIMEOUT_PER_CHAR_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS"), 20, 0);
-const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_HEALTH_TIMEOUT_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS"), 3000, 1);
-const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_SYNTH_RETRIES"), 1, 0);
-const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS") ?? resolveEchoEnv("VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
+// All tuning values resolve through the canonical Echo configuration keys.
+const EDGETTS_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MS"), 15000, 1);
+const EDGETTS_TIMEOUT_MAX_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MAX_MS"), 60000, 1);
+const EDGETTS_TIMEOUT_PER_CHAR_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS"), 20, 0);
+const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_HEALTH_TIMEOUT_MS"), 3000, 1);
+const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES"), 1, 0);
+const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
 
 class EdgeProcessError extends Error {
@@ -1172,8 +1172,7 @@ export async function getProviderStatus(): Promise<Record<string, ProviderStatus
 // best-effort — a logging failure must NEVER break a /notify.
 //
 // Path: user-owned (macOS ~/Library/Logs, else $XDG_STATE_HOME / ~/.local/state),
-// never /tmp, never the repo. Override with ECHO_RESOLUTION_LOG (legacy
-// VOICESYSTEM_RESOLUTION_LOG kept as a silent fallback). Host-neutral: no
+// never /tmp, never the repo. Override with ECHO_RESOLUTION_LOG. Host-neutral: no
 // host-adapter knowledge here.
 //
 // Resolved at write time (not frozen at module load) so a process that sets the
@@ -1184,16 +1183,15 @@ export async function getProviderStatus(): Promise<Record<string, ProviderStatus
 // =============================================================================
 
 function resolveResolutionLogPath(): string {
-  return resolveEchoEnv("ECHO_RESOLUTION_LOG") ?? resolveEchoEnv("VOICESYSTEM_RESOLUTION_LOG") ?? (
+  return resolveEchoEnv("ECHO_RESOLUTION_LOG") ?? (
     process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Logs', 'echo', 'voice-resolution.jsonl')
       : join(resolveEchoEnv("XDG_STATE_HOME") || join(homedir(), '.local', 'state'), 'echo', 'voice-resolution.jsonl')
   );
 }
 
-// ~1MB cap (floor 1KB). Override via ECHO_RESOLUTION_LOG_MAX_BYTES (legacy
-// VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES kept as a silent fallback).
-const RESOLUTION_LOG_MAX_BYTES = parseBoundedInt(resolveEchoEnv("ECHO_RESOLUTION_LOG_MAX_BYTES") ?? resolveEchoEnv("VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES"), 1_000_000, 1024);
+// ~1MB cap (floor 1KB). Override via ECHO_RESOLUTION_LOG_MAX_BYTES.
+const RESOLUTION_LOG_MAX_BYTES = parseBoundedInt(resolveEchoEnv("ECHO_RESOLUTION_LOG_MAX_BYTES"), 1_000_000, 1024);
 
 type AttemptOutcome = 'success' | 'failed' | 'unhealthy' | 'circuit-open' | 'disabled';
 

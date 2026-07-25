@@ -53,7 +53,7 @@ export function resolveVoicesUrl(env: EndpointEnv): string {
 }
 
 function configuredNotifyUrl(env: EndpointEnv): string | undefined {
-  return env.ECHO_NOTIFY_URL ?? env.ATLAS_VOICE_NOTIFY_URL ?? env.VOICESYSTEM_NOTIFY_URL;
+  return env.ECHO_NOTIFY_URL ?? env.ATLAS_VOICE_NOTIFY_URL;
 }
 
 function stripTrailingSlash(url: string): string {

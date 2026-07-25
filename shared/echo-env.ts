@@ -45,8 +45,6 @@ export function validateEchoConfig(value: unknown): string[] {
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
     if (key === "ELEVENLABS_API_KEY") {
       errors.push("ELEVENLABS_API_KEY is a secret and must not be stored in config.json");
-    } else if (key.startsWith("VOICESYSTEM_")) {
-      errors.push(`${key} is retired; use the canonical Echo key in config.json`);
     } else if (!ECHO_CONFIG_KEYS.has(key)) {
       errors.push(`${key} is not an Echo configuration key`);
     } else if (!isConfigPrimitive(entry)) {
@@ -74,7 +72,7 @@ function readJsonConfig(path: string): Record<string, EchoConfigValue> {
 
 function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironment {
   const envPaths = [
-    ...((env.ECHO_ENV_PATHS ?? env.VOICESYSTEM_ENV_PATHS)?.split(":").filter(Boolean) ?? []),
+    ...(env.ECHO_ENV_PATHS?.split(":").filter(Boolean) ?? []),
     join(homeDir, ".config", "echo", ".env"),
     join(homeDir, ".config", "voicesystem", ".env"),
     join(homeDir, ".env"),
