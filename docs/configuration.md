@@ -5,12 +5,16 @@ variables, `core/voices.json`, and `core/pronunciations.json`. For voice customi
 how-tos (change a voice, add a persona, enable ElevenLabs) see [`voices.md`](voices.md); for
 the request contract see [`http-api.md`](http-api.md).
 
-The daemon and each Pi/omp host process read configuration once. Restart the daemon after
+The daemon and each Pi/omp host process read configuration once. Reload the daemon after
 changing daemon settings; fully relaunch Pi/omp after changing adapter settings:
 
 ```bash
-launchctl kickstart -k "gui/$UID/com.echo"
+launchctl kickstart -k "gui/$UID/com.echo"   # env-file changes — the daemon reads those in place
+cli/echo update                              # changes to core/voices.json or core/pronunciations.json
 ```
+
+The second form is required for the JSON config because the daemon loads it from a staged
+copy of `core/`, not from your checkout — see [`operations.md`](operations.md).
 
 ## Environment files
 

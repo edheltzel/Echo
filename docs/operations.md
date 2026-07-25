@@ -40,8 +40,10 @@ launchctl kickstart -k "gui/$UID/com.echo"     # one-shot in-place restart
 ```
 
 Both work. `restart.sh` unloads and reloads the LaunchAgent and verifies health;
-`kickstart -k` is the quick one-liner after editing `core/server.ts` or a config file —
-follow it with the health check below if you want confirmation.
+`kickstart -k` is the quick one-liner — follow it with the health check below if you want
+confirmation. Neither picks up an edit to `core/` or `shared/` in your checkout: both reload
+the staged payload, so a source or `voices.json` change needs `cli/echo update` (see
+[Update after a `git pull`](#update-after-a-git-pull)).
 
 ## Status
 
@@ -114,7 +116,7 @@ and reloads it, so a bad update leaves you on the daemon you had rather than a c
 one, and exits 1 with the log path. It re-checks health after the restore too, and says
 `ROLLBACK INCOMPLETE` rather than claiming success if even the old payload stays down.
 
-## Config changes need a restart
+## Config changes need a re-stage
 
 The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
 the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy

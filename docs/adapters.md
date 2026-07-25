@@ -94,10 +94,10 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   `ECHO_VOICE_ID` overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
   the injection feature above, #76 also touched `core/voices.json` data — a running daemon
-  loads voices.json once at startup, so restart it
-  (`launchctl kickstart -k "gui/$UID/com.echo"`) to pick up the `pi` entry; until then the
-  adapter's `voice_id: "pi"` is unresolvable and falls back to the provider default voice
-  (audibly the identity voice on stock installs), logged as `resolution: fallback`.
+  loads voices.json once at startup, from its staged payload, so run `cli/echo update` to
+  pick up the `pi` entry; until then the adapter's `voice_id: "pi"` is unresolvable and falls
+  back to the provider default voice (audibly the identity voice on stock installs), logged
+  as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
   `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`shared/voice-line.ts`) strips an optional leading

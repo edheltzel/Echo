@@ -93,8 +93,10 @@ review nit.
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork — its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
-| Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler. |
-| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path). |
+| Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
+| Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 8888) and the shared occupied-port report, so no two surfaces can disagree. Reads no env file — the daemon owns that parsing. |
+| Control CLI | `cli/echo` | The stable human surface — a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
+| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
@@ -205,8 +207,10 @@ are contract.
 - **Do not push directly to `master`.** Work on `dev`, PR `dev` → `master`; Ed owns merges.
 - **Adapters are out-of-process `/notify` clients** that suppress child/subagent contexts
   and treat notify failures as non-fatal.
+- **The daemon runs from a staged payload, not the checkout** — so editing `core/`/`shared/`
+  changes nothing until it is re-staged. Payload path and staging contract: [`AGENTS.md`](AGENTS.md).
 - **Config loads once at startup** — editing `voices.json`/`pronunciations.json` requires a
-  daemon restart.
+  re-stage plus a daemon restart, which is what `cli/echo update` does.
 
 The authoritative copy of the invariant list and the DOX rail lives in [`AGENTS.md`](AGENTS.md).
 

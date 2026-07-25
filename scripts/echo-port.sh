@@ -18,6 +18,7 @@
 
 ECHO_PORT="${PORT:-8888}"
 ECHO_BASE_URL="http://localhost:${ECHO_PORT}"
+# shellcheck disable=SC2034  # read by the scripts that source this file, not here
 HEALTH_URL="${ECHO_BASE_URL}/health"
 ECHO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
