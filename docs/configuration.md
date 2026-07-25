@@ -60,7 +60,7 @@ processes keep the configuration loaded when their Echo extension started.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8888` | HTTP listen port. **Configure the daemon's port in `~/.config/echo/.env`** — the LaunchAgent's environment is only `HOME` and `PATH`, so a shell variable never reaches the launchd-started daemon. The shell surfaces (`install.sh`, `start`/`stop`/`status`/`mute`/`uninstall`, `cli/echo`) do **not** read that file; they assume `8888` unless you export `PORT` to aim one command at a specific daemon (`PORT=8899 bash scripts/status.sh`). If you move the daemon off 8888, export a matching `PORT` when running them |
+| `PORT` | `8888` | HTTP listen port. **Stage 1: the CLI and the lifecycle scripts are single-port.** `cli/echo` and `scripts/*.sh` target `8888` and do not discover a daemon listening anywhere else, so **running the daemon on a non-default port is not supported by them in this stage** — `install`, `doctor`, `status`, `mute`, and `stop` would all act on `8888` while the daemon served elsewhere. Exporting `PORT` aims one command at one specific daemon, which is how the tests reach an isolated instance (`PORT=8899 bash scripts/status.sh`); it never configures the installed LaunchAgent, whose environment is `HOME` and `PATH` only |
 | `VOICES_PATH` | `voices.json` next to `core/server.ts` | Voice config file location |
 | `PRONUNCIATIONS_PATH` | `pronunciations.json` next to `core/server.ts` | Pronunciation rules location |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (see indirection below) |

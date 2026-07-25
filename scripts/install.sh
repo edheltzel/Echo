@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-# Resolves ECHO_PORT / ECHO_BASE_URL / HEALTH_URL the way the daemon does.
+# Sets ECHO_PORT (PORT when exported, else 8888) and its URLs. No env-file reading.
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPT_DIR/echo-port.sh"
 # Versioned daemon payload — a self-contained copy of core/ + shared/ under a
@@ -141,11 +141,16 @@ check_port_owner() {
     return 0
   fi
 
-  echo "Port ${ECHO_PORT} is in use by another process that is not answering Echo's /health:" >&2
+  local owner
+  owner="$(lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1" (PID "$2")"}' || true)"
+  echo "Port ${ECHO_PORT} is held by ${owner:-another process}, which is not Echo:" >&2
   lsof -nP -iTCP:"${ECHO_PORT}" -sTCP:LISTEN >&2 || true
-  echo "Refusing to start Echo on an occupied port — Echo never kills the port owner." >&2
-  echo "Stop that process, or set PORT=<n> in ~/.config/echo/.env (the daemon reads it" >&2
-  echo "there) and rerun. Diagnose with: cli/echo doctor" >&2
+  if [ -n "${PORT:-}" ]; then
+    echo "PORT=${PORT} is exported in this shell, so this checked :${ECHO_PORT} instead of" >&2
+    echo "Echo's default. Unset PORT and rerun to target the default." >&2
+  fi
+  echo "Stop that process and rerun — Echo never kills the port owner." >&2
+  echo "Diagnose with: cli/echo doctor" >&2
   exit 1
 }
 
@@ -312,7 +317,7 @@ write_plist() {
   # EnvironmentVariables stays HOME + PATH. PORT is deliberately NOT written: the
   # plist is rewritten wholesale on every run, so baking in an ambient shell PORT
   # would silently move the daemon on one install and silently move it back on the
-  # next. The daemon reads ~/.config/echo/.env itself — that is the durable place.
+  # next.
   cat > "$tmp_plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -411,9 +416,8 @@ reload_core_service() {
   else
     echo "Voice server did not respond on :${ECHO_PORT}. Check logs: $LOG_PATH" >&2
     if [ -n "${PORT:-}" ]; then
-      echo "PORT=${PORT} is exported in this shell, so this check probed :${ECHO_PORT}. The" >&2
-      echo "daemon takes its port from ~/.config/echo/.env, not from your shell — if it is" >&2
-      echo "serving on a different port, unset PORT and rerun." >&2
+      echo "PORT=${PORT} is exported in this shell, so this check probed :${ECHO_PORT}" >&2
+      echo "instead of Echo's default. Unset PORT and rerun to target the default." >&2
     fi
     return 1
   fi

@@ -1,18 +1,17 @@
 #!/bin/bash
-# Sourced helper: the port these shell surfaces talk to. `PORT` when exported,
-# else 8888.
+# Sourced helper: the port these shell surfaces talk to — `PORT` when exported,
+# else 8888. That is the whole resolution.
 #
-# It deliberately does NOT read ~/.config/echo/.env. The daemon resolves its own
-# port from there (`resolveEchoEnv` over `shared/echo-env.ts`), and a second
-# parser in bash can only drift from that one — it did: an inline comment on the
-# `PORT=` line parsed differently on each side. So there is one parser, in the
-# daemon, and these scripts default to 8888 unless you point a command somewhere
-# else with `PORT=<n>`. That override addresses a specific running daemon (an
-# isolated test instance, a second install); it does not configure the installed
-# LaunchAgent, whose environment is only HOME and PATH.
+# Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
+# cli/echo all target 8888 and make no attempt to discover a daemon listening
+# anywhere else. Nothing here reads ~/.config/echo/.env or any other env file —
+# the daemon owns that parsing, and a second parser in bash could only drift from
+# it. Exporting PORT aims one command at one specific daemon (an isolated test
+# instance); it does not configure the installed LaunchAgent, whose environment
+# is HOME and PATH only.
 #
 # Pure bash on purpose: sourced by scripts that must work without Bun. Values stay
-# script-local — every script sources this for itself.
+# script-local — every script sources this for itself, nothing is exported.
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
