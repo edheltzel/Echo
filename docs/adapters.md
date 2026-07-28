@@ -73,6 +73,22 @@ the adapters' check modes plus the LaunchAgent plist paths — a new adapter mus
 reconcile and check commands into both. Future hosts (Codex/OpenCode #30) inherit this
 contract.
 
+## Native terminal visuals
+
+Pi, omp, and Claude Code adapters use the shared notify client for visual delivery. Before the
+HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
+then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
+adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
+`allow-passthrough` to be read as `on` or `all` before wrapping the OSC sequence. SSH/headless
+contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
+
+The terminal matrix is maintained in [`http-api.md`](http-api.md#native-terminal-visual-delivery):
+Ghostty and WezTerm use OSC 777, Kitty uses OSC 99 with a fail-closed capability query, iTerm2
+uses OSC 9, and Alacritty is explicitly unsupported. The exact `visual_delivery: "native"`
+marker is sent only after native success; it suppresses the daemon banner and prevents a
+duplicate visual notification. Adapter diagnostics expose the selected route in
+`NotifyResult.visual`.
+
 ## Pi adapter — per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the

@@ -47,6 +47,49 @@ Primary host-neutral endpoint. Body (every field optional):
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
 | `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
 
+### Native terminal visual delivery
+
+Host adapters attempt visual delivery before they POST to `/notify`, in this order:
+
+1. Herdr's `notification.show` route, when the adapter has a documented Herdr session or
+   socket context and Herdr returns `shown: true`.
+2. The adapter's explicitly owned controlling TTY, using the terminal protocol selected from
+   its environment.
+3. The normal `/notify` request without `visual_delivery: "native"`; the daemon then uses its
+   macOS `osascript` notification as the final visual fallback.
+
+The native marker is an exact success contract. It is added only after route 1 or 2 reports
+`status: "shown"`; the daemon then suppresses its own AppleScript banner, so one native
+success produces one visual notification. A failed, unavailable, unsupported, headless, or
+unproven route never receives the marker and preserves the legacy fallback.
+
+Supported terminal protocols and limits:
+
+| Terminal | Route | Limit |
+|---|---|---|
+| Ghostty | OSC 777 | Requires Ghostty terminal identity. |
+| WezTerm | OSC 777 | Requires `TERM_PROGRAM_VERSION` as well as WezTerm identity. |
+| Kitty | OSC 99 | The adapter may run Kitty's capability query; a failed query is fail-closed. |
+| iTerm2 | OSC 9 | Uses iTerm2 identity or `ITERM_SESSION_ID`; delivery is terminal-native but less structured than OSC 777/99. |
+| Alacritty | Unsupported | Echo deliberately refuses the route, even if another environment variable looks supported. |
+
+Echo never writes escape sequences to arbitrary `stdout` or `stderr`: adapters must provide an
+explicit TTY writer, and a controlling TTY is opened only when it is actually a TTY. This keeps
+hook protocols and piped/headless/SSH sessions free of terminal control bytes. When running
+inside tmux, Echo reads `allow-passthrough` and sends the tmux DCS envelope only for `on` or
+`all`; it never changes the tmux setting. Verify it without changing state with:
+
+```bash
+tmux show-options -p -t "${TMUX_PANE:?}" -v allow-passthrough
+```
+
+SSH or headless runs normally have no safe local TTY and therefore use the fallback path. Native
+delivery never focuses a pane or terminal: Kitty uses `a=-focus`, and the other protocols do
+not send focus actions. To inspect an adapter-level result, inspect its `NotifyResult.visual`
+value; it reports `shown` plus `route` (`herdr` or `terminal`) and, for terminal delivery, the
+terminal name. The daemon's `/health`, `~/Library/Logs/echo.log`, and the audio lifecycle and
+voice-resolution logs remain the authoritative service diagnostics.
+
 Validation: `title` and `message` are each rejected with `400` when over **500 characters**,
 then sanitized for speech — shell metacharacters (`` ;&|><`$\ ``) stripped, markdown
 (bold/italic/inline code/headers) unwrapped, `<script` and `../` removed. A message that is

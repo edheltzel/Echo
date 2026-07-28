@@ -65,6 +65,43 @@ from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live 
 override is available for one isolated command or test. The CLI does not discover arbitrary
 listeners. See [`configuration.md`](configuration.md).
 
+## Verify a native terminal notification
+
+`curl -X POST /notify` is a raw HTTP caller, so it intentionally exercises the legacy macOS
+notification fallback. Native delivery belongs to a host adapter: the adapter tries Herdr,
+then a safe controlling TTY (Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9), and only
+sets `visual_delivery: "native"` after one of those routes reports success. The daemon then
+skips its AppleScript banner exactly once. See [`http-api.md`](http-api.md#native-terminal-visual-delivery)
+for terminal limits, tmux passthrough, SSH/headless behavior, and the adapter-level diagnostic.
+
+Run a direct adapter-client smoke from the adapter package root and from the terminal that owns
+the adapter's TTY (not from a pipe, SSH headless shell, or hook-protocol stdout):
+
+```bash
+cd adapters/pi
+bun -e '
+import { sendNotification } from "@echo/shared/notify-client.ts";
+import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
+const id = `terminal-check-${Date.now()}`;
+const result = await sendNotification(
+  { endpoint: "http://localhost:3246/notify", title: "Echo native check", voiceEnabled: false },
+  "Echo native terminal check",
+  "terminal-check",
+  id,
+  undefined,
+  nativeContextFromAdapterContext({}, process.env, id, true),
+);
+console.log(JSON.stringify({ status: result.status, visual: result.visual, body: result.body }, null, 2));
+'
+```
+
+The expected HTTP status is `202`. Confirm `visual.status` is `"shown"` and its route is
+`"herdr"` or `"terminal"`; an unavailable result means the request correctly retained the
+legacy fallback. Verify service state with `cli/echo doctor`, `cli/echo status`, and
+`curl -fsS http://localhost:3246/health`. A spoken check uses the ordinary `/notify` request
+with `voice_enabled: true`; verify its eventual `played` disposition in the audio-lifecycle
+log because `202` means accepted, not finished speaking.
+
 ## Logs
 
 - Server log: `~/Library/Logs/echo.log` — `tail -f` it while debugging.

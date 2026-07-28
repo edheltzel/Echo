@@ -47,6 +47,25 @@
 | oh-my-pi (omp) | `adapters/omp/` | Supported — sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | OpenCode | TBD | Planned | Future adapter |
 
+### Terminal visual capabilities
+
+Native visuals do not add a provider dependency; they require the adapter's safe TTY context
+and the terminal protocol shown below. Herdr is attempted first when its documented session or
+socket context is present. If no native route succeeds, the daemon retains its macOS
+AppleScript banner fallback.
+
+| Terminal | Protocol | Support boundary |
+|---|---|---|
+| Ghostty | OSC 777 | Supported with Ghostty identity. |
+| WezTerm | OSC 777 | Supported when `TERM_PROGRAM_VERSION` is present. |
+| Kitty | OSC 99 | Supported with a fail-closed capability query. |
+| iTerm2 | OSC 9 | Supported through iTerm2 identity variables. |
+| Alacritty | None | Explicitly unsupported. |
+
+SSH/headless sessions normally have no safe TTY. tmux passthrough must already be `on` or
+`all`; Echo reads but never changes that setting. Native delivery does not focus terminals or
+panes, and exact native success suppresses the daemon's duplicate AppleScript banner.
+
 ## Decision matrix
 
 | Goal | Install |
