@@ -24,17 +24,17 @@ Optional voice providers and host adapters are described in `docs/dependencies.m
 bash scripts/install.sh --adapter none
 ```
 
-This writes a neutral LaunchAgent (`com.echo`) and starts the server on `localhost:8888`.
+This writes a neutral LaunchAgent (`com.echo`) and starts the server on `localhost:3246`.
 
 You should see:
 
 ```
-OK echo is healthy on :8888
+OK echo is healthy on :3246
 ```
 
 If the installer prints `Voice server did not respond` instead, open the log at `~/Library/Logs/echo.log`.
 
-If it refuses with `Port 8888 is occupied but not answering Echo's /health`, something is holding the port without serving Echo — either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
+If it refuses with `Port 3246 is occupied but not answering Echo's /health`, something is holding the port without serving Echo — either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
 
 ## Add the Claude Code adapter
 
@@ -77,8 +77,8 @@ Full detail, including what `--check` does and does not verify: `docs/operations
 ## Verify manually
 
 ```bash
-curl -fsS http://localhost:8888/health
-curl -fsS -X POST http://localhost:8888/notify \
+curl -fsS http://localhost:3246/health
+curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
   -d '{"message":"Hello from echo"}'
 ```

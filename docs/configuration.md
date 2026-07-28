@@ -1,220 +1,240 @@
 # Configuration
 
-Canonical reference for every place Echo reads configuration: environment files, environment
-variables, `core/voices.json`, and `core/pronunciations.json`. For voice customization
-how-tos (change a voice, add a persona, enable ElevenLabs) see [`voices.md`](voices.md); for
-the request contract see [`http-api.md`](http-api.md).
+Echo's persistent configuration is JSON at:
 
-The daemon and each Pi/omp host process read configuration once. Reload the daemon after
-changing daemon settings; fully relaunch Pi/omp after changing adapter settings:
+    ~/.config/echo/config.json
 
-```bash
-launchctl kickstart -k "gui/$UID/com.echo"   # env-file changes — the daemon reads those in place
-cli/echo update                              # changes to core/voices.json or core/pronunciations.json
-```
+The complete machine-readable schema is shared/config-schema.json. The file uses canonical
+Echo key names as JSON properties so the daemon, adapters, clone-independent payload, and
+shell CLI share one unambiguous format:
 
-The second form is required for the JSON config because the daemon loads it from a staged
-copy of `core/`, not from your checkout — see [`operations.md`](operations.md).
+    {
+      "PORT": 3246,
+      "ECHO_VOICE_PERSONA_NAME": "Echo",
+      "ECHO_VOICE_ID": "echo",
+      "ECHO_VOICE_ENABLED": true,
+      "ECHO_VOICE_GREET_ON_START": true,
+      "ECHO_EDGETTS_TIMEOUT_MS": 15000,
+      "ECHO_TTS_CACHE_MAX_BYTES": 20000000,
+      "ECHO_AUDIO_LIFECYCLE_LOG": "~/Library/Logs/echo/audio-lifecycle.jsonl"
+    }
 
-## Environment files
+JSON was chosen because Echo already treats core/voices.json and its JSON schema as
+authoritative configuration, and because typed booleans and numbers avoid dotenv's
+string-only ambiguity. Paths beginning with ~ are passed through to the existing path
+handling; use an absolute path when a tool does not expand it.
 
-The daemon and the Pi/omp adapter resolve `KEY=VALUE` config from these files, in order
-(precedence lives in `shared/echo-env.ts`; the daemon reads through the non-mutating
-`resolveEchoEnv` in `core/env.ts`):
+The file is optional. Missing or invalid files leave the documented defaults in effect, and
+Echo logs a warning rather than failing startup. It is read from your home directory, never
+from the daemon payload, so a plain reload picks up an edit, with no re-staging:
 
-1. Every path in `ECHO_ENV_PATHS` (colon-separated; legacy `VOICESYSTEM_ENV_PATHS` honored as
-   a silent fallback)
-2. `~/.config/echo/.env` — the recommended home for Echo secrets and adapter identity
-3. `~/.config/voicesystem/.env` (legacy)
-4. `~/.env`
+    launchctl kickstart -k "gui/$UID/com.echo"
+    # or: bash scripts/restart.sh
 
-Precedence rules:
+(A `core/voices.json` edit is the case that also needs `cli/echo update`; see
+[`operations.md`](operations.md#which-config-changes-need-a-re-stage).)
 
-- The **first file found wins per key**, and a real environment variable (e.g. set in the
-  LaunchAgent plist) always beats every file.
-- Resolution is **read-only**: file values are layered under the live environment at read
-  time; the daemon never writes them into `process.env` (importing a core module must not
-  leak env-file identity into same-process adapter code — see the AGENTS.md invariant).
-- Surrounding single or double quotes around values are stripped.
-- Lines without `=`, keys starting with `#`, and empty values are ignored.
-- No file is required to exist.
+## Precedence and secrets
 
-Pi/omp identity can therefore be configured without shell-profile exports:
+For a canonical setting, resolution is:
 
-```dotenv
-ECHO_VOICE_PERSONA_NAME=Atlas
-ECHO_VOICE_CATCHPHRASE="Atlas online and standing by."
-```
+1. A value already present in the live process environment (compatibility override).
+2. The matching property in config.json.
+3. A matching value in a legacy dotenv file — the migration fallback, plus the permanent
+   home of the one secret below.
 
-`cli/echo voice <name> <edge-tts-voice-id>` writes exactly two keys —
-`ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` — into `~/.config/echo/.env` for you
-(merge-preserving, atomic, with a `.bak` backup), the pi/omp default persona. Claude Code
-reads its persona from `~/.claude/settings.json` instead, so that command does not affect
-Claude sessions. The name is rejected if it contains control characters or a double quote,
-since it is written as `KEY="<name>"` into a file parsed line by line.
+Resolution is read-only: Echo never copies file values into process.env. This preserves
+the import-purity boundary that prevents a daemon import from leaking one user's persona
+into same-process adapter code.
 
-`ECHO_ENV_FILE` redirects **that write only** — it is a writer-side override for
-`cli/echo voice` (and its tests), not a daemon knob. The daemon and adapters never consult
-it; to point them at another file use `ECHO_ENV_PATHS`.
+**PORT is the one exception to layer 3.** It is read from the live environment and
+config.json only, never from a dotenv file. `cli/echo`, the lifecycle scripts, and the
+health probes resolve the port in pure bash and read only config.json (`scripts/echo-port.sh`),
+so honoring a dotenv PORT would move the daemon somewhere every one of those surfaces
+reports as down. `scripts/install.sh` migrates an existing dotenv PORT into config.json
+before it probes anything, so an upgrading user keeps the port they configured.
 
-Real process variables still win. Relaunch Pi/omp after editing the file; existing host
-processes keep the configuration loaded when their Echo extension started.
+### ELEVENLABS_API_KEY: the one secret, and where it lives
 
-## Environment variables
+ELEVENLABS_API_KEY is the only Echo secret, and config.json **rejects** it — a config.json
+containing it has that one key dropped (see [Invalid keys](#invalid-keys)).
 
-| Variable | Default | Purpose |
+Its permanent home is a dotenv file, normally `~/.config/echo/.env`:
+
+    mkdir -p ~/.config/echo
+    echo 'ELEVENLABS_API_KEY=sk_…' >> ~/.config/echo/.env
+
+That is not a migration leftover — it is the supported mechanism. The installed LaunchAgent
+deliberately writes only HOME and PATH into `EnvironmentVariables` (`scripts/install.sh`
+`write_plist`), so the daemon gets nothing from a login shell; a dotenv file is how the key
+reaches it. **Do not delete `~/.config/echo/.env` after migrating** — migration moves the
+non-secret settings out of it and leaves the file, and the key, alone. The only alternative
+is a real process environment value, which means launching the daemon yourself instead of
+through the LaunchAgent.
+
+The core/voices.json value "\${ELEVENLABS_API_KEY}" is only an indirection to that value.
+Do not commit .env files or put API keys in config.json.
+
+### Invalid keys
+
+A key that fails validation — an unknown name, a typo, a compound value, or the secret above
+— is **dropped on its own**; every other setting in the file still applies. The daemon logs
+one warning naming each dropped key, and reports the same thing in `GET /health`:
+
+    curl -fsS http://localhost:3246/health | jq '.config'
+    {
+      "path": "/Users/you/.config/echo/config.json",
+      "present": true,
+      "valid": false,
+      "ignored_keys": ["ECHO_VOICE_PERSONNA_NAME"],
+      "errors": ["ECHO_VOICE_PERSONNA_NAME is not an Echo configuration key"]
+    }
+
+A file that is not valid JSON, or not a JSON object, cannot be partially applied: the whole
+file is skipped, `valid` reads false, and the built-in defaults are used.
+
+PAI_DIR, PAI_SETTINGS_PATH, PI_SETTINGS_PATH, PI_CODING_AGENT_DIR, OMP_EXTENSIONS_DIR,
+and CLAUDE_PROJECT_DIR remain host-owned runtime context. They describe where a host keeps
+its own settings or project, so they are not Echo settings and are not copied into this file.
+ECHO_ENV_PATHS and ECHO_CONFIG_FILE are likewise not settings but path selectors, read only
+from the live process environment: the first prepends extra dotenv locations to the layer-3
+read fallback (those files are read as configuration but never drained by the migration
+below), the second retargets config.json itself and is honored identically by the daemon and by
+`echo voice`, so a test or development instance can never write where the reader will not look.
+
+## Schema reference
+
+All properties are optional. Numeric values accept JSON numbers or strings and are bounded
+at runtime; invalid values use the defaults below.
+
+| Group | Properties | Defaults / notes |
 |---|---|---|
-| `PORT` | `8888` | HTTP listen port. **Stage 1: the CLI and the lifecycle scripts are single-port.** `cli/echo` and `scripts/*.sh` target `8888` and do not discover a daemon listening anywhere else, so **running the daemon on a non-default port is not supported by them in this stage** — `install`, `doctor`, `status`, `mute`, and `stop` would all act on `8888` while the daemon served elsewhere. Exporting `PORT` aims one command at one specific daemon, which is how the tests reach an isolated instance (`PORT=8899 bash scripts/status.sh`); it never configures the installed LaunchAgent, whose environment is `HOME` and `PATH` only |
-| `VOICES_PATH` | `voices.json` next to `core/server.ts` | Voice config file location |
-| `PRONUNCIATIONS_PATH` | `pronunciations.json` next to `core/server.ts` | Pronunciation rules location |
-| `ELEVENLABS_API_KEY` | — | ElevenLabs API key (see indirection below) |
-| `ECHO_DEFAULT_TITLE` | `Voice Notification` | Title when a `/notify` body omits `title` |
-| `ECHO_AUDIO_CACHE_DIR` | `~/Library/Caches/echo/audio` (macOS), else `$XDG_CACHE_HOME`/`~/.cache` under `echo/audio` | Synthesis temp files |
-| `ECHO_AUDIO_PROCESS_TIMEOUT_MS` | `60000` | Playback process (afplay/mpv/say) timeout |
-| `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | `10000` | macOS notification (osascript) timeout |
-| `ECHO_MUTE_STATE_PATH` | `~/Library/Application Support/echo/mute.json` (macOS), else `$XDG_STATE_HOME`/`~/.local/state` under `echo/mute.json` | Runtime mute state file (`POST /mute`), written atomically; missing/corrupt = unmuted |
-| `ECHO_RESOLUTION_LOG` / `ECHO_RESOLUTION_LOG_MAX_BYTES` | see [`providers-observability.md`](providers-observability.md) | Voice-resolution drop-off log path / size cap |
-| `ECHO_PLAY_QUEUE_AGE_CAP_MS` | `300000` (floor `1000`; comfortably above one line's worst-case occupancy — synth retries + playback can approach ~2 min — so an ordinary slow line cannot mass-drop the backlog; coalescing already bounds the queue to one line per session) | Play queue (Phase 2): a queued line that has waited longer than this since receipt is dropped (`dropped-stale`) instead of played late |
-| `ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS` | `120000` (floor `1000`) | Play queue watchdog: a player exceeding this is reported (`onPlayerError` lifecycle row) and the queue advances — a hung play can never wedge global playback |
-| `ECHO_PLAY_QUEUE_MAX_DEPTH` | `20` (floor `1`) | Play queue (Phase 2): max queued lines; enqueueing beyond it drops the oldest queued line |
-| `ECHO_CAPTURE_STATE_PATH` | `~/.local/state/voicelayer/recording-state.json` (the capture tool's published cross-process state file; it hardcodes `~/.local/state` — no XDG consult) | Capture guard: while this file reports `recording`/`transcribing` from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition; banner unaffected). Missing/corrupt file = idle; **empty string disables the guard** |
-| `ECHO_DAEMON_URL` | derived from `ECHO_NOTIFY_URL`, else `http://localhost:8888` | **Adapter-side.** Origin of the daemon every adapter talks to. Sets `POST /notify`, `POST /notify/personality` and `GET /voices` at once — and wins over `ECHO_NOTIFY_URL` for all of them — so pointing a host at a second instance (e.g. an isolated test daemon) is one variable and can never split notify from the read endpoints. Resolved in `shared/daemon-endpoints.ts` |
-| `ECHO_TTS_CACHE_DIR` | `~/Library/Caches/echo/tts-cache` (macOS), else `$XDG_CACHE_HOME`/`~/.cache` under `echo/tts-cache` | Short-phrase synthesis cache; redirect it so a second instance never writes the operator's cache |
-| `ECHO_CIRCUIT_BREAKER_THRESHOLD`, `ECHO_EDGETTS_TIMEOUT_MS`, `ECHO_EDGETTS_TIMEOUT_MAX_MS`, `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS`, `ECHO_EDGETTS_HEALTH_TIMEOUT_MS`, `ECHO_EDGETTS_SYNTH_RETRIES`, `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | see [`reliability.md`](reliability.md) | Circuit breaker + edge-tts timeout/retry knobs |
+| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH | 3246; the two JSON files next to core/server.ts |
+| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE | Adapter defaults apply when unset |
+| Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Booleans default to enabled/unsuppressed; title defaults to Voice Notification |
+| Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
+| Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
+| Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
+| State and logs | ECHO_MUTE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths; log caps default to 1 MB |
+| Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL, ECHO_VOICE_SURFACES | Adapter-side endpoint overrides; otherwise adapters use http://localhost:3246 |
 
-Every `ECHO_*` knob also accepts its legacy `VOICESYSTEM_*` name as a deprecated silent
-fallback (full mapping in [Deprecated environment variables](#deprecated-environment-variables)
-below).
+Settings whose behavior is not obvious from the name:
 
-## `core/voices.json`
+- **PORT** must be canonical decimal, from 1 to 65535 — `3246` or `"3246"`. Digits only: no
+  sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an
+  invalid key (see [Invalid keys](#invalid-keys)) and Echo uses 3246. That covers other
+  numeric spellings (`"0x0C9E"`, `"1e4"`, `"03246"`) and padded ones (`" 3246 "`), because
+  the daemon and the pure-bash CLI resolve those to different ports, which would leave the
+  daemon listening somewhere every CLI surface reports as down. `0` means an ephemeral bind,
+  which no CLI can address, so it is accepted only as a live process value and only for
+  tests. Installing normalizes a padded dotenv PORT; any other spelling the grammar rejects
+  is reported by name and left unmigrated rather than written and then dropped at startup.
+- **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
+  (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
+  `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`
+  from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition;
+  the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
+  disables the guard entirely**.
+- **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
+  `GET /voices` at once — and wins over `ECHO_NOTIFY_URL` for all of them — so pointing a host
+  at a second instance can never split notify from the read endpoints
+  (`shared/daemon-endpoints.ts`).
+- **ECHO_PLAY_QUEUE_AGE_CAP_MS** sits comfortably above one line's worst-case occupancy
+  (synth retries plus playback can approach ~2 min), so an ordinary slow line cannot
+  mass-drop the backlog. Floors for every reliability knob:
+  [`reliability.md`](reliability.md).
 
-Location: `core/voices.json`, or wherever `VOICES_PATH` points. Top-level keys:
+Voice provider mappings remain in core/voices.json, and pronunciation rules remain in
+core/pronunciations.json. The configuration file controls the daemon and host-neutral
+tuning around those files; it does not duplicate their provider schema. Their own reference
+— the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
+fallback — lives in [`voices.md`](voices.md#reference-corevoicesjson).
 
-| Key | Meaning |
-|---|---|
-| `providers` | Per-provider config blocks (below) |
-| `defaultProvider` | Provider tried first (shipped: `edgetts`) |
-| `fallbackOrder` | Full chain (shipped: `edgetts → elevenlabs → kokoro → say`) |
-| `default_volume` | `0.8` — playback volume, applied unevenly (caveat below) |
-| `default_rate` | `175` — words/min for the `say` provider only |
-| `identity` | The default ("Atlas") voice mapping, used when `voice_id` is omitted |
-| `agents` | Named persona mappings keyed by short lowercase name (`kai`, `themis`, …) |
+## Migrating from ~/.config/echo/.env
 
-### Provider order
+An upgrade does not silently discard existing settings. Echo still reads the old dotenv
+locations as the lowest-priority layer:
 
-Per notification, `speakWithFallback` walks `defaultProvider` first, then `fallbackOrder`
-minus the duplicate — a single pass. A **disabled** provider is skipped before any network or
-health path (the structural egress gate — [`providers-observability.md`](providers-observability.md)).
-For edge-tts specifically, the `/notify` hot path does not run the diagnostic Python-import
-health probe; it tries synthesis unless edge-tts is disabled or its circuit breaker is open
-([`reliability.md`](reliability.md)). Other unhealthy or circuit-open providers are skipped;
-a failed provider falls through to the next.
+    paths in ECHO_ENV_PATHS (read, but never migrated; see below)
+    ~/.config/echo/.env
+    ~/.config/voicesystem/.env
+    ~/.env
 
-### Provider blocks
+**The installer migrates for you.** `scripts/install.sh` (and `cli/echo install` /
+`cli/echo update`) runs `scripts/migrate-config.ts` before anything else, which copies every
+canonical Echo setting out of `~/.config/echo/.env` and `~/.config/voicesystem/.env` into
+config.json and prints exactly which keys it moved. It is:
 
-| Provider | Keys |
-|---|---|
-| `edgetts` | `enabled`, `defaultVoice` (`en-US-AvaNeural`), `rate` (global edge-tts rate, `"+0%"`) |
-| `elevenlabs` | `enabled` (shipped `false`), `apiKey`, `defaultVoiceId` |
-| `kokoro` | `enabled` (shipped `false`), `endpoint` (`http://127.0.0.1:8880/v1`), `defaultVoice` |
-| `say` | `enabled`, `voice` (`Daniel (Enhanced)`) |
+- **Non-destructive.** A key already in config.json is never overwritten, and the dotenv file
+  is never edited or deleted. A `.bak` of the previous config.json is written on every change.
+- **Idempotent.** A second run finds nothing to move and prints nothing.
+- **Narrow.** Only canonical schema keys move. `ELEVENLABS_API_KEY` stays put (and the report
+  says so), the retired aliases below are ignored, and host-owned variables are left alone.
+- **Limited to Echo's own dotenv locations.** `~/.env` and `ECHO_ENV_PATHS` are never drained:
+  `~/.env` is a shared user dotfile, not Echo's to rewrite. Move those keys by hand. Every
+  other key there is still read as before, so only PORT needs action — and a PORT in one of
+  those files is named on every install run until you move it into config.json.
 
-**ElevenLabs `apiKey` indirection:** the shipped value `"${ELEVENLABS_API_KEY}"` is expanded
-from the environment at startup (`resolveEnvVar`); a bare `ELEVENLABS_API_KEY` env var is
-also accepted as a constructor fallback. The provider is enabled only when
-`enabled: true` **and** a key resolved. Caveat: `/health`'s `apiKeyConfigured` field reflects
-only the config-file indirection, not the bare-env fallback — the provider can work while
-`apiKeyConfigured` reads `false`.
+Nothing is required of you afterwards. If you want to tidy up, delete the migrated lines from
+`~/.config/echo/.env` — but keep the file itself whenever it holds `ELEVENLABS_API_KEY`.
 
-### Identity and agent mappings
+### Deprecated environment variables
 
-`identity` and each `agents.<key>` entry carry per-provider voice blocks: `edgetts.voice` +
-optional `speed` (multiplier → edge-tts rate, `1.08 → +8%`; `1.0` or absent uses the global
-`providers.edgetts.rate`), `elevenlabs.voice_id` + optional stability/similarity/style/
-speaker-boost, `kokoro.voice` + optional `speed`. Resolution order and customization
-walkthroughs: [`voices.md`](voices.md).
+Echo reads its configuration from canonical `ECHO_*` names. Two generations of older names
+exist, and they are **not** in the same state:
 
-### `default_volume` / `default_rate` caveats
-
-`default_volume` is applied via `afplay -v` to **ElevenLabs and Kokoro playback only**;
-edge-tts playback spawns afplay without `-v`, so the default provider ignores it. `say` uses
-`default_rate` (words/min) instead and ignores volume. An out-of-range `default_volume`
-falls back to `1.0`.
-
-### Parse-error fallback
-
-A missing or malformed `voices.json` does not stop the daemon: it logs one
-`⚠️ Failed to load voices.json` warning at startup and uses **built-in defaults that differ
-from the shipped file** — kokoro `enabled: true` and an empty `agents` map, so every persona
-`voice_id` then resolves as `fallback`. If all persona voices break at once, check the top of
-`~/Library/Logs/echo.log` for that warning. When the file does parse, it is merged over the
-defaults: top-level keys shallowly, `providers` one level deep — `identity`, `agents`, and
-`fallbackOrder` are taken wholesale from your file.
-
-## `core/pronunciations.json`
-
-Location: `core/pronunciations.json`, or wherever `PRONUNCIATIONS_PATH` points. Shape:
-`{"replacements": [{"term", "phonetic", "note"?}]}`. Each term is replaced whole-word before
-synthesis by the edge-tts, ElevenLabs, and Kokoro providers (`say` does not apply them). The
-loaded rule count is surfaced in `GET /health` as `pronunciation_rules`.
-
-## Deprecated environment variables
-
-Echo reads its configuration from `ECHO_*` environment variables. The project's
-former names — `ATLAS_VOICE_*` (Pi adapter) and `VOICESYSTEM_*` (core) — **still
-work as silent fallbacks**, so nothing breaks on upgrade, but they are
-**deprecated** and slated for removal in a future major release.
-
-**Read order:** the canonical `ECHO_*` name is read first; if it is unset, the
-legacy name(s) are consulted in order. Two settings converge two old names onto a
-single canonical name (priority `ECHO_*` → `ATLAS_VOICE_*` → `VOICESYSTEM_*`).
-
-| Old name | New canonical | Notes |
+| Family | Status | Behavior |
 |---|---|---|
-| `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (with `VOICESYSTEM_NOTIFY_URL`) |
-| `VOICESYSTEM_NOTIFY_URL` | `ECHO_NOTIFY_URL` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (with `VOICESYSTEM_VOICE_ID`) |
-| `VOICESYSTEM_VOICE_ID` | `ECHO_VOICE_ID` | **convergence** (lowest priority) |
-| `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` | |
-| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` | |
-| `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` | default value is now `Pi` (#76) |
-| `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` | |
-| `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` | |
-| `ATLAS_VOICE_SPEAK_COMPLETIONS` | `ECHO_VOICE_SPEAK_COMPLETIONS` | |
-| `ATLAS_VOICE_SUPPRESS_SUBAGENTS` | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | |
-| `ATLAS_VOICE_SUPPRESS` | `ECHO_VOICE_SUPPRESS` | |
-| `VOICESYSTEM_ENV_PATHS` | `ECHO_ENV_PATHS` | |
-| `VOICESYSTEM_DEFAULT_TITLE` | `ECHO_DEFAULT_TITLE` | |
-| `VOICESYSTEM_AUDIO_PROCESS_TIMEOUT_MS` | `ECHO_AUDIO_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_NOTIFICATION_PROCESS_TIMEOUT_MS` | `ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS` | |
-| `VOICESYSTEM_AUDIO_CACHE_DIR` | `ECHO_AUDIO_CACHE_DIR` | |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_MS` | `ECHO_EDGETTS_TIMEOUT_MS` | Base synthesis timeout |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_MAX_MS` | `ECHO_EDGETTS_TIMEOUT_MAX_MS` | Adaptive synthesis timeout cap |
-| `VOICESYSTEM_EDGETTS_TIMEOUT_PER_CHAR_MS` | `ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS` | Adaptive synthesis timeout increment |
-| `VOICESYSTEM_EDGETTS_HEALTH_TIMEOUT_MS` | `ECHO_EDGETTS_HEALTH_TIMEOUT_MS` | Diagnostic import-probe timeout |
-| `VOICESYSTEM_EDGETTS_SYNTH_RETRIES` | `ECHO_EDGETTS_SYNTH_RETRIES` | |
-| `VOICESYSTEM_EDGETTS_SYNTH_BACKOFF_MS` | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | |
-| `VOICESYSTEM_RESOLUTION_LOG` | `ECHO_RESOLUTION_LOG` | |
-| `VOICESYSTEM_RESOLUTION_LOG_MAX_BYTES` | `ECHO_RESOLUTION_LOG_MAX_BYTES` | |
-| `VOICESYSTEM_CIRCUIT_BREAKER_THRESHOLD` | `ECHO_CIRCUIT_BREAKER_THRESHOLD` | |
+| `VOICESYSTEM_*` (core) | **Retired** in this release | Ignored everywhere. A `VOICESYSTEM_*` line in a dotenv file is skipped, not migrated. Rename it to the canonical `ECHO_*` name. |
+| `ATLAS_VOICE_*` (Pi/omp adapters) | **Deprecated**, still honored | Read as a silent fallback when the canonical name is unset (`adapters/pi/config.ts`, `adapters/omp/config.ts`). Slated for removal in a future major release. |
 
-### Migrating
+`ATLAS_VOICE_*` → canonical, in the priority order the adapters read them
+(`ECHO_*` → `ATLAS_VOICE_*`):
 
-**Human:** search your shell profile, `~/.config/echo/.env`, and your LaunchAgent
-plist for the old names and replace each per the table above, then restart the
-daemon:
+| Old name | New canonical |
+|---|---|
+| `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` |
+| `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` |
+| `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` |
+| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` |
+| `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` |
+| `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` |
+| `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` |
+| `ATLAS_VOICE_SPEAK_COMPLETIONS` | `ECHO_VOICE_SPEAK_COMPLETIONS` |
+| `ATLAS_VOICE_SUPPRESS` | `ECHO_VOICE_SUPPRESS` |
+| `ATLAS_VOICE_SUPPRESS_SUBAGENTS` | `ECHO_VOICE_SUPPRESS_SUBAGENTS` |
+
+Every `VOICESYSTEM_*` name maps to the `ECHO_*` name with the prefix swapped
+(`VOICESYSTEM_DEFAULT_TITLE` → `ECHO_DEFAULT_TITLE`, and so on), with two convergences:
+`VOICESYSTEM_NOTIFY_URL` → `ECHO_NOTIFY_URL` and `VOICESYSTEM_VOICE_ID` → `ECHO_VOICE_ID`.
+
+To find both families across your own config:
 
 ```bash
 rg -l 'ATLAS_VOICE_|VOICESYSTEM_' ~/.zshrc ~/.bashrc ~/.config/echo/.env 2>/dev/null
-bash scripts/restart.sh
 ```
 
-**Agent:** run `rg -l 'ATLAS_VOICE_|VOICESYSTEM_'` across your config locations,
-rewrite each match to its `ECHO_*` canonical per the table (collapsing the two
-convergence pairs onto `ECHO_NOTIFY_URL` / `ECHO_VOICE_ID`), then restart the
-daemon with `bash scripts/restart.sh`.
+Rewrite each match to its canonical name, put it in config.json, and restart the daemon
+(`bash scripts/restart.sh`).
 
-> Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and
-> the LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A
-> reinstall (`bash scripts/install.sh`) migrates the running service
-> automatically — see the [CHANGELOG](../CHANGELOG.md).
+> Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and the
+> LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A reinstall
+> (`bash scripts/install.sh`) migrates the running service automatically — see the
+> [CHANGELOG](../CHANGELOG.md).
+
+## Port and CLI
+
+The default daemon port is 3246 (E=3, C=2, H=4, O=6 on a phone keypad). The daemon,
+cli/echo, lifecycle scripts, adapters, smoke checks, and docs all use that default. An
+explicit live PORT override remains useful for an isolated development daemon; the normal
+installed LaunchAgent reads config.json.
+
+Both sides read the port from the same two places, in the same order, with the same bounds —
+that is what keeps `cli/echo doctor`, `status`, `mute` and the installer's health probe
+talking to the port the daemon actually bound. A value either side would reject falls back to
+3246 on both.
+
+    curl -fsS http://localhost:3246/health
+    curl -fsS -X POST http://localhost:3246/notify \
+      -H 'Content-Type: application/json' \
+      -d '{"message":"Echo online","voice_enabled":false}'

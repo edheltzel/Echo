@@ -8,7 +8,7 @@
 //      resolution drop-off log still records the voice resolution tagged muted.
 //
 // PORT=0 binds an ephemeral port so importing the daemon never collides with a
-// running :8888 instance. ECHO_MUTE_STATE_PATH is resolved at read/write time
+// running :3246 instance. ECHO_MUTE_STATE_PATH is resolved at read/write time
 // (not frozen at module load), so each test points it at its own temp file.
 process.env.PORT = "0";
 

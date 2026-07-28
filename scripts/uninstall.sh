@@ -11,7 +11,10 @@ LOG_PATH="$HOME/Library/Logs/echo.log"
 # daemon state (mute.json in the same case-insensitive `echo` dir). Logs and the
 # user's persona config are preserved.
 PAYLOAD_HOME="$HOME/Library/Application Support/echo/payload"
-ECHO_ENV_FILE="$HOME/.config/echo/.env"
+# Honors the documented ECHO_CONFIG_FILE path selector so the preserved-config
+# line names the file the daemon actually reads, and never clobbers an exported
+# override. Reporting only: this script deletes the LaunchAgent and payload.
+CONFIG_FILE="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}"
 
 CHECK_ONLY=0
 [ "${1:-}" = "--check" ] && CHECK_ONLY=1
@@ -21,8 +24,8 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   [ -f "$PLIST_PATH" ] && echo "would remove LaunchAgent: $PLIST_PATH" || echo "= no LaunchAgent at $PLIST_PATH"
   [ -d "$PAYLOAD_HOME" ] && echo "would remove payload: $PAYLOAD_HOME" || echo "= no payload at $PAYLOAD_HOME"
   echo "= would preserve logs: $LOG_PATH"
-  if [ -f "$ECHO_ENV_FILE" ]; then
-    echo "= would preserve persona config: $ECHO_ENV_FILE"
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "= would preserve persona config: $CONFIG_FILE"
   fi
   exit 0
 fi
@@ -44,8 +47,8 @@ if lsof -i :"${ECHO_PORT}" >/dev/null 2>&1; then
 fi
 
 echo "Logs preserved at $LOG_PATH"
-if [ -f "$ECHO_ENV_FILE" ]; then
-  echo "Persona config preserved at $ECHO_ENV_FILE"
+if [ -f "$CONFIG_FILE" ]; then
+  echo "Persona config preserved at $CONFIG_FILE"
 fi
 
 # A successful uninstall exits 0 regardless of which optional notes were printed.

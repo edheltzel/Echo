@@ -8,13 +8,16 @@ pages for per-area detail.
 
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
-(`core/server.ts`) listens on `localhost:8888` and exposes five HTTP endpoints
+(`core/server.ts`) listens on `localhost:3246` by default and exposes five HTTP endpoints
 (`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`). Any host — a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` —
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
-macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner.
+macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner — unless
+the adapter already delivered the visual notification natively (Herdr, or a supported
+terminal's OSC escape sequence; `shared/terminal-notify.ts`), in which case it marks the
+request `visual_delivery: "native"` and the daemon skips its own banner for that request.
 
 ```
   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────┐
@@ -32,9 +35,9 @@ macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner
   └────────┬─────────┘   └─────────┬────────┘          │
            │   POST JSON {message, voice_id?, source, session_id?}
            └───────────────┬───────┴────────────────────┘
-                           │  HTTP → http://localhost:8888/notify
+                           │  HTTP → http://localhost:3246/notify
               ┌────────────▼───────────────────────────────┐
-              │   core/server.ts  (Bun serve, :8888)        │
+              │   core/server.ts  (Bun serve, :3246)        │
               │   rate-limit → validate → sanitize →        │
               │   resolve voice → apply pronunciations →    │
               │   speakWithFallback (banner @ accept)       │
@@ -83,8 +86,8 @@ review nit.
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` — instant replay for repeated lines (#202). |
-| Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it; `resolveEchoEnv` — non-mutating env-file reads. |
-| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first, first-file-per-key env loading), `notify-client.ts`, `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
+| Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it; `resolveEchoEnv` — non-mutating config reads. |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first configuration loading: `config.json`, then the legacy dotenv fallback), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 — Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
@@ -94,7 +97,7 @@ review nit.
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork — its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
-| Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 8888) and the shared occupied-port report, so no two surfaces can disagree. Reads no env file — the daemon owns that parsing. |
+| Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 3246) and the shared occupied-port report, so no two surfaces can disagree. Reads the documented config port when no override is present. |
 | Control CLI | `cli/echo` | The stable human surface — a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
@@ -111,7 +114,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    input is a 4xx **before** anything is queued.
 3. **Banner + enqueue + ack `202`** — the macOS banner fires immediately at accept
    (outside the queue; a superseded/dropped line keeps its banner, and a
-   `voice_enabled: false` request is banner-only and never queued). The validated VOICE
+   `voice_enabled: false` request is banner-only and never queued), unless the request's
+   exact `visual_delivery: "native"` marker says an adapter already showed the notification
+   through a native terminal route. The validated VOICE
    line joins the global serial play queue (`core/play-queue.ts`) and the request returns
    immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
    steps 4–6 one line at a time — a new line never plays over an in-flight one; queued
@@ -180,8 +185,8 @@ exist). Host lifecycle behavior remains independent: the Claude Code adapter
 suppresses subagents via stdin `agent_id` and reads `~/.claude/settings.json` for identity;
 Pi suppresses via `ECHO_VOICE_SUPPRESS` plus run-context (`hasUI === false`, or mode
 `json`/`print`). The daemon and the adapters share code only through the `@echo/shared`
-package — including the environment-file loader (`shared/echo-env.ts`), so
-`~/.config/echo/.env` uses identical precedence in every process. The package boundary,
+package — including the configuration loader (`shared/echo-env.ts`), so
+`~/.config/echo/config.json` uses identical precedence in every process. The package boundary,
 adapter responsibilities, and the Pi per-turn injection (#15):
 [`docs/adapters.md`](docs/adapters.md).
 
@@ -197,10 +202,10 @@ are contract.
   return JSON 404 with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan — many callers depend on the body shape and status semantics.
-- **All voice traffic is `:8888`.** No new `localhost:31337` references (the legacy Pulse
+- **All voice traffic is `:3246` by default.** No new `localhost:31337` references (the legacy Pulse
   port).
 - **Never write process state to `/tmp`.** Use user-owned cache/log/config paths.
-- **Do not broad-kill whatever owns port `8888`** — it may be another service.
+- **Do not broad-kill whatever owns port `3246`** — it may be another service.
 - **Bun + TypeScript only.** No npm/npx/node workflows. Python only as the out-of-process
   `edge_tts` dependency.
 - **Do not commit secrets or `.env` files.**
@@ -220,7 +225,7 @@ The authoritative copy of the invariant list and the DOX rail lives in [`AGENTS.
 |---|---|
 | Build, test, and run | [`AGENTS.md`](AGENTS.md), [`docs/development.md`](docs/development.md) |
 | Operate the installed service (start/stop/update/repo moves) | [`docs/operations.md`](docs/operations.md) |
-| Configure env files, ports, and providers | [`docs/configuration.md`](docs/configuration.md) |
+| Configure JSON settings, migrate dotenv values, ports, and providers | [`docs/configuration.md`](docs/configuration.md) |
 | Call or extend the HTTP API | [`docs/http-api.md`](docs/http-api.md) |
 | Understand egress / observability | [`docs/providers-observability.md`](docs/providers-observability.md) |
 | Tune reliability / circuit breaker | [`docs/reliability.md`](docs/reliability.md) |

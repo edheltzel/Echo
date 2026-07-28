@@ -44,7 +44,7 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
 }
 
 export function loadOmpVoiceConfig(env: Record<string, string | undefined> = process.env): OmpVoiceConfig {
-  // Same canonical ECHO_* env names as the Pi adapter (legacy ATLAS_VOICE_* / VOICESYSTEM_*
+  // Same canonical ECHO_* env names as the Pi adapter (legacy ATLAS_VOICE_* names
   // kept as silent deprecated fallbacks). omp defaults to persona "omp" and shares Pi's
   // "pi" voice mapping by default; a project daidentity override (below) or env pins otherwise.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
@@ -53,7 +53,7 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = pro
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "omp Notification",
     startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "omp",
-    voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? env.VOICESYSTEM_VOICE_ID ?? "pi",
+    voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? "pi",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED ?? env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS ?? env.ATLAS_VOICE_SPEAK_COMPLETIONS, true),

@@ -118,7 +118,7 @@ Both PRs: the trio locally (`bun test` · `PORT=8889 tests/smoke-core.sh` · the
 
 Item A end-to-end: open the PR, confirm the `verify` check appears and goes green on the PR itself.
 
-Item B end-to-end (live, on the Mac): `launchctl kickstart -k "gui/$UID/com.echo"` → start a VoiceLayer `voice_ask` → `curl -X POST localhost:8888/notify -H 'Content-Type: application/json' -d '{"message":"capture test"}'` → banner appears, **no audio**, `tail ~/.agents/Echo/audio-lifecycle.jsonl` shows `capture-held` → end the capture, repeat, audio plays → `curl localhost:8888/health | jq .capture_guard`.
+Item B end-to-end (live, on the Mac): `launchctl kickstart -k "gui/$UID/com.echo"` → start a VoiceLayer `voice_ask` → `curl -X POST localhost:3246/notify -H 'Content-Type: application/json' -d '{"message":"capture test"}'` → banner appears, **no audio**, `tail ~/.agents/Echo/audio-lifecycle.jsonl` shows `capture-held` → end the capture, repeat, audio plays → `curl localhost:3246/health | jq .capture_guard`.
 
 ## Sequencing summary
 

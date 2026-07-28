@@ -46,17 +46,17 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
 }
 
 export function loadPiVoiceConfig(env: Record<string, string | undefined> = process.env): PiVoiceConfig {
-  // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* / VOICESYSTEM_*
-  // names remain as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
-  // environment variables"). VOICE_ID converges two legacy names onto one canonical;
-  // the notify endpoint is resolved by @echo/shared so ECHO_DAEMON_URL retargets it.
+  // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* names remain
+  // as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
+  // environment variables"). The notify endpoint is resolved by @echo/shared, so
+  // ECHO_DAEMON_URL retargets it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "Pi Notification",
     startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "Pi",
-    voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? env.VOICESYSTEM_VOICE_ID ?? "pi",
+    voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? "pi",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED ?? env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS ?? env.ATLAS_VOICE_SPEAK_COMPLETIONS, true),

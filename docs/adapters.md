@@ -83,8 +83,8 @@ summary>`. The existing `message_end`/`turn_end` path then extracts and speaks t
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
 - **Persona name** comes from config: `personaName` ← `ECHO_VOICE_PERSONA_NAME` (default
-  `"Pi"`), never hard-coded. Pi/omp load the same Echo environment-file chain as the daemon,
-  so `~/.config/echo/.env` is the durable local configuration surface; real process
+  `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
+  `~/.config/echo/config.json` is the durable local configuration surface; real process
   variables win, and an existing host process must be relaunched after edits.
 - **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from a
   pool of neutral catchphrases (`adapters/pi/config.ts`, mirroring the Claude Code adapter's
@@ -135,5 +135,5 @@ the adapter absorbs:
   state aborts before any host state is mutated.
 
 omp reads the same canonical `ECHO_VOICE_*` configuration as Pi and defaults to the same
-`voice_id: "pi"`, but speaks as `personaName: "omp"`. Local values from `~/.config/echo/.env`
-override those defaults for both hosts.
+`voice_id: "pi"`, but speaks as `personaName: "omp"`. Local values from
+`~/.config/echo/config.json` override those defaults for both hosts.

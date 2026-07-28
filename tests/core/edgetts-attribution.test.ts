@@ -20,7 +20,7 @@
 //
 // Config is pinned via env BEFORE import so the breaker math is deterministic and
 // independent of the host environment (these are module-load-time consts):
-//   • PORT=0                      → ephemeral bind, never collides with :8888.
+//   • PORT=0                      → ephemeral bind, never collides with :3246.
 //   • THRESHOLD=2                 → two recorded failures open the breaker.
 //   • SYNTH_RETRIES=1             → one retry, i.e. two synth attempts per speak().
 //   • SYNTH_BACKOFF_MS=1          → retry sleep is ~1ms, keeps the suite fast.

@@ -76,7 +76,7 @@ describe("Claude Code startup greeting announces the project persona name", () =
 
 // The greeting hook runs its work at import time (it is a hook script, not a
 // module), so its daemon address is asserted by reading the source: both POST
-// paths must resolve through @echo/shared rather than pinning :8888 themselves.
+// paths must resolve through @echo/shared rather than pinning :3246 themselves.
 describe("VoiceGreeting hook resolves the daemon address, never hardcodes it", () => {
   const source = readFileSync(
     join("adapters", "claudecode", "hooks", "VoiceGreeting.hook.ts"),
@@ -93,7 +93,7 @@ describe("VoiceGreeting hook resolves the daemon address, never hardcodes it", (
     const offenders = source
       .split("\n")
       .map((line, i) => ({ line: line.trim(), n: i + 1 }))
-      .filter(({ line }) => /(['"`])https?:\/\/[^'"`]*:8888[^'"`]*\1/.test(line));
+      .filter(({ line }) => /(['"`])https?:\/\/[^'"`]*:3246[^'"`]*\1/.test(line));
     expect(offenders).toEqual([]);
   });
 });

@@ -23,7 +23,7 @@ implementation to **mine, not port**.
 ```
  Claude Code ──MCP tool──┐
  Pi / omp ──ext tool или─┤        ┌──────────────────┐    POST /notify     ┌────────────┐
-        same MCP─────────┼──HTTP──│  echo-converse    │────(speak question)─▶│ core :8888 │
+        same MCP─────────┼──HTTP──│  echo-converse    │────(speak question)─▶│ core :3246 │
  scripts ──curl──────────┘  /ask  │  mic·STT·booking  │                     │ (untouched)│
                                   │  duplex turn      │◀──/health poll──────│            │
                                   └───────┬──────────┘                      └────────────┘

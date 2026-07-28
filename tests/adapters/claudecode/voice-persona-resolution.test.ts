@@ -349,7 +349,7 @@ describe("fetchKnownAgentKeys — persona keys come from the daemon, not its con
     const keys = await fetchKnownAgentKeys();
 
     expect([...keys].sort()).toEqual(["engineer", "themis"]);
-    expect(requestedUrls).toEqual(["http://localhost:8888/voices"]);
+    expect(requestedUrls).toEqual(["http://localhost:3246/voices"]);
     // The source is the daemon's answer, so an on-disk VOICES_PATH is irrelevant.
     expect(requestedUrls.some((u) => u.includes("voices.json"))).toBe(false);
   });

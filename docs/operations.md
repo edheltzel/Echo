@@ -19,7 +19,7 @@ Run all commands from the repo root.
 bash scripts/start.sh
 ```
 
-Prints `OK echo started on :8888`. If the service is already loaded it says so and exits;
+Prints `OK echo started on :3246`. If the service is already loaded it says so and exits;
 if the plist is missing it tells you to run `scripts/install.sh` first.
 
 ## Stop
@@ -57,14 +57,13 @@ runs a health check, and prints the log path with the last five log lines.
 ## Health
 
 ```bash
-curl -fsS http://localhost:8888/health
+curl -fsS http://localhost:3246/health
 ```
 
-Returns JSON containing `"status":"healthy"`. Every command on this page targets `8888`
-(`scripts/echo-port.sh`) — Stage 1's CLI is single-port and does not discover a daemon
-listening anywhere else, so a daemon moved off the default is not supported by these
-commands yet. Exporting `PORT` aims one command at one specific daemon (an isolated test
-instance), nothing more. See [`configuration.md`](configuration.md).
+Returns JSON containing `"status":"healthy"`. Every command on this page uses the port
+from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT`
+override is available for one isolated command or test. The CLI does not discover arbitrary
+listeners. See [`configuration.md`](configuration.md).
 
 ## Logs
 
@@ -76,8 +75,9 @@ instance), nothing more. See [`configuration.md`](configuration.md).
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on `:8888` (exporting `PORT` aims it at one specific
-daemon, e.g. an isolated test instance). While muted, notifications are still accepted,
+`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`; exporting
+`PORT` aims it at one specific daemon, e.g. an isolated test instance). While muted,
+notifications are still accepted,
 processed, and logged — only the audio is suppressed, across every provider:
 
 ```bash
@@ -116,11 +116,16 @@ and reloads it, so a bad update leaves you on the daemon you had rather than a c
 one, and exits 1 with the log path. It re-checks health after the restore too, and says
 `ROLLBACK INCOMPLETE` rather than claiming success if even the old payload stays down.
 
-## Config changes need a re-stage
+## Which config changes need a re-stage
 
-The daemon loads `core/voices.json` and `core/pronunciations.json` once at startup — **from
-the payload copy**, resolved next to the running `core/server.ts`. Editing the checkout's copy
-has no effect until you re-stage. Edit, then `cli/echo update` (it re-stages and reloads).
+The daemon reads all three of its config files once at startup, but they do **not** live in the
+same place:
+
+- `~/.config/echo/config.json` is resolved from your home directory, never from the payload.
+  Edit it and reload — `launchctl kickstart -k "gui/$UID/com.echo"` is enough; no re-stage.
+- `core/voices.json` and `core/pronunciations.json` are resolved next to the running
+  `core/server.ts`, which is **the payload copy**. Editing the checkout's copy has no effect
+  until you re-stage: edit, then `cli/echo update` (it re-stages and reloads).
 
 ## Moved or renamed the repo?
 
@@ -159,7 +164,7 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 ```
 
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
-and persona config (`~/.config/echo/.env`). Adapter registrations are **not** removed:
+and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in
 `~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in
 `~/.omp/agent/extensions/` all survive. There is no deregistration tool; remove those

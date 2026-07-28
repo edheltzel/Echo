@@ -10,7 +10,7 @@ source: SCOUT-REPORT.md
 
 ## Overview
 
-Convert `atlas-voicesystem` from a PAI-shaped voice server bundle into a host-neutral voice server with explicit host adapters, then add Pi as the first non-PAI adapter. The universal core continues to provide the existing `/notify` contract on port `8888`; PAI- and Pi-specific lifecycle integration lives outside the core under `adapters/`.
+Convert `atlas-voicesystem` from a PAI-shaped voice server bundle into a host-neutral voice server with explicit host adapters, then add Pi as the first non-PAI adapter. The universal core continues to provide the existing `/notify` contract on port `3246`; PAI- and Pi-specific lifecycle integration lives outside the core under `adapters/`.
 
 This plan intentionally combines the foundational issue #1 decoupling with issue #7's Pi adapter work. A Pi adapter would otherwise have nowhere clean to plug in, and adding it directly to the current PAI-shaped tree would bake in the coupling this repo is trying to remove.
 
@@ -32,7 +32,7 @@ The intended outcome is: install/run the voice server without PAI, opt into `ada
 ## Requirements Trace
 
 - R1. Universal core must not depend on PAI, Pi, Claude Code, or any host-specific settings files.
-- R2. The `/notify` HTTP contract, default port `8888`, rate limiting, sanitization, provider fallback, voice settings resolution, and health reporting must remain compatible.
+- R2. The `/notify` HTTP contract, default port `3246`, rate limiting, sanitization, provider fallback, voice settings resolution, and health reporting must remain compatible.
 - R3. Existing PAI integration must keep working after migration through `adapters/pai/`, including session-start greeting, stop-phase `🗣️` line speaking, and subagent voice suppression.
 - R4. Pi integration must be a Pi package/extension under `adapters/pi/` that can be installed without PAI present.
 - R5. Pi session-start should trigger an audible greeting through `/notify` using Pi session metadata and `source: "pi"`.
@@ -634,7 +634,7 @@ Pi event mapping:
 - **State lifecycle risks:** Pi adapter dedupe state is per session and cleared on session shutdown; PAI adapter preserves existing file-based voice logs.
 - **API surface parity:** `/notify` remains the stable cross-host API; `/pai` should not be a universal core surface after decoupling.
 - **Integration coverage:** Core route contract, PAI hook behavior, Pi lifecycle mapping, install migration, and docs links all need coverage.
-- **Unchanged invariants:** Default port `8888`, provider fallback order semantics, voice settings override precedence, sanitization limit, CORS locality, and rate limiting remain unchanged unless explicitly documented.
+- **Unchanged invariants:** Default port `3246`, provider fallback order semantics, voice settings override precedence, sanitization limit, CORS locality, and rate limiting remain unchanged unless explicitly documented.
 
 ---
 

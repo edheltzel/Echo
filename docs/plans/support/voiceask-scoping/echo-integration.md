@@ -80,7 +80,7 @@ notify.
 
 ## 2. The decision space: three placements
 
-### Option (a) — Extend `core/server.ts` with `POST /ask` on `:8888`
+### Option (a) — Extend `core/server.ts` with `POST /ask` on `:3246`
 
 The daemon grows a fifth endpoint. The `fetch` handler at `core/server.ts:1717` dispatches
 on `url.pathname`; you'd add an `=== "/ask"` branch that: speaks the question, opens the
@@ -360,7 +360,7 @@ touches the TTS daemon's dependency surface** — a direct payoff of Option (b).
 `~/Library/Logs/echo.log`). A converse daemon means a **second** service identity
 (`com.echo.converse`), its own log, and its own lifecycle in
 `scripts/{start,stop,restart,status,uninstall}.sh`. AGENTS.md warns: *"Do not broad-kill
-whatever owns port 8888"* — the same discipline applies to converse's port. Prefer the
+whatever owns port 3246"* — the same discipline applies to converse's port. Prefer the
 **booking-daemon-is-tiny / capture-is-a-child** topology from §5.1 to minimize the
 always-on footprint.
 

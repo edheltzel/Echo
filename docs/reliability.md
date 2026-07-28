@@ -29,8 +29,8 @@ missing/non-numeric/below-floor values:
 | `ECHO_EDGETTS_SYNTH_RETRIES` | 1 | 0 |
 | `ECHO_EDGETTS_SYNTH_BACKOFF_MS` | 250 | 1 |
 
-The legacy `VOICESYSTEM_*` names for these knobs still work as deprecated silent
-fallbacks (see [`configuration.md`](configuration.md#deprecated-environment-variables)).
+The former voice-system-prefixed names for these knobs are retired. Use the canonical
+properties in `~/.config/echo/config.json`.
 
 The threshold is **global** across edgetts/elevenlabs/kokoro (default 2 tolerates one
 isolated post-retry failure; a second consecutive failure still opens the breaker, so

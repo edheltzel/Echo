@@ -39,14 +39,16 @@ describe("isAbortError (R2) — abort vs. genuine failure", () => {
   });
 });
 
+// The env is injected, never read from the operator's real config.json: the key
+// is a documented config setting, so an operator who sets it would otherwise
+// fail the default assertion locally while CI stayed green.
 describe("resolveVoiceEventsLogPath (R3)", () => {
   test("defaults under ~/.agents/Echo", () => {
-    delete process.env.ECHO_VOICE_EVENTS_LOG;
-    expect(resolveVoiceEventsLogPath()).toContain(join(".agents", "Echo", "voice-events.jsonl"));
+    expect(resolveVoiceEventsLogPath({})).toContain(join(".agents", "Echo", "voice-events.jsonl"));
   });
   test("honors ECHO_VOICE_EVENTS_LOG", () => {
-    process.env.ECHO_VOICE_EVENTS_LOG = "/somewhere/custom.jsonl";
-    expect(resolveVoiceEventsLogPath()).toBe("/somewhere/custom.jsonl");
+    expect(resolveVoiceEventsLogPath({ ECHO_VOICE_EVENTS_LOG: "/somewhere/custom.jsonl" }))
+      .toBe("/somewhere/custom.jsonl");
   });
 });
 

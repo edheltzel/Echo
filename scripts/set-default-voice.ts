@@ -1,24 +1,18 @@
 #!/usr/bin/env bun
 // `echo voice <name> <voice-id>` — set the default Echo persona (name + edge-tts
-// voice) for pi and omp agent sessions by merge-writing ~/.config/echo/.env, the
-// first env file the daemon and adapters read (shared/echo-env.ts). The two keys
-// are the ones adapters resolve for the spoken persona name + voice id.
-//
-// Claude Code reads its persona from ~/.claude/settings.json (adapters/…/identity.ts),
-// not these env vars, so this command is scoped to pi/omp; the confirmation says so.
-//
-// Validation reuses looksLikeEdgeVoice so the edge-tts grammar stays single-sourced.
+// voice) in ~/.config/echo/config.json for pi and omp agent sessions. Claude Code
+// reads its persona from ~/.claude/settings.json instead.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { echoConfigPath } from "../shared/echo-env";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 
-const ENV_FILE = process.env.ECHO_ENV_FILE ?? join(homedir(), ".config", "echo", ".env");
+// One resolver for reader and writer, so `echo voice` can never report success
+// after writing to a file the daemon does not read.
+const CONFIG_FILE = echoConfigPath(process.env.HOME ?? homedir(), process.env);
 const NAME_KEY = "ECHO_VOICE_PERSONA_NAME";
 const VOICE_KEY = "ECHO_VOICE_ID";
-// The name is written as KEY="<name>" into a file the daemon parses line by line:
-// a control character (a newline above all) would inject further config lines, and
-// a double quote would not survive the daemon's quote stripping intact.
 const ILLEGAL_IN_NAME = /[\u0000-\u001f\u007f"]/;
 
 function fail(message: string): never {
@@ -27,9 +21,7 @@ function fail(message: string): never {
 }
 
 const [name, voice] = process.argv.slice(2);
-if (!name || !voice) {
-  fail("Usage: echo voice <name> <edge-tts-voice-id>   e.g. echo voice Echo en-US-AndrewNeural");
-}
+if (!name || !voice) fail("Usage: echo voice <name> <edge-tts-voice-id>   e.g. echo voice Echo en-US-AndrewNeural");
 if (ILLEGAL_IN_NAME.test(name)) {
   fail(`Persona name must not contain control characters or double quotes: ${JSON.stringify(name)}`);
 }
@@ -38,24 +30,27 @@ if (!looksLikeEdgeVoice(voice)) {
   fail("List available voices: bun scripts/preview-voices.ts --list");
 }
 
-// Merge-preserving write: keep every existing line except assignments of the two
-// keys we own; comments, blanks, and unrelated keys survive. Then append the
-// canonical pair. A malformed line is never parsed — it is simply preserved.
-const raw = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, "utf8") : "";
-const ownedRe = new RegExp(`^\\s*(${NAME_KEY}|${VOICE_KEY})\\s*=`);
-const kept = raw.split("\n").filter((line) => !ownedRe.test(line));
-while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
+const raw = existsSync(CONFIG_FILE) ? readFileSync(CONFIG_FILE, "utf8") : "{}";
+let config: Record<string, unknown>;
+try {
+  const parsed: unknown = JSON.parse(raw);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+  config = parsed as Record<string, unknown>;
+} catch {
+  fail(`Cannot update invalid JSON configuration: ${CONFIG_FILE}`);
+}
 
-const next = [...kept, `${NAME_KEY}="${name}"`, `${VOICE_KEY}="${voice}"`].join("\n") + "\n";
+config[NAME_KEY] = name;
+config[VOICE_KEY] = voice;
+const next = JSON.stringify(config, null, 2) + "\n";
 
-mkdirSync(dirname(ENV_FILE), { recursive: true });
-// One-shot backup of any prior file, then atomic replace.
-if (existsSync(ENV_FILE)) writeFileSync(`${ENV_FILE}.bak`, raw);
-const tmp = `${ENV_FILE}.tmp.${process.pid}`;
+mkdirSync(dirname(CONFIG_FILE), { recursive: true });
+if (existsSync(CONFIG_FILE)) writeFileSync(`${CONFIG_FILE}.bak`, raw);
+const tmp = `${CONFIG_FILE}.tmp.${process.pid}`;
 writeFileSync(tmp, next);
-renameSync(tmp, ENV_FILE);
+renameSync(tmp, CONFIG_FILE);
 
-console.log(`Set default persona "${name}" (${voice}) in ${ENV_FILE}.`);
+console.log(`Set default persona "${name}" (${voice}) in ${CONFIG_FILE}.`);
 console.log("Applies to pi and omp sessions. Claude Code reads its persona from");
 console.log("~/.claude/settings.json — set it there or with the /echo-voice command.");
 console.log("Start a new agent session to hear it.");

@@ -1,6 +1,6 @@
 # HTTP API
 
-The universal core (`core/server.ts`) listens on `localhost:8888` (override: `PORT`) and
+The universal core (`core/server.ts`) listens on `localhost:3246` by default (override: `PORT`) and
 exposes five endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
 [`configuration.md`](configuration.md) for the config the server reads at startup.
@@ -32,7 +32,8 @@ Primary host-neutral endpoint. Body (every field optional):
     "use_speaker_boost": true
   },
   "session_id": "host-session-id",
-  "source": "pi"
+  "source": "pi",
+  "visual_delivery": "native"
 }
 ```
 
@@ -44,6 +45,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_id` | — (identity voice) | Short persona **name key** (e.g. `"themis"`), not a raw provider voice id — resolution order and traps in [`voices.md`](voices.md). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
 | `voice_settings` | — | Pass-through override, see below |
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
+| `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
 
 Validation: `title` and `message` are each rejected with `400` when over **500 characters**,
 then sanitized for speech — shell metacharacters (`` ;&|><`$\ ``) stripped, markdown
@@ -69,7 +71,10 @@ failures (rejected **before** the line is queued), `500` otherwise.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never
-waits behind playback), while synthesis and playback of **voice lines only** run
+waits behind playback) unless the request carries the exact `visual_delivery: "native"`
+marker, in which case an adapter already delivered the visual notification through a
+native terminal route and the macOS banner is skipped. Synthesis and playback of
+**voice lines only** run
 asynchronously from a **global serial play queue** — one voice at a time across all
 sessions and hosts, a new line never starts while another plays, and the in-flight line is
 never interrupted. A `voice_enabled: false` request is banner-only: it never enters the
@@ -133,17 +138,17 @@ Stream Deck — anything that can run a command or make an HTTP request):
 
 ```bash
 # Raycast Script Command / Stream Deck "System: Open" / any shell binding
-curl -fsS -X POST http://localhost:8888/mute
+curl -fsS -X POST http://localhost:3246/mute
 
 # Explicit variants
-curl -fsS -X POST http://localhost:8888/mute -H 'Content-Type: application/json' \
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
   -d '{"muted": true, "duration_minutes": 30}'   # mute for 30 minutes
-curl -fsS -X POST http://localhost:8888/mute -H 'Content-Type: application/json' \
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
   -d '{"muted": false}'                           # unmute now
 ```
 
 In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
-`http://localhost:8888/mute` (leave the request body empty to toggle).
+`http://localhost:3246/mute` (leave the request body empty to toggle).
 
 ## `GET /health`
 
@@ -152,9 +157,23 @@ status, `macos_fallback_voice`, pronunciation rule count, emotional preset count
 `play_queue` (`{depth, in_flight_ms, stalled}` — backlog, how long the current line has
 been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
-`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), and the capture
+`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), the capture
 guard (`capture_guard: {path, state}` — the resolved recording-state file and its current
-reading; `state` is `idle` unless an external mic capture is live).
+reading; `state` is `idle` unless an external mic capture is live), and the configuration
+audit below.
+
+`config: {path, present, valid, ignored_keys, errors}` reports what
+`~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
+existed, and — because a key that fails validation is dropped on its own rather than
+discarding the file — exactly which keys were ignored and why. `valid: false` with a
+non-empty `ignored_keys` is the machine-readable form of "your config partly applied", so a
+typo is discoverable without reading `~/Library/Logs/echo.log`:
+
+```bash
+curl -fsS http://localhost:3246/health | jq '.config'
+```
+
+Full key reference and the validation rules: [`configuration.md`](configuration.md).
 
 Each provider entry carries an **egress audit** (`getProviderStatus` in `core/server.ts`):
 `enabled`, `healthy`, and `wouldEgress` (true only when the provider is *both* enabled and

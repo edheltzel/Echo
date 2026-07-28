@@ -9,6 +9,7 @@ import {
 } from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
+import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
@@ -103,7 +104,14 @@ export default function echoVoiceOmpAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
     try {
-      const result = await sendNotification(cfg, message, "omp", resolveSessionId(ctx), ctx.signal);
+      const result = await sendNotification(
+        cfg,
+        message,
+        "omp",
+        resolveSessionId(ctx),
+        ctx.signal,
+        nativeContextFromAdapterContext(ctx, process.env, resolveSessionId(ctx), ctx.hasUI === true),
+      );
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
         return false;

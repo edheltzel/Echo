@@ -18,7 +18,7 @@ SCRIPTS="$REPO_ROOT/scripts"
 SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-# Sets ECHO_PORT (PORT when exported, else 8888) and its URLs. Stage 1 is
+# Sets ECHO_PORT (PORT when exported, else 3246) and its URLs. Stage 1 is
 # single-port: this CLI does not discover a daemon listening anywhere else.
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPTS/echo-port.sh"

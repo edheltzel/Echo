@@ -23,7 +23,7 @@ and a registered adapter fails to load.** `scripts/install.sh` runs it for you, 
 
 ## Run Dev Server
 
-Use a non-production port so the installed LaunchAgent on `:8888` is not disturbed:
+Use a non-production port so the installed LaunchAgent on `:3246` is not disturbed:
 
 ```bash
 PORT=8889 bun run core/server.ts
@@ -84,7 +84,7 @@ CI runs the same set (plus the Pi and omp adapter builds) headlessly on every PR
 
 ### Never test against the running daemon
 
-The installed LaunchAgent on `:8888` serves the operator's real notifications. Stopping it,
+The installed LaunchAgent on `:3246` serves the operator's real notifications. Stopping it,
 retargeting it, overwriting its config, or speaking through it is a live-system incident, not
 a test.
 
@@ -92,7 +92,7 @@ a test.
 (`ECHO_E2E_PORT`, default `8899`) with every state path — mute, capture guard, audio cache,
 TTS cache, lifecycle log, `VOICES_PATH` — redirected into a scratch directory, points the
 adapters at it via `ECHO_DAEMON_URL`, and kills only the pid it started. It **refuses to run**
-if the chosen port is `8888` or if anything is already listening there: it never attaches to a
+if the chosen port is `3246` or if anything is already listening there: it never attaches to a
 daemon it does not own. Before sending anything it prints an isolation proof (pid, port,
 adapter target, scratch dir).
 
@@ -114,4 +114,4 @@ lsof -nP -iTCP:8889 | awk 'NR>1 {print $2}' | xargs kill 2>/dev/null || true
 
 - If `:8889` is busy, choose another dev port.
 - If `edge-tts` fails, `/notify` should try real synthesis before falling back unless the Edge circuit is already open; inspect `attempts[]` in the resolution log for `phase`, `reason`, and stderr.
-- If production voice changes, confirm you did not run scripts against `:8888` unintentionally.
+- If production voice changes, confirm you did not run scripts against `:3246` unintentionally.

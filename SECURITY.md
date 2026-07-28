@@ -8,7 +8,7 @@ the trust boundary, egress posture, and secret handling. For the request flow se
 
 ## Trust boundary
 
-- **Localhost only.** The daemon binds `localhost:8888` (`PORT`, default 8888). It is meant
+- **Localhost only.** The daemon binds `localhost:3246` (`PORT`, default 3246). It is meant
   to be reachable only by other processes on the same machine; do not expose it to a network.
 - **CORS restricted to localhost.** `Access-Control-Allow-Origin` is hard-set to
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
@@ -20,6 +20,13 @@ the trust boundary, egress posture, and secret handling. For the request flow se
 - **Input sanitization.** Every spoken message passes `validateInput` (non-empty string, ≤500
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.
+- **Native terminal visual delivery is adapter-owned, not core.** An adapter that routes a
+  notification's title/body through Herdr or a supported terminal's OSC sequence
+  (`shared/terminal-notify.ts`) normalizes that text independently of `sanitizeForSpeech` —
+  stripping control/escape bytes and bounding length — and never writes to a hook's or the
+  daemon's stdout. Alacritty and unproven tmux passthrough are treated as unsupported
+  (fail-closed); the daemon only learns about a successful native delivery after the fact,
+  via the exact `visual_delivery: "native"` marker (see [`docs/http-api.md`](docs/http-api.md)).
 
 There is **no authentication** on `/notify` — any local process may request speech — and
 the same applies to `/mute` (#83): any local process may flip the global mute. `GET /voices`
@@ -55,14 +62,15 @@ logged), not an oversight; do not add network exposure without revisiting it.
   runtime (`resolveEnvVar`, falling back to a bare `ELEVENLABS_API_KEY`). The key is
   read once in the provider constructor — `/health` reports only `apiKeyConfigured: true|false`,
   never the key itself.
-- **Env files resolve from user-owned paths** (`ECHO_ENV_PATHS`,
-  `~/.config/echo/.env`, …), first-found-wins, never overriding a live
-  environment value. Resolution is read-only: the daemon layers file values under
-  the live environment at read time and never writes them into `process.env`, so an
-  env-file secret is not hydrated into the environment that same-process modules
-  and spawned helpers inherit. Precedence detail: [`docs/configuration.md`](docs/configuration.md).
-  (Legacy `VOICESYSTEM_ENV_PATHS` is still honored as a deprecated silent
-  fallback — see the README.)
+- **Config resolves from user-owned paths** — `~/.config/echo/config.json` first,
+  then the legacy dotenv locations (`ECHO_ENV_PATHS`, `~/.config/echo/.env`, …)
+  first-found-wins — never overriding a live environment value. Resolution is
+  read-only: the daemon layers file values under the live environment at read time
+  and never writes them into `process.env`, so a secret in either file is not
+  hydrated into the environment that same-process modules and spawned helpers
+  inherit. `config.json` **rejects** `ELEVENLABS_API_KEY`, which keeps the one
+  secret in a dotenv file that is never staged into the daemon payload. Precedence
+  detail: [`docs/configuration.md`](docs/configuration.md).
 
 ## User-owned paths — never `/tmp`
 
