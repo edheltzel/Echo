@@ -90,6 +90,15 @@ value; it reports `shown` plus `route` (`herdr` or `terminal`) and, for terminal
 terminal name. The daemon's `/health`, `~/Library/Logs/echo.log`, and the audio lifecycle and
 voice-resolution logs remain the authoritative service diagnostics.
 
+When the fallback appears as a macOS notification from **Script Editor**, that is the daemon's
+final AppleScript route, not a WezTerm notification. It means the adapter did not establish a
+native-success marker for that request. Conversely, a native route that reports `shown` adds
+the exact marker and suppresses AppleScript, even if a host compositor or Herdr UI later fails to
+render the visual toast; that latter case is a host-display boundary, not duplicate Echo delivery.
+For focused WezTerm diagnostics, `notification_handling="AlwaysShow"` can be supplied as a
+temporary command-line override. Do not change the user's global WezTerm configuration merely
+to make an acceptance screenshot pass.
+
 Validation: `title` and `message` are each rejected with `400` when over **500 characters**,
 then sanitized for speech — shell metacharacters (`` ;&|><`$\ ``) stripped, markdown
 (bold/italic/inline code/headers) unwrapped, `<script` and `../` removed. A message that is

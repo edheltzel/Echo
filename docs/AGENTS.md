@@ -13,6 +13,9 @@ contributors.
   Durable evidence needed to execute a plan lives under `plans/support/<topic>/`.
 - `handoffs/` contains committed session-continuity records. The current handoff lives at the
   directory root; retired handoffs retain their original filenames under `handoffs/archive/`.
+- `assets/` contains reviewable documentation media; notification captures belong under
+  `assets/notifications/` and must exclude machine-local state, secrets, and unrelated private
+  content.
 - Other documentation areas keep the ownership described by the root documentation map.
 
 ## Local Contracts

@@ -102,6 +102,39 @@ legacy fallback. Verify service state with `cli/echo doctor`, `cli/echo status`,
 with `voice_enabled: true`; verify its eventual `played` disposition in the audio-lifecycle
 log because `202` means accepted, not finished speaking.
 
+### Verified WezTerm capture
+
+For a visual acceptance test, run the adapter smoke from a real WezTerm TTY. If the terminal
+is focused and its notification policy suppresses focused-pane notifications, use a temporary
+isolated process with the runtime-only override below; do not edit the global WezTerm config:
+
+```bash
+/Applications/WezTerm.app/Contents/MacOS/wezterm \
+  --config 'notification_handling="AlwaysShow"' \
+  start --always-new-process --no-auto-connect --cwd "$PWD" -- \
+  env HERDR_SOCKET_PATH=/dev/null ECHO_VOICE_ENABLED=false \
+  ECHO_VOICE_GREET_ON_START=true ECHO_VOICE_SPEAK_COMPLETIONS=false PI_OFFLINE=1 \
+  pi --no-session --offline --no-tools -e "$PWD/adapters/pi/index.ts"
+```
+
+The rollout capture was made from the real terminal path with WezTerm
+`20260716-195552-76b606ec` on macOS, Echo `0.7.1` staged payload, and Pi `0.82.1`. The adapter
+selected terminal-native WezTerm OSC 777 delivery (`visual: {status: "shown", route:
+"terminal", terminal: "wezterm"}`); the exact native marker suppressed the AppleScript
+fallback. The temporary window was closed after capture and the global WezTerm configuration
+was unchanged.
+
+![Real WezTerm native notification](assets/notifications/wezterm-native-pi.png)
+
+*Real native terminal notification captured from Pi: title `Echo WezTerm`, message `Native
+WezTerm capture`. The image is deliberately cropped to the notification and contains no
+unrelated terminal content.*
+
+If a voice test is not heard, check the host output device and volume before diagnosing Echo:
+the original External Headphones route at 6% was not audible, while the same accepted test was
+heard clearly through Mac Studio Speakers at 35%; the original headphones route and 6% volume
+were then restored. This counterfactual isolates host output masking from Echo synthesis.
+
 ## Logs
 
 - Server log: `~/Library/Logs/echo.log` — `tail -f` it while debugging.
