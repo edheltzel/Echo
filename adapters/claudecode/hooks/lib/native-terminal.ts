@@ -1,4 +1,8 @@
-import { openNativeControllingTty, type TerminalNotificationContext } from "@echo/shared/terminal-notify.ts";
+import {
+  openNativeControllingTty,
+  tmuxContextFromEnv,
+  type TerminalNotificationContext,
+} from "@echo/shared/terminal-notify.ts";
 
 /**
  * Claude hooks receive JSON on stdin and may use stdout for hook protocol
@@ -10,5 +14,7 @@ export function createHookNativeVisualContext(
 ): TerminalNotificationContext {
   const context: TerminalNotificationContext = { env: process.env, notificationId };
   context.writer = openNativeControllingTty();
+  const tmux = tmuxContextFromEnv(process.env);
+  if (tmux) context.tmux = tmux;
   return context;
 }

@@ -86,10 +86,16 @@ export function nativeContextFromAdapterContext(
     writer: writer ?? (openControllingTty ? openNativeControllingTty() : undefined),
     notificationId,
   };
-  if (env.TMUX) {
-    context.tmux = { readOnlyEvidence: () => readTmuxPassthrough(env) };
-  }
+  const tmux = tmuxContextFromEnv(env);
+  if (tmux) context.tmux = tmux;
   return context;
+}
+
+/** Read-only tmux passthrough evidence for a given env; Echo never mutates this setting. */
+export function tmuxContextFromEnv(
+  env: Record<string, string | undefined>,
+): TerminalNotificationContext["tmux"] | undefined {
+  return env.TMUX ? { readOnlyEvidence: () => readTmuxPassthrough(env) } : undefined;
 }
 
 /** Open only the adapter process's controlling TTY, never stdout or stderr. */
