@@ -176,6 +176,37 @@ describe("/notify acks on receipt (R2)", () => {
     expect(readRows().filter((r) => r.session_id === "sess-banner")).toEqual([]);
   });
 
+  test("exact native marker suppresses the duplicate legacy banner", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "already shown natively",
+        voice_enabled: false,
+        visual_delivery: "native",
+        session_id: "sess-native",
+      }),
+    });
+    expect(res.status).toBe(202);
+    await Bun.sleep(40);
+    expect(spawnedCommands).not.toContain("/usr/bin/osascript");
+  });
+
+  test("unknown visual markers preserve raw-caller banner compatibility", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "unknown marker",
+        voice_enabled: false,
+        visual_delivery: "future-route",
+        session_id: "sess-unknown-route",
+      }),
+    });
+    expect(res.status).toBe(202);
+    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+  });
+
   test("a banner-only line never supersedes a queued voice line (same session)", async () => {
     // Blocker occupies the player so the voice target is deterministically QUEUED.
     const blocker = await fetch(`http://localhost:${PORT}/notify`, {

@@ -19,6 +19,8 @@ import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validato
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
 import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoints.ts';
 import { loadEchoConfiguration, type EchoEnvironment } from '@echo/shared/echo-env.ts';
+import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
+import { createHookNativeVisualContext } from '../lib/native-terminal';
 
 // ElevenLabs voice notification payload
 interface ElevenLabsNotificationPayload {
@@ -161,21 +163,21 @@ async function sendNotification(
   try {
     // The daemon's /notify endpoint, resolved from the shared endpoint contract so
     // a second instance (e.g. an isolated test daemon) is reachable via env.
-    const response = await fetch(resolveNotifyUrl(process.env), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    const response = await sendNotificationPayload(
+      { endpoint: resolveNotifyUrl(process.env), title: payload.title },
+      payload as NotifyPayload,
+      controller.signal,
+      createHookNativeVisualContext(sessionId),
+    );
 
     const fetchMs = Date.now() - fetchStart;
     if (!response.ok) {
-      console.error(`[Voice] fetch_fail: ${response.status} ${response.statusText} in ${fetchMs}ms`);
+      console.error(`[Voice] fetch_fail: ${response.status} in ${fetchMs}ms`);
       logVoiceEvent({
         ...baseEvent,
         event_type: 'failed',
         status_code: response.status,
-        error: response.statusText,
+        error: response.body,
       });
     } else {
       console.error(`[Voice] fetch_ok: ${response.status} in ${fetchMs}ms`);

@@ -1473,10 +1473,11 @@ export async function speakWithFallback(
 // Notification handlers — banner at accept time, speech via the play queue
 // =============================================================================
 
-// Fire the macOS banner immediately, OUTSIDE the play queue: a banner is not
-// audio, must never wait behind playback, and a superseded/dropped voice line
-// keeps its visual notification. Best-effort fire-and-forget, bounded by the
-// osascript process timeout; a banner failure never affects the request.
+// Fire the legacy macOS banner immediately, OUTSIDE the play queue: a banner
+// is not audio, must never wait behind playback, and a superseded/dropped voice
+// line keeps its visual notification. Adapters that already delivered a native
+// visual notification pass the exact additive marker below and skip this path.
+// Raw HTTP callers and unknown marker values retain the legacy fallback.
 function showBanner(sanitizedTitle: string, sanitizedMessage: string): void {
   try {
     const visible = stripMarkers(extractEmotionalMarker(sanitizedMessage).cleaned);
@@ -1701,6 +1702,7 @@ function acceptNotification(
     voiceId: string | null;
     voiceSettings: Partial<VoiceSettings> | null;
     sessionId: string | null;
+    nativeVisualShown: boolean;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1713,8 +1715,12 @@ function acceptNotification(
   }
 
   // Banner for every accepted notification, voice or not — decoupled from
-  // the queue so it shows immediately and survives supersede/age-drop.
-  showBanner(titleValidation.sanitized!, messageValidation.sanitized!);
+  // the queue so it shows immediately and survives supersede/age-drop. The
+  // exact native marker is the only opt-out; absent/unknown values preserve
+  // raw HTTP compatibility and the macOS fallback.
+  if (!opts.nativeVisualShown) {
+    showBanner(titleValidation.sanitized!, messageValidation.sanitized!);
+  }
 
   if (!opts.voiceEnabled) return;
 
@@ -1787,6 +1793,7 @@ export const server = serve({
         const voiceSettings = data.voice_settings || null;
         const sessionId = data.session_id || null;
         const source = data.source || null;
+        const nativeVisualShown = data.visual_delivery === 'native';
         const ctx: LogContext = { requestId: reqId, sessionId, source };
 
         if (voiceId && typeof voiceId !== 'string') {
@@ -1805,7 +1812,9 @@ export const server = serve({
         // async in the play queue's single consumer so the hook never blocks
         // on synthesis (#202) and concurrent notifications never overlap
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
-        acceptNotification(reqId, { title, message, voiceEnabled, voiceId, voiceSettings, sessionId });
+        acceptNotification(reqId, {
+          title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
+        });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
         return new Response(
@@ -1845,6 +1854,7 @@ export const server = serve({
         acceptNotification(reqId, {
           title: DEFAULT_NOTIFICATION_TITLE, message, voiceEnabled: true,
           voiceId: null, voiceSettings: null, sessionId: data.session_id || null,
+          nativeVisualShown: data.visual_delivery === 'native',
         });
 
         return new Response(

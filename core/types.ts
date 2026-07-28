@@ -15,6 +15,8 @@ export interface NotifyPayload {
   voice_settings?: VoiceSettings;
   session_id?: string;
   source?: string;
+  /** Set only after an adapter has completed native visual delivery. */
+  visual_delivery?: "native";
 }
 
 export interface NotifyResult {
