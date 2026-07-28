@@ -135,7 +135,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| `@echo/shared` workspace package (env loading, notify client, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
+| `@echo/shared` workspace package (env loading, notify client, native terminal visual routing, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
