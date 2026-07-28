@@ -14,7 +14,10 @@ session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or 
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
-macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner.
+macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner — unless
+the adapter already delivered the visual notification natively (Herdr, or a supported
+terminal's OSC escape sequence; `shared/terminal-notify.ts`), in which case it marks the
+request `visual_delivery: "native"` and the daemon skips its own banner for that request.
 
 ```
   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────┐
@@ -84,7 +87,7 @@ review nit.
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` — instant replay for repeated lines (#202). |
 | Numeric env parsing | `core/env.ts` | `parseBoundedInt` — every numeric env knob flows through it; `resolveEchoEnv` — non-mutating config reads. |
-| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first configuration loading: `config.json`, then the legacy dotenv fallback), `notify-client.ts`, `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first configuration loading: `config.json`, then the legacy dotenv fallback), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 — Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
@@ -111,7 +114,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    input is a 4xx **before** anything is queued.
 3. **Banner + enqueue + ack `202`** — the macOS banner fires immediately at accept
    (outside the queue; a superseded/dropped line keeps its banner, and a
-   `voice_enabled: false` request is banner-only and never queued). The validated VOICE
+   `voice_enabled: false` request is banner-only and never queued), unless the request's
+   exact `visual_delivery: "native"` marker says an adapter already showed the notification
+   through a native terminal route. The validated VOICE
    line joins the global serial play queue (`core/play-queue.ts`) and the request returns
    immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
    steps 4–6 one line at a time — a new line never plays over an in-flight one; queued

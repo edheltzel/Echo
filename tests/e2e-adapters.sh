@@ -119,7 +119,14 @@ bun -e '
 bun -e '
   const { sendNotification } = await import(`${process.env.ROOT}/adapters/pi/node_modules/@echo/shared/notify-client.ts`);
   const result = await sendNotification(
-    { endpoint: `${process.env.ECHO_DAEMON_URL}/notify`, title: "Echo Test", voiceEnabled: false },
+    {
+      endpoint: `${process.env.ECHO_DAEMON_URL}/notify`,
+      title: "Echo Test",
+      voiceEnabled: false,
+      // Keep the isolated regression from routing into the live
+      // Herdr session when the test itself runs inside Herdr.
+      visualContext: { env: {} },
+    },
     "Echo Test engaged. Beep, boop, bop.",
     "e2e-pi",
     "e2e-session",

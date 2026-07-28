@@ -20,6 +20,13 @@ the trust boundary, egress posture, and secret handling. For the request flow se
 - **Input sanitization.** Every spoken message passes `validateInput` (non-empty string, ≤500
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.
+- **Native terminal visual delivery is adapter-owned, not core.** An adapter that routes a
+  notification's title/body through Herdr or a supported terminal's OSC sequence
+  (`shared/terminal-notify.ts`) normalizes that text independently of `sanitizeForSpeech` —
+  stripping control/escape bytes and bounding length — and never writes to a hook's or the
+  daemon's stdout. Alacritty and unproven tmux passthrough are treated as unsupported
+  (fail-closed); the daemon only learns about a successful native delivery after the fact,
+  via the exact `visual_delivery: "native"` marker (see [`docs/http-api.md`](docs/http-api.md)).
 
 There is **no authentication** on `/notify` — any local process may request speech — and
 the same applies to `/mute` (#83): any local process may flip the global mute. `GET /voices`

@@ -32,7 +32,8 @@ Primary host-neutral endpoint. Body (every field optional):
     "use_speaker_boost": true
   },
   "session_id": "host-session-id",
-  "source": "pi"
+  "source": "pi",
+  "visual_delivery": "native"
 }
 ```
 
@@ -44,6 +45,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_id` | — (identity voice) | Short persona **name key** (e.g. `"themis"`), not a raw provider voice id — resolution order and traps in [`voices.md`](voices.md). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
 | `voice_settings` | — | Pass-through override, see below |
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
+| `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
 
 Validation: `title` and `message` are each rejected with `400` when over **500 characters**,
 then sanitized for speech — shell metacharacters (`` ;&|><`$\ ``) stripped, markdown
@@ -69,7 +71,10 @@ failures (rejected **before** the line is queued), `500` otherwise.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never
-waits behind playback), while synthesis and playback of **voice lines only** run
+waits behind playback) unless the request carries the exact `visual_delivery: "native"`
+marker, in which case an adapter already delivered the visual notification through a
+native terminal route and the macOS banner is skipped. Synthesis and playback of
+**voice lines only** run
 asynchronously from a **global serial play queue** — one voice at a time across all
 sessions and hosts, a new line never starts while another plays, and the in-flight line is
 never interrupted. A `voice_enabled: false` request is banner-only: it never enters the

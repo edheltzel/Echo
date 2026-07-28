@@ -33,6 +33,8 @@ import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 import { resolveStartupCatchphrase } from './lib/greeting';
 import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
+import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
+import { createHookNativeVisualContext } from './lib/native-terminal';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
@@ -41,11 +43,21 @@ const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 // that produced false `failed`/`aborted` events).
 const NOTIFY_TIMEOUT_MS = 5_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function postNotification(
+  url: string,
+  body: Record<string, unknown>,
+  sessionId?: string,
+): Promise<{ status: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), NOTIFY_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const result = await sendNotificationPayload(
+      { endpoint: url, title: typeof body.title === 'string' ? body.title : undefined },
+      body as NotifyPayload,
+      controller.signal,
+      createHookNativeVisualContext(sessionId),
+    );
+    return { status: result.status };
   } finally {
     clearTimeout(timeout);
   }
@@ -239,11 +251,7 @@ if (isNamedAgent && agentType) {
 
     console.error(`[VoiceGreeting] speaking: "${message}" (agent: ${agentType})`);
     const t0 = Date.now();
-    const resp = await fetchWithTimeout(resolveNotifyUrl(process.env), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const resp = await postNotification(resolveNotifyUrl(process.env), body, hookSessionId);
     console.error(`[VoiceGreeting] fetch_ok: ${resp.status} in ${Date.now() - t0}ms`);
   } catch (err) {
     console.error(`[VoiceGreeting] agent_voice_fail: ${err}`);
@@ -305,11 +313,7 @@ try {
   hookLog('VoiceGreeting', 'SessionStart', `speaking: "${catchphrase}"`, { url, pid: process.pid });
   console.error(`[VoiceGreeting] speaking: "${catchphrase}" via ${url}`);
   const t0 = Date.now();
-  const resp = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const resp = await postNotification(url, body, hookSessionId);
   console.error(`[VoiceGreeting] fetch_ok: ${resp.status} in ${Date.now() - t0}ms`);
 } catch (err) {
   console.error(`[VoiceGreeting] atlas_voice_fail: ${err}`);
