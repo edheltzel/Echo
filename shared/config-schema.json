@@ -66,6 +66,7 @@
     "ECHO_CONVERSE_CAPTURE_DIR": { "type": "string" },
     "ECHO_CONVERSE_MAX_CAPTURE_MS": { "type": ["string", "integer"], "minimum": 1 },
     "ECHO_CONVERSE_SILENCE_MS": { "type": ["string", "integer"], "minimum": 1 },
+    "ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS": { "type": ["string", "integer"], "minimum": 1 },
     "ECHO_CONVERSE_LOCALE": { "type": "string" },
     "ECHO_CONVERSE_STT_TIER": { "enum": ["yap", "whisper"] },
     "ECHO_CONVERSE_REC_BIN": { "type": "string" },

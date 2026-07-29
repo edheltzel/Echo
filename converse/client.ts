@@ -25,7 +25,7 @@ import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
 
 const COORDINATOR_START_TIMEOUT_MS = 5_000;
 const COORDINATOR_POLL_MS = 100;
-/** Slack over the capture cap so a lease cannot expire mid-recording. */
+/** Slack over the bounded work so a lease cannot expire mid-turn. */
 const LEASE_SLACK_MS = 30_000;
 const MAX_ANCESTRY_DEPTH = 12;
 
@@ -195,7 +195,10 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       source: options.source ?? "unknown",
       voice_id: options.voiceId,
       title: options.title,
-      lease_ms: config.maxCaptureMs + LEASE_SLACK_MS,
+      // Both capped steps run under this lease. Asking for only the capture cap
+      // would let a slow-but-healthy transcription outlive the booking, which is
+      // the very state that leaves a caller unable to hand the microphone back.
+      lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + LEASE_SLACK_MS,
       ancestry,
     }),
     signal: options.signal,

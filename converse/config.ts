@@ -8,6 +8,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveDaemonBase } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration, type EchoEnvironment } from "@echo/shared/echo-env.ts";
 
 /** Keypad ECHOV. Core's TTS daemon keeps :3246; converse never moves it. */
@@ -21,7 +22,12 @@ export interface ConverseConfig {
   port: number;
   /** Origin host adapters address the coordinator through. */
   baseUrl: string;
-  /** Core's `/notify` + `/health` origin: the daemon converse speaks through. */
+  /**
+   * Core's `/notify` + `/health` origin: the daemon converse speaks through.
+   * Resolved by `shared/daemon-endpoints.ts`, the one module that knows the
+   * daemon's address, so an operator who configured only `ECHO_NOTIFY_URL`
+   * reaches the same instance their notifications already reach.
+   */
   coreBaseUrl: string;
   /** Single-microphone booking lock (atomic create, stale owner reaped). */
   bookingLockPath: string;
@@ -31,6 +37,13 @@ export interface ConverseConfig {
   captureDir: string;
   /** Hard cap on one capture, whatever the endpointer does. */
   maxCaptureMs: number;
+  /**
+   * Hard cap on the transcription step, for the same reason the recorder has
+   * one: the capture state stays non-idle for the whole turn, and core skips
+   * every voice line while it is. A wedged transcriber would otherwise mute the
+   * operator's Echo for as long as the calling host lives.
+   */
+  transcribeTimeoutMs: number;
   /** Trailing silence that ends a capture. */
   silenceMs: number;
   /** BCP-47 locale for the transcriber. */
@@ -80,11 +93,12 @@ export function resolveConverseConfig(
   return {
     port,
     baseUrl: stripTrailingSlash(env.ECHO_CONVERSE_URL || `http://localhost:${port}`),
-    coreBaseUrl: stripTrailingSlash(env.ECHO_DAEMON_URL || "http://localhost:3246"),
+    coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
     leaseMs: positiveInt(env.ECHO_CONVERSE_LEASE_MS, 120_000),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),
+    transcribeTimeoutMs: positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000),
     silenceMs: positiveInt(env.ECHO_CONVERSE_SILENCE_MS, 1_500),
     locale: env.ECHO_CONVERSE_LOCALE || "en-US",
     sttTier: parseTier(env.ECHO_CONVERSE_STT_TIER),

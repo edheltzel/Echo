@@ -14,7 +14,7 @@
 // something that is not an echo MCP adapter, this aborts rather than
 // overwriting a config entry it does not own.
 
-import { readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -146,9 +146,25 @@ config.mcpServers = servers;
 // Replace the resolved real file so a config symlinked into a dotfiles repo is
 // updated through the link rather than replaced by a regular file.
 const realPath = resolveOrKeep(CONFIG_PATH);
-const temp = `${realPath}.echo-mcp.tmp`;
+const temp = `${realPath}.echo-mcp.tmp-${process.pid}`;
+
+// ~/.claude.json is the operator's whole Claude Code state - project history,
+// onboarding flags, MCP approvals - and Claude Code rewrites it from memory
+// during a session, so a write landing between this script's read and its
+// rename is lost either way. A timestamped copy first is the same mitigation
+// adapters/claudecode/restore-hooks.ts takes for settings.json.
+let backup: string | undefined;
+if (existsSync(realPath)) {
+  backup = `${realPath}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  copyFileSync(realPath, backup);
+}
+
 writeFileSync(temp, `${JSON.stringify(config, null, 2)}\n`);
+// writeFileSync's mode is masked by the umask, so the mode is set explicitly:
+// replacing a hardened 0600 config with a 0644 one is not this script's call.
+if (backup !== undefined) chmodSync(temp, statSync(realPath).mode & 0o777);
 renameSync(temp, realPath);
 
 for (const change of changes) console.log(`✓ ${change}`);
 console.log(`  config: ${realPath}`);
+if (backup !== undefined) console.log(`  backup: ${backup}`);

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { handleMessage, SUPPORTED_PROTOCOL_VERSIONS } from "../../../adapters/mcp/server.ts";
 import { ECHO_ASK_PARAMETERS } from "../../../converse/host-tool.ts";
 
@@ -101,6 +104,27 @@ describe("tools/call", () => {
     expect(response.result.content[0].text).toContain("no speech");
   });
 
+  // notifications/cancelled aborts the controller the stdio loop registered for
+  // the call. It only closes the microphone if the signal reaches the ask.
+  test("the cancellation signal is handed to the ask", async () => {
+    const controller = new AbortController();
+    let seen: AbortSignal | undefined;
+
+    const response: any = await handleMessage(
+      { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "echo_ask", arguments: { question: "Ready?" } } },
+      {
+        signal: controller.signal,
+        ask: async (options) => {
+          seen = options.signal;
+          return { ...(await askReturns("ok")()), text: "ok" };
+        },
+      },
+    );
+
+    expect(response.result.isError).toBe(false);
+    expect(seen).toBe(controller.signal);
+  });
+
   test("an unknown tool name is an invalid-params error", async () => {
     const response: any = await handleMessage({
       jsonrpc: "2.0",
@@ -139,6 +163,25 @@ describe("unsupported methods", () => {
 
 // The dispatcher tests above prove the shapes; this one proves the transport,
 // by running the real entry point and speaking to it the way a host does.
+//
+// Replies are correlated by id, never by arrival order: messages are dispatched
+// without blocking the read loop, so JSON-RPC's own correlation rule is the only
+// guarantee the transport makes.
+async function readReplies(child: ReturnType<typeof Bun.spawn>, count: number): Promise<any[]> {
+  const lines: any[] = [];
+  const decoder = new TextDecoder();
+  let buffered = "";
+  for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
+    buffered += decoder.decode(chunk as Uint8Array, { stream: true });
+    for (const line of buffered.split("\n").slice(0, -1)) {
+      if (line.trim()) lines.push(JSON.parse(line));
+    }
+    buffered = buffered.slice(buffered.lastIndexOf("\n") + 1);
+    if (lines.length >= count) break;
+  }
+  return lines;
+}
+
 describe("stdio transport", () => {
   test("a spawned server completes a handshake and lists its tool", async () => {
     const child = Bun.spawn(["bun", "adapters/mcp/server.ts"], {
@@ -155,24 +198,55 @@ describe("stdio transport", () => {
     child.stdin.write(requests.map((request) => JSON.stringify(request)).join("\n") + "\n");
     await child.stdin.flush();
 
-    const lines: any[] = [];
-    const decoder = new TextDecoder();
-    let buffered = "";
-    for await (const chunk of child.stdout) {
-      buffered += decoder.decode(chunk as Uint8Array, { stream: true });
-      for (const line of buffered.split("\n").slice(0, -1)) {
-        if (line.trim()) lines.push(JSON.parse(line));
-      }
-      buffered = buffered.slice(buffered.lastIndexOf("\n") + 1);
-      if (lines.length >= 2) break;
-    }
+    const lines = await readReplies(child, 2);
     child.stdin.end();
     child.kill();
 
     // Exactly two replies for three messages: the notification is not answered.
     expect(lines.length).toBe(2);
-    expect(lines[0].result.serverInfo.name).toBe("echo-converse");
-    expect(lines[1].id).toBe(2);
-    expect(lines[1].result.tools[0].name).toBe("echo_ask");
+    expect(lines.find((line) => line.id === 1).result.serverInfo.name).toBe("echo-converse");
+    expect(lines.find((line) => line.id === 2).result.tools[0].name).toBe("echo_ask");
+  }, 15_000);
+
+  // An ask holds the microphone for the better part of a minute. Awaiting it in
+  // the read loop made ping and notifications/cancelled unreachable for that
+  // whole window, so the host could neither health-check the server nor call the
+  // turn off - which made the abort plumbing dead code on this transport.
+  test("a ping is answered while an ask is still in flight", async () => {
+    // Nothing real is touched: the coordinator address is a port that refuses,
+    // and the stand-in entry point exits immediately, so the ask sits in its
+    // start-up poll instead of reaching a coordinator, a daemon or a microphone.
+    const standIn = join(mkdtempSync(join(tmpdir(), "echo-mcp-")), "main.ts");
+    writeFileSync(standIn, "// stand-in coordinator entry point; binds nothing\n");
+    const child = Bun.spawn(["bun", "adapters/mcp/server.ts"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        ECHO_CONVERSE_URL: "http://127.0.0.1:1",
+        ECHO_CONVERSE_PORT: "8931",
+        ECHO_CONVERSE_MAIN: standIn,
+      },
+    });
+
+    child.stdin.write(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: { name: "echo_ask", arguments: { question: "Still there?" } },
+      }) + "\n",
+    );
+    await child.stdin.flush();
+    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 11, method: "ping" }) + "\n");
+    await child.stdin.flush();
+
+    const [first] = await readReplies(child, 1);
+    child.stdin.end();
+    child.kill();
+
+    expect(first.id).toBe(11);
+    expect(first.result).toEqual({});
   }, 15_000);
 });

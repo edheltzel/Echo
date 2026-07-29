@@ -234,7 +234,9 @@ describe("capture and transcribe together", () => {
     expect((failure as CaptureError).message).not.toContain("ENOENT");
   });
 
-  test("the whisper rung reports a missing sox instead of failing to resample", async () => {
+  // The recorder was fine here; the resampler was missing. Reporting that as
+  // `no_recorder` would send the operator after the wrong half of the pipeline.
+  test("the whisper rung reports a missing sox as a transcriber failure", async () => {
     const cfg = config({
       recBin: fakeRecorder(8_192),
       soxBin: join(scratch, "absent-sox"),
@@ -243,7 +245,40 @@ describe("capture and transcribe together", () => {
       sttTier: "whisper",
     });
 
-    await expect(captureAndTranscribe(cfg)).rejects.toThrow(/brew install sox/);
+    const failure = await captureAndTranscribe(cfg).catch((error: CaptureError) => error);
+
+    expect(failure).toBeInstanceOf(CaptureError);
+    expect((failure as CaptureError).code).toBe("transcriber_failed");
+    expect((failure as CaptureError).message).toContain("brew install sox");
+  });
+
+  // A transcriber that never exits holds the capture state, and core skips every
+  // voice line while that state is non-idle: an unbounded hang mutes Echo for as
+  // long as the calling host lives.
+  test("a hung transcriber is stopped at the cap and named as a timeout", async () => {
+    const cfg = config({
+      yapBin: fakeBinary("fake-yap", "sleep 30"),
+      transcribeTimeoutMs: 250,
+    });
+
+    const failure = await transcribeFile(cfg, join(scratch, "reply.wav"), "yap").catch(
+      (error: CaptureError) => error,
+    );
+
+    expect(failure).toBeInstanceOf(CaptureError);
+    expect((failure as CaptureError).code).toBe("transcriber_failed");
+    expect((failure as CaptureError).message).toContain("did not finish within 250ms");
+  });
+
+  // Waiting for exit before reading deadlocks on a full pipe: the child blocks
+  // writing, so it can only exit once somebody drains it.
+  test("a transcript larger than the pipe buffer is read in full", async () => {
+    const yapBin = fakeBinary("fake-yap", "head -c 400000 /dev/zero | tr '\\0' 'a'");
+    const cfg = config({ yapBin, transcribeTimeoutMs: 5_000 });
+
+    const text = await transcribeFile(cfg, join(scratch, "reply.wav"), "yap");
+
+    expect(text.length).toBe(400_000);
   });
 
   test("with no local transcriber available the failure names both rungs", async () => {
@@ -276,5 +311,7 @@ describe("Tier 1 against the installed yap binary", () => {
     const text = await transcribeFile(config({ yapBin: yapPath! }), wav, "yap");
 
     expect(text.toLowerCase()).toContain("ship the dev branch");
-  });
+    // The Speech framework's first transcription after a cold start regularly
+    // runs past the 5s default.
+  }, 30_000);
 });

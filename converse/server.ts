@@ -286,7 +286,14 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
 
   function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Response {
     const turn = active.get(turnId);
-    if (!turn) return fail("unknown_turn", `no active turn ${turnId}`, 404);
+    if (!turn) {
+      // A turn dropped for outliving its lease still owns the lock file, and its
+      // caller is the only one who can hand the microphone back. releaseBooking
+      // refuses when the holder is a different turn, so this cannot take a lock
+      // away from a live one.
+      releaseBooking(config.bookingLockPath, turnId);
+      return fail("unknown_turn", `no active turn ${turnId}`, 404);
+    }
 
     active.delete(turnId);
     releaseBooking(config.bookingLockPath, turnId);

@@ -330,6 +330,26 @@ describe("finishing a turn", () => {
     expect(readBooking(lockPath)?.turn_id).toBe(grant.turn_id);
   });
 
+  // The booking lives on disk and the turn table lives in memory, so a turn the
+  // coordinator no longer remembers - it restarted, or the turn outlived its
+  // lease - still owns the lock file. Its caller is the only one who can hand
+  // the microphone back, and refusing without releasing left GET /health
+  // reporting a held booking, and every other ask refused, until the lease ran
+  // out.
+  test("a caller whose turn the coordinator forgot can still release the booking", async () => {
+    const { base: before } = startServer();
+    const { body: grant } = await postTurn(before, askBody());
+
+    // A fresh instance over the same lock file: the booking survives, the turn
+    // table does not.
+    const { base: after } = startServer();
+    const response = await fetch(`${after}/turn/${grant.turn_id}/complete`, { method: "POST" });
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("unknown_turn");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
   test("the microphone is free for the next ask after a completed turn", async () => {
     const { base } = startServer();
     const first = await postTurn(base, askBody());

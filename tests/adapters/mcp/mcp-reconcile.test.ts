@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -177,6 +186,54 @@ describe("symlinked config", () => {
     // The link survives and the real file behind it carries the entry.
     expect(readConfig(realConfig).mcpServers["echo-converse"].args).toEqual([CANONICAL]);
     expect(Bun.spawnSync(["test", "-L", linked]).exitCode).toBe(0);
-    expect(existsSync(`${realConfig}.echo-mcp.tmp`)).toBe(false);
+    expect(readdirSync(scratch).filter((name) => name.includes(".echo-mcp.tmp"))).toEqual([]);
+  });
+});
+
+// ~/.claude.json is the operator's whole Claude Code state, and Claude Code
+// rewrites it from memory during a session, so this script's read-modify-write
+// can lose a concurrent change. A copy first is the same mitigation
+// adapters/claudecode/restore-hooks.ts takes for settings.json.
+describe("protecting the operator's config", () => {
+  function backupsIn(dir = scratch): string[] {
+    return readdirSync(dir).filter((name) => name.includes(".bak-"));
+  }
+
+  test("the pre-write config is backed up before it is replaced", () => {
+    writeConfig({ numStartups: 42, mcpServers: {} });
+    const before = readFileSync(configPath, "utf8");
+
+    const result = run();
+
+    expect(result.code).toBe(0);
+    const backups = backupsIn();
+    expect(backups.length).toBe(1);
+    expect(readFileSync(join(scratch, backups[0]), "utf8")).toBe(before);
+    expect(result.stdout).toContain("backup:");
+  });
+
+  test("a hardened config keeps its mode", () => {
+    writeConfig({ mcpServers: {} });
+    chmodSync(configPath, 0o600);
+
+    run();
+
+    expect(statSync(configPath).mode & 0o777).toBe(0o600);
+  });
+
+  test("nothing is backed up when there was no config to lose", () => {
+    const result = run();
+
+    expect(result.code).toBe(0);
+    expect(backupsIn()).toEqual([]);
+  });
+
+  test("a no-op run leaves no backup behind", () => {
+    run();
+
+    const result = run();
+
+    expect(result.stdout).toContain("already current");
+    expect(backupsIn()).toEqual([]);
   });
 });

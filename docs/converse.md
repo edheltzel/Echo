@@ -105,7 +105,9 @@ ask must not wedge every later one. A concurrent ask gets `409` rather than an i
 
 Refusals name their reason: `400 invalid_request`, `409 microphone_busy`,
 `503 core_unreachable | core_rate_limited | core_muted | capture_guard_disabled | question_not_spoken`,
-`404 unknown_turn`. Every refusal releases the booking.
+`404 unknown_turn`. Every refusal releases the booking, `404 unknown_turn` included: the turn
+table is in memory and the booking is on disk, so a caller whose turn the coordinator no longer
+remembers is still the one who has to hand the microphone back.
 
 **The transcript never reaches the coordinator.** `/turn/:id/complete` carries a character count,
 not the text; the recording itself is deleted as soon as it is transcribed. The audio and the
@@ -170,6 +172,7 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 | `ECHO_CONVERSE_CAPTURE_DIR` | `~/Library/Caches/echo/converse` | caller |
 | `ECHO_CONVERSE_MAX_CAPTURE_MS` | `30000` | caller |
 | `ECHO_CONVERSE_SILENCE_MS` | `1500` | caller |
+| `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` | `60000` | caller |
 | `ECHO_CONVERSE_LOCALE` | `en-US` | caller |
 | `ECHO_CONVERSE_STT_TIER` | auto (`yap`, else `whisper`) | caller |
 | `ECHO_CONVERSE_REC_BIN` / `_SOX_BIN` / `_YAP_BIN` / `_WHISPER_BIN` | on `PATH` | caller |
@@ -177,6 +180,11 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 
 An explicitly configured tier is never silently swapped for the other: a missing binary reports
 itself instead of transcribing through a rung nobody chose.
+
+Both subprocess steps are capped, not just the recorder. The capture state stays non-idle for the
+whole turn and core skips every voice line while it is, so a wedged transcriber would otherwise
+mute Echo for as long as the calling host lives. A turn's lease covers both caps plus slack, so a
+slow-but-healthy transcription can never outlive its own booking.
 
 ## Testing
 

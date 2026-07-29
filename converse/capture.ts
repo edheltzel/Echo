@@ -86,9 +86,9 @@ function whisperUsable(config: ConverseConfig, which: Which): boolean {
  * row made sox a Tier 1 dependency, so the very machine the plan pictured (macOS
  * 26 with `brew install yap` and nothing else) is the one that hits it.
  */
-function requireBinary(bin: string, hint: string, which: Which = defaultWhich): void {
+function requireBinary(bin: string, code: CaptureError["code"], hint: string, which: Which = defaultWhich): void {
   if (which(bin) === null) {
-    throw new CaptureError("no_recorder", `${bin} is not available. ${hint}`);
+    throw new CaptureError(code, `${bin} is not available. ${hint}`);
   }
 }
 
@@ -111,25 +111,50 @@ export function recorderArgv(config: ConverseConfig, wavPath: string): string[] 
   ];
 }
 
+interface PipeCollector {
+  /** Everything read before the pipe ended or the read was abandoned. */
+  text: Promise<string>;
+  abandon: () => void;
+}
+
 /**
- * Read a finished child's pipe without being able to hang on it.
+ * Start reading a child's pipe immediately, while it is still running.
+ *
+ * Waiting for exit before reading deadlocks a chatty child: a transcriber that
+ * fills the pipe buffer blocks on write and never exits, so the process this is
+ * waiting on can only exit once somebody drains it.
+ */
+function drainPipe(stream: ReadableStream<Uint8Array>): PipeCollector {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let collected = "";
+  const text = (async () => {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) collected += decoder.decode(value, { stream: true });
+      }
+    } catch {
+      // A cancelled or broken pipe yields what was read up to that point.
+    }
+    return collected + decoder.decode();
+  })();
+  return { text, abandon: () => void reader.cancel().catch(() => {}) };
+}
+
+/**
+ * Collect what a finished child wrote, without being able to hang on it.
  *
  * Waiting for end-of-stream is not safe here: a killed recorder can leave a
  * grandchild holding the same pipe open, and the read would then outlive the
- * process it was reading. The output is already buffered by the time the child
- * exits in every normal case, so a short grace period costs nothing and removes
- * the hang.
+ * process it was reading. Cancelling the reader settles the collector with
+ * whatever it already had, so the grace period costs output nobody sent.
  */
-async function readWithin(stream: ReadableStream<Uint8Array>, graceMs: number): Promise<string> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const grace = new Promise<string>((resolve) => {
-    timer = setTimeout(() => {
-      void stream.cancel().catch(() => {});
-      resolve("");
-    }, graceMs);
-  });
+async function collectWithin(collector: PipeCollector, graceMs: number): Promise<string> {
+  const timer = setTimeout(collector.abandon, graceMs);
   try {
-    return await Promise.race([new Response(stream).text().catch(() => ""), grace]);
+    return await collector.text;
   } finally {
     clearTimeout(timer);
   }
@@ -143,6 +168,10 @@ async function run(
   signal?: AbortSignal,
 ): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   const child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  // Drain from the moment the child exists; the grace timer is armed only once
+  // it has exited, so a slow-but-healthy child is never truncated.
+  const outCollector = drainPipe(child.stdout);
+  const errCollector = drainPipe(child.stderr);
   let timedOut = false;
   const timer = timeoutMs === undefined
     ? undefined
@@ -163,8 +192,8 @@ async function run(
   try {
     const code = await child.exited;
     const [stdout, stderr] = await Promise.all([
-      readWithin(child.stdout, OUTPUT_GRACE_MS),
-      readWithin(child.stderr, OUTPUT_GRACE_MS),
+      collectWithin(outCollector, OUTPUT_GRACE_MS),
+      collectWithin(errCollector, OUTPUT_GRACE_MS),
     ]);
     return { code, stdout, stderr, timedOut };
   } finally {
@@ -186,7 +215,11 @@ export async function recordReply(
   wavPath: string,
   signal?: AbortSignal,
 ): Promise<RecordingReport> {
-  requireBinary(config.recBin, "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.");
+  requireBinary(
+    config.recBin,
+    "no_recorder",
+    "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.",
+  );
 
   const startedAt = Date.now();
   const result = await run([config.recBin, ...recorderArgv(config, wavPath)], config.maxCaptureMs, signal);
@@ -211,24 +244,51 @@ export async function recordReply(
   return { wav_path: wavPath, capture_ms, timed_out: result.timedOut, bytes };
 }
 
+/**
+ * A stopped transcriber is a failure with a name, never an empty answer: the
+ * caller still holds the capture state, and reporting a hang as silence would
+ * send the human's spoken reply to `no_speech`.
+ */
+function requireTranscriberSuccess(
+  result: { code: number | null; stderr: string; timedOut: boolean },
+  what: string,
+  timeoutMs: number,
+): void {
+  if (result.timedOut) {
+    throw new CaptureError("transcriber_failed", `${what} did not finish within ${timeoutMs}ms and was stopped`);
+  }
+  if (result.code !== 0) {
+    throw new CaptureError("transcriber_failed", `${what} exited ${result.code}: ${result.stderr.trim()}`);
+  }
+}
+
 /** Offline rate conversion for whisper, which requires 16kHz mono. */
 async function toWhisperInput(config: ConverseConfig, wavPath: string): Promise<string> {
-  requireBinary(config.soxBin, "whisper needs 16kHz mono; install sox (`brew install sox`) or set ECHO_CONVERSE_SOX_BIN.");
+  // A missing resampler is a transcriber-side failure: the recorder did its job,
+  // and reporting it as `no_recorder` would send the operator after sox for the
+  // wrong reason.
+  requireBinary(
+    config.soxBin,
+    "transcriber_failed",
+    "whisper needs 16kHz mono; install sox (`brew install sox`) or set ECHO_CONVERSE_SOX_BIN.",
+  );
 
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
-  const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted]);
-  if (result.code !== 0) {
-    throw new CaptureError("transcriber_failed", `resampling for whisper failed: ${result.stderr.trim()}`);
-  }
+  const result = await run(
+    [config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted],
+    config.transcribeTimeoutMs,
+  );
+  requireTranscriberSuccess(result, `resampling for whisper (${config.soxBin})`, config.transcribeTimeoutMs);
   return converted;
 }
 
 export async function transcribeFile(config: ConverseConfig, wavPath: string, tier: SttTier): Promise<string> {
   if (tier === "yap") {
-    const result = await run([config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath]);
-    if (result.code !== 0) {
-      throw new CaptureError("transcriber_failed", `${config.yapBin} exited ${result.code}: ${result.stderr.trim()}`);
-    }
+    const result = await run(
+      [config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath],
+      config.transcribeTimeoutMs,
+    );
+    requireTranscriberSuccess(result, config.yapBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
   }
 
@@ -237,16 +297,17 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
   }
   const input = await toWhisperInput(config, wavPath);
   try {
-    const result = await run([
-      config.whisperBin,
-      "-m", config.whisperModel,
-      "-f", input,
-      "-l", whisperLanguage(config.locale),
-      "-nt",
-    ]);
-    if (result.code !== 0) {
-      throw new CaptureError("transcriber_failed", `${config.whisperBin} exited ${result.code}: ${result.stderr.trim()}`);
-    }
+    const result = await run(
+      [
+        config.whisperBin,
+        "-m", config.whisperModel,
+        "-f", input,
+        "-l", whisperLanguage(config.locale),
+        "-nt",
+      ],
+      config.transcribeTimeoutMs,
+    );
+    requireTranscriberSuccess(result, config.whisperBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
   } finally {
     rmSync(input, { force: true });

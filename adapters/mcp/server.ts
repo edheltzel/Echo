@@ -57,6 +57,8 @@ interface JsonRpcRequest {
 
 export interface McpServerDeps {
   ask?: AskToolOptions["ask"];
+  /** Aborted when the host cancels this request, which closes the microphone. */
+  signal?: AbortSignal;
 }
 
 function result(id: JsonRpcRequest["id"], value: unknown) {
@@ -119,7 +121,7 @@ export async function handleMessage(message: JsonRpcRequest, deps: McpServerDeps
       });
     }
 
-    const outcome = await runAskTool(params.arguments, { source: "mcp", ask: deps.ask });
+    const outcome = await runAskTool(params.arguments, { source: "mcp", ask: deps.ask, signal: deps.signal });
     // A turn nobody answered is a tool-level failure, not a protocol error: the
     // model asked a question and needs to read what happened.
     return result(id, {
@@ -132,8 +134,21 @@ export async function handleMessage(message: JsonRpcRequest, deps: McpServerDeps
   return error(id, JSON_RPC_METHOD_NOT_FOUND, `Method not found: ${String(method)}`);
 }
 
+function cancelledRequestId(params: unknown): string | number | undefined {
+  const requestId = typeof params === "object" && params !== null
+    ? (params as { requestId?: unknown }).requestId
+    : undefined;
+  return typeof requestId === "string" || typeof requestId === "number" ? requestId : undefined;
+}
+
 /**
  * Serve MCP over stdio: one JSON message per line.
+ *
+ * Each message is dispatched without blocking the read loop. An ask holds the
+ * microphone for the better part of a minute, and awaiting it here made `ping`
+ * and `notifications/cancelled` structurally unreachable for that whole window:
+ * the host could neither health-check the server nor call the turn off. JSON-RPC
+ * correlates by id, so replies may come back in any order.
  *
  * stdout carries protocol traffic only. Diagnostics go to stderr, because a
  * stray log line on stdout is a parse error for the host.
@@ -141,11 +156,38 @@ export async function handleMessage(message: JsonRpcRequest, deps: McpServerDeps
 export async function runStdioServer(deps: McpServerDeps = {}): Promise<void> {
   const decoder = new TextDecoder();
   let buffered = "";
+  const inFlight = new Map<string | number, AbortController>();
+  const pending = new Set<Promise<void>>();
 
   const send = (payload: object) => {
-    // JSON.stringify escapes newlines inside strings, so a multi-line
-    // transcript can never split one message into two.
+    // One write per message, and JSON.stringify escapes newlines inside strings,
+    // so a multi-line transcript can never split one message into two.
     process.stdout.write(`${JSON.stringify(payload)}\n`);
+  };
+
+  const dispatch = (message: JsonRpcRequest) => {
+    const id = message.id;
+    const answerable = id !== undefined && id !== null;
+    const controller = new AbortController();
+    if (answerable) inFlight.set(id, controller);
+
+    const task = (async () => {
+      try {
+        const response = await handleMessage(message, { ...deps, signal: controller.signal });
+        // A cancelled request gets no response, per the specification.
+        if (response !== null && !controller.signal.aborted) send(response);
+      } catch (thrown) {
+        const detail = thrown instanceof Error ? thrown.message : String(thrown);
+        console.error(`[echo-mcp] handler failed: ${detail}`);
+        if (answerable && !controller.signal.aborted) {
+          send(error(id, -32603, "Internal error", { detail }));
+        }
+      } finally {
+        if (answerable) inFlight.delete(id);
+      }
+    })();
+    pending.add(task);
+    void task.finally(() => pending.delete(task));
   };
 
   for await (const chunk of Bun.stdin.stream()) {
@@ -167,18 +209,22 @@ export async function runStdioServer(deps: McpServerDeps = {}): Promise<void> {
         continue;
       }
 
-      try {
-        const response = await handleMessage(message, deps);
-        if (response !== null) send(response);
-      } catch (thrown) {
-        const detail = thrown instanceof Error ? thrown.message : String(thrown);
-        console.error(`[echo-mcp] handler failed: ${detail}`);
-        if (message.id !== undefined && message.id !== null) {
-          send(error(message.id, -32603, "Internal error", { detail }));
-        }
+      // Cancellation is handled here rather than in the dispatcher because it
+      // acts on another request, not on itself. Aborting reaches the recorder
+      // through the ask tool's signal, so the microphone closes now.
+      if (message.method === "notifications/cancelled") {
+        const requestId = cancelledRequestId(message.params);
+        if (requestId !== undefined) inFlight.get(requestId)?.abort();
+        continue;
       }
+
+      dispatch(message);
     }
   }
+
+  // stdin closing does not entitle an in-flight ask to be dropped: the human may
+  // already be speaking, and the recorder is a child of this process.
+  await Promise.all([...pending]);
 }
 
 if (import.meta.main) {

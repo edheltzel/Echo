@@ -27,6 +27,11 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 - **Speak while idle, capture after drain.** The capture state flips to `recording` only after
   the coordinator reports playback drained, or core's own guard silences the question converse
   asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
+- **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
+  recorded sample until the transcript exists, and core skips every voice line while it is, so an
+  unbounded child mutes Echo for as long as the calling host lives. The recorder is capped by
+  `ECHO_CONVERSE_MAX_CAPTURE_MS`, the transcriber and its resampler by
+  `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS`, and the turn's lease is derived from both.
 - **The capture owner writes its own pid** into the capture-state file. Core honors a non-idle
   state only while that pid is alive, so any other pid turns a crash into permanent silence.
 - **Never import `core/`.** Core is reached over HTTP, plus the capture-state path core itself
