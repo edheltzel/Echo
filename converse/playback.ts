@@ -28,8 +28,14 @@ import type { CoreHealthSnapshot } from "./types.ts";
 /** edge-tts speaks near 14 characters a second; the constant covers synthesis and playback start. */
 const SPEECH_OVERHEAD_MS = 1_200;
 const MS_PER_CHARACTER = 70;
-const DRAIN_POLL_INTERVAL_MS = 1_500;
-const DRAIN_MAX_POLLS = 6;
+
+// Backoff rather than a fixed cadence, and this is a budget decision as much as
+// a latency one. Core's /health shares its /notify bucket at ten requests a
+// minute per client, so one ask can afford about three or four core requests
+// before it starts eating the host's own notification budget. Early polls stay
+// close together (the human should not sit in silence after the question), then
+// widen fast so a slow synthesis costs one more request, not six.
+const DRAIN_BACKOFF_MS = [750, 1_250, 2_000, 3_500] as const;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 export type SleepLike = (ms: number) => Promise<void>;
@@ -45,22 +51,34 @@ export function turnSessionId(turnId: string): string {
   return `converse:${turnId}`;
 }
 
-export async function readCoreHealth(
-  coreBaseUrl: string,
-  fetchImpl: FetchLike,
-): Promise<CoreHealthSnapshot | null> {
+/**
+ * A rate-limited read is reported separately from an unreachable one. They look
+ * identical over the wire but mean opposite things to an operator: one is "the
+ * daemon is down", the other is "you asked twice inside a minute".
+ */
+export type CoreHealthRead =
+  | { status: "ok"; health: CoreHealthSnapshot }
+  | { status: "rate_limited" }
+  | { status: "unreachable" };
+
+export async function readCoreHealth(coreBaseUrl: string, fetchImpl: FetchLike): Promise<CoreHealthRead> {
   try {
     const response = await fetchImpl(`${coreBaseUrl}/health`);
-    if (!response.ok) return null;
-    return (await response.json()) as CoreHealthSnapshot;
+    if (response.status === 429) return { status: "rate_limited" };
+    if (!response.ok) return { status: "unreachable" };
+    return { status: "ok", health: (await response.json()) as CoreHealthSnapshot };
   } catch {
-    return null;
+    return { status: "unreachable" };
   }
 }
 
 export type CoreAssessment =
   | { ok: true; capture_state_path: string }
-  | { ok: false; code: "core_unreachable" | "core_muted" | "capture_guard_disabled"; detail: string }
+  | {
+      ok: false;
+      code: "core_unreachable" | "core_rate_limited" | "core_muted" | "capture_guard_disabled";
+      detail: string;
+    }
   | { ok: false; code: "microphone_busy"; detail: string };
 
 /**
@@ -68,10 +86,20 @@ export type CoreAssessment =
  * turn would otherwise record into a silence the human never heard, or record
  * with no interlock protecting the recording.
  */
-export function assessCore(health: CoreHealthSnapshot | null): CoreAssessment {
-  if (health === null) {
+export function assessCore(read: CoreHealthRead): CoreAssessment {
+  if (read.status === "rate_limited") {
+    return {
+      ok: false,
+      code: "core_rate_limited",
+      detail:
+        "core is rate-limiting this client (ten requests a minute, shared with /notify). " +
+        "One ask costs several of them, so wait a moment before asking again.",
+    };
+  }
+  if (read.status === "unreachable") {
     return { ok: false, code: "core_unreachable", detail: "core did not answer GET /health" };
   }
+  const health = read.health;
   if (health.mute?.muted) {
     return {
       ok: false,
@@ -155,22 +183,25 @@ function queueIsIdle(health: CoreHealthSnapshot): boolean {
  */
 export async function waitForPlaybackDrain(options: DrainOptions): Promise<DrainReport> {
   const sleep = options.sleep ?? realSleep;
-  const interval = options.pollIntervalMs ?? DRAIN_POLL_INTERVAL_MS;
-  const maxPolls = options.maxPolls ?? DRAIN_MAX_POLLS;
+  const backoff = options.pollIntervalMs === undefined
+    ? DRAIN_BACKOFF_MS
+    : Array(Math.max((options.maxPolls ?? DRAIN_BACKOFF_MS.length + 1) - 1, 0)).fill(options.pollIntervalMs);
+  const maxPolls = options.maxPolls ?? backoff.length + 1;
 
   await sleep(options.estimateMs);
   let waited = options.estimateMs;
 
   for (let poll = 1; poll <= maxPolls; poll++) {
-    const health = await readCoreHealth(options.coreBaseUrl, options.fetchImpl);
-    // A null reading is a 429 or a blip, not evidence the queue is empty. Keep
+    const read = await readCoreHealth(options.coreBaseUrl, options.fetchImpl);
+    // A rate-limited or failed read is not evidence the queue is empty. Keep
     // waiting: opening the microphone on a guess is the expensive mistake.
-    if (health !== null && queueIsIdle(health)) {
+    if (read.status === "ok" && queueIsIdle(read.health)) {
       return { drained: true, waited_ms: waited, polls: poll };
     }
     if (poll === maxPolls) return { drained: false, waited_ms: waited, polls: poll };
-    await sleep(interval);
-    waited += interval;
+    const gap = backoff[Math.min(poll - 1, backoff.length - 1)] ?? 0;
+    await sleep(gap);
+    waited += gap;
   }
   return { drained: false, waited_ms: waited, polls: maxPolls };
 }

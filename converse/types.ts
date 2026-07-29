@@ -60,6 +60,7 @@ export type ConverseErrorCode =
   | "invalid_request"
   | "microphone_busy"
   | "core_unreachable"
+  | "core_rate_limited"
   | "core_muted"
   | "capture_guard_disabled"
   | "question_not_spoken"

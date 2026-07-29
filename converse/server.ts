@@ -215,8 +215,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       return fail(code, detail, status);
     };
 
-    const health = await readCoreHealth(config.coreBaseUrl, fetchImpl);
-    const assessment = assessCore(health);
+    const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
     if (!assessment.ok) {
       return release(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
     }

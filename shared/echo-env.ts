@@ -25,6 +25,14 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_CAPTURE_STATE_PATH", "ECHO_AUDIO_LIFECYCLE_LOG", "ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES",
   "ECHO_RESOLUTION_LOG", "ECHO_RESOLUTION_LOG_MAX_BYTES", "ECHO_VOICE_EVENTS_LOG",
   "ECHO_DAEMON_URL", "ECHO_NOTIFY_URL", "ECHO_VOICE_SURFACES",
+  // echo-converse (one-shot voice ask). Only the coordinator reads PORT/URL and
+  // the booking lock; the rest are read in the calling host's process, where the
+  // capture actually happens.
+  "ECHO_CONVERSE_PORT", "ECHO_CONVERSE_URL", "ECHO_CONVERSE_BOOKING_LOCK",
+  "ECHO_CONVERSE_LEASE_MS", "ECHO_CONVERSE_CAPTURE_DIR", "ECHO_CONVERSE_MAX_CAPTURE_MS",
+  "ECHO_CONVERSE_SILENCE_MS", "ECHO_CONVERSE_LOCALE", "ECHO_CONVERSE_STT_TIER",
+  "ECHO_CONVERSE_REC_BIN", "ECHO_CONVERSE_SOX_BIN", "ECHO_CONVERSE_YAP_BIN",
+  "ECHO_CONVERSE_WHISPER_BIN", "ECHO_CONVERSE_WHISPER_MODEL",
 ]);
 
 // Retired in this release: an old alias left in a dotenv file is ignored rather

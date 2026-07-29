@@ -110,6 +110,8 @@ describe("waiting for the question to finish playing", () => {
   });
 
   test("a rate-limited poll is not read as an empty queue", async () => {
+    // 429 twice, then an idle queue: a refused read must never be mistaken for
+    // "nothing is playing", or the microphone opens over the question.
     const core = fakeCore([null, null, health()]);
 
     const report = await waitForPlaybackDrain({
@@ -134,39 +136,73 @@ describe("waiting for the question to finish playing", () => {
       maxPolls: 3,
     });
 
-    expect(report).toEqual({ drained: false, waited_ms: 3_000, polls: 3 });
+    // 0 + 750 + 1250: the gaps come from the backoff schedule.
+    expect(report).toEqual({ drained: false, waited_ms: 2_000, polls: 3 });
+  });
+
+  test("polls back off so a slow synthesis costs one more request, not six", async () => {
+    const slept: number[] = [];
+    const core = fakeCore([health({ play_queue: { depth: 1, in_flight_ms: 900, stalled: false } })]);
+
+    const report = await waitForPlaybackDrain({
+      coreBaseUrl: "http://localhost:8899",
+      estimateMs: 2_000,
+      fetchImpl: core.fetchImpl,
+      sleep: async (ms) => void slept.push(ms),
+    });
+
+    // An ask can afford three or four core requests before it starts eating the
+    // host's own notification budget, so the gaps widen instead of repeating.
+    expect(report.drained).toBe(false);
+    expect(report.polls).toBeLessThanOrEqual(5);
+    expect(slept).toEqual([2_000, 750, 1_250, 2_000, 3_500]);
+    expect(slept.slice(1)).toEqual([...slept.slice(1)].sort((a, b) => a - b));
   });
 });
 
+/** assessCore reads the result of a health fetch, not the snapshot directly. */
+const reads = (snapshot: CoreHealthSnapshot) => ({ status: "ok" as const, health: snapshot });
+
 describe("core preflight", () => {
   test("accepts an idle, unmuted core and reports the path core itself reads", () => {
-    expect(assessCore(health())).toEqual({ ok: true, capture_state_path: "/state/recording-state.json" });
+    expect(assessCore(reads(health()))).toEqual({ ok: true, capture_state_path: "/state/recording-state.json" });
   });
 
   test("refuses when core is unreachable", () => {
-    const verdict = assessCore(null);
+    const verdict = assessCore({ status: "unreachable" });
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.code).toBe("core_unreachable");
   });
 
+  // Rate limiting and a dead daemon look identical over the wire but mean
+  // opposite things: "wait a moment" versus "your voice daemon is down".
+  test("reports core's rate limit as its own reason, not as an unreachable core", () => {
+    const verdict = assessCore({ status: "rate_limited" });
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) {
+      expect(verdict.code).toBe("core_rate_limited");
+      expect(verdict.detail).toContain("ten requests a minute");
+    }
+  });
+
   test("refuses while core is muted, rather than recording against a silent question", () => {
-    const verdict = assessCore(health({ mute: { muted: true, muted_until: null } }));
+    const verdict = assessCore(reads(health({ mute: { muted: true, muted_until: null } })));
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.code).toBe("core_muted");
   });
 
   test("refuses when the capture guard is disabled, since nothing would hold core's speech", () => {
     for (const path of [null, ""]) {
-      const verdict = assessCore(health({ capture_guard: { path, state: "idle" } }));
+      const verdict = assessCore(reads(health({ capture_guard: { path, state: "idle" } })));
       expect(verdict.ok).toBe(false);
       if (!verdict.ok) expect(verdict.code).toBe("capture_guard_disabled");
     }
   });
 
   test("reports another live capture as a busy microphone", () => {
-    const verdict = assessCore(health({
+    const verdict = assessCore(reads(health({
       capture_guard: { path: "/state/recording-state.json", state: "recording" },
-    }));
+    })));
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.code).toBe("microphone_busy");
   });

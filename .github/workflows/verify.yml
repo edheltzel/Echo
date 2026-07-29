@@ -24,6 +24,8 @@ jobs:
         run: PORT=8889 tests/smoke-core.sh
       - name: Adapter boundary e2e (isolated daemon, silent)
         run: ECHO_E2E_PORT=8899 tests/e2e-adapters.sh
+      - name: Voice-ask e2e (isolated core + coordinator, no microphone)
+        run: ECHO_E2E_PORT=8921 ECHO_E2E_CONVERSE_PORT=8922 tests/e2e-converse.sh
       - name: Pi adapter build
         run: bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
       - name: omp adapter build
