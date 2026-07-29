@@ -40,7 +40,7 @@ For a canonical setting, resolution is:
 
 1. A value already present in the live process environment (compatibility override).
 2. The matching property in config.json.
-3. A matching value in a legacy dotenv file — the migration fallback, plus the permanent
+3. A matching value in a legacy dotenv file - the migration fallback, plus the permanent
    home of the one secret below.
 
 Resolution is read-only: Echo never copies file values into process.env. This preserves
@@ -56,7 +56,7 @@ before it probes anything, so an upgrading user keeps the port they configured.
 
 ### ELEVENLABS_API_KEY: the one secret, and where it lives
 
-ELEVENLABS_API_KEY is the only Echo secret, and config.json **rejects** it — a config.json
+ELEVENLABS_API_KEY is the only Echo secret, and config.json **rejects** it - a config.json
 containing it has that one key dropped (see [Invalid keys](#invalid-keys)).
 
 Its permanent home is a dotenv file, normally `~/.config/echo/.env`:
@@ -64,10 +64,10 @@ Its permanent home is a dotenv file, normally `~/.config/echo/.env`:
     mkdir -p ~/.config/echo
     echo 'ELEVENLABS_API_KEY=sk_…' >> ~/.config/echo/.env
 
-That is not a migration leftover — it is the supported mechanism. The installed LaunchAgent
+That is not a migration leftover - it is the supported mechanism. The installed LaunchAgent
 deliberately writes only HOME and PATH into `EnvironmentVariables` (`scripts/install.sh`
 `write_plist`), so the daemon gets nothing from a login shell; a dotenv file is how the key
-reaches it. **Do not delete `~/.config/echo/.env` after migrating** — migration moves the
+reaches it. **Do not delete `~/.config/echo/.env` after migrating** - migration moves the
 non-secret settings out of it and leaves the file, and the key, alone. The only alternative
 is a real process environment value, which means launching the daemon yourself instead of
 through the LaunchAgent.
@@ -77,8 +77,8 @@ Do not commit .env files or put API keys in config.json.
 
 ### Invalid keys
 
-A key that fails validation — an unknown name, a typo, a compound value, or the secret above
-— is **dropped on its own**; every other setting in the file still applies. The daemon logs
+A key that fails validation - an unknown name, a typo, a compound value, or the secret above
+- is **dropped on its own**; every other setting in the file still applies. The daemon logs
 one warning naming each dropped key, and reports the same thing in `GET /health`:
 
     curl -fsS http://localhost:3246/health | jq '.config'
@@ -120,7 +120,7 @@ at runtime; invalid values use the defaults below.
 
 Settings whose behavior is not obvious from the name:
 
-- **PORT** must be canonical decimal, from 1 to 65535 — `3246` or `"3246"`. Digits only: no
+- **PORT** must be canonical decimal, from 1 to 65535 - `3246` or `"3246"`. Digits only: no
   sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an
   invalid key (see [Invalid keys](#invalid-keys)) and Echo uses 3246. That covers other
   numeric spellings (`"0x0C9E"`, `"1e4"`, `"03246"`) and padded ones (`" 3246 "`), because
@@ -136,7 +136,7 @@ Settings whose behavior is not obvious from the name:
   the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
   disables the guard entirely**.
 - **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
-  `GET /voices` at once — and wins over `ECHO_NOTIFY_URL` for all of them — so pointing a host
+  `GET /voices` at once - and wins over `ECHO_NOTIFY_URL` for all of them - so pointing a host
   at a second instance can never split notify from the read endpoints
   (`shared/daemon-endpoints.ts`).
 - **ECHO_PLAY_QUEUE_AGE_CAP_MS** sits comfortably above one line's worst-case occupancy
@@ -147,8 +147,8 @@ Settings whose behavior is not obvious from the name:
 Voice provider mappings remain in core/voices.json, and pronunciation rules remain in
 core/pronunciations.json. The configuration file controls the daemon and host-neutral
 tuning around those files; it does not duplicate their provider schema. Their own reference
-— the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
-fallback — lives in [`voices.md`](voices.md#reference-corevoicesjson).
+- the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
+fallback - lives in [`voices.md`](voices.md#reference-corevoicesjson).
 
 ## Migrating from ~/.config/echo/.env
 
@@ -172,11 +172,11 @@ config.json and prints exactly which keys it moved. It is:
   says so), the retired aliases below are ignored, and host-owned variables are left alone.
 - **Limited to Echo's own dotenv locations.** `~/.env` and `ECHO_ENV_PATHS` are never drained:
   `~/.env` is a shared user dotfile, not Echo's to rewrite. Move those keys by hand. Every
-  other key there is still read as before, so only PORT needs action — and a PORT in one of
+  other key there is still read as before, so only PORT needs action - and a PORT in one of
   those files is named on every install run until you move it into config.json.
 
 Nothing is required of you afterwards. If you want to tidy up, delete the migrated lines from
-`~/.config/echo/.env` — but keep the file itself whenever it holds `ELEVENLABS_API_KEY`.
+`~/.config/echo/.env` - but keep the file itself whenever it holds `ELEVENLABS_API_KEY`.
 
 ### Deprecated environment variables
 
@@ -219,7 +219,7 @@ Rewrite each match to its canonical name, put it in config.json, and restart the
 
 > Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and the
 > LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A reinstall
-> (`bash scripts/install.sh`) migrates the running service automatically — see the
+> (`bash scripts/install.sh`) migrates the running service automatically - see the
 > [CHANGELOG](../CHANGELOG.md).
 
 ## Port and CLI
@@ -229,7 +229,7 @@ cli/echo, lifecycle scripts, adapters, smoke checks, and docs all use that defau
 explicit live PORT override remains useful for an isolated development daemon; the normal
 installed LaunchAgent reads config.json.
 
-Both sides read the port from the same two places, in the same order, with the same bounds —
+Both sides read the port from the same two places, in the same order, with the same bounds -
 that is what keeps `cli/echo doctor`, `status`, `mute` and the installer's health probe
 talking to the port the daemon actually bound. A value either side would reject falls back to
 3246 on both.

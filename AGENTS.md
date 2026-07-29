@@ -2,7 +2,7 @@
 
 Lean entry point for agents working on `echo`. This file is the build/test
 commands, the repo map, the hard invariants, and the DOX rail. Architecture and per-area
-detail live behind the pointers below — load them on demand (progressive disclosure).
+detail live behind the pointers below - load them on demand (progressive disclosure).
 
 ## Architecture in one breath
 
@@ -20,7 +20,7 @@ that calls `POST /notify`.
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
-# Stable human surface — cli/echo wraps the scripts + daemon API (never reimplements them)
+# Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
 cli/echo install [--adapter none|claudecode|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
@@ -71,7 +71,7 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
 through their own `node_modules`; without the workspace links a registered adapter fails to
 load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale. A test
-that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` — the flag opts that run out
+that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` - the flag opts that run out
 of both creating and verifying the links, so `bun test` never relinks the checkout's
 `node_modules` underneath itself.
 
@@ -86,7 +86,7 @@ is unmistakably a test.
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
-such as the JSON config file. Use **Bun only** — no npm/npx/node. Run
+such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
 `bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
 same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
@@ -156,7 +156,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not broad-kill whatever owns port `3246`; it may be another service.
 - Do not commit secrets or `.env` files.
 - Do not write env-file config into `process.env`. Core resolves env-file values through
-  `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at
+  `resolveEchoEnv` (`core/env.ts`) - read-only, live env wins. Hydrating `process.env` at
   import leaked the operator's `ECHO_VOICE_*` identity into same-process adapter tests
   (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
   `tests/core/architecture-invariants.test.ts` (source scan) plus
@@ -164,24 +164,24 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Keep daemon and adapter configuration precedence in `shared/echo-env.ts`; real process values win, then `~/.config/echo/config.json`, then the first legacy dotenv file per key. Two carve-outs live there and nowhere else: `PORT` is never read from a dotenv file (the bash surfaces cannot see it, and `scripts/migrate-config.ts` moves it into `config.json` at install time), and `ELEVENLABS_API_KEY` is never accepted from `config.json` (a dotenv file stays its permanent home).
 - Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
-- Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
+- Do not read the daemon's files from an adapter - no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
-- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
-- Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
+- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
+- Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills
 
-- **Issue tracker** — draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
-- **Triage labels** — namespaced taxonomy shared with Recall: `type:`, `agent:`, `needs:`/`needs-triage`/`needs-info`, `risk:`, `blocked:`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
-- **Domain docs** — single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See [docs/agents/domain.md](docs/agents/domain.md).
+- **Issue tracker** - draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+- **Triage labels** - namespaced taxonomy shared with Recall: `type:`, `agent:`, `needs:`/`needs-triage`/`needs-info`, `risk:`, `blocked:`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+- **Domain docs** - single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See [docs/agents/domain.md](docs/agents/domain.md).
 
 ## DOX framework
 
 DOX makes AGENTS.md files binding work contracts for their subtrees. The procedural how-to
 (Read Before Editing, Update After Editing, Hierarchy, Child Doc Shape, Style, Closeout)
-lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
+lives in **[docs/dox.md](docs/dox.md)** - read it before editing any docs.
 
 ### Core Contract
 

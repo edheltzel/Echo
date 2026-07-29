@@ -16,14 +16,14 @@ Adapters should:
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
 
-## Package boundary — self-contained, HTTP-only
+## Package boundary - self-contained, HTTP-only
 
 Every host adapter is a **workspace package** (`adapters/<host>/package.json`, listed in the
 root `workspaces` array). Two rules make the boundary real rather than aspirational, and
 both are machine-enforced in `tests/core/architecture-invariants.test.ts`:
 
 1. **No import escapes the package root.** Relative imports stay inside `adapters/<host>/`.
-   Shared behavior is imported by name from `@echo/shared` — the `shared/` workspace package,
+   Shared behavior is imported by name from `@echo/shared` - the `shared/` workspace package,
    which every adapter declares in its own `dependencies`. `bun install` links it at
    `adapters/<host>/node_modules/@echo/shared`, so resolution works wherever the host loads
    the adapter from (repo path, foreign cwd, symlink, or bundled). A `../../shared/...`
@@ -34,16 +34,16 @@ both are machine-enforced in `tests/core/architecture-invariants.test.ts`:
    daemon's private state. The daemon may run from a different clone or a different
    `VOICES_PATH`, so a co-located read is wrong even when it happens to work.
 
-An import scan alone cannot enforce rule 2 — the violation it replaced was a `readFileSync`
-of a path string, not an import — so the guard pairs an import check with a string scan for
+An import scan alone cannot enforce rule 2 - the violation it replaced was a `readFileSync`
+of a path string, not an import - so the guard pairs an import check with a string scan for
 `core/` paths in adapter sources.
 
 `@echo/shared` is also the single owner of invariants both sides enforce: the edge-tts voice
 grammar lives in `shared/edge-voice.ts` and `core/server.ts` imports it, rather than each
-keeping a copy in sync. `shared/` may never import `core/` — core imports shared, so the
+keeping a copy in sync. `shared/` may never import `core/` - core imports shared, so the
 dependency runs one way only.
 
-## Registration contract — reconcile and prune (issue #77)
+## Registration contract - reconcile and prune (issue #77)
 
 Every adapter MUST ship an **idempotent reconcile-and-prune registration** for whatever host
 config holds its repo paths. Append-only registration is forbidden: a repo directory rename
@@ -53,15 +53,15 @@ production on 2026-07-02.
 
 A conforming registration:
 
-1. **Sets the required path explicitly** — derives the canonical path from the adapter's own
+1. **Sets the required path explicitly** - derives the canonical path from the adapter's own
    location (`import.meta.url`), never from a hardcoded clone location.
-2. **Prunes stale variants** — removes or replaces in place any registration that matches the
+2. **Prunes stale variants** - removes or replaces in place any registration that matches the
    adapter's pattern but is not the canonical path (dead paths from a rename, duplicates from
    append-style installs).
-3. **Is idempotent** — rerunning against an already-correct config is a byte-for-byte no-op.
-4. **Supports `--check`** — reports pending changes (including stale paths) without mutating,
+3. **Is idempotent** - rerunning against an already-correct config is a byte-for-byte no-op.
+4. **Supports `--check`** - reports pending changes (including stale paths) without mutating,
    exiting 0 when current and 3 when changes are pending (machine-checkable).
-5. **Edits through symlinks** — if the host config may be a symlink (e.g. into a dotfiles
+5. **Edits through symlinks** - if the host config may be a symlink (e.g. into a dotfiles
    repo), write by atomically replacing the resolved real file, never the symlink itself.
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
@@ -69,7 +69,7 @@ Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook e
 `~/.pi/agent/settings.json`), and `adapters/omp/reconcile.ts` (the `echo-voice` symlink in
 `~/.omp/agent/extensions/`, #18/#109). `scripts/install.sh` re-reconciles **every installed
 adapter on every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates
-the adapters' check modes plus the LaunchAgent plist paths — a new adapter must plug its
+the adapters' check modes plus the LaunchAgent plist paths - a new adapter must plug its
 reconcile and check commands into both. Future hosts (Codex/OpenCode #30) inherit this
 contract.
 
@@ -87,13 +87,13 @@ The terminal protocol matrix, the tmux passthrough contract, and the exact
 [Native terminal visual delivery](http-api.md#native-terminal-visual-delivery). Adapter
 diagnostics expose the selected route in `NotifyResult.visual`.
 
-## Pi adapter — per-turn completions (issue #15)
+## Pi adapter - per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
 convention. On `before_agent_start` (`adapters/pi/index.ts`) it appends an instruction to the
 chained `event.systemPrompt` (feature-detected; falls back to `systemPromptAppend`; no-ops on
 older runtimes) telling the model to end each response with `🗣️ <Name>: <8–16 word
-summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line — so
+summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line - so
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
 - **Persona name** comes from config: `personaName` ← `ECHO_VOICE_PERSONA_NAME` (default
@@ -107,7 +107,7 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 - **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"` (env
   `ECHO_VOICE_ID` overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
-  the injection feature above, #76 also touched `core/voices.json` data — a running daemon
+  the injection feature above, #76 also touched `core/voices.json` data - a running daemon
   loads voices.json once at startup, from its staged payload, so run `cli/echo update` to
   pick up the `pi` entry; until then the adapter's `voice_id: "pi"` is unresolvable and falls
   back to the provider default voice (audibly the identity voice on stock installs), logged
@@ -123,7 +123,7 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
 
-## oh-my-pi (omp) — sibling adapter, shared shape (issues #18, #109)
+## oh-my-pi (omp) - sibling adapter, shared shape (issues #18, #109)
 
 `adapters/omp/` is its own package alongside `adapters/pi/` (split in #109); the two share
 behavior through `@echo/shared`, not through one directory serving both hosts. The host
@@ -139,10 +139,10 @@ the adapter absorbs:
   `~/.omp/agent/extensions/` pointing at the dedicated `adapters/omp/` (omp loads the entries
   declared in the package.json `pi` field through it). It **migrates** an existing Echo
   `echo-voice` link off the pre-split shared `adapters/pi/` onto `adapters/omp/` (#109). The script follows the reconcile-and-prune
-  contract from #77 with strict ownership: Echo owns **only** the `echo-voice` name — no
+  contract from #77 with strict ownership: Echo owns **only** the `echo-voice` name - no
   other entry is ever touched, whatever its target. The `echo-voice` entry is healed only
   when it provably belongs to Echo (a dead `*/adapters/pi` target from a renamed clone, or
-  a live target whose package.json is `@echo/pi-adapter` — another Echo checkout, re-pointed
+  a live target whose package.json is `@echo/pi-adapter` - another Echo checkout, re-pointed
   at this one). Anything else occupying the name is FATAL (exit 2), never replaced.
   Reruns are idempotent; `--check` exits 0 when current / 3 when changes are pending /
   2 on a FATAL state, and the installer preflights `--check` (tolerating 3) so a FATAL

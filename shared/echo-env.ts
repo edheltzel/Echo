@@ -33,7 +33,7 @@ const RETIRED_ALIAS_PREFIX = "VOICESYSTEM_";
 
 // PORT is deliberately NOT migrated from the dotenv layer. The bash surfaces
 // (scripts/echo-port.sh) read only config.json and a live PORT, and a second
-// dotenv parser in bash could only drift from this one — so honoring a dotenv
+// dotenv parser in bash could only drift from this one - so honoring a dotenv
 // PORT here would put the daemon on a port every CLI, lifecycle script and
 // health probe reports as down. scripts/migrate-config.ts moves an existing
 // dotenv PORT into config.json, where both sides read it.
@@ -65,7 +65,7 @@ function isConfigPrimitive(value: unknown): value is EchoConfigValue {
 // A configured port has to be one the pure-bash surfaces can target too: they
 // resolve it without any of the daemon's fallback logic, so a value only the
 // daemon accepts leaves every CLI, lifecycle script and health probe on 3246
-// while the daemon listens elsewhere — permanently. `0` (ephemeral bind) is the
+// while the daemon listens elsewhere - permanently. `0` (ephemeral bind) is the
 // clearest case, which is why it is rejected here and stays a live-process-only
 // test mode. Keep these bounds in step with shared/config-schema.json and the
 // range check in scripts/echo-port.sh.
@@ -74,10 +74,10 @@ export const MAX_CONFIG_PORT = 65535;
 
 // One value, three readers: this validator, `parseInt(_, 10)` in core/server.ts,
 // and the sed capture plus bash arithmetic in scripts/echo-port.sh. Each
-// understands a different superset — `Number()` reads `0x0C9E` as 3230 where
+// understands a different superset - `Number()` reads `0x0C9E` as 3230 where
 // base-10 parsing stops at 0, bash reads a leading-zero operand as octal
 // (`03246` → 1702), and a padded `" 3457 "` is a port to one reader and nothing
-// to another — so the grammar is kept small enough that all three can mirror it
+// to another - so the grammar is kept small enough that all three can mirror it
 // exactly: digits only, no sign, no leading zero, no surrounding whitespace.
 // Anything else resolves to 3246 everywhere. The same rule is spelled out in
 // shared/config-schema.json and scripts/echo-port.sh, and every reader is held
@@ -124,7 +124,7 @@ export function validateEchoConfig(value: unknown): string[] {
 /**
  * Read config.json, dropping ONLY the keys that fail validation. An unknown key
  * (a typo, or a setting written by a newer Echo) must not revert every other
- * setting to its built-in default — the ignored keys and their reasons are
+ * setting to its built-in default - the ignored keys and their reasons are
  * reported through EchoConfigStatus and surfaced in GET /health.
  */
 function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>; status: EchoConfigStatus } {
@@ -178,7 +178,7 @@ function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>
 
 /**
  * The one dotenv parser: the daemon's fallback layer and the migration tool
- * share it. Best-effort by contract — a file that exists but cannot be read
+ * share it. Best-effort by contract - a file that exists but cannot be read
  * (permissions, or a directory at that path) yields no keys rather than
  * throwing, because this runs during daemon startup and inside install
  * preflight, where an exception is a dead service or a failed install.

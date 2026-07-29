@@ -1,4 +1,4 @@
-![Echo — a voice for any agent](assets/echo-banner-riso.jpg)
+![Echo - a voice for any agent](assets/echo-banner-riso.jpg)
 
 # Echo
 
@@ -6,10 +6,10 @@ Standalone, multi-provider TTS notification server for coding agents, terminals,
 
 The server core accepts JSON on `localhost:3246` by default and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
-- `adapters/claudecode/` — Claude Code hook integration.
-- `adapters/pi/` — Pi extension package integration.
-- `adapters/omp/` — oh-my-pi (omp) extension package integration.
-- direct HTTP — any process can POST to `/notify`.
+- `adapters/claudecode/` - Claude Code hook integration.
+- `adapters/pi/` - Pi extension package integration.
+- `adapters/omp/` - oh-my-pi (omp) extension package integration.
+- direct HTTP - any process can POST to `/notify`.
 
 ## Architecture
 
@@ -63,7 +63,7 @@ You should hear "Hello from Echo" spoken aloud and see:
 { "status": "success", "message": "Notification sent", "request_id": "..." }
 ```
 
-Hear nothing, or an unexpected voice? See [If you hear nothing — or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
+Hear nothing, or an unexpected voice? See [If you hear nothing - or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
 
 ## Install
 
@@ -86,7 +86,7 @@ Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/insta
 ```bash
 cli/echo doctor                # is my install healthy? one recovery command per failed check
 cli/echo status
-cli/echo update                # after a git pull — restarting alone keeps the old daemon
+cli/echo update                # after a git pull - restarting alone keeps the old daemon
 cli/echo mute 30m              # or: on | off | toggle | status
 ```
 
@@ -137,7 +137,7 @@ Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
 }
 ```
 
-All fields are optional — a missing `message` defaults to `"Task completed"`.
+All fields are optional - a missing `message` defaults to `"Task completed"`.
 `voice_enabled: false` keeps the notification path silent for smoke tests.
 
 `voice_id` takes a persona **name key** from `voices.json` (e.g. `kai`, `themis`). Omit it
@@ -176,7 +176,7 @@ daemon's `voices.json` off disk. Contract: [docs/http-api.md](docs/http-api.md).
 
 To make it observable _why_ a `/notify` used the voice it did, the daemon appends one
 structured JSONL event per voice-enabled `/notify` to
-`~/Library/Logs/echo/voice-resolution.jsonl` — separate from the human-readable daemon log
+`~/Library/Logs/echo/voice-resolution.jsonl` - separate from the human-readable daemon log
 (`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
 `elapsed_ms`, `timeout_ms`, `exit_code`, and `stderr`, so Edge failures distinguish health
 status, synthesis, playback, and circuit-breaker paths. Fields, retention, and overrides:
@@ -185,7 +185,7 @@ status, synthesis, playback, and circuit-breaker paths. Fields, retention, and o
 ## Voices
 
 Voices are configured per agent in `core/voices.json`. The `identity` mapping is the
-default ("Atlas") voice — it speaks whenever `voice_id` is omitted. Every entry under
+default ("Atlas") voice - it speaks whenever `voice_id` is omitted. Every entry under
 `agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`,
 `themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
 
@@ -205,12 +205,12 @@ by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 ### Gotchas: wrong voice or silence
 
 - Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
-  while ElevenLabs is disabled — it speaks in the active provider's **default voice**
+  while ElevenLabs is disabled - it speaks in the active provider's **default voice**
   instead of the persona you meant.
 - Unexpected macOS `say` usually means Edge is disabled, the Edge circuit is open, or real
   Edge synthesis failed. Check `attempts[]` in the resolution log; the diagnostic health
   probe alone no longer forces `say` fallback.
-- Port `31337` causes silence — voice traffic is `:3246`.
+- Port `31337` causes silence - voice traffic is `:3246`.
 
 ### Auditioning edge voices
 
@@ -222,8 +222,8 @@ Persistent settings live in `~/.config/echo/config.json`, including persona iden
 timeouts, cache limits, and log paths. JSON values are typed and validated against
 [`shared/config-schema.json`](shared/config-schema.json). Live process values remain a
 compatibility override; installing migrates an existing `~/.config/echo/.env` into the JSON
-file and leaves the old one in place, since `ELEVENLABS_API_KEY` — the only secret, never
-accepted in JSON — keeps living there. See [docs/configuration.md](docs/configuration.md).
+file and leaves the old one in place, since `ELEVENLABS_API_KEY` - the only secret, never
+accepted in JSON - keeps living there. See [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
