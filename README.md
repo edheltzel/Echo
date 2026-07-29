@@ -114,6 +114,12 @@ curl -fsS -X POST http://localhost:3246/notify \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
 
+Host adapters also provide native terminal visuals: Herdr first, then a safe terminal TTY
+(Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9), with the macOS notification fallback
+last. The exact native-success marker suppresses the duplicate fallback banner. Limits,
+headless/tmux behavior, and a direct verification command are in
+[Native terminal visual delivery](docs/http-api.md#native-terminal-visual-delivery).
+
 Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md](docs/operations.md).
 
 ## API

@@ -47,6 +47,15 @@
 | oh-my-pi (omp) | `adapters/omp/` | Supported — sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | OpenCode | TBD | Planned | Future adapter |
 
+### Terminal visual capabilities
+
+Native visuals do not add a provider dependency; they require the adapter's safe TTY context
+and one of the supported terminal protocols. Herdr is attempted first when its documented
+session or socket context is present. If no native route succeeds, the daemon retains its
+macOS AppleScript banner fallback. Terminal support boundaries, tmux passthrough behavior, and
+SSH/headless fallback are documented in
+[Native terminal visual delivery](http-api.md#native-terminal-visual-delivery).
+
 ## Decision matrix
 
 | Goal | Install |

@@ -65,6 +65,76 @@ from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live 
 override is available for one isolated command or test. The CLI does not discover arbitrary
 listeners. See [`configuration.md`](configuration.md).
 
+## Verify a native terminal notification
+
+`curl -X POST /notify` is a raw HTTP caller, so it intentionally exercises the legacy macOS
+notification fallback. Native delivery belongs to a host adapter: the adapter tries Herdr,
+then a safe controlling TTY (Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9), and only
+sets `visual_delivery: "native"` after one of those routes reports success. The daemon then
+skips its AppleScript banner exactly once. See [`http-api.md`](http-api.md#native-terminal-visual-delivery)
+for terminal limits, tmux passthrough, SSH/headless behavior, and the adapter-level diagnostic.
+
+Run a direct adapter-client smoke from the adapter package root and from the terminal that owns
+the adapter's TTY (not from a pipe, SSH headless shell, or hook-protocol stdout):
+
+```bash
+cd adapters/pi
+bun -e '
+import { sendNotification } from "@echo/shared/notify-client.ts";
+import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
+const id = `terminal-check-${Date.now()}`;
+const result = await sendNotification(
+  { endpoint: "http://localhost:3246/notify", title: "Echo native check", voiceEnabled: false },
+  "Echo native terminal check",
+  "terminal-check",
+  id,
+  undefined,
+  nativeContextFromAdapterContext({}, process.env, id, true),
+);
+console.log(JSON.stringify({ status: result.status, visual: result.visual, body: result.body }, null, 2));
+'
+```
+
+The expected HTTP status is `202`. Confirm `visual.status` is `"shown"` and its route is
+`"herdr"` or `"terminal"`; an unavailable result means the request correctly retained the
+legacy fallback. Verify service state with `cli/echo doctor`, `cli/echo status`, and
+`curl -fsS http://localhost:3246/health`. A spoken check uses the ordinary `/notify` request
+with `voice_enabled: true`; verify its eventual `played` disposition in the audio-lifecycle
+log because `202` means accepted, not finished speaking.
+
+### Verified WezTerm capture
+
+For a visual acceptance test, run the adapter smoke from a real WezTerm TTY. If the terminal
+is focused and its notification policy suppresses focused-pane notifications, use a temporary
+isolated process with the runtime-only override below; do not edit the global WezTerm config:
+
+```bash
+/Applications/WezTerm.app/Contents/MacOS/wezterm \
+  --config 'notification_handling="AlwaysShow"' \
+  start --always-new-process --no-auto-connect --cwd "$PWD" -- \
+  env HERDR_SOCKET_PATH=/dev/null ECHO_VOICE_ENABLED=false \
+  ECHO_VOICE_GREET_ON_START=true ECHO_VOICE_SPEAK_COMPLETIONS=false PI_OFFLINE=1 \
+  pi --no-session --offline --no-tools -e "$PWD/adapters/pi/index.ts"
+```
+
+The rollout capture was made from the real terminal path with WezTerm
+`20260716-195552-76b606ec` on macOS, Echo `0.7.1` staged payload, and Pi `0.82.1`. The adapter
+selected terminal-native WezTerm OSC 777 delivery (`visual: {status: "shown", route:
+"terminal", terminal: "wezterm"}`); the exact native marker suppressed the AppleScript
+fallback. The temporary window was closed after capture and the global WezTerm configuration
+was unchanged.
+
+![Real WezTerm native notification](assets/notifications/wezterm-native-pi.png)
+
+*Real native terminal notification captured from Pi: title `Echo WezTerm`, message `Native
+WezTerm capture`. The image is deliberately cropped to the notification and contains no
+unrelated terminal content.*
+
+If a voice test is not heard, check the host output device and volume before diagnosing Echo:
+the original External Headphones route at 6% was not audible, while the same accepted test was
+heard clearly through Mac Studio Speakers at 35%; the original headphones route and 6% volume
+were then restored. This counterfactual isolates host output masking from Echo synthesis.
+
 ## Logs
 
 - Server log: `~/Library/Logs/echo.log` — `tail -f` it while debugging.
