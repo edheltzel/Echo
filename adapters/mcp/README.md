@@ -18,8 +18,10 @@ bun adapters/mcp/server.ts                     # serve MCP over stdio (hosts do 
   the [#77 contract](../../docs/adapters.md#registration-contract--reconcile-and-prune-issue-77).
   Echo owns that one name; anything else holding it is FATAL rather than overwritten.
   `ECHO_MCP_CONFIG_PATH` redirects the target, which is how the tests stay off the real config.
-- **Why the host launches it:** a stdio MCP server is the host's own child, so the capture
-  child it spawns inherits the terminal's process ancestry and the microphone grant attributes
-  to the terminal app. See [docs/converse.md](../../docs/converse.md).
+- **Why the host launches it:** stdio transport means the host spawns this server as its own
+  child, so the capture child it spawns is expected to inherit the terminal's process ancestry
+  and attribute the microphone grant to the terminal app. That chain has not been measured
+  through Claude Code on this host; every turn records the ancestry it resolved, so the first
+  real ask reports it. See [docs/converse.md](../../docs/converse.md).
 
 The turn itself lives in `@echo/converse`; this package only speaks the wire protocol.

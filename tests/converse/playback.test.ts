@@ -85,7 +85,7 @@ describe("waiting for the question to finish playing", () => {
     // The estimate carries the wait; /health shares /notify's 10-per-minute
     // bucket, so a tight poll loop would starve the host's notifications.
     expect(slept[0]).toBe(4_000);
-    expect(report).toEqual({ drained: true, waited_ms: 4_000, polls: 1 });
+    expect(report).toEqual({ drained: true, waited_ms: 4_000, polls: 1, refused_reads: 0 });
     expect(core.calls).toEqual(["GET /health"]);
   });
 
@@ -137,7 +137,30 @@ describe("waiting for the question to finish playing", () => {
     });
 
     // 0 + 750 + 1250: the gaps come from the backoff schedule.
-    expect(report).toEqual({ drained: false, waited_ms: 2_000, polls: 3 });
+    expect(report).toEqual({ drained: false, waited_ms: 2_000, polls: 3, refused_reads: 0 });
+  });
+
+  test("a wait that ran out of readings is distinguishable from a busy queue", async () => {
+    // Same symptom, opposite fixes: "your play queue is backed up" versus "you
+    // asked twice inside a minute". The count is what lets the caller say which.
+    const refused = fakeCore([null]);
+    const busy = fakeCore([health({ play_queue: { depth: 4, in_flight_ms: 200, stalled: false } })]);
+    const wait = (core: ReturnType<typeof fakeCore>) =>
+      waitForPlaybackDrain({
+        coreBaseUrl: "http://localhost:8899",
+        estimateMs: 0,
+        fetchImpl: core.fetchImpl,
+        sleep: async () => {},
+        maxPolls: 3,
+      });
+
+    const refusedReport = await wait(refused);
+    const busyReport = await wait(busy);
+
+    expect(refusedReport.drained).toBe(false);
+    expect(refusedReport.refused_reads).toBe(3);
+    expect(busyReport.drained).toBe(false);
+    expect(busyReport.refused_reads).toBe(0);
   });
 
   test("polls back off so a slow synthesis costs one more request, not six", async () => {

@@ -217,6 +217,35 @@ describe("capture and transcribe together", () => {
     expect(readdirSync(cfg.captureDir)).toEqual([]);
   });
 
+  // Splitting the plan's Tier 1 row made sox a Tier 1 dependency, so the machine
+  // the plan pictured - macOS 26 with yap installed and nothing else - is exactly
+  // the one that hits this. It must name the fix, not raise ENOENT mid-turn.
+  test("a missing recorder names the package that provides it", async () => {
+    const cfg = config({
+      recBin: join(scratch, "absent-rec"),
+      yapBin: fakeBinary("fake-yap", 'echo "never reached"'),
+    });
+
+    const failure = await captureAndTranscribe(cfg).catch((error: CaptureError) => error);
+
+    expect(failure).toBeInstanceOf(CaptureError);
+    expect((failure as CaptureError).code).toBe("no_recorder");
+    expect((failure as CaptureError).message).toContain("brew install sox");
+    expect((failure as CaptureError).message).not.toContain("ENOENT");
+  });
+
+  test("the whisper rung reports a missing sox instead of failing to resample", async () => {
+    const cfg = config({
+      recBin: fakeRecorder(8_192),
+      soxBin: join(scratch, "absent-sox"),
+      whisperBin: fakeBinary("fake-whisper", 'echo "unused"'),
+      whisperModel: "/models/ggml-base.en.bin",
+      sttTier: "whisper",
+    });
+
+    await expect(captureAndTranscribe(cfg)).rejects.toThrow(/brew install sox/);
+  });
+
   test("with no local transcriber available the failure names both rungs", async () => {
     const cfg = config({
       recBin: fakeRecorder(8_192),

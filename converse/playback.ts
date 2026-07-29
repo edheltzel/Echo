@@ -170,6 +170,12 @@ export interface DrainReport {
   drained: boolean;
   waited_ms: number;
   polls: number;
+  /**
+   * Polls core refused or failed to answer. Non-zero with `drained: false` means
+   * the wait ran out of readings, not that the queue was busy - the difference
+   * between "your play queue is backed up" and "you asked twice in a minute".
+   */
+  refused_reads: number;
 }
 
 function queueIsIdle(health: CoreHealthSnapshot): boolean {
@@ -190,18 +196,22 @@ export async function waitForPlaybackDrain(options: DrainOptions): Promise<Drain
 
   await sleep(options.estimateMs);
   let waited = options.estimateMs;
+  let refused = 0;
 
   for (let poll = 1; poll <= maxPolls; poll++) {
     const read = await readCoreHealth(options.coreBaseUrl, options.fetchImpl);
     // A rate-limited or failed read is not evidence the queue is empty. Keep
     // waiting: opening the microphone on a guess is the expensive mistake.
-    if (read.status === "ok" && queueIsIdle(read.health)) {
-      return { drained: true, waited_ms: waited, polls: poll };
+    if (read.status !== "ok") refused++;
+    else if (queueIsIdle(read.health)) {
+      return { drained: true, waited_ms: waited, polls: poll, refused_reads: refused };
     }
-    if (poll === maxPolls) return { drained: false, waited_ms: waited, polls: poll };
+    if (poll === maxPolls) {
+      return { drained: false, waited_ms: waited, polls: poll, refused_reads: refused };
+    }
     const gap = backoff[Math.min(poll - 1, backoff.length - 1)] ?? 0;
     await sleep(gap);
     waited += gap;
   }
-  return { drained: false, waited_ms: waited, polls: maxPolls };
+  return { drained: false, waited_ms: waited, polls: maxPolls, refused_reads: refused };
 }

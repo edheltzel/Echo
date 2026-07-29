@@ -45,7 +45,10 @@ export interface CaptureEngineResult {
 export type CaptureEngine = (config: ConverseConfig, signal?: AbortSignal) => Promise<CaptureEngineResult>;
 
 export class CaptureError extends Error {
-  constructor(readonly code: "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech", message: string) {
+  constructor(
+    readonly code: "no_recorder" | "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech",
+    message: string,
+  ) {
     super(message);
     this.name = "CaptureError";
   }
@@ -75,6 +78,18 @@ export function selectSttTier(config: ConverseConfig, which: Which = defaultWhic
 
 function whisperUsable(config: ConverseConfig, which: Which): boolean {
   return Boolean(which(config.whisperBin)) && config.whisperModel !== undefined;
+}
+
+/**
+ * Fail with a name and a fix before spawning, rather than with an ENOENT from
+ * inside a turn. This matters most for the recorder: splitting the plan's Tier 1
+ * row made sox a Tier 1 dependency, so the very machine the plan pictured (macOS
+ * 26 with `brew install yap` and nothing else) is the one that hits it.
+ */
+function requireBinary(bin: string, hint: string, which: Which = defaultWhich): void {
+  if (which(bin) === null) {
+    throw new CaptureError("no_recorder", `${bin} is not available. ${hint}`);
+  }
 }
 
 /** whisper takes a bare language code; the configured locale is BCP-47. */
@@ -171,6 +186,8 @@ export async function recordReply(
   wavPath: string,
   signal?: AbortSignal,
 ): Promise<RecordingReport> {
+  requireBinary(config.recBin, "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.");
+
   const startedAt = Date.now();
   const result = await run([config.recBin, ...recorderArgv(config, wavPath)], config.maxCaptureMs, signal);
   const capture_ms = Date.now() - startedAt;
@@ -196,6 +213,8 @@ export async function recordReply(
 
 /** Offline rate conversion for whisper, which requires 16kHz mono. */
 async function toWhisperInput(config: ConverseConfig, wavPath: string): Promise<string> {
+  requireBinary(config.soxBin, "whisper needs 16kHz mono; install sox (`brew install sox`) or set ECHO_CONVERSE_SOX_BIN.");
+
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
   const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted]);
   if (result.code !== 0) {

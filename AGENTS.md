@@ -28,7 +28,7 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 bun install
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|pi|omp] [--check]
+cli/echo install [--adapter none|claudecode|mcp|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h

@@ -9,10 +9,16 @@
 //
 // The server is a thin client of the capability: it does no capture logic of its
 // own, it just calls askOnce, which spawns the capture child in THIS process's
-// tree. That matters beyond tidiness. Claude Code launches a stdio MCP server as
-// its own child, so this process inherits the host terminal's ancestry, and the
-// microphone grant attributes to the terminal app the human already granted
-// rather than to a background service (the TCC spike; docs/converse.md).
+// tree.
+//
+// That is expected to give the right TCC attribution, and the expectation is
+// worth stating precisely because it has not been measured here. What the spike
+// measured is that a capture spawned from the host terminal's tree attributes to
+// the terminal app while one under a launchd job gets no responsible process at
+// all. Stdio transport means the host spawns this server as its own child, so
+// the ancestry should reach the terminal - but no run on this host has confirmed
+// the chain through Claude Code specifically. Each turn records the ancestry it
+// resolved, so the first real ask reports the answer rather than assuming it.
 //
 // The wire protocol is hand-written rather than pulled from an SDK: three
 // methods over newline-delimited JSON is less code than a dependency, and the

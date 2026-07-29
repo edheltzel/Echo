@@ -245,11 +245,14 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       maxPolls: options.maxPolls,
     });
     if (!drain.drained) {
-      return release(
-        "question_not_spoken",
-        `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`,
-        503,
-      );
+      // Name the cause the operator can act on. Out of readings and out of queue
+      // are the same symptom with opposite fixes, and the rate-limit case is the
+      // likely one: the turn has already spent several requests on core.
+      const detail = drain.refused_reads === drain.polls
+        ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
+          "so whether the question finished playing is unknown"
+        : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
+      return release("question_not_spoken", detail, 503);
     }
 
     active.set(turnId, {

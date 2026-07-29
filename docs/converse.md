@@ -38,6 +38,13 @@ audio. The capability is split accordingly.
   process ancestry. Each turn records the resolved ancestry chain, so the attribution claim is
   something an operator can read back rather than assume.
 
+One link in that chain is expected rather than measured. For Pi and omp the capture child is a
+descendant of the host process itself, which is the shape the spike measured. For Claude Code the
+capture child descends from the stdio MCP server the host spawns, so the ancestry should reach the
+terminal the same way, but no run on this host has confirmed it end to end. Every turn records the
+ancestry it resolved (`GET /turn` response and the turn log), so the first real ask through Claude
+Code reports the answer instead of assuming it.
+
 There is deliberately **no LaunchAgent** for this capability. The coordinator starts on demand
 (`ensureCoordinator`) and its lifetime tracks actual use.
 
@@ -124,6 +131,14 @@ dependency**, where the plan had it only in Tier 2.
 Capture stays at the device's native rate on purpose: VoiceLayer's documented lesson is that
 resampling inside the streaming path overruns on devices at unusual rates (AirPods at 24kHz), so
 the 16kHz conversion whisper needs happens offline afterwards, where an overrun is impossible.
+The Tier 1 rung needs no conversion at all, which was checked rather than assumed: this host
+records at 48kHz, and `yap transcribe` returns the phrase from a 48kHz file. Only whisper.cpp
+requires 16kHz mono, so only that rung pays for the resample.
+
+Both binaries are checked for existence before a turn spawns anything, so a machine with `yap`
+but no `sox` gets "install sox (`brew install sox`), which provides `rec`" rather than an ENOENT
+from inside a turn. That case is worth naming because splitting the Tier 1 row is what created
+it: `sox` is now a Tier 1 dependency.
 
 No speech is a distinct outcome: sox writes a 44-byte header-only file when the endpointer hears
 nothing, and an empty transcript is reported as `no_speech` rather than as an empty answer.
