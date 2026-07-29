@@ -38,6 +38,13 @@
         "@earendil-works/pi-coding-agent",
       ],
     },
+    "converse": {
+      "name": "@echo/converse",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+    },
     "shared": {
       "name": "@echo/shared",
       "version": "0.1.0",
@@ -45,6 +52,8 @@
   },
   "packages": {
     "@echo/claudecode-adapter": ["@echo/claudecode-adapter@workspace:adapters/claudecode"],
+
+    "@echo/converse": ["@echo/converse@workspace:converse"],
 
     "@echo/omp-adapter": ["@echo/omp-adapter@workspace:adapters/omp"],
 

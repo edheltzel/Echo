@@ -1,0 +1,13 @@
+{
+  "name": "@echo/converse",
+  "version": "0.1.0",
+  "description": "Host-neutral one-shot voice-ask capability: speak a question, capture the spoken reply, transcribe it locally",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*.ts": "./*.ts"
+  },
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}
