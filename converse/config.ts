@@ -38,6 +38,8 @@ export interface ConverseConfig {
   /** `undefined` selects the best available rung at capture time. */
   sttTier: SttTier | undefined;
   recBin: string;
+  /** Offline rate conversion for the whisper rung; `rec` is sox in record mode. */
+  soxBin: string;
   yapBin: string;
   whisperBin: string;
   /** whisper.cpp needs a model file; there is no bundled default. */
@@ -87,6 +89,7 @@ export function resolveConverseConfig(
     locale: env.ECHO_CONVERSE_LOCALE || "en-US",
     sttTier: parseTier(env.ECHO_CONVERSE_STT_TIER),
     recBin: env.ECHO_CONVERSE_REC_BIN || "rec",
+    soxBin: env.ECHO_CONVERSE_SOX_BIN || "sox",
     yapBin: env.ECHO_CONVERSE_YAP_BIN || "yap",
     whisperBin: env.ECHO_CONVERSE_WHISPER_BIN || "whisper-cli",
     whisperModel: nonEmpty(env.ECHO_CONVERSE_WHISPER_MODEL),
