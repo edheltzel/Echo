@@ -181,10 +181,23 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 An explicitly configured tier is never silently swapped for the other: a missing binary reports
 itself instead of transcribing through a rung nobody chose.
 
-Both subprocess steps are capped, not just the recorder. The capture state stays non-idle for the
-whole turn and core skips every voice line while it is, so a wedged transcriber would otherwise
-mute Echo for as long as the calling host lives. A turn's lease covers both caps plus slack, so a
-slow-but-healthy transcription can never outlive its own booking.
+Every subprocess is capped, not just the recorder. The capture state stays non-idle for the whole
+turn and core skips every voice line while it is, so a wedged transcriber would otherwise mute
+Echo for as long as the calling host lives. A turn has exactly two caps: the recorder gets
+`ECHO_CONVERSE_MAX_CAPTURE_MS`, and the whole transcription phase shares one
+`ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` budget, so the whisper tier's resample and its
+transcriber draw from the same clock rather than getting a cap each. A turn's lease is those two
+caps plus slack, so a slow-but-healthy transcription cannot outlive its own booking.
+
+The recorder is stopped with SIGTERM only, because sox has to catch the signal to finalize the
+WAV header. A transcriber has no header to finalize, so its cap escalates to SIGKILL after a
+short grace and is therefore hard rather than advisory.
+
+Cancelling an ask (the host aborts the tool call) never strands the microphone. `POST /turn` is
+deliberately not cancellable: aborting it would reject before the grant arrived, leaving a
+booking whose `turn_id` the caller never learned. A cancel that lands while the question is being
+spoken is honored as soon as the grant arrives, by aborting the turn instead of opening the
+microphone; a cancel during capture reaches the recorder directly and the same release path runs.
 
 ## Testing
 

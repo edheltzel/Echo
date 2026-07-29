@@ -137,6 +137,53 @@ describe("one-shot ask", () => {
     expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
   });
 
+  test("an already-cancelled ask never books the microphone", async () => {
+    const { core, config } = startCoordinator();
+    const controller = new AbortController();
+    controller.abort();
+
+    const failure = await askOnce(
+      { question: "Ready?", signal: controller.signal },
+      { config, captureEngine: recordingEngine().engine, fetchImpl: (u, i) => fetch(u, i) },
+    ).catch((error: AskError) => error);
+
+    expect((failure as AskError).code).toBe("cancelled");
+    expect(core.observed.calls).toEqual([]);
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+  });
+
+  // The cancel lands while the coordinator is booking, speaking and waiting for
+  // drain. Cancelling the POST itself would reject before the grant arrived, and
+  // a booking whose turn_id the caller never learned is one nobody can release:
+  // the microphone would stay busy for the whole lease.
+  test("a cancel during the speak window leaves no booking behind", async () => {
+    const { config } = startCoordinator();
+    const controller = new AbortController();
+    let captures = 0;
+    const countingEngine: CaptureEngine = async () => {
+      captures++;
+      return { text: "should not run", engine: "yap", capture_ms: 1, timed_out: false };
+    };
+
+    const failure = await askOnce(
+      { question: "Ready?", signal: controller.signal },
+      {
+        config,
+        captureEngine: countingEngine,
+        fetchImpl: (url, init) => {
+          const inFlight = fetch(url, init);
+          if (url.endsWith("/turn")) controller.abort();
+          return inFlight;
+        },
+      },
+    ).catch((error: AskError) => error);
+
+    expect((failure as AskError).code).toBe("cancelled");
+    expect(captures).toBe(0);
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+    expect(readCaptureState(capturePath, () => true)).toBe("idle");
+  });
+
   test("an empty question never reaches the coordinator", async () => {
     const { core, config } = startCoordinator();
 

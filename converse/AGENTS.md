@@ -29,9 +29,15 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
 - **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
   recorded sample until the transcript exists, and core skips every voice line while it is, so an
-  unbounded child mutes Echo for as long as the calling host lives. The recorder is capped by
-  `ECHO_CONVERSE_MAX_CAPTURE_MS`, the transcriber and its resampler by
-  `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS`, and the turn's lease is derived from both.
+  unbounded child mutes Echo for as long as the calling host lives. A turn has exactly two caps:
+  the recorder gets `ECHO_CONVERSE_MAX_CAPTURE_MS`, and the whole transcription phase shares one
+  `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` budget, so adding a step to that phase must draw from
+  the same deadline rather than take a cap of its own. The turn's lease is derived from both, so
+  the arithmetic breaks the moment a step gets its own cap.
+- **A cancel must never strand the booking.** `POST /turn` is not cancellable: the caller has to
+  learn `turn_id`, because a booking nobody can name is a booking nobody can release. A signal
+  that fired before capture is honored by aborting the granted turn; during capture it reaches
+  the recorder and the existing catch releases.
 - **The capture owner writes its own pid** into the capture-state file. Core honors a non-idle
   state only while that pid is alive, so any other pid turns a crash into permanent silence.
 - **Never import `core/`.** Core is reached over HTTP, plus the capture-state path core itself

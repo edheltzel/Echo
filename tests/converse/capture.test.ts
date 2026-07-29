@@ -270,6 +270,40 @@ describe("capture and transcribe together", () => {
     expect((failure as CaptureError).message).toContain("did not finish within 250ms");
   });
 
+  // The cap is only a real bound if it survives a child that ignores SIGTERM.
+  // The recorder cannot be killed this way (sox must catch the signal to
+  // finalize its WAV header), but a transcriber has no header to lose.
+  test("a transcriber that ignores SIGTERM is killed anyway", async () => {
+    const cfg = config({
+      yapBin: fakeBinary("fake-yap", "trap '' TERM\nsleep 5"),
+      transcribeTimeoutMs: 250,
+    });
+
+    const failure = await transcribeFile(cfg, join(scratch, "reply.wav"), "yap").catch(
+      (error: CaptureError) => error,
+    );
+
+    expect((failure as CaptureError).code).toBe("transcriber_failed");
+    expect((failure as CaptureError).message).toContain("did not finish within 250ms");
+  }, 15_000);
+
+  // One budget for the whole phase, not one per step: the turn's lease is
+  // calculated from a single transcription cap, so a whisper tier that spent the
+  // cap on resampling and then the cap again on transcribing would outlive it.
+  test("the whisper tier shares one budget across resampling and transcribing", async () => {
+    const soxBin = fakeBinary("fake-sox", 'sleep 0.8\nout="${!#}"\nhead -c 64 /dev/zero > "$out"');
+    const whisperBin = fakeBinary("fake-whisper", 'sleep 0.8\necho "too late"');
+    const wav = join(scratch, "reply.wav");
+    writeFileSync(wav, "x".repeat(2_048));
+    const cfg = config({ soxBin, whisperBin, whisperModel: "/models/ggml-base.en.bin", transcribeTimeoutMs: 1_000 });
+
+    const failure = await transcribeFile(cfg, wav, "whisper").catch((error: CaptureError) => error);
+
+    expect((failure as CaptureError).code).toBe("transcriber_failed");
+    expect((failure as CaptureError).message).toContain("did not finish within 1000ms");
+    expect(existsSync(join(scratch, "reply.16k.wav"))).toBe(false);
+  }, 15_000);
+
   // Waiting for exit before reading deadlocks on a full pipe: the child blocks
   // writing, so it can only exit once somebody drains it.
   test("a transcript larger than the pipe buffer is read in full", async () => {

@@ -182,6 +182,9 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
 
   const question = options.question.trim();
   if (question.length === 0) throw new AskError("invalid_request", "question must not be empty");
+  if (options.signal?.aborted) {
+    throw new AskError("cancelled", "the ask was cancelled before the question was spoken");
+  }
 
   await ensureCoordinator(config, deps);
 
@@ -195,13 +198,18 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       source: options.source ?? "unknown",
       voice_id: options.voiceId,
       title: options.title,
-      // Both capped steps run under this lease. Asking for only the capture cap
-      // would let a slow-but-healthy transcription outlive the booking, which is
-      // the very state that leaves a caller unable to hand the microphone back.
+      // The capture cap plus the one transcription-phase cap, which is every
+      // bounded step a turn has. Asking for only the capture cap would let a
+      // slow-but-healthy transcription outlive the booking, which is the very
+      // state that leaves a caller unable to hand the microphone back.
       lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + LEASE_SLACK_MS,
       ancestry,
     }),
-    signal: options.signal,
+    // Deliberately NOT cancellable. Aborting this request would reject before
+    // the grant arrives, and a booking whose turn_id the caller never learned is
+    // one nobody can release: the microphone would stay busy for the whole
+    // lease. Cancellation is honored immediately below instead, through the
+    // release path that already exists.
   });
 
   const body = (await response.json()) as TurnGrant & { error?: string; detail?: string };
@@ -222,6 +230,14 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       // discard a transcript the human already spoke.
     }
   };
+
+  // A cancel that landed while the coordinator was speaking hands the
+  // microphone straight back rather than opening it. During capture the same
+  // signal reaches the recorder instead, and the catch below releases.
+  if (options.signal?.aborted) {
+    await finish("abort", { reason: "cancelled: the host cancelled the ask before capture started" });
+    throw new AskError("cancelled", "the ask was cancelled before the microphone opened");
+  }
 
   try {
     // The capture state goes to `recording` only now, after the coordinator has

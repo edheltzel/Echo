@@ -162,25 +162,43 @@ async function collectWithin(collector: PipeCollector, graceMs: number): Promise
 
 const OUTPUT_GRACE_MS = 500;
 
+/** Grace between SIGTERM and SIGKILL for a child whose cap must be hard. */
+const HARD_KILL_GRACE_MS = 2_000;
+
+interface RunOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /**
+   * Escalate to SIGKILL this long after the cap's SIGTERM. Without it the cap is
+   * only as strong as the child's signal handling, which is the right trade for
+   * the recorder and the wrong one for the transcriber (see the call sites).
+   */
+  hardKillAfterMs?: number;
+}
+
 async function run(
   cmd: string[],
-  timeoutMs?: number,
-  signal?: AbortSignal,
+  options: RunOptions = {},
 ): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+  const { timeoutMs, signal, hardKillAfterMs } = options;
   const child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   // Drain from the moment the child exists; the grace timer is armed only once
   // it has exited, so a slow-but-healthy child is never truncated.
   const outCollector = drainPipe(child.stdout);
   const errCollector = drainPipe(child.stderr);
   let timedOut = false;
+  let hardTimer: ReturnType<typeof setTimeout> | undefined;
   const timer = timeoutMs === undefined
     ? undefined
     : setTimeout(() => {
         timedOut = true;
-        // SIGTERM, not SIGKILL: sox finalizes the WAV header on a caught signal,
+        // SIGTERM first, always: sox finalizes the WAV header on a caught signal,
         // and a truncated header is an unreadable recording. Verified on macOS
         // 26.5.2 - a recorder stopped at the cap still yields a readable file.
         child.kill("SIGTERM");
+        if (hardKillAfterMs !== undefined) {
+          hardTimer = setTimeout(() => child.kill("SIGKILL"), hardKillAfterMs);
+        }
       }, timeoutMs);
 
   // A cancelled host turn must close the microphone now, not when the cap
@@ -198,6 +216,7 @@ async function run(
     return { code, stdout, stderr, timedOut };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (hardTimer !== undefined) clearTimeout(hardTimer);
     signal?.removeEventListener("abort", onAbort);
   }
 }
@@ -222,7 +241,12 @@ export async function recordReply(
   );
 
   const startedAt = Date.now();
-  const result = await run([config.recBin, ...recorderArgv(config, wavPath)], config.maxCaptureMs, signal);
+  // No SIGKILL escalation here on purpose: the recorder must be allowed to catch
+  // the signal and finalize its WAV header, or the capture is unreadable.
+  const result = await run([config.recBin, ...recorderArgv(config, wavPath)], {
+    timeoutMs: config.maxCaptureMs,
+    signal,
+  });
   const capture_ms = Date.now() - startedAt;
 
   let bytes = 0;
@@ -262,8 +286,18 @@ function requireTranscriberSuccess(
   }
 }
 
+/**
+ * The whole transcription phase shares ONE budget, whatever it takes to reach a
+ * transcript. Giving the resample and the transcriber a cap each would let the
+ * whisper tier spend two of them, and the turn's lease is calculated from a
+ * single transcription cap.
+ */
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
 /** Offline rate conversion for whisper, which requires 16kHz mono. */
-async function toWhisperInput(config: ConverseConfig, wavPath: string): Promise<string> {
+async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline: number): Promise<string> {
   // A missing resampler is a transcriber-side failure: the recorder did its job,
   // and reporting it as `no_recorder` would send the operator after sox for the
   // wrong reason.
@@ -274,20 +308,24 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string): Promise<
   );
 
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
-  const result = await run(
-    [config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted],
-    config.transcribeTimeoutMs,
-  );
+  const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted], {
+    timeoutMs: remainingMs(deadline),
+    hardKillAfterMs: HARD_KILL_GRACE_MS,
+  });
   requireTranscriberSuccess(result, `resampling for whisper (${config.soxBin})`, config.transcribeTimeoutMs);
   return converted;
 }
 
 export async function transcribeFile(config: ConverseConfig, wavPath: string, tier: SttTier): Promise<string> {
+  // One deadline for the whole phase. A transcriber has no header to finalize,
+  // so its cap escalates to SIGKILL and is therefore hard.
+  const deadline = Date.now() + config.transcribeTimeoutMs;
+
   if (tier === "yap") {
-    const result = await run(
-      [config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath],
-      config.transcribeTimeoutMs,
-    );
+    const result = await run([config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath], {
+      timeoutMs: remainingMs(deadline),
+      hardKillAfterMs: HARD_KILL_GRACE_MS,
+    });
     requireTranscriberSuccess(result, config.yapBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
   }
@@ -295,7 +333,7 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
   if (config.whisperModel === undefined) {
     throw new CaptureError("no_stt_tier", "whisper needs ECHO_CONVERSE_WHISPER_MODEL to point at a ggml model file");
   }
-  const input = await toWhisperInput(config, wavPath);
+  const input = await toWhisperInput(config, wavPath, deadline);
   try {
     const result = await run(
       [
@@ -305,7 +343,7 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
         "-l", whisperLanguage(config.locale),
         "-nt",
       ],
-      config.transcribeTimeoutMs,
+      { timeoutMs: remainingMs(deadline), hardKillAfterMs: HARD_KILL_GRACE_MS },
     );
     requireTranscriberSuccess(result, config.whisperBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
