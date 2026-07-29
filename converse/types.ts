@@ -14,7 +14,12 @@
 // The transcript is deliberately absent from every response above: it never
 // leaves the process that captured it.
 
-import type { CaptureState } from "./capture-state.ts";
+/**
+ * The capture-state contract's states, as core/capture-guard.ts defines them.
+ * Declared here rather than in the writer so the coordinator never reaches the
+ * writer at all, not even for a type (tests/converse/architecture-invariants).
+ */
+export type CaptureState = "idle" | "recording" | "transcribing";
 
 /** The subset of core's GET /health that converse depends on. */
 export interface CoreHealthSnapshot {

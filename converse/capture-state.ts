@@ -25,7 +25,8 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type CaptureState = "idle" | "recording" | "transcribing";
+export type { CaptureState } from "./types.ts";
+import type { CaptureState } from "./types.ts";
 
 export interface CaptureStateRecord {
   state: CaptureState;
