@@ -16,8 +16,13 @@
 # booking is really released afterwards.
 #
 #   tests/e2e-converse.sh                       # silent (default; safe anywhere)
-#   tests/e2e-converse.sh --audible             # also speaks the test question
+#   tests/e2e-converse.sh --audible             # speaks the question for real
 #   ECHO_E2E_PORT=8921 ECHO_E2E_CONVERSE_PORT=8922 tests/e2e-converse.sh
+#
+# Silent is achieved by disabling every TTS provider in the isolated core's own
+# scratch voices.json, not by sending a silent question: the ask forces
+# voice_enabled on by design. --audible leaves the real chain in place, which is
+# the only way to exercise real synthesis timing in the drain wait.
 set -euo pipefail
 
 export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -65,6 +70,27 @@ export ECHO_VOICE_EVENTS_LOG="${SCRATCH}/voice-events.jsonl"
 export ECHO_TTS_CACHE_DIR="${SCRATCH}/tts-cache"
 cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
+
+# Silence, without asking converse to send a silent question.
+#
+# A voice ask forces `voice_enabled: true` on the question by design - a question
+# nobody heard would record the human against silence - so the notify payload is
+# the wrong place to quiet this test. Instead the isolated core is given a scratch
+# voices.json with every provider disabled, so it accepts and queues the question
+# and the provider loop reaches no player at all. The whole path still runs:
+# validate, sanitize, resolve, enqueue, drain.
+#
+# The cost is timing realism, which is what --audible buys: with real synthesis the
+# drain wait spans seconds and several polls, and with providers disabled the queue
+# empties at once.
+if [ "$AUDIBLE" -eq 0 ]; then
+  bun -e '
+    const path = process.env.VOICES_PATH;
+    const config = await Bun.file(path).json();
+    for (const provider of Object.values(config.providers ?? {})) provider.enabled = false;
+    await Bun.write(path, JSON.stringify(config, null, 2));
+  ' || { echo "could not disable providers in the scratch voices.json" >&2; exit 1; }
+fi
 
 # Converse state, also scratch-only.
 export ECHO_DAEMON_URL="http://localhost:${PORT}"
@@ -138,6 +164,11 @@ echo "  core pid/port        : ${CORE_PID} / ${PORT}  (production is :${PRODUCTI
 echo "  coordinator pid/port : ${CONVERSE_PID} / ${CONVERSE_PORT}  (production is :${PRODUCTION_CONVERSE_PORT}, untouched)"
 echo "  capture state file   : ${reported_capture_path}"
 echo "  recorder/transcriber : stand-ins in ${SCRATCH} (no microphone is opened)"
+if [ "$AUDIBLE" -eq 1 ]; then
+  echo "  audio                : ENABLED - the question will be spoken out loud"
+else
+  echo "  audio                : disabled in the scratch voices.json (nothing plays)"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. The coordinator reports itself microphone-free and unbooked.
@@ -153,9 +184,7 @@ echo "$converse_health" | bun -e '
 # ---------------------------------------------------------------------------
 # 2. One full turn: question through core, reply captured, transcript returned.
 # ---------------------------------------------------------------------------
-VOICE_ENABLED=0
-[ "$AUDIBLE" -eq 1 ] && VOICE_ENABLED=1
-export VOICE_ENABLED TEST_QUESTION TRANSCRIPT
+export TEST_QUESTION TRANSCRIPT
 
 bun -e '
   const { askOnce } = await import(`${process.env.ROOT}/converse/client.ts`);
@@ -165,9 +194,6 @@ bun -e '
 
   const config = resolveConverseConfig(process.env);
   const seenDuringCapture = [];
-  const engine = process.env.VOICE_ENABLED === "1"
-    ? undefined
-    : undefined; // the stand-in binaries are the engine; nothing is injected here
 
   const result = await askOnce(
     { question: process.env.TEST_QUESTION, source: "e2e-converse" },
@@ -268,7 +294,6 @@ bun -e '
   const config = resolveConverseConfig(process.env);
 
   // A crashed ask: a live-looking lease owned by a pid that no longer exists.
-  const dead = Bun.spawnSync(["true"]);
   writeFileSync(config.bookingLockPath, JSON.stringify({
     turn_id: "crashed-turn", owner_pid: 999999, source: "e2e-crash",
     acquired_at: new Date().toISOString(),
@@ -304,5 +329,5 @@ bun -e '
 echo
 echo "PASS: one-shot voice ask end to end (core :${PORT}, coordinator :${CONVERSE_PORT})"
 if [ "$AUDIBLE" -eq 0 ]; then
-  echo "      silent run; pass --audible to hear the question spoken"
+  echo "      silent run (providers disabled); pass --audible to speak the question for real"
 fi
