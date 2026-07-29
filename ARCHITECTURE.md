@@ -54,6 +54,32 @@ request `visual_delivery: "native"` and the daemon skips its own banner for that
 First provider to return `true` wins. Notify failures are non-fatal to the host session
 by contract - a down voice daemon never breaks an agent turn.
 
+**The other direction.** `converse/` (`@echo/converse`) is a second host-neutral capability: it
+speaks a question, captures the spoken reply, transcribes it locally and returns the text. It
+adds nothing to `core/`. The question goes out as an ordinary `POST /notify`, playback completion
+is observed through `GET /health`, and the microphone-versus-playback interlock comes from
+converse *writing* the capture-state file `core/capture-guard.ts` already reads - the arbitration
+core ships, used in reverse.
+
+Its coordinator listens on `localhost:32468` and is microphone-free by design; the calling host
+opens the microphone in its own process tree, because macOS attributes a microphone grant to the
+responsible process and a background service gets none. That measurement, the turn sequence, the
+endpoint contract and the v1 limits are in [docs/converse.md](docs/converse.md).
+
+```
+ Pi / omp (echo_ask tool)  Claude Code (adapters/mcp)  curl
+              \                    |                  /
+               \                   |                 /
+                +--- POST /turn --> converse/ :32468 (books, speaks, waits)
+                |                        |  POST /notify + GET /health
+                |                        v
+                |                   core/ :3246 (untouched)
+                |                        ^
+                +-- capture child --------+  writes recording-state.json,
+                    (in the HOST's           so core holds its speech while
+                     process tree)           the microphone is open
+```
+
 ## The boundary that shapes everything
 
 **`core/` never imports a host API.** No PAI, Pi, Claude Code, or OpenCode symbols reach
@@ -75,8 +101,12 @@ directions:
   `core/` filesystem paths. The last check is a string scan on purpose: the violation it
   replaced was a `readFileSync` of `core/voices.json`, which no import-based check can see.
 
-When you add code to `core/` or an adapter, a boundary violation is a test failure, not a
-review nit.
+`converse/` sits beside `core/`, not inside it, and has its own enforced split:
+`tests/converse/architecture-invariants.test.ts` fails if the coordinator can import a capture
+module or spawn any subprocess, if converse imports `core/`, or if it writes state to `/tmp`.
+
+When you add code to `core/`, `converse/`, or an adapter, a boundary violation is a test failure,
+not a review nit.
 
 ## Repo layout
 
@@ -96,11 +126,13 @@ review nit.
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
+| MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
+| `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for playback to drain, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 3246) and the shared occupied-port report, so no two surfaces can disagree. Reads the documented config port when no override is present. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
-| Tests | `tests/core/`, `tests/adapters/`, `tests/scripts/` | `bun test`; see [`docs/development.md`](docs/development.md). |
+| Tests | `tests/core/`, `tests/adapters/`, `tests/converse/`, `tests/scripts/`, `tests/shared/` | `bun test`, plus `tests/e2e-adapters.sh` and `tests/e2e-converse.sh`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
 

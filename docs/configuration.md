@@ -117,8 +117,16 @@ at runtime; invalid values use the defaults below.
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
 | State and logs | ECHO_MUTE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths; log caps default to 1 MB |
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL, ECHO_VOICE_SURFACES | Adapter-side endpoint overrides; otherwise adapters use http://localhost:3246 |
+| Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS | 32468 (keypad ECHOV; core keeps 3246), http://localhost:32468, ~/.local/state/echo/converse/booking.lock, 120000 |
+| Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, 1500, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
 
 Settings whose behavior is not obvious from the name:
+
+- **ECHO_CONVERSE_STT_TIER** pins the transcriber to `yap` or `whisper`. When it is set, a
+  missing binary reports itself rather than falling through to the other rung, so nobody is
+  transcribed through a tier they did not choose. `whisper` also needs
+  **ECHO_CONVERSE_WHISPER_MODEL**, since whisper.cpp ships no model. Full pipeline and the v1
+  limits: [converse.md](converse.md).
 
 - **PORT** must be canonical decimal, from 1 to 65535 - `3246` or `"3246"`. Digits only: no
   sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an

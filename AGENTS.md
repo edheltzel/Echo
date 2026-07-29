@@ -14,6 +14,13 @@ boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](
 Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs in an adapter
 that calls `POST /notify`.
 
+A second host-neutral capability, `echo-converse` (`converse/`, `localhost:32468`), adds the
+other direction: speak a question, capture the spoken reply, transcribe it locally, return the
+text. It changes nothing in `core/` - it speaks through `/notify` and writes the capture-state
+file `core/capture-guard.ts` already reads. Its coordinator is deliberately microphone-free;
+the calling host opens the microphone. Why, and the TCC measurements behind it:
+**[docs/converse.md](docs/converse.md)**.
+
 ## Quick commands
 
 ```bash
@@ -35,6 +42,11 @@ bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)
 bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
+
+# echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
+bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)
+curl -fsS http://localhost:32468/health  # capability, booking holder, configured core address
+bash scripts/install.sh --adapter mcp    # register the ask tool for Claude Code
 
 # Health / silent smoke
 curl -fsS http://localhost:3246/health
@@ -65,6 +77,7 @@ bun install                 # links @echo/shared into each adapter package (requ
 bun test
 PORT=8889 tests/smoke-core.sh
 tests/e2e-adapters.sh       # isolated daemon on :8899; --audible to hear it
+tests/e2e-converse.sh       # isolated core :8921 + coordinator :8922; no microphone needed
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
 ```
 
@@ -87,8 +100,8 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
-`bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
-same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
+`bun test` + the smoke + both e2e scripts + the Pi and omp builds before shipping; CI
+machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 
@@ -118,6 +131,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
+| One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
@@ -139,11 +153,14 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
+| `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
+| MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
 | Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else the `config.json` port, else 3246; never parses dotenv files) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
+| Isolated voice-ask e2e (own core + own coordinator, stand-in recorder) | `tests/e2e-converse.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
 ## Invariants / must not do
@@ -169,6 +186,8 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
+- Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Guarded by `tests/converse/architecture-invariants.test.ts` (the coordinator may neither import a capture module nor spawn any subprocess).
+- Do not speak a converse question while the capture state is non-idle, and do not open the microphone before playback drains. Core's own guard would hold back the question converse asked it to speak, and the human would be recorded against silence. The capture owner also writes its OWN pid, because core honors a non-idle state only while that pid is alive.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills
@@ -194,6 +213,9 @@ lives in **[docs/dox.md](docs/dox.md)** - read it before editing any docs.
 
 - [`docs/AGENTS.md`](docs/AGENTS.md) owns durable documentation, including canonical plans and
   handoffs under `docs/plans/` and `docs/handoffs/`.
+- [`converse/AGENTS.md`](converse/AGENTS.md) owns the `@echo/converse` voice-ask capability: the
+  microphone-free coordinator, the caller-side capture, and the local contracts that keep the
+  two apart.
 
 Add another child contract when a folder becomes a durable boundary that needs local rules
 (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).

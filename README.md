@@ -240,6 +240,7 @@ accepted in JSON - keeps living there. See [docs/configuration.md](docs/configur
 | Tune reliability / the circuit breaker                   | [docs/reliability.md](docs/reliability.md)                         |
 | See required and optional dependencies                   | [docs/dependencies.md](docs/dependencies.md)                       |
 | Write or wire a host adapter                             | [docs/adapters.md](docs/adapters.md)                               |
+| Ask the human a question out loud and read their answer  | [docs/converse.md](docs/converse.md)                               |
 
 ## Development
 

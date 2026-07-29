@@ -123,6 +123,47 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
 
+## MCP adapter - Claude Code's route to a model-invokable tool
+
+`adapters/mcp/` is an MCP server exposing the `echo_ask` tool (the one-shot voice ask; see
+[converse.md](converse.md)). It exists because a Claude Code hook structurally cannot do this
+job: a hook is a one-shot subprocess that reads one JSON blob, writes one verdict and exits, so
+it can block, allow or inject context, but it is not model-invokable and has no channel for
+handing a transcript back as a tool result.
+
+- **Transport:** newline-delimited JSON over stdio; `initialize`, `tools/list`, `tools/call`,
+  `ping`. Hand-written against the published MCP specification rather than an SDK, and replayed
+  against a spawned process in `tests/adapters/mcp/`.
+- **The tool itself is shared**, not reimplemented: `@echo/converse/host-tool.ts` owns the name,
+  schema, description and behavior, so this server, the Pi adapter and the omp adapter cannot
+  drift into three different tools.
+- **Registration:** `~/.claude.json` -> `mcpServers["echo-converse"]`, reconcile-and-prune per
+  the contract above, wired into `install.sh` as `--adapter mcp` (preflight, install, `--check`).
+  Ownership is strict like omp's: echo owns that one name, a foreign server holding it is FATAL
+  rather than overwritten, and an echo registration hiding under a different name is pruned so no
+  session sees the tool twice. `ECHO_MCP_CONFIG_PATH` redirects the target for tests.
+- **Why the host must launch it:** a stdio MCP server is the host's own child, so the capture
+  child it spawns inherits the terminal's process ancestry and the microphone grant attributes to
+  the terminal application rather than to a background service.
+
+## Pi and omp: the `echo_ask` tool (two-way voice)
+
+Both Pi runtimes can expose model-invokable tools, so both adapters register `echo_ask` through
+`registerEchoAskTool` from `@echo/converse/host-tool.ts`. Three details were pinned against the
+installed SDK rather than assumed, and each would have been a silent break:
+
+- The runtime calls `execute(toolCallId, params, signal, onUpdate, ctx)`. The shipped
+  `api-demo.ts` example names the arguments in a different order; the extension tool wrapper that
+  actually calls it is authoritative. omp's separate file-based `CustomTool` type does use the
+  other order, which is one more reason not to use it here.
+- `parameters` accepts plain JSON Schema (a first-class `kind: "json"` branch alongside Zod and
+  ArkType), so neither adapter needs a schema library or `pi.zod`.
+- Registration is **feature-detected**. A runtime without the tool API loses the ask tool and
+  keeps its voice notifications, instead of taking the whole extension down on load.
+
+The adapters contribute only their host tag (`source`) and a per-call persona voice resolved from
+the host context, so a project-local persona still applies.
+
 ## oh-my-pi (omp) - sibling adapter, shared shape (issues #18, #109)
 
 `adapters/omp/` is its own package alongside `adapters/pi/` (split in #109); the two share
