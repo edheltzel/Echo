@@ -1,0 +1,359 @@
+// The echo-converse coordinator: a microphone-free booking and sequencing surface.
+//
+// What it owns: the single-microphone booking, speaking the question through
+// core, and observing playback drain. What it deliberately does NOT own: the
+// microphone. A TCC spike on macOS 26.5.2 proved why - a capture opened from a
+// launchd background job gets no responsible process ("Failed to fetch
+// responsible file descriptor"), no prompt surface and no usable grant, while
+// the same capture spawned from the host terminal's process tree attributes
+// cleanly to the terminal app the human already granted. So this process books
+// the microphone and the CALLER opens it, which is why a turn is a lease rather
+// than a single blocking call. `converse/client.ts` puts the blocking one-shot
+// ask back on top of that lease.
+//
+// The mic-free property is not a comment: tests/converse/architecture-invariants
+// fails if this file ever reaches the capture module or names a capture binary.
+//
+// Exported as a factory. `core/server.ts` exports a started singleton, and
+// sharing one across Bun's module cache is the documented cause of the #47 test
+// flake, so every caller here starts and stops its own instance.
+
+import type { Server } from "bun";
+import {
+  acquireBooking,
+  readBooking,
+  releaseBooking,
+  type BookingRecord,
+} from "./booking.ts";
+import type { ConverseConfig } from "./config.ts";
+import {
+  assessCore,
+  estimateSpeechMs,
+  readCoreHealth,
+  speakQuestion,
+  waitForPlaybackDrain,
+  type FetchLike,
+  type SleepLike,
+} from "./playback.ts";
+import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from "./types.ts";
+
+const MAX_QUESTION_CHARS = 1_000;
+const MIN_LEASE_MS = 10_000;
+const MAX_LEASE_MS = 600_000;
+
+export interface ConverseServerOptions {
+  config: ConverseConfig;
+  /** Overridden in tests so no test ever reaches the operator's running daemon. */
+  fetchImpl?: FetchLike;
+  sleep?: SleepLike;
+  now?: () => number;
+  isPidAlive?: (pid: number) => boolean;
+  pollIntervalMs?: number;
+  maxPolls?: number;
+  log?: (line: string) => void;
+  /** 0 binds an ephemeral port; tests use it so they can never collide. */
+  port?: number;
+}
+
+interface ActiveTurn {
+  turn_id: string;
+  owner_pid: number;
+  source: string;
+  question_chars: number;
+  started_at: number;
+  expires_at: number;
+  ancestry: string[];
+}
+
+export interface ConverseServerHandle {
+  port: number;
+  stop(): void;
+  /** Read-only view for tests and diagnostics. */
+  activeTurns(): ActiveTurn[];
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function fail(code: ConverseErrorCode, detail: string, status: number, extra: Partial<ConverseError> = {}): Response {
+  return json({ error: code, detail, ...extra }, status);
+}
+
+function heldByView(record: BookingRecord | null) {
+  return record === null
+    ? null
+    : {
+        turn_id: record.turn_id,
+        owner_pid: record.owner_pid,
+        source: record.source,
+        acquired_at: record.acquired_at,
+      };
+}
+
+function clampLease(requested: unknown, fallback: number): number {
+  const value = typeof requested === "number" && Number.isFinite(requested) ? requested : fallback;
+  return Math.min(Math.max(Math.floor(value), MIN_LEASE_MS), MAX_LEASE_MS);
+}
+
+function validateTurnRequest(body: unknown, isPidAlive: (pid: number) => boolean): { ok: true; request: TurnRequest } | { ok: false; detail: string } {
+  if (typeof body !== "object" || body === null) return { ok: false, detail: "body must be a JSON object" };
+  const raw = body as Record<string, unknown>;
+
+  const question = raw.question;
+  if (typeof question !== "string" || question.trim().length === 0) {
+    return { ok: false, detail: "question must be a non-empty string" };
+  }
+  if (question.length > MAX_QUESTION_CHARS) {
+    return { ok: false, detail: `question must be at most ${MAX_QUESTION_CHARS} characters` };
+  }
+
+  const ownerPid = raw.owner_pid;
+  if (typeof ownerPid !== "number" || !Number.isInteger(ownerPid) || ownerPid <= 0) {
+    return { ok: false, detail: "owner_pid must be a positive integer" };
+  }
+  // The owner pid is what core's capture guard probes for liveness. A dead or
+  // invented pid would publish a capture state core ignores, so the recording
+  // would happen with core still free to speak into it.
+  if (!isPidAlive(ownerPid)) {
+    return { ok: false, detail: `owner_pid ${ownerPid} is not a live process` };
+  }
+
+  return {
+    ok: true,
+    request: {
+      question: question.trim(),
+      owner_pid: ownerPid,
+      source: typeof raw.source === "string" ? raw.source : "unknown",
+      voice_id: typeof raw.voice_id === "string" ? raw.voice_id : undefined,
+      title: typeof raw.title === "string" ? raw.title : undefined,
+      lease_ms: typeof raw.lease_ms === "number" ? raw.lease_ms : undefined,
+      ancestry: Array.isArray(raw.ancestry) ? raw.ancestry.filter((entry): entry is string => typeof entry === "string") : [],
+    },
+  };
+}
+
+export function createConverseServer(options: ConverseServerOptions): ConverseServerHandle {
+  const { config } = options;
+  const fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init));
+  const now = options.now ?? Date.now;
+  const isPidAlive = options.isPidAlive ?? ((pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  const log = options.log ?? (() => {});
+
+  const active = new Map<string, ActiveTurn>();
+  const counts = { completed: 0, aborted: 0, refused: 0 };
+
+  /** Abandoned turns are dropped here rather than by a timer, so nothing leaks and no interval outlives a test. */
+  function dropExpiredTurns(at: number): void {
+    for (const [id, turn] of active) {
+      if (turn.expires_at <= at) {
+        active.delete(id);
+        counts.aborted++;
+        log(`turn ${id} expired without completing`);
+      }
+    }
+  }
+
+  function newTurnId(): string {
+    return `t-${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function handleTurn(req: Request): Promise<Response> {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return fail("invalid_request", "body must be valid JSON", 400);
+    }
+
+    const validated = validateTurnRequest(body, isPidAlive);
+    if (!validated.ok) {
+      counts.refused++;
+      return fail("invalid_request", validated.detail, 400);
+    }
+    const request = validated.request;
+
+    const startedAt = now();
+    dropExpiredTurns(startedAt);
+
+    const leaseMs = clampLease(request.lease_ms, config.leaseMs);
+    const turnId = newTurnId();
+
+    // Book first. Two asks arriving together must not both get as far as
+    // speaking: the human would hear two questions and answer one recording.
+    const booking = acquireBooking({
+      path: config.bookingLockPath,
+      turnId,
+      ownerPid: request.owner_pid,
+      source: request.source ?? "unknown",
+      leaseMs,
+      now,
+      isPidAlive,
+    });
+    if (!booking.ok) {
+      counts.refused++;
+      return fail("microphone_busy", "another turn holds the microphone", 409, {
+        held_by: heldByView(booking.held_by),
+      });
+    }
+    if (booking.reaped) log(`reaped abandoned booking ${booking.reaped.turn_id} (pid ${booking.reaped.owner_pid})`);
+
+    const release = (code: ConverseErrorCode, detail: string, status: number): Response => {
+      releaseBooking(config.bookingLockPath, turnId);
+      counts.refused++;
+      log(`turn ${turnId} refused: ${code} (${detail})`);
+      return fail(code, detail, status);
+    };
+
+    const health = await readCoreHealth(config.coreBaseUrl, fetchImpl);
+    const assessment = assessCore(health);
+    if (!assessment.ok) {
+      return release(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
+    }
+
+    // Speak while the capture state is still idle. Publishing `recording` first
+    // would make core's own guard hold back the question converse just asked it
+    // to speak, and the human would be recorded against silence.
+    const spoken = await speakQuestion({
+      coreBaseUrl: config.coreBaseUrl,
+      question: request.question,
+      turnId,
+      voiceId: request.voice_id,
+      title: request.title,
+      source: request.source,
+      fetchImpl,
+    });
+    if (spoken.status < 200 || spoken.status >= 300) {
+      return release("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
+    }
+
+    const drain = await waitForPlaybackDrain({
+      coreBaseUrl: config.coreBaseUrl,
+      estimateMs: estimateSpeechMs(request.question),
+      fetchImpl,
+      sleep: options.sleep,
+      pollIntervalMs: options.pollIntervalMs,
+      maxPolls: options.maxPolls,
+    });
+    if (!drain.drained) {
+      return release(
+        "question_not_spoken",
+        `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`,
+        503,
+      );
+    }
+
+    active.set(turnId, {
+      turn_id: turnId,
+      owner_pid: request.owner_pid,
+      source: request.source ?? "unknown",
+      question_chars: request.question.length,
+      started_at: startedAt,
+      expires_at: startedAt + leaseMs,
+      ancestry: request.ancestry ?? [],
+    });
+    log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
+
+    const grant: TurnGrant = {
+      turn_id: turnId,
+      state: "capture_ready",
+      capture_state_path: assessment.capture_state_path,
+      spoke: {
+        notify_status: spoken.status,
+        drained: drain.drained,
+        waited_ms: drain.waited_ms,
+        polls: drain.polls,
+      },
+      lease: {
+        owner_pid: request.owner_pid,
+        expires_at: new Date(startedAt + leaseMs).toISOString(),
+      },
+    };
+    return json(grant, 200);
+  }
+
+  function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Response {
+    const turn = active.get(turnId);
+    if (!turn) return fail("unknown_turn", `no active turn ${turnId}`, 404);
+
+    active.delete(turnId);
+    releaseBooking(config.bookingLockPath, turnId);
+    if (outcome === "completed") counts.completed++;
+    else counts.aborted++;
+    log(`turn ${turnId} ${outcome}${detail ? `: ${detail}` : ""}`);
+
+    return json({ turn_id: turnId, state: outcome, duration_ms: now() - turn.started_at });
+  }
+
+  function health(): Response {
+    const booking = readBooking(config.bookingLockPath);
+    return json({
+      status: "healthy",
+      capability: "echo-converse",
+      port: handle.port,
+      // Not probed: core's /health shares its /notify rate-limit bucket, so a
+      // status check must not spend the operator's notification budget.
+      core: { base_url: config.coreBaseUrl },
+      booking: { held: booking !== null, held_by: heldByView(booking) },
+      turns: { active: active.size, ...counts },
+      capture: {
+        // Capture is the caller's job; the coordinator never opens the microphone.
+        owner: "caller",
+        booking_lock: config.bookingLockPath,
+      },
+    });
+  }
+
+  const server: Server = Bun.serve({
+    port: options.port ?? config.port,
+    // Loopback only. This capability coordinates microphone access; it has no
+    // business being reachable from another host.
+    hostname: "127.0.0.1",
+    async fetch(req) {
+      const url = new URL(req.url);
+
+      if (url.pathname === "/health" && req.method === "GET") return health();
+
+      if (url.pathname === "/turn" && req.method === "POST") return handleTurn(req);
+
+      const finish = /^\/turn\/([^/]+)\/(complete|abort)$/.exec(url.pathname);
+      if (finish && req.method === "POST") {
+        const [, turnId, verb] = finish;
+        let detail = "";
+        try {
+          const body = (await req.json()) as Record<string, unknown>;
+          detail = typeof body?.reason === "string" ? body.reason : "";
+        } catch {
+          // Metadata is optional: releasing the microphone must not depend on it.
+        }
+        return finishTurn(turnId, verb === "complete" ? "completed" : "aborted", detail);
+      }
+
+      return json(
+        {
+          error: "not_found",
+          detail: `Unsupported endpoint: ${req.method} ${url.pathname}`,
+          supported_endpoints: ["POST /turn", "POST /turn/:id/complete", "POST /turn/:id/abort", "GET /health"],
+        },
+        404,
+      );
+    },
+  });
+
+  const handle: ConverseServerHandle = {
+    port: server.port ?? 0,
+    stop: () => void server.stop(true),
+    activeTurns: () => [...active.values()],
+  };
+  return handle;
+}
