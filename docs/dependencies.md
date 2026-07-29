@@ -58,7 +58,7 @@ AppleScript banner fallback.
 |---|---|---|
 | Ghostty | OSC 777 | Supported with Ghostty identity. |
 | WezTerm | OSC 777 | Supported when `TERM_PROGRAM_VERSION` is present. |
-| Kitty | OSC 99 | Supported with a fail-closed capability query. |
+| Kitty | OSC 99 | Supported as a recognized route (verified live against Kitty 0.48.1); no capability-query negotiation is performed. |
 | iTerm2 | OSC 9 | Supported through iTerm2 identity variables. |
 | Alacritty | None | Explicitly unsupported. |
 

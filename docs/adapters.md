@@ -83,10 +83,11 @@ adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and r
 contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
 
 The terminal matrix is maintained in [`http-api.md`](http-api.md#native-terminal-visual-delivery):
-Ghostty and WezTerm use OSC 777, Kitty uses OSC 99 with a fail-closed capability query, iTerm2
-uses OSC 9, and Alacritty is explicitly unsupported. The exact `visual_delivery: "native"`
-marker is sent only after native success; it suppresses the daemon banner and prevents a
-duplicate visual notification. Adapter diagnostics expose the selected route in
+Ghostty and WezTerm use OSC 777, Kitty uses OSC 99 as a recognized route (verified live against
+Kitty 0.48.1; no capability-query negotiation is performed), iTerm2 uses OSC 9, and Alacritty is
+explicitly unsupported. The exact `visual_delivery: "native"` marker is sent only after native
+success; it suppresses the daemon banner and prevents a duplicate visual notification. Adapter
+diagnostics expose the selected route in
 `NotifyResult.visual`.
 
 ## Pi adapter — per-turn completions (issue #15)

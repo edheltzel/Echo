@@ -69,7 +69,7 @@ Supported terminal protocols and limits:
 |---|---|---|
 | Ghostty | OSC 777 | Requires Ghostty terminal identity. |
 | WezTerm | OSC 777 | Requires `TERM_PROGRAM_VERSION` as well as WezTerm identity. |
-| Kitty | OSC 99 | The adapter may run Kitty's capability query; a failed query is fail-closed. |
+| Kitty | OSC 99 | Recognized route; delivery counts as `shown` on a successful write, with no capability-query negotiation (verified live against Kitty 0.48.1). |
 | iTerm2 | OSC 9 | Uses iTerm2 identity or `ITERM_SESSION_ID`; delivery is terminal-native but less structured than OSC 777/99. |
 | Alacritty | Unsupported | Echo deliberately refuses the route, even if another environment variable looks supported. |
 
