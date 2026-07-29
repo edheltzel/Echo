@@ -17,6 +17,7 @@
 //   write idle      -> unconditionally, in a finally
 //   POST complete   -> booking released; metadata only, never the transcript
 
+import { existsSync } from "node:fs";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
 import { resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
 import { withCaptureHeld } from "./capture-state.ts";
@@ -34,6 +35,8 @@ export interface AskOptions {
   source?: string;
   voiceId?: string;
   title?: string;
+  /** A cancelled host turn closes the microphone immediately. */
+  signal?: AbortSignal;
 }
 
 export interface AskResult {
@@ -103,7 +106,17 @@ export function resolveAncestry(
 }
 
 function spawnCoordinator(config: ConverseConfig): void {
+  // Resolved next to this module, which is correct when a host loads the adapter
+  // from source (how every host loads it today). A bundled copy has no sibling
+  // main.ts, so that case is named rather than left as a spawn that fails.
   const main = process.env.ECHO_CONVERSE_MAIN || new URL("./main.ts", import.meta.url).pathname;
+  if (!existsSync(main)) {
+    throw new AskError(
+      "coordinator_unavailable",
+      `cannot start the coordinator: no entry at ${main}. Start it once with ` +
+        "`bun converse/main.ts`, or set ECHO_CONVERSE_MAIN to that file.",
+    );
+  }
   const child = Bun.spawn(["bun", main], {
     // The coordinator outlives this call but must never hold the host session
     // open, and its output belongs in the host's log, not in a tool result.
@@ -185,6 +198,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       lease_ms: config.maxCaptureMs + LEASE_SLACK_MS,
       ancestry,
     }),
+    signal: options.signal,
   });
 
   const body = (await response.json()) as TurnGrant & { error?: string; detail?: string };
@@ -212,7 +226,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
     // `recording` covers the transcriber too. Core holds its speech on
     // `recording` and `transcribing` alike, so splitting the phases here would
     // add a write that changes nothing core does.
-    const captured = await withCaptureHeld(body.capture_state_path, () => captureEngine(config));
+    const captured = await withCaptureHeld(body.capture_state_path, () => captureEngine(config, options.signal));
 
     await finish("complete", {
       engine: captured.engine,

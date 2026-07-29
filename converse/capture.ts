@@ -42,7 +42,7 @@ export interface CaptureEngineResult {
 }
 
 /** The seam the client is built against, so tests can drive a turn without a microphone. */
-export type CaptureEngine = (config: ConverseConfig) => Promise<CaptureEngineResult>;
+export type CaptureEngine = (config: ConverseConfig, signal?: AbortSignal) => Promise<CaptureEngineResult>;
 
 export class CaptureError extends Error {
   constructor(readonly code: "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech", message: string) {
@@ -122,7 +122,11 @@ async function readWithin(stream: ReadableStream<Uint8Array>, graceMs: number): 
 
 const OUTPUT_GRACE_MS = 500;
 
-async function run(cmd: string[], timeoutMs?: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+async function run(
+  cmd: string[],
+  timeoutMs?: number,
+  signal?: AbortSignal,
+): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   const child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
   const timer = timeoutMs === undefined
@@ -135,6 +139,12 @@ async function run(cmd: string[], timeoutMs?: number): Promise<{ code: number | 
         child.kill("SIGTERM");
       }, timeoutMs);
 
+  // A cancelled host turn must close the microphone now, not when the cap
+  // expires. Nothing else would stop the recorder.
+  const onAbort = () => child.kill("SIGTERM");
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+
   try {
     const code = await child.exited;
     const [stdout, stderr] = await Promise.all([
@@ -144,6 +154,7 @@ async function run(cmd: string[], timeoutMs?: number): Promise<{ code: number | 
     return { code, stdout, stderr, timedOut };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -155,9 +166,13 @@ export interface RecordingReport {
 }
 
 /** Record one reply. Returns as soon as the endpointer hears the human stop. */
-export async function recordReply(config: ConverseConfig, wavPath: string): Promise<RecordingReport> {
+export async function recordReply(
+  config: ConverseConfig,
+  wavPath: string,
+  signal?: AbortSignal,
+): Promise<RecordingReport> {
   const startedAt = Date.now();
-  const result = await run([config.recBin, ...recorderArgv(config, wavPath)], config.maxCaptureMs);
+  const result = await run([config.recBin, ...recorderArgv(config, wavPath)], config.maxCaptureMs, signal);
   const capture_ms = Date.now() - startedAt;
 
   let bytes = 0;
@@ -226,7 +241,7 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
  * the deliverable; keeping the audio around would leave the human's voice on
  * disk for no reason, and it is never sent to the coordinator either.
  */
-export const captureAndTranscribe: CaptureEngine = async (config) => {
+export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
   const tier = selectSttTier(config);
   if (tier === null) {
     throw new CaptureError(
@@ -240,7 +255,7 @@ export const captureAndTranscribe: CaptureEngine = async (config) => {
   const wavPath = join(config.captureDir, `reply-${Date.now()}-${process.pid}.wav`);
 
   try {
-    const recording = await recordReply(config, wavPath);
+    const recording = await recordReply(config, wavPath, signal);
     const text = recording.bytes < MIN_AUDIBLE_WAV_BYTES ? "" : await transcribeFile(config, wavPath, tier);
     if (text.length === 0) {
       throw new CaptureError("no_speech", "the recording contained no speech");

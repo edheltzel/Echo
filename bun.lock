@@ -16,6 +16,7 @@
       "name": "@echo/omp-adapter",
       "version": "0.1.0",
       "dependencies": {
+        "@echo/converse": "workspace:*",
         "@echo/shared": "workspace:*",
       },
       "peerDependencies": {
@@ -29,6 +30,7 @@
       "name": "@echo/pi-adapter",
       "version": "0.1.0",
       "dependencies": {
+        "@echo/converse": "workspace:*",
         "@echo/shared": "workspace:*",
       },
       "peerDependencies": {

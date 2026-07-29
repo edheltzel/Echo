@@ -13,6 +13,7 @@ import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
+import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -25,7 +26,7 @@ function resolveSessionId(ctx: ExtensionContext): string | undefined {
 }
 
 // omp exposes the project root as ctx.cwd (documented ExtensionContext field, pi
-// lineage). Read defensively — the installed SDK types may predate it — and treat
+// lineage). Read defensively - the installed SDK types may predate it - and treat
 // empty as absent.
 function resolveCwd(ctx: ExtensionContext): string | undefined {
   const cwd = (ctx as { cwd?: unknown }).cwd;
@@ -68,7 +69,7 @@ function buildVoiceLineInstruction(personaName: string): string {
     "## Spoken completion (required)",
     "End EVERY response with a final line, on its own line as the very last line, in exactly this form:",
     `🗣️ ${personaName}: <one sentence, 8-16 words, summarizing what you just did>`,
-    "Write plain spoken English in that line — no markdown, no code.",
+    "Write plain spoken English in that line - no markdown, no code.",
   ].join("\n");
 }
 
@@ -80,7 +81,7 @@ export default function echoVoiceOmpAdapter(
   const pending = new Set<string>();
 
   // Per-project config: layer a persona override from omp's native config
-  // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key —
+  // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key -
   // same daidentity convention as the Claude Code and Pi adapters) over the
   // env-based `config`, resolved from ctx.cwd and memoized per cwd. A repo with no
   // daidentity resolves to the base config unchanged.
@@ -209,7 +210,19 @@ export default function echoVoiceOmpAdapter(
     },
   });
 
-  // `/echo-voice [name] [voice]` — set THIS repo's persona (name + edge-tts voice)
+  // `echo_ask` - the model-invokable two-way turn, identical to the Pi adapter's
+  // (both share @echo/converse/host-tool.ts, so the two hosts cannot drift into
+  // different tools). The capture child is spawned from THIS process so macOS
+  // attributes the microphone grant to the host terminal (docs/converse.md).
+  registerEchoAskTool(omp, {
+    source: "omp",
+    resolveVoice: (ctx) => {
+      const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
+      return { voiceId: cfg.voiceId, title: cfg.title };
+    },
+  });
+
+  // `/echo-voice [name] [voice]` - set THIS repo's persona (name + edge-tts voice)
   // in .omp/config.yml (YAML), merged so other config is preserved. Cross-host analog
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
   omp.registerCommand(
