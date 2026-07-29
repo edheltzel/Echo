@@ -3,5 +3,5 @@
   "version": "0.7.1",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/omp", "adapters/pi"]
+  "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/mcp", "adapters/omp", "adapters/pi"]
 }

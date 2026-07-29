@@ -12,6 +12,13 @@
         "@echo/shared": "workspace:*",
       },
     },
+    "adapters/mcp": {
+      "name": "@echo/mcp-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/converse": "workspace:*",
+      },
+    },
     "adapters/omp": {
       "name": "@echo/omp-adapter",
       "version": "0.1.0",
@@ -56,6 +63,8 @@
     "@echo/claudecode-adapter": ["@echo/claudecode-adapter@workspace:adapters/claudecode"],
 
     "@echo/converse": ["@echo/converse@workspace:converse"],
+
+    "@echo/mcp-adapter": ["@echo/mcp-adapter@workspace:adapters/mcp"],
 
     "@echo/omp-adapter": ["@echo/omp-adapter@workspace:adapters/omp"],
 
