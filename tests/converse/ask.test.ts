@@ -375,6 +375,14 @@ describe("coordinator startup", () => {
 
 describe("auto-started coordinator diagnostics", () => {
   const originalMain = process.env.ECHO_CONVERSE_MAIN;
+  // These two tests poll a real `bun` subprocess, and were budgeted 2s. One
+  // failed once inside a full-suite run with an empty log and never reproduced
+  // in isolation; the cause was not established. Measured spawn-to-flush stays
+  // under 70ms even with the CPU saturated, so the wider budget below costs a
+  // passing run nothing (the loop breaks on first sight of the output) and
+  // still fails a genuinely broken spawn - just later.
+  const SPAWN_POLL_ATTEMPTS = 500;
+  const SPAWN_TIMEOUT_MS = 20_000;
 
   afterEach(() => {
     if (originalMain === undefined) delete process.env.ECHO_CONVERSE_MAIN;
@@ -389,7 +397,7 @@ describe("auto-started coordinator diagnostics", () => {
 
     spawnCoordinator(config);
     let written = "";
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (let attempt = 0; attempt < SPAWN_POLL_ATTEMPTS; attempt++) {
       written = existsSync(config.logPath) ? readFileSync(config.logPath, "utf8") : "";
       if (written.includes("coordinator stderr")) break;
       await Bun.sleep(20);
@@ -398,7 +406,7 @@ describe("auto-started coordinator diagnostics", () => {
     expect(written).toContain("coordinator stdout");
     expect(written).toContain("coordinator stderr");
     expect(statSync(config.logPath).mode & 0o777).toBe(0o600);
-  });
+  }, SPAWN_TIMEOUT_MS);
 
   test("honors a redirected log path", () => {
     const redirected = join(scratch, "logs", "converse.log");
@@ -417,9 +425,9 @@ describe("auto-started coordinator diagnostics", () => {
     };
 
     expect(() => spawnCoordinator(config)).not.toThrow();
-    for (let attempt = 0; attempt < 100 && !existsSync(marker); attempt++) await Bun.sleep(20);
+    for (let attempt = 0; attempt < SPAWN_POLL_ATTEMPTS && !existsSync(marker); attempt++) await Bun.sleep(20);
     expect(existsSync(marker)).toBe(true);
-  });
+  }, SPAWN_TIMEOUT_MS);
 });
 
 describe("process ancestry evidence", () => {
