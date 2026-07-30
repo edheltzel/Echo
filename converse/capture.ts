@@ -26,7 +26,7 @@
 // devices that run at unusual rates (AirPods at 24kHz), so the rate conversion
 // whisper needs happens afterwards, offline, where an overrun is impossible.
 
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ConverseConfig, SttTier } from "./config.ts";
 
@@ -46,7 +46,13 @@ export type CaptureEngine = (config: ConverseConfig, signal?: AbortSignal) => Pr
 
 export class CaptureError extends Error {
   constructor(
-    readonly code: "no_recorder" | "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech",
+    readonly code:
+      | "no_recorder"
+      | "no_stt_tier"
+      | "recorder_failed"
+      | "transcriber_failed"
+      | "no_speech"
+      | "cancelled",
     message: string,
   ) {
     super(message);
@@ -296,8 +302,20 @@ function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
-/** Offline rate conversion for whisper, which requires 16kHz mono. */
-async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline: number): Promise<string> {
+/**
+ * Offline rate conversion for whisper, which requires 16kHz mono.
+ *
+ * The converted path is registered with the caller's artifact set BEFORE sox
+ * runs. Returning the path only on success is what left recorded speech on disk
+ * when the resample failed (F7): sox had already created the file, and nobody
+ * downstream knew its name.
+ */
+async function toWhisperInput(
+  config: ConverseConfig,
+  wavPath: string,
+  deadline: number,
+  artifacts: Set<string>,
+): Promise<string> {
   // A missing resampler is a transcriber-side failure: the recorder did its job,
   // and reporting it as `no_recorder` would send the operator after sox for the
   // wrong reason.
@@ -308,6 +326,7 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline:
   );
 
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
+  artifacts.add(converted);
   const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted], {
     timeoutMs: remainingMs(deadline),
     hardKillAfterMs: HARD_KILL_GRACE_MS,
@@ -316,7 +335,37 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline:
   return converted;
 }
 
-export async function transcribeFile(config: ConverseConfig, wavPath: string, tier: SttTier): Promise<string> {
+/**
+ * Transcribe one recording.
+ *
+ * `artifacts` is how the caller takes ownership of any intermediate audio this
+ * creates, so a failure downstream still has a cleanup owner. Called without
+ * one, this owns and removes its own: every artifact has exactly one owner, and
+ * neither call shape can leave speech on disk.
+ */
+export async function transcribeFile(
+  config: ConverseConfig,
+  wavPath: string,
+  tier: SttTier,
+  signal?: AbortSignal,
+  callerArtifacts?: Set<string>,
+): Promise<string> {
+  const artifacts = callerArtifacts ?? new Set<string>();
+  const ownsArtifacts = callerArtifacts === undefined;
+  try {
+    return await transcribeInto(config, wavPath, tier, signal, artifacts);
+  } finally {
+    if (ownsArtifacts) for (const artifact of artifacts) rmSync(artifact, { force: true });
+  }
+}
+
+async function transcribeInto(
+  config: ConverseConfig,
+  wavPath: string,
+  tier: SttTier,
+  signal: AbortSignal | undefined,
+  artifacts: Set<string>,
+): Promise<string> {
   // One deadline for the whole phase. A transcriber has no header to finalize,
   // so its cap escalates to SIGKILL and is therefore hard.
   const deadline = Date.now() + config.transcribeTimeoutMs;
@@ -325,6 +374,7 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
     const result = await run([config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath], {
       timeoutMs: remainingMs(deadline),
       hardKillAfterMs: HARD_KILL_GRACE_MS,
+      signal,
     });
     requireTranscriberSuccess(result, config.yapBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
@@ -333,31 +383,44 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
   if (config.whisperModel === undefined) {
     throw new CaptureError("no_stt_tier", "whisper needs ECHO_CONVERSE_WHISPER_MODEL to point at a ggml model file");
   }
-  const input = await toWhisperInput(config, wavPath, deadline);
-  try {
-    const result = await run(
-      [
-        config.whisperBin,
-        "-m", config.whisperModel,
-        "-f", input,
-        "-l", whisperLanguage(config.locale),
-        "-nt",
-      ],
-      { timeoutMs: remainingMs(deadline), hardKillAfterMs: HARD_KILL_GRACE_MS },
-    );
-    requireTranscriberSuccess(result, config.whisperBin, config.transcribeTimeoutMs);
-    return result.stdout.trim();
-  } finally {
-    rmSync(input, { force: true });
+  const input = await toWhisperInput(config, wavPath, deadline, artifacts);
+  const result = await run(
+    [
+      config.whisperBin,
+      "-m", config.whisperModel,
+      "-f", input,
+      "-l", whisperLanguage(config.locale),
+      "-nt",
+    ],
+    { timeoutMs: remainingMs(deadline), hardKillAfterMs: HARD_KILL_GRACE_MS, signal },
+  );
+  requireTranscriberSuccess(result, config.whisperBin, config.transcribeTimeoutMs);
+  return result.stdout.trim();
+}
+
+/**
+ * Cancellation is terminal, not advisory.
+ *
+ * Killing the child is not enough: a recorder that has already written a valid
+ * WAV leaves a transcribable file behind, so treating the signal as "stop the
+ * process" still produced a transcript for a turn the caller had abandoned (F3).
+ * Every boundary in the capture below re-asks this question, because the abort
+ * can land in any of the gaps between them.
+ */
+function throwIfCancelled(signal: AbortSignal | undefined, phase: string): void {
+  if (signal?.aborted) {
+    throw new CaptureError("cancelled", `the ask was cancelled ${phase}; no transcript was produced`);
   }
 }
 
 /**
  * Capture one spoken reply and transcribe it locally.
  *
- * The recording is deleted before this returns, on every path. The transcript is
- * the deliverable; keeping the audio around would leave the human's voice on
- * disk for no reason, and it is never sent to the coordinator either.
+ * Every audio artifact is registered the moment it can exist and removed in the
+ * outermost finally. A failed resample used to leave its converted copy behind
+ * with no cleanup owner (F7), so ownership is tracked here rather than at each
+ * step: the step that creates a file cannot be the step that guarantees its
+ * removal, because the guarantee has to survive that step throwing.
  */
 export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
   const tier = selectSttTier(config);
@@ -369,17 +432,43 @@ export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
     );
   }
 
+  // `mode` on mkdir only applies when it creates the directory, so a capture
+  // directory that already exists keeps whatever bits it had. The recorded voice
+  // is the most private thing this code touches, so the mode is asserted rather
+  // than requested.
   mkdirSync(config.captureDir, { recursive: true, mode: 0o700 });
+  chmodSync(config.captureDir, 0o700);
+
   const wavPath = join(config.captureDir, `reply-${Date.now()}-${process.pid}.wav`);
+  const artifacts = new Set<string>([wavPath]);
 
   try {
+    throwIfCancelled(signal, "before the microphone opened");
+
     const recording = await recordReply(config, wavPath, signal);
-    const text = recording.bytes < MIN_AUDIBLE_WAV_BYTES ? "" : await transcribeFile(config, wavPath, tier);
+    // The recorder is a foreign process and creates its output under its own
+    // umask; the reviewer measured mode 644. Tighten the file itself rather than
+    // relying on the directory to keep the audio private.
+    try {
+      chmodSync(wavPath, 0o600);
+    } catch {
+      // A recording that vanished before this is not a privacy problem, and the
+      // byte-count check below is what decides whether it was usable.
+    }
+    // The recording exists now, which is exactly why this check matters: the
+    // file is transcribable, and without this the abort would be overtaken.
+    throwIfCancelled(signal, "while recording");
+
+    let text = "";
+    if (recording.bytes >= MIN_AUDIBLE_WAV_BYTES) {
+      text = await transcribeFile(config, wavPath, tier, signal, artifacts);
+      throwIfCancelled(signal, "while transcribing");
+    }
     if (text.length === 0) {
       throw new CaptureError("no_speech", "the recording contained no speech");
     }
     return { text, engine: tier, capture_ms: recording.capture_ms, timed_out: recording.timed_out };
   } finally {
-    rmSync(wavPath, { force: true });
+    for (const artifact of artifacts) rmSync(artifact, { force: true });
   }
 };
