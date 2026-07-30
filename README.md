@@ -130,7 +130,8 @@ Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md]
 
 ## API
 
-Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
+The everyday endpoints are below; the voice ask adds opt-in playback-status and
+capture-reservation routes on top of them. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 

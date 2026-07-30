@@ -129,7 +129,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | --- | --- |
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
-| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
+| HTTP API: every endpoint, the request/response contract, rate-limit buckets + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |

@@ -77,12 +77,11 @@ Do not commit .env files or put API keys in config.json.
 
 ### Invalid keys
 
-A key that fails validation - an unknown name, a typo, a compound value, or the secret above
-
-- is **dropped on its own**; every other setting in the file still applies. The daemon logs
+A key that fails validation (an unknown name, a typo, a compound value, or the secret above)
+is **dropped on its own**; every other setting in the file still applies. The daemon logs
 one warning naming each dropped key, and reports the same thing in `GET /health`:
 
-    curl -fsS <http://localhost:3246/health> | jq '.config'
+    curl -fsS http://localhost:3246/health | jq '.config'
     {
       "path": "/Users/you/.config/echo/config.json",
       "present": true,
@@ -166,9 +165,8 @@ Settings whose behavior is not obvious from the name:
 Voice provider mappings remain in core/voices.json, and pronunciation rules remain in
 core/pronunciations.json. The configuration file controls the daemon and host-neutral
 tuning around those files; it does not duplicate their provider schema. Their own reference
-
-- the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
-fallback - lives in [`voices.md`](voices.md#reference-corevoicesjson).
+(the key tables, provider blocks, the ElevenLabs apiKey caveat, and the parse-error
+fallback) lives in [`voices.md`](voices.md#reference-corevoicesjson).
 
 ## Migrating from ~/.config/echo/.env
 
