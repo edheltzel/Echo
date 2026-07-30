@@ -11,8 +11,9 @@
 // than a single blocking call. `converse/client.ts` puts the blocking one-shot
 // ask back on top of that lease.
 //
-// The mic-free property is not a comment: tests/converse/architecture-invariants
-// fails if this file ever reaches the capture module or names a capture binary.
+// The mic-free property is a source boundary: tests/converse/architecture-invariants
+// catches direct imports, subprocess calls and simple transitive regressions. It is
+// not runtime enforcement of every possible indirect dependency behavior.
 //
 // Exported as a factory. `core/server.ts` exports a started singleton, and
 // sharing one across Bun's module cache is the documented cause of the #47 test

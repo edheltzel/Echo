@@ -31,19 +31,20 @@ audio. The capability is split accordingly.
 
 - **The coordinator** (`converse/server.ts`, port **32468**, keypad ECHOV) books the microphone,
   speaks the question through core and watches playback drain. It never opens the microphone,
-  and it never spawns a subprocess at all. Both properties are enforced by
-  `tests/converse/architecture-invariants.test.ts`, not just documented.
+  and it never spawns a subprocess at all. `tests/converse/architecture-invariants.test.ts`
+  provides source-level regression checks for those boundaries; it is not runtime process
+  enforcement.
 - **The caller** (`converse/client.ts`, running inside the Pi extension, the omp extension or
-  the MCP server) spawns the capture child per ask, so the recorder inherits the host terminal's
-  process ancestry. Each turn records the resolved ancestry chain, so the attribution claim is
-  something an operator can read back rather than assume.
+  the MCP server) normally spawns the capture child per ask, so the recorder inherits the host
+  terminal's process ancestry. Each turn records the resolved ancestry chain as evidence, but the
+  coordinator does not enforce that ancestry.
 
 One link in that chain is expected rather than measured. For Pi and omp the capture child is a
 descendant of the host process itself, which is the shape the spike measured. For Claude Code the
 capture child descends from the stdio MCP server the host spawns, so the ancestry should reach the
-terminal the same way, but no run on this host has confirmed it end to end. Every turn records the
-ancestry it resolved (`GET /turn` response and the turn log), so the first real ask through Claude
-Code reports the answer instead of assuming it.
+terminal the same way, but the Claude Code bridge path is unverified on this host. Every turn
+records the ancestry it resolved (`GET /turn` response and the turn log), so a real ask through
+Claude Code reports the observed chain instead of turning that expectation into a guarantee.
 
 There is deliberately **no LaunchAgent** for this capability. The coordinator starts on demand
 (`ensureCoordinator`) and its lifetime tracks actual use.
