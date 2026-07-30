@@ -55,11 +55,17 @@ First provider to return `true` wins. Notify failures are non-fatal to the host 
 by contract - a down voice daemon never breaks an agent turn.
 
 **The other direction.** `converse/` (`@echo/converse`) is a second host-neutral capability: it
-speaks a question, captures the spoken reply, transcribes it locally and returns the text. It
-adds nothing to `core/`. The question goes out as an ordinary `POST /notify`, playback completion
-is observed through `GET /health`, and the microphone-versus-playback interlock comes from
-converse *writing* the capture-state file `core/capture-guard.ts` already reads - the arbitration
-core ships, used in reverse.
+speaks a question, captures the spoken reply, transcribes it locally and returns the text. The
+question goes out as an ordinary `POST /notify` and the microphone-versus-playback interlock comes
+from converse *writing* the capture-state file `core/capture-guard.ts` already reads - the
+arbitration core ships, used in reverse.
+
+It also required the only deliberate change to `core/` in this design: `/notify` accepts two
+optional fields, `await_playback` (hold the response until this line reaches a terminal
+disposition) and `capture_bypass_nonce` (speak this line despite an active hold, when it proves it
+owns that hold). Polling `/health` cannot substitute, because queue depth is global and cannot
+answer for one particular line. Both fields are additive: a caller that omits them sees the
+previous behavior exactly.
 
 Its coordinator listens on `localhost:32468` and is microphone-free by design; the calling host
 opens the microphone in its own process tree, because macOS attributes a microphone grant to the
@@ -73,7 +79,7 @@ endpoint contract and the v1 limits are in [docs/converse.md](docs/converse.md).
                 +--- POST /turn --> converse/ :32468 (books, speaks, waits)
                 |                        |  POST /notify + GET /health
                 |                        v
-                |                   core/ :3246 (untouched)
+                |                   core/ :3246 (2 optional /notify fields)
                 |                        ^
                 +-- capture child --------+  writes recording-state.json,
                     (in the HOST's           so core holds its speech while

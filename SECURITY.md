@@ -54,6 +54,19 @@ boundary notes. Mechanism and process topology: [`docs/converse.md`](docs/conver
   audio, and there is deliberately no LaunchAgent that could hold one.
 - **Transcription is local-only.** No cloud rung and no API key exists for speech-to-text, so
   a spoken answer never leaves the host.
+- **The capture-hold bypass is keyed on a secret, not on a pid.** A voice ask has to publish its
+  microphone hold before it speaks its question, so it needs one narrow exception to the capture
+  guard: `POST /notify` speaks a line despite an active hold when the request presents the
+  `nonce` from that hold's own state file (mode `0600`, per turn, absent while idle). The pid in
+  that file is deliberately NOT the credential - anyone who can stat the file can read a pid, so
+  treating it as authorization would let any local process speak into somebody's recording. A
+  missing, empty, stale or wrong nonce is held exactly as before rather than erroring, so the
+  field also cannot be used to make notifications fail. A capture published with no nonce (an
+  external tool such as VoiceLayer's VoiceBar) cannot be bypassed at all. The nonce is never
+  logged, never returned by `/turn`, and never exposed through `/health`.
+- **A held-open `/notify` is bounded.** `await_playback` keeps one request open until the line
+  finishes, capped by the play queue's own watchdog plus a margin, so it cannot be used to pin a
+  request open indefinitely.
 - **The audio and the words stay in the capturing process.** The recording is written under
   `~/Library/Caches/echo/converse` (`mode 0o700`, `ECHO_CONVERSE_CAPTURE_DIR`) and deleted on
   every path once transcribed; `POST /turn/:id/complete` reports a character count, never the

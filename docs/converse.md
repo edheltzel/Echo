@@ -71,29 +71,48 @@ with a microphone usage description, which is a separate architecture decision.
       |
       v
  POST /turn ------------------> coordinator:32468
-                                  1. book the microphone (atomic lock)
-                                  2. GET core /health   (preflight)
-                                  3. POST core /notify  (speak the question)
-                                  4. GET core /health   (wait for the queue to drain)
-      <----------------------- 200 { turn_id, capture_state_path, spoke, lease }
+ caller writes capture state = recording + nonce   <-- BEFORE asking
       |
-      | caller writes capture state = recording   <-- only now
+      v
+ POST /turn ------------------> coordinator:32468
+                                  1. book the microphone (atomic lock)
+                                  2. GET core /health   (preflight: mute, path, holder)
+                                  3. POST core /notify  (question + nonce + await_playback)
+                                     ... core answers when THIS line is finished
+      <----------------------- 200 { turn_id, spoke: { disposition: "played" }, lease }
+      |
       | caller spawns the capture child (rec -> wav -> yap/whisper)
-      | caller writes capture state = idle        <-- always, in a finally
+      | caller writes capture state = idle              <-- always, in a finally
       v
  POST /turn/<id>/complete ----> booking released
 ```
 
-**Core is untouched.** It stays on `:3246`, keeps its `/notify` contract, gains no endpoint and
-gains no microphone. The question rides the existing provider chain, cache and play queue.
+**Core is touched, minimally and additively.** The original plan said core would not change at
+all, and for the first version it did not. A red team then showed that polling shared `/health`
+cannot prove a particular question finished: queue depth is global, so an idle reading cannot
+distinguish "my line is done" from "my line has not started", and another session's audio can
+begin in the gap before the microphone opens. There is no sound fix without a real completion
+signal, so `/notify` gained two optional fields:
+
+| Field | Effect | Absent |
+|---|---|---|
+| `await_playback: true` | The response is held until that line reaches a terminal disposition and answers `200` with it | `202` on receipt, exactly as before |
+| `capture_bypass_nonce` | Speaks this one line despite an active capture hold, when it matches the secret in the hold's own file | Held by the guard, exactly as before |
+
+Core gains no endpoint, no microphone, and no change for any caller that omits both fields. It
+still stays on `:3246`. `GET /health` also reports `capture_guard.pid` so a coordinator can tell
+its own caller's hold from a foreign tool's recording.
 
 **The self-hold trap.** Core already reads a capture-state file and goes silent while some other
 tool holds the microphone (`core/capture-guard.ts`). Converse becomes the writer of that same
 file, which turns the arbitration core already ships into the interlock a conversation needs.
-Ordering is therefore not optional: the question is spoken while the state is idle, the state
-flips to `recording` only after playback drains, or core would hold back the very question it
-was asked to speak. `withCaptureHeld` expresses that in code, and the test in
-`tests/converse/ask.test.ts` reads the state file at the moment core is asked to speak.
+Ordering is therefore not optional, and it now runs the other way round. The hold goes up
+BEFORE the question is asked, which is what leaves no gap between "the question finished" and
+"the microphone opened" for another session's audio. The question stays audible because it
+carries the owner nonce from that same file, which is core's proof that the line belongs to the
+process holding the microphone. Get the pairing wrong and core silences the very question it was
+asked to speak, so `tests/converse/interlock.test.ts` asserts both halves: the hold IS published
+when core receives the question, and the nonce accompanies it.
 
 **The writer publishes its own pid.** Core honors a non-idle state only while that pid is alive,
 so the capture owner writes its own, and a crashed host frees core immediately instead of
@@ -109,7 +128,7 @@ ask must not wedge every later one. A concurrent ask gets `409` rather than an i
 
 | Route | Meaning |
 |---|---|
-| `POST /turn` | Book, speak, wait for drain. `200` grants capture and returns `capture_state_path`, `spoke`, `lease`. |
+| `POST /turn` | Book, speak, and wait for core's verdict on the question. `200` grants capture and returns `spoke.disposition`, `capture_state_path`, `lease`. Takes the caller's `capture_state_path` and `capture_nonce`. |
 | `POST /turn/:id/complete` | Release the booking. Body is metadata only (`engine`, `capture_ms`, `transcript_chars`). |
 | `POST /turn/:id/abort` | Release the booking and record why. |
 | `GET /health` | Capability, port, booking holder, turn counters, configured core address. Does not probe core. |
@@ -158,13 +177,13 @@ nothing, and an empty transcript is reported as `no_speech` rather than as an em
 
 ## Known limits in v1
 
-- **An ask costs four to six requests against core.** Core rate-limits one client to ten
-  requests a minute, shared between `/notify` and `/health`, and the drain wait is `/health`
-  polling. So asks are for occasional questions, not tight loops; asking twice inside a minute
-  can come back `core_rate_limited`. Making this cheap needs a per-request completion signal from
-  `/notify`, which would change core's contract, and that is deliberately deferred.
-- **A question dropped by the play queue's age cap is indistinguishable from one that played.**
-  Same root cause, same deferred fix. The wait is bounded and its outcome is reported in `spoke`.
+- **An ask costs two requests against core**, one preflight `/health` and one `/notify` whose
+  response is the completion signal. Core rate-limits one client to ten requests a minute shared
+  across both, so several asks a minute are fine and a burst can still come back
+  `core_rate_limited`. The earlier four-to-six range came from drain polling, which is gone.
+- **A held-open `/notify` occupies a request for the length of the question.** It is bounded by
+  the play queue's own watchdog plus a margin, and a timeout answers with the disposition rather
+  than hanging.
 - Out of scope for v1: barge-in, a transcript-polish model, cloned voices, waveform streaming,
   non-macOS targets, and any multi-turn session.
 

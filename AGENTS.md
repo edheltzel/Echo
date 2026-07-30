@@ -16,10 +16,13 @@ that calls `POST /notify`.
 
 A second host-neutral capability, `echo-converse` (`converse/`, `localhost:32468`), adds the
 other direction: speak a question, capture the spoken reply, transcribe it locally, return the
-text. It changes nothing in `core/` - it speaks through `/notify` and writes the capture-state
+text. It speaks through `/notify` and writes the capture-state
 file `core/capture-guard.ts` already reads. Its coordinator is deliberately microphone-free;
-the calling host opens the microphone. Why, and the TCC measurements behind it:
-**[docs/converse.md](docs/converse.md)**.
+the calling host opens the microphone. It also required the one deliberate, additive change to
+`core/`: two optional `/notify` fields (`await_playback`, `capture_bypass_nonce`) that a caller
+omitting them cannot observe, because polling shared `/health` provably cannot tell whether one
+particular question finished. Why, the TCC measurements, and exactly how strongly each property
+holds: **[docs/converse.md](docs/converse.md)**.
 
 ## Quick commands
 
@@ -167,7 +170,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - Do not import PAI, Pi, Claude Code, OpenCode, or other host APIs from `core/`.
 - Do not add new host-named endpoints to the universal server.
-- Do not change the `/notify` request/response contract without an explicit compatibility plan.
+- Do not change the `/notify` request/response contract without an explicit compatibility plan. The one existing extension is additive and documented: `await_playback` and `capture_bypass_nonce` are optional, and a request omitting both gets byte-for-byte the previous behavior (202 on receipt, capture guard holding unconditionally). Keep any future field to that standard.
 - Do not write process state to `/tmp`; use user-owned cache/log/config paths.
 - Do not add new `localhost:31337` references; voice server traffic is `:3246`.
 - Do not broad-kill whatever owns port `3246`; it may be another service.
