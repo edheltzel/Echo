@@ -48,6 +48,7 @@ bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute 
 
 # echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
 bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)
+tail -f ~/Library/Logs/echo-converse.log # where an auto-started coordinator's output lands
 curl -fsS http://localhost:32468/health  # capability, booking holder, configured core address
 bash scripts/install.sh --adapter mcp    # register the ask tool for Claude Code
 

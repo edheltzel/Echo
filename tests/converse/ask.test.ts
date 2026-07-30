@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AskError, askOnce, ensureCoordinator, resolveAncestry } from "../../converse/client.ts";
+import { AskError, askOnce, ensureCoordinator, resolveAncestry, spawnCoordinator } from "../../converse/client.ts";
 import { CaptureError, type CaptureEngine } from "../../converse/capture.ts";
 import { resolveConverseConfig, type ConverseConfig } from "../../converse/config.ts";
 import { createConverseServer, type ConverseServerHandle } from "../../converse/server.ts";
@@ -309,6 +309,66 @@ describe("coordinator startup", () => {
     }).catch((error: AskError) => error);
 
     expect((failure as AskError).code).toBe("coordinator_unavailable");
+  });
+});
+
+// Auto-start is the default deployment: there is no LaunchAgent, so a coordinator
+// nobody launched by hand is the normal case. Discarding its stdout took every
+// log() call site in server.ts with it - the reaped booking, the expired turn,
+// the refusals and the unhandled-fault diagnostic the F1 fix added.
+describe("an auto-started coordinator's output reaches an operator", () => {
+  const originalMain = process.env.ECHO_CONVERSE_MAIN;
+
+  afterEach(() => {
+    if (originalMain === undefined) delete process.env.ECHO_CONVERSE_MAIN;
+    else process.env.ECHO_CONVERSE_MAIN = originalMain;
+  });
+
+  test("stdout and stderr land in the log file beside the daemon's own", async () => {
+    // A stand-in for the coordinator: it prints on both streams and exits, so no
+    // listener is ever bound and nothing reaches a real coordinator on :32468.
+    const stub = join(scratch, "stub-coordinator.ts");
+    writeFileSync(
+      stub,
+      'console.log("[echo-converse] reaped abandoned booking t-1");\n' +
+        'console.error("[echo-converse] unhandled coordinator error: boom");\n',
+    );
+    process.env.ECHO_CONVERSE_MAIN = stub;
+    const config = resolveConverseConfig({}, scratch);
+    expect(config.logPath).toBe(join(scratch, "Library", "Logs", "echo-converse.log"));
+
+    spawnCoordinator(config);
+    for (let attempt = 0; attempt < 100 && !existsSync(config.logPath); attempt++) {
+      await Bun.sleep(20);
+    }
+    let written = "";
+    for (let attempt = 0; attempt < 100; attempt++) {
+      written = readFileSync(config.logPath, "utf8");
+      if (written.includes("boom")) break;
+      await Bun.sleep(20);
+    }
+
+    expect(written).toContain("reaped abandoned booking t-1");
+    expect(written).toContain("unhandled coordinator error: boom");
+  });
+
+  test("a second start appends rather than truncating the first one's report", async () => {
+    const stub = join(scratch, "stub-coordinator.ts");
+    writeFileSync(stub, 'console.log("run " + process.env.ECHO_CONVERSE_PORT);\n');
+    process.env.ECHO_CONVERSE_MAIN = stub;
+    const config = resolveConverseConfig({}, scratch);
+
+    spawnCoordinator({ ...config, port: 8001 });
+    spawnCoordinator({ ...config, port: 8002 });
+    let written = "";
+    for (let attempt = 0; attempt < 100; attempt++) {
+      written = existsSync(config.logPath) ? readFileSync(config.logPath, "utf8") : "";
+      if (written.includes("run 8001") && written.includes("run 8002")) break;
+      await Bun.sleep(20);
+    }
+
+    expect(written).toContain("run 8001");
+    expect(written).toContain("run 8002");
   });
 });
 

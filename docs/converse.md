@@ -57,7 +57,12 @@ ancestry it resolved (`GET /turn` response and the turn log), so the first real 
 Code reports the answer instead of assuming it.
 
 There is deliberately **no LaunchAgent** for this capability. The coordinator starts on demand
-(`ensureCoordinator`) and its lifetime tracks actual use.
+(`ensureCoordinator`) and its lifetime tracks actual use. Because that auto-start path is the
+default, the child's stdout and stderr go to **`~/Library/Logs/echo-converse.log`**, beside the
+daemon's own `echo.log`: a reaped booking, an expired turn, a refusal and an unhandled coordinator
+fault are all reported there. Its output is not inherited from the host on purpose, since the MCP
+adapter carries JSON-RPC on stdout. A coordinator you start by hand (`bun converse/main.ts`) prints
+the same lines to your terminal instead.
 
 The consequence to know: **the human grants microphone access to their terminal application**
 (WezTerm, iTerm, Ghostty, Terminal), not to `yap`, `rec` or any echo process. If a future

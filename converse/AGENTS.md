@@ -61,6 +61,9 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 - Process state is user-owned (`~/.local/state/echo/converse`, `~/Library/Caches/echo/converse`),
   never `/tmp`. Recordings are deleted once transcribed, and the transcript is never sent to the
   coordinator.
+- **An auto-started coordinator's output goes to `~/Library/Logs/echo-converse.log`.** Auto-start
+  is the default deployment, so discarding its stdout leaves every `log()` call site unreadable.
+  Never inherit the host's stdio instead: the MCP adapter carries JSON-RPC on stdout.
 - `server.ts` exports a factory, not a started server. Importing it must never bind a port.
 
 ## Work Guidance

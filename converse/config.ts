@@ -41,6 +41,16 @@ export interface ConverseConfig {
    * with no interlock. `null` means the guard is disabled.
    */
   captureStatePath: string | null;
+  /**
+   * Where a coordinator started on demand sends its stdout and stderr.
+   *
+   * There is no LaunchAgent for this capability, so the auto-start path in
+   * `client.ts` is the default deployment, and a coordinator nobody launched by
+   * hand would otherwise have nowhere to report a reaped booking, an expired
+   * turn or an unhandled fault. It sits beside the daemon's own `echo.log`
+   * rather than in a new location, and never in /tmp.
+   */
+  logPath: string;
   /** Directory for capture WAVs. User-owned; never /tmp. */
   captureDir: string;
   /** Hard cap on one capture, whatever the endpointer does. */
@@ -103,6 +113,11 @@ export function converseStateDir(homeDir: string = homedir()): string {
   return join(homeDir, ".local", "state", "echo", "converse");
 }
 
+/** Beside the daemon's own `echo.log`, so an operator has one place to look. */
+export function converseLogPath(homeDir: string = homedir()): string {
+  return join(homeDir, "Library", "Logs", "echo-converse.log");
+}
+
 export function resolveConverseConfig(
   env: EchoEnvironment = loadEchoConfiguration(),
   homeDir: string = homedir(),
@@ -114,6 +129,7 @@ export function resolveConverseConfig(
     coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
     captureStatePath: resolveCaptureStatePath(env, homeDir),
+    logPath: converseLogPath(homeDir),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),
     transcribeTimeoutMs: positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000),
