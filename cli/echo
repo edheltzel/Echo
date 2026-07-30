@@ -218,6 +218,19 @@ cmd_doctor() {
     fi
   fi
 
+  # 9. Voice-ask dependencies. Informational rather than fatal: notifications
+  # work without them, and only an ask needs a recorder and a transcriber. It is
+  # reported here because sox stopped being an optional fallback and nothing else
+  # tells an operator before their first ask fails.
+  if command -v bun >/dev/null 2>&1; then
+    if deps_out="$(bun run "$REPO_ROOT/converse/deps.ts" 2>&1)"; then
+      doctor_row ok "voice ask" "recorder + transcriber available"
+    else
+      missing="$(printf '%s' "$deps_out" | sed -n 's/^missing: //p' | head -1)"
+      doctor_row warn "voice ask" "${missing:-dependencies missing}" "see docs/converse.md"
+    fi
+  fi
+
   echo
   if [ "$DOCTOR_FAILED" -eq 1 ]; then
     echo "Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor"

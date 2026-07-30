@@ -279,6 +279,14 @@ preflight() {
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
     mcp)
+      echo "> Preflighting voice-ask dependencies"
+      # The MCP adapter exists to run voice asks, so a machine that cannot record
+      # or transcribe must hear about it here rather than at the first ask. Exit 3
+      # means something required is missing (converse/deps.ts).
+      if ! bun run "$REPO_ROOT/converse/deps.ts"; then
+        echo "Voice-ask dependencies are missing - install them and rerun (see docs/converse.md)" >&2
+        exit 1
+      fi
       echo "> Preflighting MCP server registration"
       # Exit 3 (changes pending) is normal before an install; exit 2 (FATAL, a
       # foreign server occupying the echo-converse name) must abort BEFORE any
