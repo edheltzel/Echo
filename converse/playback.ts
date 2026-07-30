@@ -143,6 +143,7 @@ export interface SpeakQuestionOptions {
   source?: string;
   ownerPid: number;
   leaseMs: number;
+  reservationId: string;
   fetchImpl: FetchLike;
 }
 
@@ -161,7 +162,11 @@ export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ st
       voice_id: options.voiceId,
       session_id: turnSessionId(options.turnId),
       source: options.source ?? "converse",
-      capture_reservation: { owner_pid: options.ownerPid, lease_ms: options.leaseMs },
+      capture_reservation: {
+        reservation_id: options.reservationId,
+        owner_pid: options.ownerPid,
+        lease_ms: options.leaseMs,
+      },
     }),
   });
   const body = await response.text();
@@ -174,6 +179,62 @@ export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ st
     // question-not-spoken failure at that boundary.
   }
   return { status: response.status, body, requestId };
+}
+
+export interface CaptureReservationGrant {
+  granted: boolean;
+  reservation_id?: string;
+  request_id?: string;
+  expires_at?: string;
+  detail?: string;
+}
+
+/** Rebase core's reservation at the same boundary where the coordinator grants capture. */
+export async function grantCaptureReservation(
+  coreBaseUrl: string,
+  reservationId: string,
+  fetchImpl: FetchLike,
+): Promise<CaptureReservationGrant> {
+  try {
+    const response = await fetchImpl(
+      `${coreBaseUrl}/notify/capture-reservations/${encodeURIComponent(reservationId)}/grant`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+    );
+    const body = (await response.json()) as Record<string, unknown>;
+    if (
+      response.ok && body.granted === true && body.reservation_id === reservationId &&
+      typeof body.request_id === "string" && typeof body.expires_at === "string"
+    ) {
+      return {
+        granted: true,
+        reservation_id: reservationId,
+        request_id: body.request_id,
+        expires_at: body.expires_at,
+      };
+    }
+    return {
+      granted: false,
+      detail: typeof body.error === "string" ? body.error : `core answered HTTP ${response.status} to the capture grant`,
+    };
+  } catch (error) {
+    return { granted: false, detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function releaseCaptureReservation(
+  coreBaseUrl: string,
+  reservationId: string,
+  fetchImpl: FetchLike,
+): Promise<boolean> {
+  try {
+    const response = await fetchImpl(
+      `${coreBaseUrl}/notify/capture-reservations/${encodeURIComponent(reservationId)}/release`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 export type PlaybackCompletionRead =

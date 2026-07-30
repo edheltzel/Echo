@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConverseConfig } from "../../converse/config.ts";
 import { readBooking } from "../../converse/booking.ts";
 import { createConverseServer, type ConverseServerHandle } from "../../converse/server.ts";
 import type { CoreHealthSnapshot } from "../../converse/types.ts";
+import {
+  captureReservationHeld,
+  markPlaybackCompleted,
+  releaseCaptureReservationById,
+  trackPlayback,
+} from "../../core/playback-reservation.ts";
 
 // Every instance here binds an ephemeral port and points at a fake core, so no
 // test can reach the operator's daemon on :3246 or the real coordinator on
@@ -52,6 +58,7 @@ function fakeCore(options: FakeCoreOptions = {}) {
   const calls: string[] = [];
   let healthIndex = 0;
   let completionIndex = 0;
+  let reservationId = "";
   const sequence = options.healthSequence ?? [options.health ?? coreHealth()];
   const completionSequence = options.completionSequence ?? ["completed"];
   return {
@@ -62,12 +69,25 @@ function fakeCore(options: FakeCoreOptions = {}) {
       if (options.unreachable) throw new Error("connection refused");
       if (path === "/notify") {
         if (options.notifyFailure) throw options.notifyFailure;
+        const request = JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } };
+        reservationId = request.capture_reservation.reservation_id;
         const status = options.notifyStatus ?? 202;
         return new Response(JSON.stringify({ status: "accepted", request_id: "request-1" }), { status });
       }
       if (path === "/notify/request-1/completion") {
         const state = completionSequence[Math.min(completionIndex++, completionSequence.length - 1)];
-        return new Response(JSON.stringify({ request_id: "request-1", state, ...(state === "completed" ? { capture_reservation_id: "request-1" } : {}) }), { status: 200 });
+        return new Response(JSON.stringify({ request_id: "request-1", state, ...(state === "completed" ? { capture_reservation_id: reservationId } : {}) }), { status: 200 });
+      }
+      if (path.endsWith(`/capture-reservations/${reservationId}/grant`)) {
+        return new Response(JSON.stringify({
+          granted: true,
+          reservation_id: reservationId,
+          request_id: "request-1",
+          expires_at: new Date(Date.now() + 120_000).toISOString(),
+        }), { status: 200 });
+      }
+      if (path.endsWith(`/capture-reservations/${reservationId}/release`)) {
+        return new Response(JSON.stringify({ reservation_id: reservationId, acknowledged: true }), { status: 200 });
       }
       const body = sequence[Math.min(healthIndex++, sequence.length - 1)];
       return new Response(JSON.stringify(body), { status: 200 });
@@ -136,12 +156,15 @@ describe("POST /turn", () => {
   test("waits for this question's completion and receives a capture reservation", async () => {
     const calls: string[] = [];
     let completionReads = 0;
+    let reservationId = "";
     const core = {
       calls,
       fetchImpl: async (url: string, init?: RequestInit) => {
         const path = new URL(url).pathname;
         calls.push(`${init?.method ?? "GET"} ${path}`);
         if (path === "/notify") {
+          const request = JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } };
+          reservationId = request.capture_reservation.reservation_id;
           return new Response(JSON.stringify({ status: "accepted", request_id: "core-question-1" }), { status: 202 });
         }
         if (path === "/notify/core-question-1/completion") {
@@ -150,7 +173,15 @@ describe("POST /turn", () => {
           return new Response(JSON.stringify({
             request_id: "core-question-1",
             state,
-            ...(state === "completed" ? { capture_reservation_id: "core-question-1" } : {}),
+            ...(state === "completed" ? { capture_reservation_id: reservationId } : {}),
+          }), { status: 200 });
+        }
+        if (path.endsWith(`/capture-reservations/${reservationId}/grant`)) {
+          return new Response(JSON.stringify({
+            granted: true,
+            reservation_id: reservationId,
+            request_id: "core-question-1",
+            expires_at: new Date(Date.now() + 120_000).toISOString(),
           }), { status: 200 });
         }
         return new Response(JSON.stringify(coreHealth()), { status: 200 });
@@ -162,12 +193,13 @@ describe("POST /turn", () => {
 
     expect(status).toBe(200);
     expect(body.spoke.completion_state).toBe("completed");
-    expect(body.capture_reservation_id).toBe("core-question-1");
+    expect(body.capture_reservation_id).toBe(reservationId);
     expect(calls).toEqual([
       "GET /health",
       "POST /notify",
       "GET /notify/core-question-1/completion",
       "GET /notify/core-question-1/completion",
+      `POST /notify/capture-reservations/${reservationId}/grant`,
     ]);
   });
 
@@ -184,8 +216,13 @@ describe("POST /turn", () => {
     expect(body.spoke).toMatchObject({ notify_status: 202, drained: true });
     expect(body.lease.owner_pid).toBe(process.pid);
     expect(Date.parse(body.lease.expires_at)).toBeGreaterThan(Date.now());
-    // The self-hold ordering, in the order core saw it: preflight, speak, exact completion.
-    expect(core.calls).toEqual(["GET /health", "POST /notify", "GET /notify/request-1/completion"]);
+    // The interlock ordering: preflight, speak, exact completion, then grant.
+    expect(core.calls).toEqual([
+      "GET /health",
+      "POST /notify",
+      "GET /notify/request-1/completion",
+      `POST /notify/capture-reservations/${body.turn_id}/grant`,
+    ]);
     expect(readBooking(lockPath)?.turn_id).toBe(body.turn_id);
   });
 
@@ -307,6 +344,108 @@ describe("POST /turn", () => {
     expect(body.error).toBe("question_not_spoken");
     expect(typeof body.detail).toBe("string");
     expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test("releases core by coordinator token when notify is accepted but its response is lost", async () => {
+    const calls: string[] = [];
+    let reservationId = "";
+    const requestId = `accepted-${crypto.randomUUID()}`;
+    const core = {
+      calls,
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        calls.push(`${init?.method ?? "GET"} ${path}`);
+        if (path === "/health") return new Response(JSON.stringify(coreHealth()), { status: 200 });
+        if (path === "/notify") {
+          const request = JSON.parse(String(init?.body)) as {
+            capture_reservation: { reservation_id: string; owner_pid: number; lease_ms: number };
+          };
+          reservationId = request.capture_reservation.reservation_id;
+          trackPlayback(requestId, request.capture_reservation);
+          markPlaybackCompleted(requestId, true);
+          throw new Error("socket reset after core accepted the request");
+        }
+        if (path.endsWith(`/capture-reservations/${reservationId}/release`)) {
+          releaseCaptureReservationById(reservationId);
+          return new Response(JSON.stringify({ acknowledged: true, reservation_id: reservationId }), { status: 200 });
+        }
+        throw new Error(`unexpected fake-core request: ${path}`);
+      },
+    };
+    const { base } = startServer(core);
+
+    const response = await fetch(`${base}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(askBody()),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe("question_not_spoken");
+    expect(captureReservationHeld()).toBe(false);
+    expect(calls).toContain(`POST /notify/capture-reservations/${reservationId}/release`);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test("rejects a lease shorter than capture plus transcription rather than clamping it", async () => {
+    const config = {
+      ...resolveConverseConfig({}, scratch),
+      bookingLockPath: lockPath,
+      coreBaseUrl: "http://core.test",
+      maxCaptureMs: 600_000,
+      transcribeTimeoutMs: 300_000,
+    };
+    const { base } = startServer(fakeCore(), { config });
+
+    const { status, body } = await postTurn(base, askBody({ lease_ms: 20_000 }));
+
+    expect(status).toBe(400);
+    expect(body.error).toBe("lease_too_short");
+    expect(body.detail).toContain("900000");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test("rebases the coordinator booking after playback at the capture grant", async () => {
+    const clock = { now: 1_700_000_000_000 };
+    let reservationId = "";
+    const core = {
+      calls: [] as string[],
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        if (path === "/health") return new Response(JSON.stringify(coreHealth()), { status: 200 });
+        if (path === "/notify") {
+          reservationId = (JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } })
+            .capture_reservation.reservation_id;
+          clock.now += 150_000;
+          return new Response(JSON.stringify({ status: "accepted", request_id: "slow-question" }), { status: 202 });
+        }
+        if (path === "/notify/slow-question/completion") {
+          return new Response(JSON.stringify({
+            request_id: "slow-question",
+            state: "completed",
+            capture_reservation_id: reservationId,
+          }), { status: 200 });
+        }
+        if (path.endsWith(`/capture-reservations/${reservationId}/grant`)) {
+          return new Response(JSON.stringify({
+            granted: true,
+            reservation_id: reservationId,
+            request_id: "slow-question",
+            expires_at: new Date(clock.now + 120_000).toISOString(),
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ acknowledged: true }), { status: 200 });
+      },
+    };
+    const { base } = startServer(core, { now: () => clock.now });
+
+    const { status, body } = await postTurn(base, askBody({ lease_ms: 120_000 }));
+
+    expect(status).toBe(200);
+    expect(Date.parse(body.lease.expires_at) - clock.now).toBe(120_000);
+    const booking = JSON.parse(readFileSync(lockPath, "utf8"));
+    expect(Date.parse(booking.expires_at) - clock.now).toBe(120_000);
   });
 
   test("refuses while core is muted, so nobody is recorded against a silent question", async () => {

@@ -67,6 +67,8 @@ export type ConverseErrorCode =
   | "core_muted"
   | "capture_guard_disabled"
   | "question_not_spoken"
+  | "lease_too_short"
+  | "lease_unsupported"
   | "coordinator_error"
   | "unknown_turn";
 

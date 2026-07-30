@@ -17,7 +17,8 @@
 //   write idle      -> unconditionally, in a finally
 //   POST complete   -> booking released; metadata only, never the transcript
 
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
+import { dirname } from "node:path";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
 import { CONVERSE_LEASE_SLACK_MS, resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
 import { withCaptureHeld } from "./capture-state.ts";
@@ -104,7 +105,17 @@ export function resolveAncestry(
   return chain;
 }
 
-function spawnCoordinator(config: ConverseConfig): void {
+/** null means diagnostics could not be opened; asking still remains available. */
+function openCoordinatorLog(logPath: string): number | null {
+  try {
+    mkdirSync(dirname(logPath), { recursive: true });
+    return openSync(logPath, "a", 0o600);
+  } catch {
+    return null;
+  }
+}
+
+export function spawnCoordinator(config: ConverseConfig): void {
   // Resolved next to this module, which is correct when a host loads the adapter
   // from source (how every host loads it today). A bundled copy has no sibling
   // main.ts, so that case is named rather than left as a spawn that fails.
@@ -116,15 +127,21 @@ function spawnCoordinator(config: ConverseConfig): void {
         "`bun converse/main.ts`, or set ECHO_CONVERSE_MAIN to that file.",
     );
   }
-  const child = Bun.spawn(["bun", main], {
-    // The coordinator outlives this call but must never hold the host session
-    // open, and its output belongs in the host's log, not in a tool result.
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-    env: { ...process.env, ECHO_CONVERSE_PORT: String(config.port) },
-  });
-  child.unref();
+  // Never inherit these streams: MCP uses stdout for JSON-RPC. The default
+  // deployment is auto-started, so coordinator diagnostics go to a user-owned
+  // append-only log instead of disappearing. Logging remains best-effort.
+  const logFd = openCoordinatorLog(config.logPath);
+  try {
+    const child = Bun.spawn(["bun", main], {
+      stdin: "ignore",
+      stdout: logFd ?? "ignore",
+      stderr: logFd ?? "ignore",
+      env: { ...process.env, ECHO_CONVERSE_PORT: String(config.port) },
+    });
+    child.unref();
+  } finally {
+    if (logFd !== null) closeSync(logFd);
+  }
 }
 
 async function coordinatorIsUp(config: ConverseConfig, fetchImpl: NonNullable<AskDeps["fetchImpl"]>): Promise<boolean> {

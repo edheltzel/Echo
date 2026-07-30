@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -175,6 +175,24 @@ describe("transcription", () => {
     expect(text).toBe("ship it");
     expect(await Bun.file(soxLog).text()).toContain("-r 16000 -c 1 -b 16");
     expect(existsSync(join(scratch, "reply.16k.wav"))).toBe(false);
+  });
+
+  test("makes the converted whisper input owner-only before transcription", async () => {
+    const modeLog = join(scratch, "converted-mode.txt");
+    const soxBin = fakeBinary(
+      "loose-sox",
+      'umask 000\nout="${!#}"\nhead -c 64 /dev/zero > "$out"',
+    );
+    const whisperBin = fakeBinary(
+      "mode-checking-whisper",
+      `if stat -f "%Lp" "$4" >/dev/null 2>&1; then stat -f "%Lp" "$4"; else stat -c "%a" "$4"; fi > ${modeLog}\necho "ship it"`,
+    );
+    const cfg = config({ soxBin, whisperBin, whisperModel: "/models/ggml-base.en.bin" });
+    const wav = join(scratch, "private-reply.wav");
+    writeFileSync(wav, "x".repeat(2_048));
+
+    expect(await transcribeFile(cfg, wav, "whisper")).toBe("ship it");
+    expect(readFileSync(modeLog, "utf8").trim()).toBe("600");
   });
 
   test("cleans the converted whisper input when sox fails after creating it", async () => {

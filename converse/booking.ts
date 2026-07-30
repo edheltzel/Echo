@@ -14,8 +14,18 @@
 // Lease semantics mirror core/capture-guard.ts's stale-crash guard on purpose:
 // same liveness probe, same "a dead writer means nothing is happening" rule.
 
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface BookingRecord {
   turn_id: string;
@@ -133,6 +143,26 @@ export function acquireBooking(options: AcquireBookingOptions): BookingOutcome {
 
   if (writeExclusive(options.path, record)) return { ok: true, record, reaped: holder };
   return { ok: false, held_by: readBooking(options.path) };
+}
+
+/** Rebase this turn's booking at the actual capture grant. */
+export function renewBooking(path: string, turnId: string, expiresAtMs: number): boolean {
+  const holder = readBooking(path);
+  if (holder === null || holder.turn_id !== turnId) return false;
+
+  const staging = join(dirname(path), `.${process.pid}.booking.tmp`);
+  try {
+    writeFileSync(staging, JSON.stringify({ ...holder, expires_at: new Date(expiresAtMs).toISOString() }), { mode: 0o600 });
+    renameSync(staging, path);
+    return true;
+  } catch {
+    try {
+      unlinkSync(staging);
+    } catch {
+      // The staging file was never created or was already removed.
+    }
+    return false;
+  }
 }
 
 export type ReleaseOutcome =

@@ -24,13 +24,16 @@ import {
   acquireBooking,
   readBooking,
   releaseBooking,
+  renewBooking,
   type BookingRecord,
 } from "./booking.ts";
 import { CONVERSE_LEASE_SLACK_MS, type ConverseConfig } from "./config.ts";
 import {
   assessCore,
   estimateSpeechMs,
+  grantCaptureReservation as grantCoreCaptureReservation,
   readCoreHealth,
+  releaseCaptureReservation as releaseCoreCaptureReservation,
   speakQuestion,
   waitForPlaybackCompletion,
   type FetchLike,
@@ -39,7 +42,6 @@ import {
 import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from "./types.ts";
 
 const MAX_QUESTION_CHARS = 1_000;
-const MIN_LEASE_MS = 10_000;
 
 export interface ConverseServerOptions {
   config: ConverseConfig;
@@ -95,9 +97,38 @@ function heldByView(record: BookingRecord | null) {
       };
 }
 
-function clampLease(requested: unknown, fallback: number, maximum: number): number {
-  const value = typeof requested === "number" && Number.isFinite(requested) ? requested : fallback;
-  return Math.min(Math.max(Math.floor(value), MIN_LEASE_MS), Math.max(MIN_LEASE_MS, maximum));
+function resolveLease(
+  requested: unknown,
+  config: ConverseConfig,
+): { ok: true; leaseMs: number } | { ok: false; code: ConverseErrorCode; detail: string } {
+  const operationBudgetMs = config.maxCaptureMs + config.transcribeTimeoutMs;
+  const maximumMs = operationBudgetMs + CONVERSE_LEASE_SLACK_MS;
+
+  const candidate = requested ?? config.leaseMs;
+  if (typeof candidate !== "number" || !Number.isFinite(candidate)) {
+    return { ok: false, code: "invalid_request", detail: "lease_ms must be a finite number" };
+  }
+
+  const leaseMs = Math.floor(candidate);
+  if (leaseMs < operationBudgetMs) {
+    return {
+      ok: false,
+      code: "lease_too_short",
+      detail:
+        `a lease of ${leaseMs}ms cannot cover the ${operationBudgetMs}ms capture and transcription budget; ` +
+        "the microphone booking could expire while the operation still owns it",
+    };
+  }
+  if (leaseMs > maximumMs) {
+    return {
+      ok: false,
+      code: "lease_unsupported",
+      detail:
+        `a lease of ${leaseMs}ms exceeds this coordinator's supported maximum of ${maximumMs}ms; ` +
+        "align the caller and coordinator capture/transcription settings",
+    };
+  }
+  return { ok: true, leaseMs };
 }
 
 function validateTurnRequest(body: unknown, isPidAlive: (pid: number) => boolean): { ok: true; request: TurnRequest } | { ok: false; detail: string } {
@@ -187,9 +218,17 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     const startedAt = now();
     dropExpiredTurns(startedAt);
 
-    const leaseBudgetMs = config.maxCaptureMs + config.transcribeTimeoutMs + CONVERSE_LEASE_SLACK_MS;
-    const leaseMs = clampLease(request.lease_ms, config.leaseMs, leaseBudgetMs);
+    const lease = resolveLease(request.lease_ms, config);
+    if (!lease.ok) {
+      counts.refused++;
+      log(`turn refused: ${lease.code} (${lease.detail})`);
+      return fail(lease.code, lease.detail, 400);
+    }
+    const leaseMs = lease.leaseMs;
     const turnId = newTurnId();
+    // Known before /notify, so an accepted request with a lost response can be
+    // cancelled without first learning core's request id.
+    const reservationId = turnId;
 
     let bookingAcquired = false;
     let handedOff = false;
@@ -233,6 +272,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         source: request.source,
         ownerPid: request.owner_pid,
         leaseMs,
+        reservationId,
         fetchImpl,
       });
       if (spoken.status < 200 || spoken.status >= 300 || spoken.requestId === undefined) {
@@ -253,17 +293,39 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         pollIntervalMs: options.pollIntervalMs,
         maxPolls: options.maxPolls,
       });
-      if (!completion.completed || completion.capture_reservation_id === undefined) {
+      if (!completion.completed || completion.capture_reservation_id !== reservationId) {
         // Name the cause the operator can act on. Out of readings and out of queue
         // are the same symptom with opposite fixes, and the rate-limit case is the
         // likely one: the turn has already spent several requests on core.
-        const detail = completion.detail ?? (completion.refused_reads === completion.polls
-          ? `core refused every completion reading (${completion.polls} of ${completion.polls}, rate limit or unreachable), ` +
-            "so whether this question finished playing is unknown"
-          : `this question did not report playback completion within ${completion.waited_ms}ms`);
+        const detail = completion.completed && completion.capture_reservation_id !== reservationId
+          ? `core completed the question with reservation ${completion.capture_reservation_id ?? "missing"}, not ${reservationId}`
+          : completion.detail ?? (completion.refused_reads === completion.polls
+            ? `core refused every completion reading (${completion.polls} of ${completion.polls}, rate limit or unreachable), ` +
+              "so whether this question finished playing is unknown"
+            : `this question did not report playback completion within ${completion.waited_ms}ms`);
         counts.refused++;
         log(`turn ${turnId} refused: question_not_spoken (${detail})`);
         return fail("question_not_spoken", detail, 503);
+      }
+
+      const coreGrant = await grantCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
+      if (!coreGrant.granted) {
+        counts.refused++;
+        const detail = `core could not grant capture reservation ${reservationId}: ${coreGrant.detail ?? "not ready"}`;
+        log(`turn ${turnId} refused: question_not_spoken (${detail})`);
+        return fail("question_not_spoken", detail, 503);
+      }
+
+      // Both leases start at the grant. The booking had to exist before
+      // playback so simultaneous asks could not both speak, but charging that
+      // phase to the capture budget made a live capture reapable on arrival.
+      const grantedAt = now();
+      const expiresAt = grantedAt + leaseMs;
+      if (!renewBooking(config.bookingLockPath, turnId, expiresAt)) {
+        log(
+          `turn ${turnId} granted but its booking could not be re-based to ${new Date(expiresAt).toISOString()}; ` +
+            "core's active reservation remains the playback interlock, but the file booking is reapable",
+        );
       }
 
       const grant: TurnGrant = {
@@ -277,10 +339,10 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
           waited_ms: completion.waited_ms,
           polls: completion.polls,
         },
-        capture_reservation_id: completion.capture_reservation_id,
+        capture_reservation_id: reservationId,
         lease: {
           owner_pid: request.owner_pid,
-          expires_at: new Date(startedAt + leaseMs).toISOString(),
+          expires_at: new Date(expiresAt).toISOString(),
         },
       };
       // Serialize before handing the lock to the caller. A serialization failure
@@ -292,9 +354,9 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         source: request.source ?? "unknown",
         question_chars: request.question.length,
         started_at: startedAt,
-        expires_at: startedAt + leaseMs,
+        expires_at: expiresAt,
         ancestry: request.ancestry ?? [],
-        capture_reservation_id: completion.capture_reservation_id,
+        capture_reservation_id: reservationId,
       });
       handedOff = true;
       log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
@@ -309,20 +371,15 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       }
       return fail(code, detail, status);
     } finally {
-      if (bookingAcquired && !handedOff) releaseBooking(config.bookingLockPath, turnId);
+      if (bookingAcquired && !handedOff) {
+        await releaseCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
+        releaseBooking(config.bookingLockPath, turnId);
+      }
     }
   }
 
-  async function releaseCoreReservation(turn: ActiveTurn): Promise<void> {
-    try {
-      await fetchImpl(`${config.coreBaseUrl}/notify/${encodeURIComponent(turn.capture_reservation_id)}/capture-release`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch {
-      // The core reservation has the same owner-liveness and lease expiry guard
-      // as the booking, so a lost release cannot hold speech forever.
-    }
+  async function releaseCoreReservation(reservationId: string): Promise<void> {
+    await releaseCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
   }
 
   async function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Promise<Response> {
@@ -332,11 +389,12 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       // caller is the only one who can hand the microphone back. releaseBooking
       // refuses when the holder is a different turn, so this cannot take a lock
       // away from a live one.
+      await releaseCoreReservation(turnId);
       releaseBooking(config.bookingLockPath, turnId);
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 
-    await releaseCoreReservation(turn);
+    await releaseCoreReservation(turn.capture_reservation_id);
     active.delete(turnId);
     releaseBooking(config.bookingLockPath, turnId);
     if (outcome === "completed") counts.completed++;

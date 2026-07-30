@@ -36,6 +36,8 @@ export interface ConverseConfig {
   bookingLockPath: string;
   /** How long a booking may be held before it is reapable as abandoned. */
   leaseMs: number;
+  /** Auto-start coordinator stdout/stderr. Best-effort and user-owned. */
+  logPath: string;
   /** Directory for capture WAVs. User-owned; never /tmp. */
   captureDir: string;
   /** Hard cap on one capture, whatever the endpointer does. */
@@ -88,6 +90,10 @@ export function converseStateDir(homeDir: string = homedir()): string {
   return join(homeDir, ".local", "state", "echo", "converse");
 }
 
+export function converseLogPath(homeDir: string = homedir()): string {
+  return join(homeDir, "Library", "Logs", "echo-converse.log");
+}
+
 export function resolveConverseConfig(
   env: EchoEnvironment = loadEchoConfiguration(),
   homeDir: string = homedir(),
@@ -99,6 +105,7 @@ export function resolveConverseConfig(
     coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
     leaseMs: positiveInt(env.ECHO_CONVERSE_LEASE_MS, 120_000),
+    logPath: env.ECHO_CONVERSE_LOG_PATH || converseLogPath(homeDir),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),
     transcribeTimeoutMs: positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000),

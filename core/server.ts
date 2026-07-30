@@ -32,12 +32,15 @@ import { PlayQueue } from "./play-queue";
 import {
   captureReservationHeld,
   captureReservationView,
+  grantCaptureReservation,
   markPlaybackCompleted,
   markPlaybackFailed,
   markPlaybackPlaying,
   readPlaybackStatus,
   releaseCaptureReservation,
+  releaseCaptureReservationById,
   trackPlayback,
+  type CaptureReservationRequest,
 } from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
@@ -1722,7 +1725,7 @@ function acceptNotification(
     voiceSettings: Partial<VoiceSettings> | null;
     sessionId: string | null;
     nativeVisualShown: boolean;
-    captureReservation?: { owner_pid: number; lease_ms: number };
+    captureReservation?: CaptureReservationRequest;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1840,6 +1843,7 @@ export const server = serve({
 
         if (captureReservation !== undefined && (
           typeof captureReservation !== "object" || captureReservation === null ||
+          typeof captureReservation.reservation_id !== "string" || captureReservation.reservation_id.length === 0 || captureReservation.reservation_id.length > 128 ||
           typeof captureReservation.owner_pid !== "number" || !Number.isInteger(captureReservation.owner_pid) || captureReservation.owner_pid <= 0 ||
           typeof captureReservation.lease_ms !== "number" || !Number.isFinite(captureReservation.lease_ms) || captureReservation.lease_ms <= 0
         )) {
@@ -1890,6 +1894,26 @@ export const server = serve({
       return new Response(JSON.stringify(status), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 200,
+      });
+    }
+
+    const reservationGrant = /^\/notify\/capture-reservations\/([^/]+)\/grant$/.exec(url.pathname);
+    if (reservationGrant && req.method === "POST") {
+      const reservationId = decodeURIComponent(reservationGrant[1]);
+      const granted = grantCaptureReservation(reservationId);
+      return new Response(JSON.stringify(granted.granted ? granted : { error: granted.reason, reservation_id: reservationId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: granted.granted ? 200 : 409,
+      });
+    }
+
+    const reservationReleaseById = /^\/notify\/capture-reservations\/([^/]+)\/release$/.exec(url.pathname);
+    if (reservationReleaseById && req.method === "POST") {
+      const reservationId = decodeURIComponent(reservationReleaseById[1]);
+      const released = releaseCaptureReservationById(reservationId);
+      return new Response(JSON.stringify({ reservation_id: reservationId, ...released }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
       });
     }
 
@@ -2073,6 +2097,8 @@ export const server = serve({
     const supported = [
       "POST /notify",
       "GET /notify/:request_id/completion",
+      "POST /notify/capture-reservations/:reservation_id/grant",
+      "POST /notify/capture-reservations/:reservation_id/release",
       "POST /notify/:request_id/capture-release",
       "POST /notify/personality",
       "POST /mute",

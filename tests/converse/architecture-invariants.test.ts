@@ -154,6 +154,9 @@ describe("echo-converse architecture invariants", () => {
     const server = readFileSync(join(CONVERSE_DIR, "server.ts"), "utf8");
     const packageContract = readFileSync(join(CONVERSE_DIR, "AGENTS.md"), "utf8");
     const docs = readFileSync(join("docs", "converse.md"), "utf8");
+    const security = readFileSync("SECURITY.md", "utf8");
+    const install = readFileSync(join("docs", "install-human.md"), "utf8");
+    const adapters = readFileSync(join("docs", "adapters.md"), "utf8");
     const offenders: string[] = [];
 
     if (/mechanically\s+enforc/i.test(server)) offenders.push("converse/server.ts overclaims runtime enforcement");
@@ -164,6 +167,17 @@ describe("echo-converse architecture invariants", () => {
     if (!/source-level|source scan|not runtime/i.test(docs)) offenders.push("docs/converse.md does not state the enforcement boundary");
     if (!/Claude Code[\s\S]{0,220}(not|unverified|unconfirmed)/i.test(docs)) {
       offenders.push("docs/converse.md does not state that Claude Code ancestry is unverified");
+    }
+    if (/capture runs in the calling host's process tree[\s\S]{0,100}grant attributes to the \*\*terminal application/i.test(security)) {
+      offenders.push("SECURITY.md turns the measured direct-terminal topology into a runtime guarantee");
+    }
+    for (const [file, content] of [["SECURITY.md", security], ["docs/install-human.md", install], ["docs/adapters.md", adapters]]) {
+      if (!/Claude Code[\s\S]{0,240}unverified/i.test(content)) {
+        offenders.push(`${file} does not preserve the unverified Claude Code ancestry boundary`);
+      }
+    }
+    if (!/source-level[\s\S]{0,160}(do not|not)[\s\S]{0,80}runtime ancestry/i.test(security)) {
+      offenders.push("SECURITY.md does not distinguish source checks from runtime ancestry enforcement");
     }
 
     assertNoOffenders(

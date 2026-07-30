@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AskError, askOnce, ensureCoordinator, resolveAncestry } from "../../converse/client.ts";
+import { AskError, askOnce, ensureCoordinator, resolveAncestry, spawnCoordinator } from "../../converse/client.ts";
 import { CaptureError, type CaptureEngine } from "../../converse/capture.ts";
 import { resolveConverseConfig, type ConverseConfig } from "../../converse/config.ts";
 import { createConverseServer, type ConverseServerHandle } from "../../converse/server.ts";
@@ -42,6 +42,7 @@ function fakeCore(health: CoreHealthSnapshot = coreHealth()) {
     notifyCaptureState: null,
     calls: [],
   };
+  let reservationId = "";
   return {
     observed,
     fetchImpl: async (url: string, init?: RequestInit) => {
@@ -51,10 +52,23 @@ function fakeCore(health: CoreHealthSnapshot = coreHealth()) {
         observed.notifyCaptureState = existsSync(capturePath)
           ? String(JSON.parse(readFileSync(capturePath, "utf8")).state)
           : "absent";
+        const body = JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } };
+        reservationId = body.capture_reservation.reservation_id;
         return new Response(JSON.stringify({ status: "accepted", request_id: "request-1" }), { status: 202 });
       }
       if (path === "/notify/request-1/completion") {
-        return new Response(JSON.stringify({ request_id: "request-1", state: "completed", capture_reservation_id: "request-1" }), { status: 200 });
+        return new Response(JSON.stringify({ request_id: "request-1", state: "completed", capture_reservation_id: reservationId }), { status: 200 });
+      }
+      if (path.endsWith(`/capture-reservations/${reservationId}/grant`)) {
+        return new Response(JSON.stringify({
+          granted: true,
+          reservation_id: reservationId,
+          request_id: "request-1",
+          expires_at: new Date(Date.now() + 120_000).toISOString(),
+        }), { status: 200 });
+      }
+      if (path.endsWith(`/capture-reservations/${reservationId}/release`)) {
+        return new Response(JSON.stringify({ reservation_id: reservationId, acknowledged: true }), { status: 200 });
       }
       return new Response(JSON.stringify(health), { status: 200 });
     },
@@ -214,6 +228,32 @@ describe("one-shot ask", () => {
     expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
   });
 
+  test("cancellation after completion bookkeeping still discards the transcript", async () => {
+    const { config } = startCoordinator();
+    const controller = new AbortController();
+    let completed = false;
+
+    const failure = await askOnce(
+      { question: "Ready?", signal: controller.signal },
+      {
+        config,
+        captureEngine: recordingEngine("must not escape").engine,
+        fetchImpl: async (url, init) => {
+          if (url.endsWith("/complete")) {
+            completed = true;
+            controller.abort();
+          }
+          return fetch(url, init);
+        },
+      },
+    ).catch((error: AskError) => error);
+
+    expect(completed).toBe(true);
+    expect(failure).toBeInstanceOf(AskError);
+    expect((failure as AskError).code).toBe("cancelled");
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+  });
+
   test("an empty question never reaches the coordinator", async () => {
     const { core, config } = startCoordinator();
 
@@ -330,6 +370,55 @@ describe("coordinator startup", () => {
     }).catch((error: AskError) => error);
 
     expect((failure as AskError).code).toBe("coordinator_unavailable");
+  });
+});
+
+describe("auto-started coordinator diagnostics", () => {
+  const originalMain = process.env.ECHO_CONVERSE_MAIN;
+
+  afterEach(() => {
+    if (originalMain === undefined) delete process.env.ECHO_CONVERSE_MAIN;
+    else process.env.ECHO_CONVERSE_MAIN = originalMain;
+  });
+
+  test("redirects stdout and stderr to a private user-owned log", async () => {
+    const stub = join(scratch, "stub-coordinator.ts");
+    writeFileSync(stub, 'console.log("coordinator stdout");\nconsole.error("coordinator stderr");\n');
+    process.env.ECHO_CONVERSE_MAIN = stub;
+    const config = resolveConverseConfig({}, scratch);
+
+    spawnCoordinator(config);
+    let written = "";
+    for (let attempt = 0; attempt < 100; attempt++) {
+      written = existsSync(config.logPath) ? readFileSync(config.logPath, "utf8") : "";
+      if (written.includes("coordinator stderr")) break;
+      await Bun.sleep(20);
+    }
+
+    expect(written).toContain("coordinator stdout");
+    expect(written).toContain("coordinator stderr");
+    expect(statSync(config.logPath).mode & 0o777).toBe(0o600);
+  });
+
+  test("honors a redirected log path", () => {
+    const redirected = join(scratch, "logs", "converse.log");
+    expect(resolveConverseConfig({ ECHO_CONVERSE_LOG_PATH: redirected }, scratch).logPath).toBe(redirected);
+  });
+
+  test("an unwritable log costs diagnostics rather than coordinator startup", async () => {
+    const stub = join(scratch, "stub-coordinator.ts");
+    const marker = join(scratch, "started");
+    writeFileSync(stub, `Bun.write(${JSON.stringify(marker)}, "ok");\n`);
+    process.env.ECHO_CONVERSE_MAIN = stub;
+    writeFileSync(join(scratch, "blocked"), "not a directory");
+    const config = {
+      ...resolveConverseConfig({}, scratch),
+      logPath: join(scratch, "blocked", "converse.log"),
+    };
+
+    expect(() => spawnCoordinator(config)).not.toThrow();
+    for (let attempt = 0; attempt < 100 && !existsSync(marker); attempt++) await Bun.sleep(20);
+    expect(existsSync(marker)).toBe(true);
   });
 });
 
