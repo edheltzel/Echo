@@ -101,9 +101,11 @@ ask must not wedge every later one. A concurrent ask gets `409` rather than an i
 
 **A turn holds two things, and they are always released together.** The booking is what stops a
 second microphone; core's capture reservation is what stops core speaking into the recording, and
-while core holds one it skips *every* voice line. So completing, aborting, and being dropped for
-outliving the lease all run the same cleanup, and a release core refuses is retried and then
-logged rather than assumed to have worked. Core clamps the reservation's `lease_ms` to two
+while core holds one it skips *every* voice line. So completing, aborting, being dropped for
+outliving the lease, and refusing after the question was already accepted all run the same
+cleanup, and a release core refuses is retried and then logged rather than assumed to have
+worked. That last case matters most: a turn that never learned its completion verdict (every poll
+rate-limited, say) has no evidence core did *not* activate the reservation, so it releases anyway. Core clamps the reservation's `lease_ms` to two
 minutes whatever the coordinator asks for: the reservation only bridges playback completion to
 the caller publishing `recording`, the capture guard covers the rest of the turn, and a bounded
 lease is what guarantees the silence ends even when the owner pid never exits.

@@ -43,8 +43,11 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   the recorder and the existing catch releases.
 - **A turn holds the booking AND core's capture reservation, and no path may free one without
   the other.** Core skips every voice line while it holds a reservation, so a leak is the
-  operator's Echo going silent. Every exit (complete, abort, and the expiry sweep whose caller is
-  already gone) goes through the one cleanup helper, and a release core answered non-2xx is
+  operator's Echo going silent. Every exit goes through the one cleanup helper: complete, abort,
+  the expiry sweep whose caller is already gone, and the refusals between a successful `/notify`
+  and the grant. That last set is the subtle one - the reservation id is the `/notify` request
+  id, so it is known from the moment core accepts the question, and losing the completion verdict
+  is not evidence core did not activate the reservation. A release core answered non-2xx is
   retried and then logged - never discarded as success.
 - **The capture owner writes its own pid** into the capture-state file. Core honors a non-idle
   state only while that pid is alive, so any other pid turns a crash into permanent silence.

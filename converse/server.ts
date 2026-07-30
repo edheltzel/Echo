@@ -204,6 +204,11 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
 
     let bookingAcquired = false;
     let handedOff = false;
+    // Set the moment core accepts the question. From then on core has a record
+    // that can activate the reservation at any time, so every way out of this
+    // function owes it a release - including the ones that never learn the
+    // completion verdict, which is exactly when core has already activated it.
+    let reservationId: string | undefined;
     try {
       // Book first. Two asks arriving together must not both get as far as
       // speaking: the human would hear two questions and answer one recording.
@@ -254,6 +259,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         log(`turn ${turnId} refused: question_not_spoken (${detail})`);
         return fail("question_not_spoken", detail, 503);
       }
+      reservationId = spoken.requestId;
 
       const completion = await waitForPlaybackCompletion({
         coreBaseUrl: config.coreBaseUrl,
@@ -320,7 +326,9 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       }
       return fail(code, detail, status);
     } finally {
-      if (bookingAcquired && !handedOff) releaseBooking(config.bookingLockPath, turnId);
+      if (bookingAcquired && !handedOff) {
+        await cleanupTurn({ turn_id: turnId, capture_reservation_id: reservationId });
+      }
     }
   }
 
@@ -332,8 +340,8 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
    * beyond that the lease and the owner-liveness guard are the backstop, and the
    * log names it rather than reporting success.
    */
-  async function releaseCoreReservation(turn: ActiveTurn): Promise<void> {
-    const url = `${config.coreBaseUrl}/notify/${encodeURIComponent(turn.capture_reservation_id)}/capture-release`;
+  async function releaseCoreReservation(turnId: string, reservationId: string): Promise<void> {
+    const url = `${config.coreBaseUrl}/notify/${encodeURIComponent(reservationId)}/capture-release`;
     for (let attempt = 1; attempt <= RELEASE_ATTEMPTS; attempt++) {
       let detail: string;
       try {
@@ -348,19 +356,26 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       } catch (error) {
         detail = error instanceof Error ? error.message : "core unreachable";
       }
-      log(`turn ${turn.turn_id} capture-release attempt ${attempt} failed: ${detail}`);
+      log(`turn ${turnId} capture-release attempt ${attempt} failed: ${detail}`);
       if (attempt < RELEASE_ATTEMPTS) await sleep(RELEASE_RETRY_DELAY_MS);
     }
     log(
-      `turn ${turn.turn_id} could not release core reservation ${turn.capture_reservation_id}; ` +
+      `turn ${turnId} could not release core reservation ${reservationId}; ` +
         "core stays silent until its lease expires",
     );
   }
 
-  /** Every path out of a turn goes through here, so neither hold can be freed without the other. */
-  async function cleanupTurn(turn: ActiveTurn): Promise<void> {
-    await releaseCoreReservation(turn);
-    releaseBooking(config.bookingLockPath, turn.turn_id);
+  /**
+   * Every path out of a turn goes through here, so neither hold can be freed
+   * without the other. The reservation id is optional because a turn can be
+   * abandoned before core was ever asked to speak; once the question is posted
+   * it is the `/notify` request id, known whether or not the grant was reached.
+   */
+  async function cleanupTurn(hold: { turn_id: string; capture_reservation_id?: string }): Promise<void> {
+    if (hold.capture_reservation_id !== undefined) {
+      await releaseCoreReservation(hold.turn_id, hold.capture_reservation_id);
+    }
+    releaseBooking(config.bookingLockPath, hold.turn_id);
   }
 
   async function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Promise<Response> {
@@ -368,9 +383,10 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     if (!turn) {
       // A turn dropped for outliving its lease has already had both holds
       // released by dropExpiredTurns; this covers the lock file surviving a
-      // coordinator restart. releaseBooking refuses when the holder is a
-      // different turn, so this cannot take a lock away from a live one.
-      releaseBooking(config.bookingLockPath, turnId);
+      // coordinator restart, where the reservation id died with the turn table.
+      // releaseBooking refuses when the holder is a different turn, so this
+      // cannot take a lock away from a live one.
+      await cleanupTurn({ turn_id: turnId });
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 

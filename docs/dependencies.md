@@ -72,11 +72,18 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 The voice-ask install paths preflight `sox` and `rec` before changing host state.
 `--adapter mcp` **blocks** on a missing one: that adapter exists only to expose the ask.
 `--adapter pi|omp` warns and installs anyway, because both also register notifications that
-need nothing from sox. `cli/echo doctor` runs the same check and reports the exact missing
-binary plus `brew install sox`; it is a **warning** row unless this machine actually uses
-echo-converse (the MCP server is registered, or an `ECHO_CONVERSE_*` setting is configured),
-in which case it degrades the run. Set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
-when the binaries live outside `PATH`.
+need nothing from sox; the ask itself then fails at call time, naming the missing binary.
+`cli/echo doctor` runs the same check and reports the exact missing binary plus
+`brew install sox`. That row is a **warning** unless this machine actually exposes
+echo-converse, in which case it degrades the run. Any one of these makes it a failure:
+
+- the MCP server is registered in `~/.claude.json` (override: `ECHO_MCP_CONFIG_PATH`);
+- a Pi package under `adapters/pi` is registered in `~/.pi/agent/settings.json`;
+- the omp `echo-voice` extension symlink exists (override: `OMP_EXTENSIONS_DIR`);
+- any `ECHO_CONVERSE_*` setting is configured in `~/.config/echo/config.json` (override:
+  `ECHO_CONFIG_FILE`).
+
+Set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN` when the binaries live outside `PATH`.
 
 Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1
 rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).

@@ -354,6 +354,34 @@ describe("POST /turn", () => {
     expect(body.detail).toContain("did not report playback completion");
     expect(existsSync(lockPath)).toBe(false);
   });
+
+  // The question was accepted, so core holds a record that activates the
+  // reservation the moment playback completes - and losing the verdict is not
+  // evidence it did not. Freeing the booking while leaving that reservation
+  // behind silences every voice line until the lease expires.
+  test("a turn abandoned after the question was accepted still releases the reservation", async () => {
+    const core = fakeCore({ completionSequence: ["playing"] });
+    const { base } = startServer(core, { maxPolls: 2 });
+
+    const { status } = await postTurn(base, askBody());
+
+    expect(status).toBe(503);
+    expect(core.calls).toContain("POST /notify/request-1/capture-release");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  // The mirror case: /notify never succeeded, so there is no reservation to
+  // release and the turn must not invent a request id to release.
+  test("a turn abandoned before the question was accepted releases only the booking", async () => {
+    const core = fakeCore({ notifyStatus: 500 });
+    const { base } = startServer(core);
+
+    const { status } = await postTurn(base, askBody());
+
+    expect(status).toBe(503);
+    expect(core.calls.filter((call) => call.includes("capture-release"))).toEqual([]);
+    expect(existsSync(lockPath)).toBe(false);
+  });
 });
 
 describe("finishing a turn", () => {
