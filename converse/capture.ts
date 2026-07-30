@@ -46,7 +46,7 @@ export type CaptureEngine = (config: ConverseConfig, signal?: AbortSignal) => Pr
 
 export class CaptureError extends Error {
   constructor(
-    readonly code: "no_recorder" | "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech",
+    readonly code: "cancelled" | "no_recorder" | "no_stt_tier" | "recorder_failed" | "transcriber_failed" | "no_speech",
     message: string,
   ) {
     super(message);
@@ -109,6 +109,10 @@ export function recorderArgv(config: ConverseConfig, wavPath: string): string[] 
     // the turn ends without them pressing anything.
     "silence", "1", "0.1", "2%", "1", silenceSeconds, "2%",
   ];
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new CaptureError("cancelled", "the ask was cancelled during capture");
 }
 
 interface PipeCollector {
@@ -247,6 +251,7 @@ export async function recordReply(
     timeoutMs: config.maxCaptureMs,
     signal,
   });
+  throwIfAborted(signal);
   const capture_ms = Date.now() - startedAt;
 
   let bytes = 0;
@@ -316,7 +321,12 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline:
   return converted;
 }
 
-export async function transcribeFile(config: ConverseConfig, wavPath: string, tier: SttTier): Promise<string> {
+export async function transcribeFile(
+  config: ConverseConfig,
+  wavPath: string,
+  tier: SttTier,
+  signal?: AbortSignal,
+): Promise<string> {
   // One deadline for the whole phase. A transcriber has no header to finalize,
   // so its cap escalates to SIGKILL and is therefore hard.
   const deadline = Date.now() + config.transcribeTimeoutMs;
@@ -325,7 +335,9 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
     const result = await run([config.yapBin, "transcribe", "--locale", config.locale, "--txt", wavPath], {
       timeoutMs: remainingMs(deadline),
       hardKillAfterMs: HARD_KILL_GRACE_MS,
+      signal,
     });
+    throwIfAborted(signal);
     requireTranscriberSuccess(result, config.yapBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
   }
@@ -343,8 +355,9 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
         "-l", whisperLanguage(config.locale),
         "-nt",
       ],
-      { timeoutMs: remainingMs(deadline), hardKillAfterMs: HARD_KILL_GRACE_MS },
+      { timeoutMs: remainingMs(deadline), hardKillAfterMs: HARD_KILL_GRACE_MS, signal },
     );
+    throwIfAborted(signal);
     requireTranscriberSuccess(result, config.whisperBin, config.transcribeTimeoutMs);
     return result.stdout.trim();
   } finally {
@@ -360,6 +373,7 @@ export async function transcribeFile(config: ConverseConfig, wavPath: string, ti
  * disk for no reason, and it is never sent to the coordinator either.
  */
 export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
+  throwIfAborted(signal);
   const tier = selectSttTier(config);
   if (tier === null) {
     throw new CaptureError(
@@ -374,7 +388,9 @@ export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
 
   try {
     const recording = await recordReply(config, wavPath, signal);
-    const text = recording.bytes < MIN_AUDIBLE_WAV_BYTES ? "" : await transcribeFile(config, wavPath, tier);
+    throwIfAborted(signal);
+    const text = recording.bytes < MIN_AUDIBLE_WAV_BYTES ? "" : await transcribeFile(config, wavPath, tier, signal);
+    throwIfAborted(signal);
     if (text.length === 0) {
       throw new CaptureError("no_speech", "the recording contained no speech");
     }

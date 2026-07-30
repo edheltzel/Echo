@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -214,6 +214,24 @@ describe("capture and transcribe together", () => {
     });
 
     await expect(captureAndTranscribe(cfg)).rejects.toThrow(/exited 4/);
+    expect(readdirSync(cfg.captureDir)).toEqual([]);
+  });
+
+  test("an abort during transcription discards the transcript and recording", async () => {
+    const marker = join(scratch, "transcriber-started");
+    const cfg = config({
+      recBin: fakeRecorder(8_192),
+      yapBin: fakeBinary("fake-yap", `touch ${marker}\nsleep 2\necho "must be discarded"`),
+    });
+    const controller = new AbortController();
+    const pending = captureAndTranscribe(cfg, controller.signal).catch((error: CaptureError) => error);
+
+    for (let attempt = 0; attempt < 100 && !existsSync(marker); attempt++) await Bun.sleep(10);
+    controller.abort();
+
+    const failure = await pending;
+    expect(failure).toBeInstanceOf(CaptureError);
+    expect((failure as CaptureError).code).toBe("cancelled");
     expect(readdirSync(cfg.captureDir)).toEqual([]);
   });
 

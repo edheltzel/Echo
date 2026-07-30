@@ -187,6 +187,33 @@ describe("one-shot ask", () => {
     expect(readCaptureState(capturePath, () => true)).toBe("idle");
   });
 
+  test("cancellation stays terminal when capture finishes after the abort", async () => {
+    const { config } = startCoordinator();
+    const controller = new AbortController();
+    let captureStarted!: () => void;
+    let releaseCapture!: () => void;
+    const started = new Promise<void>((resolve) => { captureStarted = resolve; });
+    const release = new Promise<void>((resolve) => { releaseCapture = resolve; });
+    const captureEngine: CaptureEngine = async () => {
+      captureStarted();
+      await release;
+      return { text: "speech after abort", engine: "yap", capture_ms: 10, timed_out: false };
+    };
+
+    const pending = askOnce(
+      { question: "Ready?", signal: controller.signal },
+      { config, captureEngine, fetchImpl: (u, i) => fetch(u, i) },
+    ).catch((error: AskError) => error);
+    await started;
+    controller.abort();
+    releaseCapture();
+
+    const failure = await pending;
+    expect(failure).toBeInstanceOf(AskError);
+    expect((failure as AskError).code).toBe("cancelled");
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+  });
+
   test("an empty question never reaches the coordinator", async () => {
     const { core, config } = startCoordinator();
 
