@@ -219,6 +219,7 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 | `ECHO_CONVERSE_PORT` | `32468` | coordinator |
 | `ECHO_CONVERSE_URL` | `http://localhost:32468` | callers |
 | `ECHO_CONVERSE_BOOKING_LOCK` | `~/.local/state/echo/converse/booking.lock` | coordinator |
+| `ECHO_CONVERSE_LOG_PATH` | `~/Library/Logs/echo-converse.log` | callers (auto-start only) |
 | `ECHO_CONVERSE_CAPTURE_DIR` | `~/Library/Caches/echo/converse` | caller |
 | `ECHO_CONVERSE_MAX_CAPTURE_MS` | `30000` | caller |
 | `ECHO_CONVERSE_SILENCE_MS` | `1500` | caller |

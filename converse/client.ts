@@ -110,6 +110,16 @@ export function resolveAncestry(
   return chain;
 }
 
+/** `null` when the log cannot be opened, which the caller degrades to no log. */
+function openCoordinatorLog(logPath: string): number | null {
+  try {
+    mkdirSync(dirname(logPath), { recursive: true });
+    return openSync(logPath, "a", 0o600);
+  } catch {
+    return null;
+  }
+}
+
 export function spawnCoordinator(config: ConverseConfig): void {
   // Resolved next to this module, which is correct when a host loads the adapter
   // from source (how every host loads it today). A bundled copy has no sibling
@@ -128,18 +138,21 @@ export function spawnCoordinator(config: ConverseConfig): void {
   // protocol. It goes to a user-owned log file instead, because auto-start is
   // the default deployment and a coordinator nobody launched by hand would
   // otherwise discard every diagnostic it produces.
-  mkdirSync(dirname(config.logPath), { recursive: true });
-  const logFd = openSync(config.logPath, "a", 0o600);
+  //
+  // Best-effort, like every other diagnostics write in this repo: a log that
+  // cannot be opened costs the operator a trace, and failing the question over
+  // that would trade the whole capability for one of its diagnostics.
+  const logFd = openCoordinatorLog(config.logPath);
   try {
     const child = Bun.spawn(["bun", main], {
       stdin: "ignore",
-      stdout: logFd,
-      stderr: logFd,
+      stdout: logFd ?? "ignore",
+      stderr: logFd ?? "ignore",
       env: { ...process.env, ECHO_CONVERSE_PORT: String(config.port) },
     });
     child.unref();
   } finally {
-    closeSync(logFd);
+    if (logFd !== null) closeSync(logFd);
   }
 }
 

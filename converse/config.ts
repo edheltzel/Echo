@@ -48,7 +48,8 @@ export interface ConverseConfig {
    * `client.ts` is the default deployment, and a coordinator nobody launched by
    * hand would otherwise have nowhere to report a reaped booking, an expired
    * turn or an unhandled fault. It sits beside the daemon's own `echo.log`
-   * rather than in a new location, and never in /tmp.
+   * rather than in a new location, and never in /tmp. Writing it is best-effort:
+   * a log that cannot be opened costs a trace, never the question.
    */
   logPath: string;
   /** Directory for capture WAVs. User-owned; never /tmp. */
@@ -129,7 +130,7 @@ export function resolveConverseConfig(
     coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
     captureStatePath: resolveCaptureStatePath(env, homeDir),
-    logPath: converseLogPath(homeDir),
+    logPath: env.ECHO_CONVERSE_LOG_PATH || converseLogPath(homeDir),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),
     transcribeTimeoutMs: positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000),

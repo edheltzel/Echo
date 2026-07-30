@@ -370,6 +370,67 @@ describe("an auto-started coordinator's output reaches an operator", () => {
     expect(written).toContain("run 8001");
     expect(written).toContain("run 8002");
   });
+
+  test("the log path honors ECHO_CONVERSE_LOG_PATH, so a test can redirect it", () => {
+    const redirected = join(scratch, "elsewhere", "converse.log");
+
+    expect(resolveConverseConfig({ ECHO_CONVERSE_LOG_PATH: redirected }, scratch).logPath).toBe(redirected);
+  });
+
+  // Diagnostics are best-effort everywhere else in this repo, and they have to be
+  // here too: this runs before the question is spoken, so a log that cannot be
+  // opened would otherwise take the whole ask down on a machine that asked fine
+  // yesterday.
+  test("a log that cannot be opened costs the trace, not the coordinator", async () => {
+    const stub = join(scratch, "stub-coordinator.ts");
+    const marker = join(scratch, "ran");
+    writeFileSync(stub, `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ok");\n`);
+    process.env.ECHO_CONVERSE_MAIN = stub;
+
+    // Two ways the open fails: a parent path that is a file (mkdir throws), and a
+    // log path that is a directory (open throws).
+    writeFileSync(join(scratch, "blocked"), "not a directory");
+    const blockedParent = { ...resolveConverseConfig({}, scratch), logPath: join(scratch, "blocked", "converse.log") };
+    const logPathIsADirectory = { ...resolveConverseConfig({}, scratch), logPath: scratch };
+
+    for (const config of [blockedParent, logPathIsADirectory]) {
+      rmSync(marker, { force: true });
+      expect(() => spawnCoordinator(config)).not.toThrow();
+      for (let attempt = 0; attempt < 100 && !existsSync(marker); attempt++) {
+        await Bun.sleep(20);
+      }
+      expect(existsSync(marker)).toBe(true);
+    }
+  });
+
+  test("an ask still succeeds when the coordinator log cannot be written", async () => {
+    // The whole path the finding names: ensureCoordinator uses the real
+    // spawnCoordinator, which used to throw EACCES/ENOTDIR straight through
+    // askOnce, so the question was never spoken.
+    const stub = join(scratch, "stub-coordinator.ts");
+    writeFileSync(stub, "");
+    process.env.ECHO_CONVERSE_MAIN = stub;
+    writeFileSync(join(scratch, "blocked"), "not a directory");
+
+    const { config } = startCoordinator();
+    const unwritable = { ...config, logPath: join(scratch, "blocked", "converse.log") };
+    let health = 0;
+    const result = await askOnce(
+      { question: "Ready?" },
+      {
+        config: unwritable,
+        captureEngine: recordingEngine("yes").engine,
+        sleep: async () => {},
+        // Down on the first probe, so the real spawn runs; up afterwards.
+        fetchImpl: async (url: string, init?: RequestInit) => {
+          if (new URL(url).pathname === "/health" && health++ === 0) throw new Error("refused");
+          return fetch(url, init);
+        },
+      },
+    );
+
+    expect(result.text).toBe("yes");
+  });
 });
 
 describe("process ancestry evidence", () => {

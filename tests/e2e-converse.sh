@@ -97,6 +97,7 @@ export ECHO_DAEMON_URL="http://localhost:${PORT}"
 export ECHO_CONVERSE_PORT="${CONVERSE_PORT}"
 export ECHO_CONVERSE_URL="http://localhost:${CONVERSE_PORT}"
 export ECHO_CONVERSE_BOOKING_LOCK="${SCRATCH}/booking.lock"
+export ECHO_CONVERSE_LOG_PATH="${SCRATCH}/echo-converse.log"
 export ECHO_CONVERSE_CAPTURE_DIR="${SCRATCH}/captures"
 export ECHO_CONVERSE_MAX_CAPTURE_MS=4000
 
@@ -163,6 +164,7 @@ echo "ISOLATION CONFIRMED"
 echo "  core pid/port        : ${CORE_PID} / ${PORT}  (production is :${PRODUCTION_PORT}, untouched)"
 echo "  coordinator pid/port : ${CONVERSE_PID} / ${CONVERSE_PORT}  (production is :${PRODUCTION_CONVERSE_PORT}, untouched)"
 echo "  capture state file   : ${reported_capture_path}"
+echo "  coordinator log      : ${ECHO_CONVERSE_LOG_PATH}  (never the operator's ~/Library/Logs)"
 echo "  recorder/transcriber : stand-ins in ${SCRATCH} (no microphone is opened)"
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  audio                : ENABLED - the question will be spoken out loud"
