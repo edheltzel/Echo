@@ -304,19 +304,16 @@ preflight() {
       ;;
   esac
 
-  # Blocking for --adapter mcp: that adapter exists only to expose the voice ask,
-  # so installing it without a recorder installs a tool that cannot work. Pi and
-  # omp register the ask alongside notifications that need nothing from sox, and
-  # they installed fine without it before, so there it is a warning.
+  # Every adapter that registers echo_ask gets the same answer: report the missing
+  # recorder, install anyway. Capture is an optional capability of an install whose
+  # notifications need nothing from sox, and the ask itself refuses at call time
+  # naming the binary, so a blocking preflight would only trade a diagnosable
+  # runtime failure for an install nobody can complete.
   case "$ADAPTER" in
-    mcp)
-      echo "> Preflighting echo-converse capture dependencies"
-      bash "$SCRIPT_DIR/converse-dependencies.sh"
-      ;;
-    pi|omp)
+    mcp|pi|omp)
       echo "> Checking echo-converse capture dependencies (optional for $ADAPTER)"
       bash "$SCRIPT_DIR/converse-dependencies.sh" \
-        || echo "WARN: the echo_ask voice ask stays unavailable until the capture dependencies are installed" >&2
+        || echo "WARN: the echo_ask voice ask stays unavailable until the capture dependencies are installed; it refuses at call time naming the missing binary" >&2
       ;;
   esac
 

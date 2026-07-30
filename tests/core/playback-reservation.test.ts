@@ -35,6 +35,35 @@ describe("core playback completion reservation", () => {
     expect(captureReservationHeld()).toBe(false);
   });
 
+  // The caller gave up before the line played: its completion polls ran out
+  // while the question sat in the serial queue, so it released on the way out.
+  // If that release only counted against an already-active reservation, the line
+  // finishing afterwards would activate one for an abandoned turn, and nothing
+  // would ever hand it back - every voice line dropped until the lease expired.
+  test("a release before playback completes stops the reservation from activating", () => {
+    const requestId = `early-release-${Date.now()}`;
+    trackPlayback(requestId, { owner_pid: process.pid, lease_ms: 60_000 });
+    markPlaybackPlaying(requestId);
+
+    // 200, not 404: there was a claim, and it is now revoked.
+    expect(releaseCaptureReservation(requestId)).toBe(true);
+
+    markPlaybackCompleted(requestId, true);
+
+    expect(captureReservationHeld()).toBe(false);
+    expect(readPlaybackStatus(requestId)).toEqual({ request_id: requestId, state: "completed" });
+  });
+
+  test("releasing a claim that never existed is reported as such", () => {
+    const requestId = `no-claim-${Date.now()}`;
+    trackPlayback(requestId, { owner_pid: process.pid, lease_ms: 60_000 });
+
+    expect(releaseCaptureReservation(requestId)).toBe(true);
+    // Nothing left to revoke, so the caller cannot read this as "still held".
+    expect(releaseCaptureReservation(requestId)).toBe(false);
+    expect(releaseCaptureReservation("never-tracked")).toBe(false);
+  });
+
   // /notify is unauthenticated, so the lease a caller asks for is not something
   // to be trusted: an owner pid that never exits (pid 1) plus a day-long lease
   // would hold back every voice line with no recovery short of a restart.

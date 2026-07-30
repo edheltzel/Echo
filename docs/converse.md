@@ -105,7 +105,9 @@ while core holds one it skips *every* voice line. So completing, aborting, being
 outliving the lease, and refusing after the question was already accepted all run the same
 cleanup, and a release core refuses is retried and then logged rather than assumed to have
 worked. That last case matters most: a turn that never learned its completion verdict (every poll
-rate-limited, say) has no evidence core did *not* activate the reservation, so it releases anyway. Core clamps the reservation's `lease_ms` to two
+rate-limited, or the question still queued behind a long line) has no evidence core did *not*
+activate the reservation, so it releases anyway - and core makes that release terminal, revoking
+the request's claim even before it is activated, so the line playing afterwards reserves nothing. Core clamps the reservation's `lease_ms` to two
 minutes whatever the coordinator asks for: the reservation only bridges playback completion to
 the caller publishing `recording`, the capture guard covers the rest of the turn, and a bounded
 lease is what guarantees the silence ends even when the owner pid never exits.

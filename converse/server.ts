@@ -349,8 +349,9 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
-        // 404 means core is not holding this reservation, which is the same
-        // end state as a successful release.
+        // Core makes a release terminal even before the reservation activates,
+        // so 200 covers "revoked" as well as "handed back", and 404 is left
+        // meaning there was no claim at all: already released, or aged out.
         if (response.status === 200 || response.status === 404) return;
         detail = `core answered HTTP ${response.status}`;
       } catch (error) {

@@ -138,6 +138,12 @@ lines are accepted but held from playback. Release it with
 `POST /notify/<capture_reservation_id>/capture-release` after capture/transcription. These
 routes are additive and do not change the receipt-based `/notify` response for existing callers.
 
+**The release is terminal, and may be sent before completion.** A caller that gives up without
+learning the verdict should still release: `200` means the request's claim on the queue is gone,
+whether it had already been activated or not, so a line that plays afterwards activates nothing.
+`404` therefore means only that no claim existed - already released, or aged out - and never
+"not yet". Releasing is the correct move on every abandonment path.
+
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never
 waits behind playback) unless the request carries the exact `visual_delivery: "native"`

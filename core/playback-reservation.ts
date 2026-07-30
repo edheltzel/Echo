@@ -108,7 +108,11 @@ export function markPlaybackFailed(requestId: string, detail: string): void {
   record.detail = detail;
 }
 
-/** Mark a successfully played notification complete and activate its reservation in the same turn. */
+/**
+ * Mark a successfully played notification complete and activate its reservation
+ * in the same turn. A record whose claim was released before it got here keeps
+ * reporting its completion, but activates nothing.
+ */
 export function markPlaybackCompleted(requestId: string, played: boolean, detail?: string): void {
   const record = playback.get(requestId);
   if (!record) return;
@@ -148,10 +152,28 @@ export function captureReservationView(): { held: boolean; request_id?: string }
     : { held: true, request_id: activeReservation.request_id };
 }
 
+/**
+ * A release is terminal: it revokes the request's claim on the queue whether or
+ * not that claim has been redeemed yet. The unredeemed case is the one that
+ * matters - a caller that gave up before learning the playback verdict (its
+ * polls ran out while the line sat in the serial queue) has already released,
+ * and if the claim survived, the line finishing afterwards would activate a
+ * reservation with nobody left to hand it back.
+ *
+ * Returns false only when there is no claim to revoke, so a caller cannot read
+ * "already released" as "still held".
+ */
 export function releaseCaptureReservation(requestId: string): boolean {
   sweep();
-  if (activeReservation?.request_id !== requestId) return false;
-  activeReservation = null;
-  playback.delete(requestId);
+  if (activeReservation?.request_id === requestId) {
+    activeReservation = null;
+    playback.delete(requestId);
+    return true;
+  }
+
+  const record = playback.get(requestId);
+  if (record === undefined || record.owner_pid === undefined) return false;
+  delete record.owner_pid;
+  delete record.expires_at;
   return true;
 }

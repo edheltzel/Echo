@@ -54,32 +54,64 @@ describe("install script adapter support", () => {
     expect(script).toContain("Quarantining legacy LaunchAgent plist");
   });
 
-  test("preflights missing sox before an MCP install mutates host state", async () => {
-    const root = mkdtempSync(join(tmpdir(), "echo-install-missing-sox-"));
+  // One branch, one answer: every adapter that registers echo_ask reports a
+  // missing recorder the same way. A per-adapter split is what let the harshest
+  // case (a blocking MCP preflight) drift away from the others.
+  test("reports missing capture dependencies identically for every echo_ask adapter", () => {
+    expect(script).toContain("mcp|pi|omp)");
+    expect(script).toContain('bash "$SCRIPT_DIR/converse-dependencies.sh" \\');
+    expect(script).toContain("WARN: the echo_ask voice ask stays unavailable");
+    // No adapter may reach converse-dependencies.sh without a `||` fallback:
+    // under `set -e` a bare call makes a missing binary abort the install.
+    const lines = script.split("\n");
+    const unguarded = lines
+      .map((line, index) => ({ line, next: lines[index + 1] ?? "" }))
+      .filter(({ line }) => line.includes("converse-dependencies.sh") && !line.trimStart().startsWith("#"))
+      .filter(({ line, next }) => !line.includes("||") && !next.trimStart().startsWith("||"))
+      .map(({ line }) => line.trim());
+    expect(unguarded).toEqual([]);
+  });
+
+  test("a missing sox warns but does not block an MCP install", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-mcp-no-sox-"));
     try {
       const home = join(root, "home");
       const bin = join(root, "bin");
+      const state = join(root, "state");
+      const mcpConfig = join(root, "claude.json");
       mkdirSync(home, { recursive: true });
       mkdirSync(bin, { recursive: true });
-      const launchctlLog = join(root, "launchctl.log");
+      mkdirSync(state, { recursive: true });
 
-      writeExecutable(join(bin, "bun"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+      // No sox, no rec: the machine the blocking preflight used to refuse, even
+      // though the ask names the missing binary for itself at call time.
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
 
       const result = await runInstall(["--adapter", "mcp"], {
         HOME: home,
         PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        ECHO_MCP_CONFIG_PATH: mcpConfig,
       });
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain("Missing echo-converse dependency: sox");
       expect(result.stderr).toContain("brew install sox");
-      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
-      expect(existsSync(launchctlLog)).toBe(false);
+      expect(result.stderr).toContain("WARN: the echo_ask voice ask stays unavailable");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      const registered = JSON.parse(readFileSync(mcpConfig, "utf8")).mcpServers["echo-converse"];
+      expect(registered.args).toEqual([resolve("adapters/mcp/server.ts")]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   test("preflights missing Pi before mutating host state", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-install-preflight-"));
@@ -206,10 +238,10 @@ exit 0
     }
   });
 
-  // omp (and Pi) register the voice ask alongside notifications that need nothing
-  // from sox, and both installed fine without it before the preflight existed.
-  // Blocking them on a missing recorder turns an optional capability into a hard
-  // install failure; only --adapter mcp, which exists solely for the ask, blocks.
+  // Every echo_ask adapter registers the ask alongside notifications that need
+  // nothing from sox, and all of them installed fine without it before the
+  // preflight existed. Blocking on a missing recorder turns an optional
+  // capability into a hard install failure.
   test("a missing sox warns but does not block an omp install", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-omp-no-sox-"));
     try {

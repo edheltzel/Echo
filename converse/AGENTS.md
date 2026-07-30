@@ -47,8 +47,10 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   the expiry sweep whose caller is already gone, and the refusals between a successful `/notify`
   and the grant. That last set is the subtle one - the reservation id is the `/notify` request
   id, so it is known from the moment core accepts the question, and losing the completion verdict
-  is not evidence core did not activate the reservation. A release core answered non-2xx is
-  retried and then logged - never discarded as success.
+  is not evidence core did not activate the reservation. Core answers such a release `200` and
+  revokes the claim terminally, so a question that plays afterwards reserves nothing; `404` means
+  no claim existed, never "not yet". A release core answered non-2xx is retried and then logged -
+  never discarded as success.
 - **The capture owner writes its own pid** into the capture-state file. Core honors a non-idle
   state only while that pid is alive, so any other pid turns a crash into permanent silence.
 - **Never import `core/`.** Core is reached over HTTP, plus the capture-state path core itself
