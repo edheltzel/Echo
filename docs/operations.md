@@ -142,6 +142,9 @@ were then restored. This counterfactual isolates host output masking from Echo s
   notification's requested voice resolved, including fallbacks and provider diagnostics
   (`phase`, `reason`, timeout, exit code, stderr). Details in
   [`providers-observability.md`](providers-observability.md).
+- Voice-ask log: `~/Library/Logs/echo-converse.log` - where an auto-started coordinator's
+  refusals, reaped bookings and faults land, since it has no LaunchAgent of its own.
+  Details in [`converse.md`](converse.md).
 
 ## Mute
 

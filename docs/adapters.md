@@ -92,7 +92,7 @@ diagnostics expose the selected route in `NotifyResult.visual`.
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
 convention. On `before_agent_start` (`adapters/pi/index.ts`) it appends an instruction to the
 chained `event.systemPrompt` (feature-detected; falls back to `systemPromptAppend`; no-ops on
-older runtimes) telling the model to end each response with `🗣️ <Name>: <8–16 word
+older runtimes) telling the model to end each response with `🗣️ <Name>: <8-16 word
 summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line - so
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 

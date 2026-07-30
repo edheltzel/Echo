@@ -147,8 +147,9 @@ Settings whose behavior is not obvious from the name:
   (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
   `~/.local/state` and consults no XDG variable). While it reports `recording`/`transcribing`
   from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition;
-  the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
-  disables the guard entirely**.
+  the banner is unaffected) unless the request proves it owns that hold with the file's own
+  `nonce` (`capture_bypass_nonce` in [`http-api.md`](http-api.md)). A missing or corrupt file
+  reads as idle, and an **empty string disables the guard entirely**.
 - **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
   `GET /voices` at once - and wins over `ECHO_NOTIFY_URL` for all of them - so pointing a host
   at a second instance can never split notify from the read endpoints

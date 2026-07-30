@@ -69,6 +69,11 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 | `yap` | Tier 1 transcription (Apple SpeechAnalyzer, on device, no model download) | Falls back to the Tier 2 rung unless a tier is pinned |
 | `whisper-cli` + a ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) | Tier 2 transcription, portable | Only the Tier 1 rung is available |
 
+You are told before your first ask, not during it: installing any adapter that carries the
+`echo_ask` tool (`--adapter mcp|pi|omp`) checks these and prints a `WARN` for whatever is
+missing, and `cli/echo doctor` reports the same state as its `voice ask` row. Both warn rather
+than fail, because the same install also sets up spoken notifications, which need none of this.
+
 Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1
 rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 

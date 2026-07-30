@@ -156,8 +156,10 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    exact `visual_delivery: "native"` marker says an adapter already showed the notification
    through a native terminal route. The validated VOICE
    line joins the global serial play queue (`core/play-queue.ts`) and the request returns
-   immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
-   steps 4–6 one line at a time - a new line never plays over an in-flight one; queued
+   immediately (`{status: "accepted", request_id}`) - unless it asked to wait for its own
+   line, the one opt-in that answers `200` with the playback verdict instead
+   ([`docs/http-api.md`](docs/http-api.md)). The queue's single consumer runs
+   steps 4-6 one line at a time - a new line never plays over an in-flight one; queued
    lines coalesce newest-per-session and age out (dispositions recorded in the
    audio-lifecycle log), and a hung player is bounded by the queue's watchdog.
 4. **Resolve the voice** - `getVoiceMapping(voice_id)` resolves the request's `voice_id`
