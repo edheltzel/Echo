@@ -26,7 +26,7 @@
 // devices that run at unusual rates (AirPods at 24kHz), so the rate conversion
 // whisper needs happens afterwards, offline, where an overrun is impossible.
 
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ConverseConfig, SttTier } from "./config.ts";
 
@@ -185,7 +185,16 @@ async function run(
   options: RunOptions = {},
 ): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   const { timeoutMs, signal, hardKillAfterMs } = options;
-  const child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  // The recorder creates the WAV itself. Give every capture child a private
+  // umask at creation time; recordReply also chmods the finished artifact to
+  // close the gap for a child that deliberately changes its own umask.
+  const previousUmask = process.umask(0o077);
+  let child: ReturnType<typeof Bun.spawn>;
+  try {
+    child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  } finally {
+    process.umask(previousUmask);
+  }
   // Drain from the moment the child exists; the grace timer is armed only once
   // it has exited, so a slow-but-healthy child is never truncated.
   const outCollector = drainPipe(child.stdout);
@@ -252,6 +261,13 @@ export async function recordReply(
     signal,
   });
   throwIfAborted(signal);
+  try {
+    chmodSync(wavPath, 0o600);
+  } catch {
+    // The size/readability check below reports a missing output; an existing
+    // output that cannot be made private must not be returned to a caller.
+    throw new CaptureError("recorder_failed", `${config.recBin} produced audio with unverifiable permissions`);
+  }
   const capture_ms = Date.now() - startedAt;
 
   let bytes = 0;
@@ -313,12 +329,19 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline:
   );
 
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
-  const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted], {
-    timeoutMs: remainingMs(deadline),
-    hardKillAfterMs: HARD_KILL_GRACE_MS,
-  });
-  requireTranscriberSuccess(result, `resampling for whisper (${config.soxBin})`, config.transcribeTimeoutMs);
-  return converted;
+  let returned = false;
+  try {
+    const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted], {
+      timeoutMs: remainingMs(deadline),
+      hardKillAfterMs: HARD_KILL_GRACE_MS,
+    });
+    if (existsSync(converted)) chmodSync(converted, 0o600);
+    requireTranscriberSuccess(result, `resampling for whisper (${config.soxBin})`, config.transcribeTimeoutMs);
+    returned = true;
+    return converted;
+  } finally {
+    if (!returned) rmSync(converted, { force: true });
+  }
 }
 
 export async function transcribeFile(
@@ -384,6 +407,7 @@ export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
   }
 
   mkdirSync(config.captureDir, { recursive: true, mode: 0o700 });
+  chmodSync(config.captureDir, 0o700);
   const wavPath = join(config.captureDir, `reply-${Date.now()}-${process.pid}.wav`);
 
   try {

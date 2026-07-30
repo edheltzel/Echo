@@ -96,6 +96,18 @@ describe("recording", () => {
     expect(report.timed_out).toBe(true);
     expect(report.bytes).toBe(2_048);
   });
+
+  test("forces recorded audio files to owner-only permissions", async () => {
+    const recBin = fakeBinary(
+      "mode-loose-rec",
+      'umask 000\nout=""\nfor a in "$@"; do case "$a" in *.wav) out="$a";; esac; done\nhead -c 4096 /dev/zero > "$out"',
+    );
+    const wav = join(scratch, "private.wav");
+
+    const report = await recordReply(config({ recBin }), wav);
+
+    expect(statSync(report.wav_path).mode & 0o777).toBe(0o600);
+  });
 });
 
 describe("transcriber selection", () => {
@@ -163,6 +175,17 @@ describe("transcription", () => {
     expect(text).toBe("ship it");
     expect(await Bun.file(soxLog).text()).toContain("-r 16000 -c 1 -b 16");
     expect(existsSync(join(scratch, "reply.16k.wav"))).toBe(false);
+  });
+
+  test("cleans the converted whisper input when sox fails after creating it", async () => {
+    const soxBin = fakeBinary("failing-sox", 'out="${!#}"\nhead -c 64 /dev/zero > "$out"\nexit 7');
+    const whisperBin = fakeBinary("unused-whisper", 'echo "must not run"');
+    const cfg = config({ soxBin, whisperBin, whisperModel: "/models/ggml-base.en.bin" });
+    const wav = join(scratch, "failed-resample.wav");
+    writeFileSync(wav, "x".repeat(2_048));
+
+    await expect(transcribeFile(cfg, wav, "whisper")).rejects.toThrow(/resampling.*exited 7/);
+    expect(existsSync(join(scratch, "failed-resample.16k.wav"))).toBe(false);
   });
 
   test("whisper without a configured model reports the missing model", async () => {
