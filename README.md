@@ -130,7 +130,8 @@ Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md]
 
 ## API
 
-Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
+The five notification endpoints below, plus the two opt-in playback-status routes the voice
+ask uses. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 

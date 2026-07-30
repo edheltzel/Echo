@@ -15,10 +15,10 @@ Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs i
 that calls `POST /notify`.
 
 A second host-neutral capability, `echo-converse` (`converse/`, `localhost:32468`), adds the
-  other direction: speak a question, capture the spoken reply, transcribe it locally, return the
-  text. It uses an additive opt-in completion/reservation protocol in `core/` while preserving
-  ordinary `/notify` callers, and writes the capture-state file `core/capture-guard.ts` already
-  reads. Its coordinator is deliberately microphone-free;
+other direction: speak a question, capture the spoken reply, transcribe it locally, return the
+text. It uses an additive opt-in completion/reservation protocol in `core/` while preserving
+ordinary `/notify` callers, and writes the capture-state file `core/capture-guard.ts` already
+reads. Its coordinator is deliberately microphone-free;
 the calling host opens the microphone. Why, and the TCC measurements behind it:
 **[docs/converse.md](docs/converse.md)**.
 
@@ -38,7 +38,7 @@ cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
 
 # Underlying scripts (cli/echo delegates to these)
-bash scripts/install.sh --adapter none        # or claudecode|pi|omp
+bash scripts/install.sh --adapter none        # or claudecode|mcp|pi|omp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)

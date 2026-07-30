@@ -1,10 +1,11 @@
 // Wire types for the echo-converse capability.
 //
 // A turn is a lease, not a single call. The coordinator books the microphone,
-// speaks the question through core and waits for playback to drain; the CALLER
-// then captures, because macOS attributes the microphone grant to the process
-// ancestry that opens it and only the host's own tree reaches the terminal app
-// the human granted (see docs/converse.md). So the shape is:
+// speaks the question through core and waits for that request's own playback
+// completion and capture reservation; the CALLER then captures, because macOS
+// attributes the microphone grant to the process ancestry that opens it and
+// only the host's own tree reaches the terminal app the human granted (see
+// docs/converse.md). So the shape is:
 //
 //   POST /turn              -> booked, question spoken, capture cleared to open
 //   (caller records + transcribes in its own process tree)

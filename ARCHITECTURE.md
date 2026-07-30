@@ -129,7 +129,7 @@ not a review nit.
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
-| `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for playback to drain, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
+| `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for that request's own playback completion plus its capture reservation, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 3246) and the shared occupied-port report, so no two surfaces can disagree. Reads the documented config port when no override is present. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
@@ -153,7 +153,7 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    through a native terminal route. The validated VOICE
    line joins the global serial play queue (`core/play-queue.ts`) and the request returns
    immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
-   steps 4–6 one line at a time - a new line never plays over an in-flight one; queued
+   steps 4-6 one line at a time - a new line never plays over an in-flight one; queued
    lines coalesce newest-per-session and age out (dispositions recorded in the
    audio-lifecycle log), and a hung player is bounded by the queue's watchdog.
 4. **Resolve the voice** - `getVoiceMapping(voice_id)` resolves the request's `voice_id`

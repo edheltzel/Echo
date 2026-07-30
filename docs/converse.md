@@ -43,9 +43,10 @@ audio. The capability is split accordingly.
 One link in that chain is expected rather than measured. For Pi and omp the capture child is a
 descendant of the host process itself, which is the shape the spike measured. For Claude Code the
 capture child descends from the stdio MCP server the host spawns, so the ancestry should reach the
-terminal the same way, but the Claude Code bridge path is unverified on this host. Every turn
-records the ancestry it resolved (`GET /turn` response and the turn log), so a real ask through
-Claude Code reports the observed chain instead of turning that expectation into a guarantee.
+terminal the same way, but the Claude Code bridge path is unverified on this host. Every ask
+returns the ancestry it resolved in the `echo_ask` tool result (`details.ancestry`), so a real
+ask through Claude Code reports the observed chain instead of turning that expectation into a
+guarantee.
 
 There is deliberately **no LaunchAgent** for this capability. The coordinator starts on demand
 (`ensureCoordinator`) and its lifetime tracks actual use.
@@ -123,7 +124,8 @@ lease is what guarantees the silence ends even when the owner pid never exits.
 
 Refusals name their reason: `400 invalid_request`, `409 microphone_busy`,
 `503 core_unreachable | core_rate_limited | core_muted | capture_guard_disabled | question_not_spoken`,
-`404 unknown_turn`. Every refusal releases the booking, `404 unknown_turn` included: the turn
+`404 unknown_turn`, and `500 coordinator_error` for a failure that predates the booking.
+Every refusal releases the booking, `404 unknown_turn` included: the turn
 table is in memory and the booking is on disk, so a caller whose turn the coordinator no longer
 remembers is still the one who has to hand the microphone back.
 

@@ -3,9 +3,9 @@
 ## Purpose
 
 `converse/` is the `@echo/converse` workspace package: the one-shot voice ask. It owns the three
-  concerns Echo's TTS daemon has never had - microphone capture, a local speech-to-text
-  dependency, and a blocking request/response turn. Its opt-in playback reservation protocol
-  extends `core/` additively while preserving the normal `/notify` contract.
+concerns Echo's TTS daemon has never had - microphone capture, a local speech-to-text
+dependency, and a blocking request/response turn. Its opt-in playback reservation protocol
+extends `core/` additively while preserving the normal `/notify` contract.
 
 Full design, the TCC evidence behind the process topology, the endpoint contract and the known
 v1 limits: **[../docs/converse.md](../docs/converse.md)**.
@@ -27,9 +27,10 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   happen in the calling host's own process tree. Direct imports and spawn sites are guarded by
   source-level checks in `../tests/converse/architecture-invariants.test.ts`; those checks do not
   enforce runtime process ancestry or indirect dependency behavior.
-- **Speak while idle, capture after completion.** The capture state flips to `recording` only after
-  the coordinator reports this request's playback completed and core has reserved the queue, or core's own guard silences the question converse
-  asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
+- **Speak while idle, capture after completion.** The capture state flips to `recording` only
+  after the coordinator reports this request's playback completed and core has reserved the
+  queue, or core's own guard silences the question converse asked it to speak. Use
+  `withCaptureHeld`, which also guarantees the return to `idle`.
 - **Nothing is spoken that cannot be recorded.** The installer only warns about a missing
   recorder, so an adapter registered without sox is a supported state, and a check that fires
   once the capture spawns fires too late - the human has already heard the question. `askOnce`

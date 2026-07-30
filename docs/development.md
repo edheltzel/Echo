@@ -111,7 +111,7 @@ default `8922`) and refuses `32468` as well as `3246`. And its recorder and tran
 stand-in scripts, so it opens no microphone and needs neither `sox` nor `yap` - which is what lets
 it run on CI. Silence comes from disabling every provider in its own scratch `voices.json`: an ask
 forces `voice_enabled` on by design, so `--audible` is the only way to hear it (and the only way
-to exercise real synthesis timing in the drain wait). See [converse.md](converse.md).
+to exercise real synthesis timing in the completion wait). See [converse.md](converse.md).
 
 Every spoken test line begins `Echo Test engaged. Beep, boop, bop.` so anything audible is
 unmistakably a test and never mistaken for a real notification.
