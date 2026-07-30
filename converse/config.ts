@@ -14,6 +14,9 @@ import { loadEchoConfiguration, type EchoEnvironment } from "@echo/shared/echo-e
 /** Keypad ECHOV. Core's TTS daemon keeps :3246; converse never moves it. */
 export const DEFAULT_CONVERSE_PORT = 32468;
 
+/** Slack over the bounded capture and transcription work for one booking. */
+export const CONVERSE_LEASE_SLACK_MS = 30_000;
+
 /** Speech-to-text rungs, local-only by design (no cloud rung in v1). */
 export type SttTier = "yap" | "whisper";
 

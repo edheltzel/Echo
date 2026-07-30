@@ -204,6 +204,23 @@ describe("POST /turn", () => {
     expect(body.spoke.polls).toBe(3);
   });
 
+  test("grants a lease that covers the configured capture and transcription budgets", async () => {
+    const startedAt = 1_700_000_000_000;
+    const config = {
+      ...resolveConverseConfig({}, scratch),
+      bookingLockPath: lockPath,
+      coreBaseUrl: "http://core.test",
+      maxCaptureMs: 400_000,
+      transcribeTimeoutMs: 300_000,
+    };
+    const { base } = startServer(fakeCore(), { config, now: () => startedAt });
+
+    const { status, body } = await postTurn(base, askBody({ lease_ms: 730_000 }));
+
+    expect(status).toBe(200);
+    expect(Date.parse(body.lease.expires_at) - startedAt).toBe(730_000);
+  });
+
   test("refuses a second concurrent ask instead of opening a second microphone", async () => {
     const { base } = startServer();
 
