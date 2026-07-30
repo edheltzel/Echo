@@ -15,9 +15,10 @@ Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs i
 that calls `POST /notify`.
 
 A second host-neutral capability, `echo-converse` (`converse/`, `localhost:32468`), adds the
-other direction: speak a question, capture the spoken reply, transcribe it locally, return the
-text. It changes nothing in `core/` - it speaks through `/notify` and writes the capture-state
-file `core/capture-guard.ts` already reads. Its coordinator is deliberately microphone-free;
+  other direction: speak a question, capture the spoken reply, transcribe it locally, return the
+  text. It uses an additive opt-in completion/reservation protocol in `core/` while preserving
+  ordinary `/notify` callers, and writes the capture-state file `core/capture-guard.ts` already
+  reads. Its coordinator is deliberately microphone-free;
 the calling host opens the microphone. Why, and the TCC measurements behind it:
 **[docs/converse.md](docs/converse.md)**.
 
@@ -187,7 +188,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
-- Do not speak a converse question while the capture state is non-idle, and do not open the microphone before playback drains. Core's own guard would hold back the question converse asked it to speak, and the human would be recorded against silence. The capture owner also writes its OWN pid, because core honors a non-idle state only while that pid is alive.
+- Do not speak a converse question while the capture state is non-idle, and do not open the microphone before this request's playback completes and core activates its reservation. Core's own guard would hold back the question converse asked it to speak, and the human would be recorded against silence. The capture owner also writes its OWN pid, because core honors a non-idle state only while that pid is alive.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills

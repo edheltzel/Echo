@@ -8,8 +8,9 @@ pages for per-area detail.
 
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
-(`core/server.ts`) listens on `localhost:3246` by default and exposes five HTTP endpoints
-(`POST /notify`, `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`). Any host - a Claude Code
+(`core/server.ts`) listens on `localhost:3246` by default and exposes the notification API plus
+two opt-in playback-status routes (`GET /notify/:request_id/completion` and
+`POST /notify/:request_id/capture-release`). Any host - a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
@@ -56,10 +57,11 @@ by contract - a down voice daemon never breaks an agent turn.
 
 **The other direction.** `converse/` (`@echo/converse`) is a second host-neutral capability: it
 speaks a question, captures the spoken reply, transcribes it locally and returns the text. It
-adds nothing to `core/`. The question goes out as an ordinary `POST /notify`, playback completion
-is observed through `GET /health`, and the microphone-versus-playback interlock comes from
-converse *writing* the capture-state file `core/capture-guard.ts` already reads - the arbitration
-core ships, used in reverse.
+uses an additive, opt-in playback completion and capture-reservation protocol in `core/`: the
+ordinary `POST /notify` receipt contract remains unchanged, while converse waits on its own
+request rather than inferring completion from aggregate queue health. The microphone-versus-
+playback interlock also comes from converse *writing* the capture-state file
+`core/capture-guard.ts` already reads - the arbitration core ships, used in reverse.
 
 Its coordinator listens on `localhost:32468` and is microphone-free by design; the calling host
 opens the microphone in its own process tree, because macOS attributes a microphone grant to the
@@ -71,9 +73,9 @@ endpoint contract and the v1 limits are in [docs/converse.md](docs/converse.md).
               \                    |                  /
                \                   |                 /
                 +--- POST /turn --> converse/ :32468 (books, speaks, waits)
-                |                        |  POST /notify + GET /health
+                |                        |  POST /notify + exact completion/reservation
                 |                        v
-                |                   core/ :3246 (untouched)
+                |                   core/ :3246 (additive opt-in protocol)
                 |                        ^
                 +-- capture child --------+  writes recording-state.json,
                     (in the HOST's           so core holds its speech while
@@ -229,9 +231,10 @@ are contract.
 
 - **Never import a host API into `core/`** - no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
-- **No new host-named endpoints.** The core exposes only `POST /notify`,
-  `POST /notify/personality`, `POST /mute`, `GET /health`, `GET /voices`. Unsupported POSTs
-  return JSON 404 with `supported_endpoints`.
+- **No new host-named endpoints.** The core exposes the host-neutral notification routes plus
+  the opt-in `GET /notify/:request_id/completion` and
+  `POST /notify/:request_id/capture-release` routes used by converse. Unsupported POSTs return
+  JSON 404 with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan - many callers depend on the body shape and status semantics.
 - **All voice traffic is `:3246` by default.** No new `localhost:31337` references (the legacy Pulse

@@ -30,7 +30,8 @@ So an always-on service cannot own the microphone: it gets no prompt surface, no
 audio. The capability is split accordingly.
 
 - **The coordinator** (`converse/server.ts`, port **32468**, keypad ECHOV) books the microphone,
-  speaks the question through core and watches playback drain. It never opens the microphone,
+  speaks the question through core and waits for that request's exact playback completion plus a
+  capture reservation. It never opens the microphone,
   and it never spawns a subprocess at all. `tests/converse/architecture-invariants.test.ts`
   provides source-level regression checks for those boundaries; it is not runtime process
   enforcement.
@@ -63,8 +64,9 @@ with a microphone usage description, which is a separate architecture decision.
  POST /turn ------------------> coordinator:32468
                                   1. book the microphone (atomic lock)
                                   2. GET core /health   (preflight)
-                                  3. POST core /notify  (speak the question)
-                                  4. GET core /health   (wait for the queue to drain)
+                                  3. POST core /notify  (speak; opt-in reservation)
+                                  4. GET core /notify/<id>/completion
+                                     (wait for this line; reservation activates)
       <----------------------- 200 { turn_id, capture_state_path, spoke, lease }
       |
       | caller writes capture state = recording   <-- only now
@@ -74,14 +76,16 @@ with a microphone usage description, which is a separate architecture decision.
  POST /turn/<id>/complete ----> booking released
 ```
 
-**Core is untouched.** It stays on `:3246`, keeps its `/notify` contract, gains no endpoint and
-gains no microphone. The question rides the existing provider chain, cache and play queue.
+**Core changes are additive and opt-in.** It stays on `:3246` and keeps the existing receipt-based
+`/notify` response for ordinary callers. Converse adds a `capture_reservation` request field and
+uses per-request completion plus reservation-release routes; the question still rides the
+existing provider chain, cache and play queue, and core never opens the microphone.
 
 **The self-hold trap.** Core already reads a capture-state file and goes silent while some other
 tool holds the microphone (`core/capture-guard.ts`). Converse becomes the writer of that same
 file, which turns the arbitration core already ships into the interlock a conversation needs.
 Ordering is therefore not optional: the question is spoken while the state is idle, the state
-flips to `recording` only after playback drains, or core would hold back the very question it
+flips to `recording` only after this request completes and core holds the reservation, or core would hold back the very question it
 was asked to speak. `withCaptureHeld` expresses that in code, and the test in
 `tests/converse/ask.test.ts` reads the state file at the moment core is asked to speak.
 
@@ -99,7 +103,7 @@ ask must not wedge every later one. A concurrent ask gets `409` rather than an i
 
 | Route | Meaning |
 |---|---|
-| `POST /turn` | Book, speak, wait for drain. `200` grants capture and returns `capture_state_path`, `spoke`, `lease`. |
+| `POST /turn` | Book, speak, wait for this request's completion/reservation. `200` grants capture and returns `capture_state_path`, `spoke`, `lease`. |
 | `POST /turn/:id/complete` | Release the booking. Body is metadata only (`engine`, `capture_ms`, `transcript_chars`). |
 | `POST /turn/:id/abort` | Release the booking and record why. |
 | `GET /health` | Capability, port, booking holder, turn counters, configured core address. Does not probe core. |
@@ -148,13 +152,12 @@ nothing, and an empty transcript is reported as `no_speech` rather than as an em
 
 ## Known limits in v1
 
-- **An ask costs four to six requests against core.** Core rate-limits one client to ten
-  requests a minute, shared between `/notify` and `/health`, and the drain wait is `/health`
-  polling. So asks are for occasional questions, not tight loops; asking twice inside a minute
-  can come back `core_rate_limited`. Making this cheap needs a per-request completion signal from
-  `/notify`, which would change core's contract, and that is deliberately deferred.
-- **A question dropped by the play queue's age cap is indistinguishable from one that played.**
-  Same root cause, same deferred fix. The wait is bounded and its outcome is reported in `spoke`.
+- **An ask still spends multiple core requests.** It preflights, submits one opt-in `/notify`,
+  polls that request's completion, and releases the reservation at the end. Completion/status
+  reads have their own rate-limit bucket, but asks remain for occasional questions rather than
+  tight loops.
+- **The coordinator reports only the core completion outcome.** A successful completed state is
+  exact for the request it submitted; provider playback details remain in core's lifecycle log.
 - Out of scope for v1: barge-in, a transcript-polish model, cloned voices, waveform streaming,
   non-macOS targets, and any multi-turn session.
 
