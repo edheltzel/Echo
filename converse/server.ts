@@ -208,16 +208,23 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     }
     if (booking.reaped) log(`reaped abandoned booking ${booking.reaped.turn_id} (pid ${booking.reaped.owner_pid})`);
 
-    const release = (code: ConverseErrorCode, detail: string, status: number): Response => {
-      releaseBooking(config.bookingLockPath, turnId);
+    // Everything from here to the grant runs under ONE finally. A booking that
+    // outlives its turn locks out every later ask until the lease expires, and
+    // the ways to reach that are not all graceful returns: a core socket reset,
+    // a malformed core response, or any unforeseen throw used to strand the lock
+    // (F1). So the release is unconditional and keyed on whether the turn was
+    // actually granted, rather than repeated on each refusal path.
+    let granted = false;
+    const refuse = (code: ConverseErrorCode, detail: string, status: number): Response => {
       counts.refused++;
       log(`turn ${turnId} refused: ${code} (${detail})`);
       return fail(code, detail, status);
     };
 
+    try {
     const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
     if (!assessment.ok) {
-      return release(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
+      return refuse(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
     }
 
     // Speak while the capture state is still idle. Publishing `recording` first
@@ -233,7 +240,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       fetchImpl,
     });
     if (spoken.status < 200 || spoken.status >= 300) {
-      return release("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
+      return refuse("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
     }
 
     const drain = await waitForPlaybackDrain({
@@ -252,7 +259,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
           "so whether the question finished playing is unknown"
         : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
-      return release("question_not_spoken", detail, 503);
+      return refuse("question_not_spoken", detail, 503);
     }
 
     active.set(turnId, {
@@ -281,7 +288,13 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         expires_at: new Date(startedAt + leaseMs).toISOString(),
       },
     };
+    granted = true;
     return json(grant, 200);
+    } finally {
+      // The turn owns the booking only if it was granted. Every other exit,
+      // refusal or throw alike, hands the microphone straight back.
+      if (!granted) releaseBooking(config.bookingLockPath, turnId);
+    }
   }
 
   function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Response {
@@ -329,6 +342,21 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     // business being reachable from another host.
     hostname: "127.0.0.1",
     async fetch(req) {
+      try {
+        return await route(req);
+      } catch (thrown) {
+        // Bun's default error page is HTML, and the client reads coordinator
+        // responses with response.json(); an unforeseen fault would surface to
+        // the caller as a parse error instead of a cause (F1). Every answer this
+        // server gives is machine-readable, including the ones nobody planned.
+        const detail = thrown instanceof Error ? thrown.message : String(thrown);
+        log(`unhandled coordinator error: ${detail}`);
+        return fail("coordinator_error", detail, 500);
+      }
+    },
+  });
+
+  async function route(req: Request): Promise<Response> {
       const url = new URL(req.url);
 
       if (url.pathname === "/health" && req.method === "GET") return health();
@@ -356,8 +384,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         },
         404,
       );
-    },
-  });
+  }
 
   const handle: ConverseServerHandle = {
     port: server.port ?? 0,

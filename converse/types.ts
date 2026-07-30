@@ -64,7 +64,9 @@ export type ConverseErrorCode =
   | "core_muted"
   | "capture_guard_disabled"
   | "question_not_spoken"
-  | "unknown_turn";
+  | "unknown_turn"
+  /** An unforeseen fault. Present so even an unplanned failure is machine-readable. */
+  | "coordinator_error";
 
 export interface ConverseError {
   error: ConverseErrorCode;
