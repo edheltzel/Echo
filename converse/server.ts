@@ -19,7 +19,6 @@
 // sharing one across Bun's module cache is the documented cause of the #47 test
 // flake, so every caller here starts and stops its own instance.
 
-import type { Server } from "bun";
 import {
   acquireBooking,
   readBooking,
@@ -423,7 +422,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     });
   }
 
-  const server: Server = Bun.serve({
+  const server = Bun.serve({
     port: options.port ?? config.port,
     // Loopback only. This capability coordinates microphone access; it has no
     // business being reachable from another host.

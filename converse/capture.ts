@@ -196,7 +196,14 @@ async function run(
     process.umask(previousUmask);
   }
   // Drain from the moment the child exists; the grace timer is armed only once
-  // it has exited, so a slow-but-healthy child is never truncated.
+  // it has exited, so a slow-but-healthy child is never truncated. Bun's
+  // broad spawn return type also covers inherited and numeric descriptors, so
+  // keep the impossible state explicit rather than asserting the pipe types.
+  if (child.stdout === undefined || typeof child.stdout === "number"
+    || child.stderr === undefined || typeof child.stderr === "number") {
+    child.kill("SIGKILL");
+    throw new Error("capture child did not expose piped output");
+  }
   const outCollector = drainPipe(child.stdout);
   const errCollector = drainPipe(child.stderr);
   let timedOut = false;

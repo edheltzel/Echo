@@ -52,6 +52,7 @@ describe("speaking the question through core", () => {
       source: "pi",
       ownerPid: 1234,
       leaseMs: 120_000,
+      reservationId: "turn-abc",
       fetchImpl,
     });
 
@@ -60,7 +61,11 @@ describe("speaking the question through core", () => {
     expect(body.voice_enabled).toBe(true);
     expect(body.voice_id).toBe("pi");
     expect(body.source).toBe("pi");
-    expect(body.capture_reservation).toEqual({ owner_pid: 1234, lease_ms: 120_000 });
+    expect(body.capture_reservation).toEqual({
+      owner_pid: 1234,
+      lease_ms: 120_000,
+      reservation_id: "turn-abc",
+    });
     // Newest-per-session coalescing must never be able to replace the question
     // with a later host line, so the session id belongs to the turn alone.
     expect(body.session_id).toBe("converse:turn-abc");
@@ -197,7 +202,7 @@ describe("core preflight", () => {
   test("refuses when core is unreachable", () => {
     const verdict = assessCore({ status: "unreachable" });
     expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.code).toBe("core_unreachable");
+    if (verdict.ok === false) expect(verdict.code).toBe("core_unreachable");
   });
 
   // Rate limiting and a dead daemon look identical over the wire but mean
@@ -205,7 +210,7 @@ describe("core preflight", () => {
   test("reports core's rate limit as its own reason, not as an unreachable core", () => {
     const verdict = assessCore({ status: "rate_limited" });
     expect(verdict.ok).toBe(false);
-    if (!verdict.ok) {
+    if (verdict.ok === false) {
       expect(verdict.code).toBe("core_rate_limited");
       expect(verdict.detail).toContain("ten requests a minute");
     }
@@ -214,14 +219,14 @@ describe("core preflight", () => {
   test("refuses while core is muted, rather than recording against a silent question", () => {
     const verdict = assessCore(reads(health({ mute: { muted: true, muted_until: null } })));
     expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.code).toBe("core_muted");
+    if (verdict.ok === false) expect(verdict.code).toBe("core_muted");
   });
 
   test("refuses when the capture guard is disabled, since nothing would hold core's speech", () => {
     for (const path of [null, ""]) {
       const verdict = assessCore(reads(health({ capture_guard: { path, state: "idle" } })));
       expect(verdict.ok).toBe(false);
-      if (!verdict.ok) expect(verdict.code).toBe("capture_guard_disabled");
+      if (verdict.ok === false) expect(verdict.code).toBe("capture_guard_disabled");
     }
   });
 
@@ -230,6 +235,6 @@ describe("core preflight", () => {
       capture_guard: { path: "/state/recording-state.json", state: "recording" },
     })));
     expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.code).toBe("microphone_busy");
+    if (verdict.ok === false) expect(verdict.code).toBe("microphone_busy");
   });
 });

@@ -1901,9 +1901,15 @@ export const server = serve({
     if (reservationGrant && req.method === "POST") {
       const reservationId = decodeURIComponent(reservationGrant[1]);
       const granted = grantCaptureReservation(reservationId);
-      return new Response(JSON.stringify(granted.granted ? granted : { error: granted.reason, reservation_id: reservationId }), {
+      if (granted.granted === false) {
+        return new Response(JSON.stringify({ error: granted.reason, reservation_id: reservationId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
+        });
+      }
+      return new Response(JSON.stringify(granted), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: granted.granted ? 200 : 409,
+        status: 200,
       });
     }
 
