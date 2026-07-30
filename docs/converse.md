@@ -4,6 +4,17 @@ Echo speaks. `echo-converse` lets it ask. One question out loud, one spoken repl
 one transcript returned to the calling agent. Local transcription, no cloud rung, no
 conversational loop in v1.
 
+```bash
+bun converse/main.ts                       # start the coordinator on :32468
+curl -fsS http://localhost:32468/health    # capability, booking state, core address
+bash scripts/install.sh --adapter mcp      # register the tool for Claude Code
+tests/e2e-converse.sh                      # isolated end-to-end turn, no microphone needed
+```
+
+Hosts do not call the HTTP surface directly. Pi and omp register an `echo_ask` tool inside
+their existing adapters; Claude Code consumes the same tool through `adapters/mcp/`. All three
+route to one place: `askOnce` in `converse/client.ts`.
+
 ## Before you enable it
 
 Voice ask is useful when an agent needs one short answer while you are away from the keyboard. It
@@ -47,17 +58,6 @@ to remove. Transcription is local. The audio and transcript never go to the coor
 receives only the transcript character count, while the transcript returns directly to the
 calling host. The question still uses Echo's configured TTS provider, so the default online Edge
 provider may receive the question text.
-
-```bash
-bun converse/main.ts                       # start the coordinator on :32468
-curl -fsS http://localhost:32468/health    # capability, booking state, core address
-bash scripts/install.sh --adapter mcp      # register the tool for Claude Code
-tests/e2e-converse.sh                      # isolated end-to-end turn, no microphone needed
-```
-
-Hosts do not call the HTTP surface directly. Pi and omp register an `echo_ask` tool inside
-their existing adapters; Claude Code consumes the same tool through `adapters/mcp/`. All three
-route to one place: `askOnce` in `converse/client.ts`.
 
 ## Why capture lives in the caller, not the daemon
 

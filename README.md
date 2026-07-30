@@ -14,7 +14,9 @@ The server core accepts JSON on `localhost:3246` by default and speaks through a
 Echo can also ask: `converse/` speaks one question, records one spoken reply, transcribes it
 locally and hands the text back to the agent. It is a one-shot exchange, not a continuing
 conversation. Pi and omp expose it as a tool from their existing adapters; Claude Code gets it
-from the MCP server in `adapters/mcp/`. See [docs/converse.md](docs/converse.md).
+from the MCP server in `adapters/mcp/`. On the measured Pi/omp path the macOS microphone prompt
+names your terminal application rather than Echo; conditions and full detail:
+[docs/converse.md](docs/converse.md#before-you-enable-it).
 
 ## Architecture
 
@@ -90,38 +92,22 @@ brew install sox
 brew install yap
 ```
 
-An adapter install checks `sox` and `rec` but only warns when they are missing, because ordinary
-notifications do not need them. Treat voice ask as not installed until that check passes; a
-missing recorder is refused before capture begins. A local `whisper-cli` plus a model is the
-alternative to `yap`; see [docs/converse.md](docs/converse.md#the-capture-pipeline).
+A Pi, omp, or MCP adapter install checks `sox` and `rec` but only warns when they are missing,
+because ordinary notifications do not need them; the Claude Code hook adapter runs no such check.
+Treat voice ask as not installed until that check passes; a missing recorder is refused before
+capture begins. A local `whisper-cli` plus a model is the alternative to `yap`; see
+[docs/converse.md](docs/converse.md#the-capture-pipeline).
+
+The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
+your terminal application rather than Echo. Permission and attribution conditions, Echo's lack of a
+per-question prompt, where reply audio lives and when it is deleted, and what still leaves the
+machine: [docs/converse.md](docs/converse.md#before-you-enable-it).
 
 Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
 
 Want a coding agent to do the setup? Ask it to **install Echo by following
 [docs/install-agent.md](docs/install-agent.md) for your host**. Agent-led installation is a
 supported route, not a workaround; that checklist gives the agent an assertion after each step.
-
-### What voice ask does with your microphone
-
-On a fresh macOS permission state, the first ask that reaches the recorder should show a
-microphone prompt. If access was denied before, macOS may not prompt again; re-enable it in
-**System Settings → Privacy & Security → Microphone**. On the measured Pi and omp path, macOS
-attributes the request to the terminal application (Terminal, WezTerm, Ghostty, or iTerm), not to
-Echo's background daemon. Claude Code's MCP process ancestry is expected to reach the terminal
-too, but has not yet been verified, so check which application macOS actually lists.
-
-Echo adds no per-question approval prompt. After macOS grants access, an agent that your coding
-host allows to call `echo_ask` can open the microphone for one reply; any additional tool approval
-comes from the host, not Echo. The macOS grant for the application that owns capture is the durable
-control. For the measured Pi/omp path that application is the terminal; Claude Code may differ.
-
-Each reply is recorded to a temporary WAV inside `~/Library/Caches/echo/converse/` and transcribed
-by the selected local engine. Echo deletes it on handled success, silence, cancellation, and
-failure. An abrupt process crash or `SIGKILL` cannot run cleanup and may leave a file in that
-private cache directory; it is safe to remove. The transcript goes back to the calling agent, while
-the coordinator receives only its character count. The recorded reply never goes to a cloud
-transcription service, but the spoken *question* still uses your configured TTS provider; the
-default Edge provider is online.
 
 ## Operation
 
@@ -285,7 +271,7 @@ accepted in JSON - keeps living there. See [docs/configuration.md](docs/configur
 | Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
 | See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
 | Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
-| Decide whether to enable one-shot voice ask | [docs/converse.md](docs/converse.md) |
+| Ask the human a question out loud and read their answer; decide whether to enable it | [docs/converse.md](docs/converse.md) |
 
 ## Development
 

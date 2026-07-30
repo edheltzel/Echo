@@ -90,18 +90,11 @@ state, but a missing recorder produces a warning rather than blocking the notifi
 Treat voice ask as not installed until `brew install sox` has supplied both commands and the check
 passes; a missing `rec` is refused before capture begins. `cli/echo doctor` repeats the check later.
 
-On a fresh macOS permission state, the first ask that reaches the recorder should show the system
-microphone prompt. If access was denied before, macOS may not prompt again; re-enable it under
-**System Settings → Privacy & Security → Microphone**. Direct Pi/omp capture uses the measured
-terminal-attributed topology. Claude Code's stdio MCP ancestry is still unverified, so check which
-application macOS lists rather than assuming it is the terminal.
-
-Echo adds no per-question approval prompt after permission is granted, although the coding host
-may apply its own tool policy. One tool call records one answer and ends; it does not start a
-conversation. Temporary reply audio stays under `~/Library/Caches/echo/converse/` for local
-transcription and is deleted on handled success, silence, cancellation, and failure. An abrupt
-process crash or `SIGKILL` may leave a file in that private cache directory; it is safe to remove.
-Full permission, privacy, and provider-egress details: [`converse.md`](converse.md).
+The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
+your terminal application rather than Echo; Claude Code's stdio MCP ancestry is still unverified.
+[`converse.md`](converse.md#before-you-enable-it) is the single source for the permission and
+attribution conditions, Echo's lack of a per-question prompt, the recording lifecycle and cleanup
+guarantee, and provider egress.
 
 ## Moved or renamed the repo directory?
 
