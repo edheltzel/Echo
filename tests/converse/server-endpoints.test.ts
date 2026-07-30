@@ -40,6 +40,7 @@ function coreHealth(overrides: Partial<CoreHealthSnapshot> = {}): CoreHealthSnap
 interface FakeCoreOptions {
   health?: CoreHealthSnapshot;
   notifyStatus?: number;
+  notifyFailure?: Error;
   unreachable?: boolean;
   /** Successive /health answers; the last one repeats. */
   healthSequence?: CoreHealthSnapshot[];
@@ -56,6 +57,7 @@ function fakeCore(options: FakeCoreOptions = {}) {
       calls.push(`${init?.method ?? "GET"} ${path}`);
       if (options.unreachable) throw new Error("connection refused");
       if (path === "/notify") {
+        if (options.notifyFailure) throw options.notifyFailure;
         const status = options.notifyStatus ?? 202;
         return new Response(JSON.stringify({ status: "accepted" }), { status });
       }
@@ -226,6 +228,23 @@ describe("POST /turn", () => {
     expect(status).toBe(503);
     expect(body.error).toBe(code);
     // A refused turn must not leave the microphone booked.
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test("releases the booking and returns stable JSON when core transport fails", async () => {
+    const { base } = startServer(fakeCore({ notifyFailure: new Error("socket reset") }));
+
+    const response = await fetch(`${base}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(askBody()),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(body.error).toBe("question_not_spoken");
+    expect(typeof body.detail).toBe("string");
     expect(existsSync(lockPath)).toBe(false);
   });
 

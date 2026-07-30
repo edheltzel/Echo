@@ -64,6 +64,7 @@ export type ConverseErrorCode =
   | "core_muted"
   | "capture_guard_disabled"
   | "question_not_spoken"
+  | "coordinator_error"
   | "unknown_turn";
 
 export interface ConverseError {
