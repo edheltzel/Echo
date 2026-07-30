@@ -6,12 +6,6 @@ import { resolveConverseConfig } from "../../converse/config.ts";
 import { readBooking } from "../../converse/booking.ts";
 import { createConverseServer, type ConverseServerHandle } from "../../converse/server.ts";
 import type { CoreHealthSnapshot } from "../../converse/types.ts";
-import {
-  captureReservationHeld,
-  markPlaybackCompleted,
-  releaseCaptureReservationById,
-  trackPlayback,
-} from "../../core/playback-reservation.ts";
 
 // Every instance here binds an ephemeral port and points at a fake core, so no
 // test can reach the operator's daemon on :3246 or the real coordinator on
@@ -349,7 +343,7 @@ describe("POST /turn", () => {
   test("releases core by coordinator token when notify is accepted but its response is lost", async () => {
     const calls: string[] = [];
     let reservationId = "";
-    const requestId = `accepted-${crypto.randomUUID()}`;
+    let reservationHeld = false;
     const core = {
       calls,
       fetchImpl: async (url: string, init?: RequestInit) => {
@@ -358,15 +352,14 @@ describe("POST /turn", () => {
         if (path === "/health") return new Response(JSON.stringify(coreHealth()), { status: 200 });
         if (path === "/notify") {
           const request = JSON.parse(String(init?.body)) as {
-            capture_reservation: { reservation_id: string; owner_pid: number; lease_ms: number };
+            capture_reservation?: { reservation_id?: string };
           };
-          reservationId = request.capture_reservation.reservation_id;
-          trackPlayback(requestId, request.capture_reservation);
-          markPlaybackCompleted(requestId, true);
+          reservationId = request.capture_reservation?.reservation_id ?? "missing-client-token";
+          reservationHeld = true;
           throw new Error("socket reset after core accepted the request");
         }
         if (path.endsWith(`/capture-reservations/${reservationId}/release`)) {
-          releaseCaptureReservationById(reservationId);
+          reservationHeld = false;
           return new Response(JSON.stringify({ acknowledged: true, reservation_id: reservationId }), { status: 200 });
         }
         throw new Error(`unexpected fake-core request: ${path}`);
@@ -383,7 +376,8 @@ describe("POST /turn", () => {
 
     expect(response.status).toBe(503);
     expect(body.error).toBe("question_not_spoken");
-    expect(captureReservationHeld()).toBe(false);
+    expect(reservationId).toMatch(/^t-/);
+    expect(reservationHeld).toBe(false);
     expect(calls).toContain(`POST /notify/capture-reservations/${reservationId}/release`);
     expect(existsSync(lockPath)).toBe(false);
   });
@@ -415,8 +409,8 @@ describe("POST /turn", () => {
         const path = new URL(url).pathname;
         if (path === "/health") return new Response(JSON.stringify(coreHealth()), { status: 200 });
         if (path === "/notify") {
-          reservationId = (JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } })
-            .capture_reservation.reservation_id;
+          reservationId = (JSON.parse(String(init?.body)) as { capture_reservation?: { reservation_id?: string } })
+            .capture_reservation?.reservation_id ?? "missing-client-token";
           clock.now += 150_000;
           return new Response(JSON.stringify({ status: "accepted", request_id: "slow-question" }), { status: 202 });
         }
