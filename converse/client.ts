@@ -246,12 +246,19 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
     // `recording` and `transcribing` alike, so splitting the phases here would
     // add a write that changes nothing core does.
     const captured = await withCaptureHeld(body.capture_state_path, () => captureEngine(config, options.signal));
+    if (options.signal?.aborted) {
+      throw new AskError("cancelled", "the ask was cancelled before its transcript could be returned");
+    }
 
     await finish("complete", {
       engine: captured.engine,
       capture_ms: captured.capture_ms,
       transcript_chars: captured.text.length,
     });
+
+    if (options.signal?.aborted) {
+      throw new AskError("cancelled", "the ask was cancelled before its result could be returned");
+    }
 
     return {
       text: captured.text,
@@ -262,6 +269,10 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       ancestry,
     };
   } catch (error) {
+    if (error instanceof AskError) {
+      await finish("abort", { reason: `${error.code}: ${error.message}` });
+      throw error;
+    }
     const code = error instanceof CaptureError ? error.code : "capture_failed";
     await finish("abort", { reason: `${code}: ${error instanceof Error ? error.message : String(error)}` });
     throw error instanceof CaptureError
