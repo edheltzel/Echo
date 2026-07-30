@@ -142,6 +142,8 @@ describe("echo doctor", () => {
       expect(r.stdout).toContain("echo install");
       // The Bun prerequisite is diagnosed (doctor itself runs without needing it).
       expect(r.stdout).toContain("bun");
+      expect(r.stdout).toContain("converse");
+      expect(r.stdout).toContain("brew install sox");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

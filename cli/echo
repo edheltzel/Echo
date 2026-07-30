@@ -157,7 +157,16 @@ cmd_doctor() {
     doctor_row fail "bun" "Bun not found on PATH" "Install Bun: curl -fsSL https://bun.sh/install | bash"
   fi
 
-  # 3. Payload
+  # 3. Converse capture dependencies. This is intentionally independent of Bun
+  # so doctor can diagnose a missing sox on a machine before install is possible.
+  local converse_deps
+  if converse_deps="$(bash "$SCRIPTS/converse-dependencies.sh" 2>&1)"; then
+    doctor_row ok "converse" "$converse_deps"
+  else
+    doctor_row fail "converse" "$converse_deps" "Install capture tools: brew install sox"
+  fi
+
+  # 4. Payload
   if [ -e "$PAYLOAD_CURRENT/core/server.ts" ]; then
     doctor_row ok "payload" "v$(read_manifest_version) at ${PAYLOAD_CURRENT}"
   else

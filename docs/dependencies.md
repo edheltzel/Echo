@@ -69,6 +69,11 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 | `yap` | Tier 1 transcription (Apple SpeechAnalyzer, on device, no model download) | Falls back to the Tier 2 rung unless a tier is pinned |
 | `whisper-cli` + a ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) | Tier 2 transcription, portable | Only the Tier 1 rung is available |
 
+The voice-ask install paths (`--adapter mcp|pi|omp`) preflight `sox` and `rec` before
+changing host state. `cli/echo doctor` runs the same check and reports the exact missing
+binary plus `brew install sox`; set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
+when the binaries live outside `PATH`.
+
 Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1
 rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 
