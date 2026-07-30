@@ -251,8 +251,13 @@ echo "$after" | bun -e '
 bun -e '
   const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
   const config = resolveConverseConfig(process.env);
+  // The lease has to cover the operation budget this coordinator is configured
+  // for, exactly as converse/client.ts computes it; a shorter one is refused
+  // rather than silently shortened.
+  const leaseMs = config.maxCaptureMs + config.transcribeTimeoutMs + 30000;
   const body = (question) => JSON.stringify({
-    question, owner_pid: process.pid, source: "e2e-converse", lease_ms: 30000,
+    question, owner_pid: process.pid, source: "e2e-converse", lease_ms: leaseMs,
+    capture_state_path: config.captureStatePath,
   });
   const post = (question) => fetch(`${config.baseUrl}/turn`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: body(question),
@@ -306,7 +311,11 @@ bun -e '
 
   const response = await fetch(`${config.baseUrl}/turn`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question: "Recovered?", owner_pid: process.pid, source: "e2e-converse", lease_ms: 30000 }),
+    body: JSON.stringify({
+      question: "Recovered?", owner_pid: process.pid, source: "e2e-converse",
+      lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + 30000,
+      capture_state_path: config.captureStatePath,
+    }),
   });
   const body = await response.json();
 
