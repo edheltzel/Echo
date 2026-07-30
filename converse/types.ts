@@ -1,11 +1,13 @@
 // Wire types for the echo-converse capability.
 //
-// A turn is a lease, not a single call. The coordinator books the microphone,
-// speaks the question through core and waits for playback to drain; the CALLER
-// then captures, because macOS attributes the microphone grant to the process
-// ancestry that opens it and only the host's own tree reaches the terminal app
-// the human granted (see docs/converse.md). So the shape is:
+// A turn is a lease, not a single call. The coordinator books the microphone and
+// speaks the question through core, which answers once that line has finished
+// playing (`await_playback`); the CALLER then captures, because macOS attributes
+// the microphone grant to the process ancestry that opens it and only the host's
+// own tree reaches the terminal app the human granted (see docs/converse.md). So
+// the shape is:
 //
+//   (caller publishes its capture hold first, with a per-turn nonce)
 //   POST /turn              -> booked, question spoken, capture cleared to open
 //   (caller records + transcribes in its own process tree)
 //   POST /turn/:id/complete -> booking released
@@ -81,6 +83,8 @@ export type ConverseErrorCode =
   | "core_unreachable"
   | "core_rate_limited"
   | "core_muted"
+  /** Core is too old to report the capture holder, so a hold cannot be attributed. */
+  | "core_version_skew"
   | "capture_guard_disabled"
   | "question_not_spoken"
   | "capture_path_mismatch"

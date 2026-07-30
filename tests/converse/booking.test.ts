@@ -7,6 +7,7 @@ import {
   isBookingStale,
   readBooking,
   releaseBooking,
+  renewBooking,
   type BookingRecord,
 } from "../../converse/booking.ts";
 
@@ -176,5 +177,37 @@ describe("staleness rule", () => {
 
   test("a missing record is stale", () => {
     expect(isBookingStale(null, 60_000, ALIVE)).toBe(true);
+  });
+});
+
+// The booking must be taken before the question is spoken, or two asks would
+// both get as far as speaking. But the lease is meant to bound the phase where
+// the microphone is open, which only starts once the question has played. Left
+// on the original clock, a question queued behind other lines leaves the booking
+// reapable the moment the recorder starts.
+describe("re-basing a lease at the grant", () => {
+  test("extends the holder's own booking to the new expiry", () => {
+    const outcome = acquire("turn-1", 111, { leaseMs: 5_000, now: () => 1_700_000_000_000 });
+    expect(outcome.ok).toBe(true);
+
+    expect(renewBooking(lockPath, "turn-1", 1_700_000_600_000)).toBe(true);
+
+    const held = readBooking(lockPath);
+    expect(Date.parse(held!.expires_at)).toBe(1_700_000_600_000);
+    // Identity is untouched: only the clock moved.
+    expect(held!.turn_id).toBe("turn-1");
+    expect(held!.owner_pid).toBe(111);
+  });
+
+  test("refuses to extend a booking a different turn now holds", () => {
+    acquire("turn-1", 111, { leaseMs: 5_000, now: () => 1_700_000_000_000 });
+
+    expect(renewBooking(lockPath, "some-other-turn", 1_700_000_600_000)).toBe(false);
+    expect(Date.parse(readBooking(lockPath)!.expires_at)).toBe(1_700_000_005_000);
+  });
+
+  test("a missing lock is reported rather than recreated", () => {
+    expect(renewBooking(lockPath, "turn-1", 1_700_000_600_000)).toBe(false);
+    expect(existsSync(lockPath)).toBe(false);
   });
 });

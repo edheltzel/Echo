@@ -64,8 +64,6 @@ function startServer(fetchImpl: (url: string, init?: RequestInit) => Promise<Res
     },
     port: 0,
     fetchImpl,
-    sleep: async () => {},
-    maxPolls: 2,
   });
   handles.push(handle);
   return `http://127.0.0.1:${handle.port}`;

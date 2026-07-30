@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConverseConfig, type ConverseConfig } from "../../converse/config.ts";
@@ -61,7 +61,6 @@ function startServer(overrides: Partial<ConverseConfig> = {}) {
       }
       return new Response(JSON.stringify(coreHealth()), { status: 200 });
     },
-    sleep: async () => {},
   });
   handles.push(handle);
   return { base: `http://127.0.0.1:${handle.port}`, config };
@@ -145,5 +144,71 @@ describe("a lease always covers the operation it protects", () => {
 
     expect(status).toBe(200);
     expect(Date.parse(body.lease.expires_at) - Date.now()).toBeGreaterThanOrEqual(requiredBudget(config));
+  });
+});
+
+/**
+ * The same clock the coordinator runs on, so a slow speak phase can be simulated
+ * without waiting for one.
+ */
+function startServerWithSlowSpeak(speakMs: number) {
+  const config: ConverseConfig = {
+    ...resolveConverseConfig({}, scratch),
+    bookingLockPath: lockPath,
+    coreBaseUrl: "http://core.test",
+    captureStatePath: CAPTURE_PATH,
+  };
+  const clock = { now: 1_700_000_000_000 };
+  const handle = createConverseServer({
+    config,
+    port: 0,
+    now: () => clock.now,
+    fetchImpl: async (url: string) => {
+      if (new URL(url).pathname === "/notify") {
+        // await_playback holds the response until the line has played, so a
+        // question queued behind other lines returns late.
+        clock.now += speakMs;
+        return new Response(JSON.stringify({ status: "played", disposition: "played" }), { status: 200 });
+      }
+      return new Response(JSON.stringify(coreHealth()), { status: 200 });
+    },
+  });
+  handles.push(handle);
+  return { base: `http://127.0.0.1:${handle.port}`, config, clock, handle };
+}
+
+// The lease bounds the phase where the microphone is OPEN. The microphone is not
+// open while the question plays, and that phase already has its own bound in core
+// (the play queue's watchdog plus a margin). Charging the speak time to the
+// capture budget let a question queued behind other lines burn the whole lease
+// before capture began: expires_at was already in the past at the grant, the turn
+// was dropped as expired, and the booking became reapable while the recorder ran.
+describe("the lease clock starts at the grant, not at the request", () => {
+  test("a slow speak phase does not shorten the capture budget", async () => {
+    const budget = resolveConverseConfig({}, scratch);
+    const speakMs = budget.maxCaptureMs + budget.transcribeTimeoutMs;
+    const { base, config, clock, handle } = startServerWithSlowSpeak(speakMs);
+
+    const { status, body } = await postTurn(base);
+
+    expect(status).toBe(200);
+    // Measured from the grant, which is where the clock stands once /notify has
+    // answered "played".
+    expect(Date.parse(body.lease.expires_at) - clock.now).toBeGreaterThanOrEqual(requiredBudget(config));
+    // And the turn is still alive rather than instantly reapable.
+    expect(handle.activeTurns()).toHaveLength(1);
+    expect(handle.activeTurns()[0]!.expires_at).toBeGreaterThan(clock.now);
+  });
+
+  test("the booking is re-based too, so it cannot be reaped mid-capture", async () => {
+    const budget = resolveConverseConfig({}, scratch);
+    const speakMs = budget.maxCaptureMs + budget.transcribeTimeoutMs;
+    const { base, config, clock } = startServerWithSlowSpeak(speakMs);
+
+    const { status } = await postTurn(base);
+
+    expect(status).toBe(200);
+    const booking = JSON.parse(readFileSync(lockPath, "utf8"));
+    expect(Date.parse(booking.expires_at) - clock.now).toBeGreaterThanOrEqual(requiredBudget(config));
   });
 });

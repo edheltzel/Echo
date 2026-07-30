@@ -28,8 +28,11 @@ export const ECHO_CONFIG_KEYS = new Set([
   // echo-converse (one-shot voice ask). Only the coordinator reads PORT/URL and
   // the booking lock; the rest are read in the calling host's process, where the
   // capture actually happens.
+  // There is deliberately no lease knob: a turn's lease is derived from the caps
+  // on the work it protects, and letting an operator set one shorter than that
+  // operation is the F5 defect with a friendlier name.
   "ECHO_CONVERSE_PORT", "ECHO_CONVERSE_URL", "ECHO_CONVERSE_BOOKING_LOCK",
-  "ECHO_CONVERSE_LEASE_MS", "ECHO_CONVERSE_CAPTURE_DIR", "ECHO_CONVERSE_MAX_CAPTURE_MS",
+  "ECHO_CONVERSE_CAPTURE_DIR", "ECHO_CONVERSE_MAX_CAPTURE_MS",
   "ECHO_CONVERSE_SILENCE_MS", "ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS",
   "ECHO_CONVERSE_LOCALE", "ECHO_CONVERSE_STT_TIER",
   "ECHO_CONVERSE_REC_BIN", "ECHO_CONVERSE_SOX_BIN", "ECHO_CONVERSE_YAP_BIN",

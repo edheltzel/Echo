@@ -30,6 +30,8 @@ jobs:
         run: bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
       - name: omp adapter build
         run: bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
+      - name: MCP adapter build
+        run: bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
       - name: Upload smoke log
         if: failure()
         uses: actions/upload-artifact@v4

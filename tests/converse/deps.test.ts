@@ -98,11 +98,15 @@ describe("the checker is wired into both operator surfaces", () => {
   const installScript = Bun.file("scripts/install.sh");
   const cli = Bun.file("cli/echo");
 
-  test("install.sh preflights it for the adapter that runs asks", async () => {
+  test("install.sh reports it for every adapter that registers echo_ask", async () => {
     const script = await installScript.text();
 
     expect(script).toContain("converse/deps.ts");
-    expect(script).toContain("Preflighting voice-ask dependencies");
+    expect(script).toContain("Checking voice-ask dependencies");
+    // Identical treatment across the three adapters that register the tool: a
+    // user cannot reason about why one is stricter than another about the same
+    // dependency.
+    expect(script.match(/warn_converse_deps$/gm)?.length).toBe(3);
   });
 
   test("echo doctor reports a row for it", async () => {

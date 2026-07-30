@@ -240,20 +240,32 @@ exit 0
     }
   }, INSTALL_TIMEOUT_MS);
 
-  // F8: sox became a hard dependency when the Tier 1 row split. A machine without
-  // it must hear about that at install time, not at the first ask.
-  test("--adapter mcp refuses a machine that cannot record", async () => {
+  // F8: sox became a hard dependency when the Tier 1 row split, and a machine
+  // without it must hear about that at install time rather than at the first ask.
+  // It is a WARNING, not a refusal, and identically so for every adapter that
+  // registers echo_ask: each of these installs also installs the core daemon, so
+  // blocking spoken notifications on a converse dependency the operator may never
+  // use is the wrong trade. The ask itself still fails at call time with an
+  // actionable message.
+  test("--adapter mcp warns about a machine that cannot record, and installs anyway", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-mcp-deps-"));
     try {
       const home = join(root, "home");
       const bin = join(root, "bin");
       mkdirSync(home, { recursive: true });
       mkdirSync(bin, { recursive: true });
-      const launchctlLog = join(root, "launchctl.log");
+      const state = join(root, "state");
+      mkdirSync(state, { recursive: true });
 
       writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
       writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
       // No rec, no sox, no yap on this PATH.
 
       const result = await runInstall(["--adapter", "mcp"], {
@@ -262,15 +274,30 @@ exit 0
         ECHO_MCP_CONFIG_PATH: join(root, "claude.json"),
       });
 
-      expect(result.exitCode).not.toBe(0);
+      expect(result.exitCode).toBe(0);
+      // Named with its remedy, so the operator can fix it before the first ask.
       expect(result.stderr + result.stdout).toContain("brew install sox");
-      // And nothing was mutated: the failure is a preflight, before host state.
-      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
-      expect(existsSync(launchctlLog)).toBe(false);
+      // The daemon this install exists to set up is still installed.
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      expect(existsSync(join(state, "echo-loaded"))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   }, INSTALL_TIMEOUT_MS);
+
+  // A user cannot reason about why one adapter is stricter than another about the
+  // same dependency, so all three that register echo_ask check it the same way.
+  test("every adapter that registers echo_ask reports the voice-ask dependencies, and none blocks on them", () => {
+    const preflight = script.slice(script.indexOf("preflight() {"), script.indexOf("write_plist() {"));
+    for (const adapter of ["mcp)", "pi)", "omp)"]) {
+      const branch = preflight.slice(preflight.indexOf(adapter));
+      expect(branch.slice(0, branch.indexOf(";;"))).toContain("warn_converse_deps");
+    }
+    expect(script).toContain("converse/deps.ts");
+    // Reporting only: the check must never be the thing that ends the install.
+    const checker = script.slice(script.indexOf("warn_converse_deps() {"), script.indexOf("preflight() {"));
+    expect(checker).not.toContain("exit 1");
+  });
 
   test("refreshes ALL installed adapters regardless of --adapter, and rerunning is a no-op (#77)", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-refresh-"));

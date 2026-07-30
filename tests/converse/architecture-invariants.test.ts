@@ -2,8 +2,17 @@ import { describe, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-// Mechanical enforcement of the property the whole capability rests on: the
-// always-on side never opens the microphone.
+// A SOURCE SCAN over the property the whole capability rests on: the always-on
+// side never opens the microphone.
+//
+// What that means precisely, because the strongest claim in the repo must not be
+// the one inside the test that supposedly backs it (docs/converse.md and
+// converse/server.ts state it the same way). This reads coordinator-reachable
+// source and fails on a capture-module import or any subprocess spawn, which
+// catches the regressions people actually write. It is not runtime enforcement:
+// a dynamic import, a dependency that spawns on its own, or a helper it does not
+// recognise would pass it. Nothing here asserts at runtime that the coordinator
+// opens no audio device.
 //
 // The TCC spike measured what happens when it does. A capture under a launchd
 // job produced TCC records with no responsible process ("Failed to fetch

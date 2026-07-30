@@ -87,7 +87,6 @@ function startServer(core = fakeCore(), overrides: Partial<Parameters<typeof cre
     config,
     port: 0,
     fetchImpl: core.fetchImpl,
-    sleep: async () => {},
     ...overrides,
   });
   handles.push(handle);
@@ -262,13 +261,28 @@ describe("POST /turn", () => {
 
   test("treats another tool's live capture as a busy microphone", async () => {
     const { base } = startServer(fakeCore({
-      health: coreHealth({ capture_guard: { path: CAPTURE_PATH, state: "recording" } }),
+      health: coreHealth({ capture_guard: { path: CAPTURE_PATH, state: "recording", pid: 999_999 } }),
     }));
 
     const { status, body } = await postTurn(base, askBody());
 
     expect(status).toBe(409);
     expect(body.error).toBe("microphone_busy");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  // A daemon predating the interlock reports no holder, and the caller's own hold
+  // is up by then, so every ask would blame a phantom foreign recorder.
+  test("names a core too old to report the holder rather than blaming a phantom recorder", async () => {
+    const { base } = startServer(fakeCore({
+      health: coreHealth({ capture_guard: { path: CAPTURE_PATH, state: "recording" } }),
+    }));
+
+    const { status, body } = await postTurn(base, askBody());
+
+    expect(status).toBe(503);
+    expect(body.error).toBe("core_version_skew");
+    expect(body.detail).toContain("cli/echo update");
     expect(existsSync(lockPath)).toBe(false);
   });
 

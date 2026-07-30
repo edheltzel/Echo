@@ -12,7 +12,8 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 ## Ownership
 
 - **Coordinator side** (`server.ts`, `main.ts`, `booking.ts`, `playback.ts`, `config.ts`,
-  `types.ts`): books the microphone, speaks the question through core, waits for playback drain.
+  `types.ts`): books the microphone and speaks the question through core, which answers once that
+  line has finished playing (`await_playback`).
 - **Caller side** (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`): opens the
   microphone, transcribes locally, publishes capture state, and exposes `echo_ask` to hosts.
 - Host wiring lives in `adapters/*`, never here. This package knows nothing about Pi, omp or
@@ -27,9 +28,18 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   module or any subprocess spawn in coordinator-reachable code, which catches the regressions
   people write, and it cannot see a dynamic import or a dependency that spawns on its own. Do not
   describe it as mechanically guaranteed; that overclaim is what held PR #136.
-- **Speak while idle, capture after drain.** The capture state flips to `recording` only after
-  the coordinator reports playback drained, or core's own guard silences the question converse
-  asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
+- **Publish the hold first, then ask.** The capture state flips to `recording` BEFORE the
+  question is spoken, which is what leaves no gap between the question ending and the microphone
+  opening for another session's audio. The question stays audible because it carries the per-turn
+  nonce from that same file, which core accepts as proof the line belongs to the holder. Use
+  `withCaptureHeld`, which also guarantees the attempt to return to `idle`.
+- **Both sides of the hold compare before they write, and a turn is identified by pid AND nonce.**
+  The hold goes up before the booking race is resolved, so a publish declines when another turn's
+  live hold exists and a clear writes `idle` only over our own record. Writing either
+  unconditionally lets a losing ask free the winner's live hold, and core then speaks into an
+  in-progress recording. The pid alone is not an identity: one host process can have two asks in
+  flight. A publish that declines fails the ask (`microphone_busy`) rather than proceeding, since
+  a turn with no hold has no interlock at all.
 - **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
   recorded sample until the transcript exists, and core skips every voice line while it is, so an
   unbounded child mutes Echo for as long as the calling host lives. A turn has exactly two caps:

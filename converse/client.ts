@@ -11,17 +11,20 @@
 //
 // The resulting sequence, which is also the answer to the self-hold trap:
 //
-//   POST /turn      -> coordinator books, speaks the question, waits for drain
-//   write recording -> only now, so core never holds back its own question
+//   write recording -> first, with a per-turn nonce, so no gap is left between
+//                      the question ending and the microphone opening
+//   POST /turn      -> coordinator books, then speaks the question carrying that
+//                      nonce and answers once core reports it played
 //   capture child   -> spawned here, in the caller's ancestry
-//   write idle      -> unconditionally, in a finally
+//   write idle      -> always attempted in a finally, and written only when the
+//                      record on disk is still ours
 //   POST complete   -> booking released; metadata only, never the transcript
 
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
 import { resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
-import { withCaptureHeld } from "./capture-state.ts";
+import { CaptureHoldError, withCaptureHeld } from "./capture-state.ts";
 import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
 
 const COORDINATOR_START_TIMEOUT_MS = 5_000;
@@ -209,12 +212,20 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
   // coordinator checks it against the file core actually reads and refuses on a
   // mismatch, so the assumption is verified rather than trusted.
   const nonce = randomBytes(24).toString("hex");
-  return await withCaptureHeld(
-    config.captureStatePath,
-    () => runTurn(),
-    process.pid,
-    nonce,
-  );
+  try {
+    return await withCaptureHeld(
+      config.captureStatePath,
+      () => runTurn(),
+      process.pid,
+      nonce,
+    );
+  } catch (error) {
+    // A hold this ask could not publish means another turn is already recording,
+    // including another turn in this same process. Refusing here is the same
+    // answer the coordinator would give, arrived at before anything is spoken.
+    if (error instanceof CaptureHoldError) throw new AskError(error.code, error.message);
+    throw error;
+  }
 
   async function runTurn(): Promise<AskResult> {
   const response = await fetchImpl(`${config.baseUrl}/turn`, {

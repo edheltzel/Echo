@@ -62,7 +62,6 @@
     },
     "ECHO_CONVERSE_URL": { "type": "string" },
     "ECHO_CONVERSE_BOOKING_LOCK": { "type": "string" },
-    "ECHO_CONVERSE_LEASE_MS": { "type": ["string", "integer"], "minimum": 1 },
     "ECHO_CONVERSE_CAPTURE_DIR": { "type": "string" },
     "ECHO_CONVERSE_MAX_CAPTURE_MS": { "type": ["string", "integer"], "minimum": 1 },
     "ECHO_CONVERSE_SILENCE_MS": { "type": ["string", "integer"], "minimum": 1 },

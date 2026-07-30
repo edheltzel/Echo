@@ -85,7 +85,7 @@ function startCoordinator(core: ReturnType<typeof fakeCore>) {
     coreBaseUrl: "http://core.test",
     captureStatePath: capturePath,
   };
-  const handle = createConverseServer({ config, port: 0, fetchImpl: core.fetchImpl, sleep: async () => {} });
+  const handle = createConverseServer({ config, port: 0, fetchImpl: core.fetchImpl });
   handles.push(handle);
   return { config: { ...config, baseUrl: `http://127.0.0.1:${handle.port}` }, handle };
 }

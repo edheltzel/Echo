@@ -70,7 +70,6 @@ with a microphone usage description, which is a separate architecture decision.
  host tool call
       |
       v
- POST /turn ------------------> coordinator:32468
  caller writes capture state = recording + nonce   <-- BEFORE asking
       |
       v
@@ -82,7 +81,8 @@ with a microphone usage description, which is a separate architecture decision.
       <----------------------- 200 { turn_id, spoke: { disposition: "played" }, lease }
       |
       | caller spawns the capture child (rec -> wav -> yap/whisper)
-      | caller writes capture state = idle              <-- always, in a finally
+      | caller writes capture state = idle   <-- always attempted in a finally,
+      |                                          written only if the record is still ours
       v
  POST /turn/<id>/complete ----> booking released
 ```
@@ -198,7 +198,6 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 | `ECHO_CONVERSE_PORT` | `32468` | coordinator |
 | `ECHO_CONVERSE_URL` | `http://localhost:32468` | callers |
 | `ECHO_CONVERSE_BOOKING_LOCK` | `~/.local/state/echo/converse/booking.lock` | coordinator |
-| `ECHO_CONVERSE_LEASE_MS` | `120000` | coordinator |
 | `ECHO_CONVERSE_CAPTURE_DIR` | `~/Library/Caches/echo/converse` | caller |
 | `ECHO_CONVERSE_MAX_CAPTURE_MS` | `30000` | caller |
 | `ECHO_CONVERSE_SILENCE_MS` | `1500` | caller |
@@ -217,7 +216,14 @@ Echo for as long as the calling host lives. A turn has exactly two caps: the rec
 `ECHO_CONVERSE_MAX_CAPTURE_MS`, and the whole transcription phase shares one
 `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` budget, so the whisper tier's resample and its
 transcriber draw from the same clock rather than getting a cap each. A turn's lease is those two
-caps plus slack, so a slow-but-healthy transcription cannot outlive its own booking.
+caps plus slack, and it is measured from the GRANT rather than from the request, so a
+slow-but-healthy transcription cannot outlive its own booking. There is no lease knob on purpose:
+the lease is derived from the caps on the work it protects, and a knob that let an operator set it
+shorter than that operation would reintroduce exactly the expiry-mid-capture bug it replaced.
+
+The speak phase is deliberately outside that budget. The microphone is not open while the question
+plays, and that phase has its own bound in core (the play queue's watchdog plus a margin), so a
+question queued behind other lines cannot eat the capture budget before recording starts.
 
 The recorder is stopped with SIGTERM only, because sox has to catch the signal to finalize the
 WAV header. A transcriber has no header to finalize, so its cap escalates to SIGKILL after a

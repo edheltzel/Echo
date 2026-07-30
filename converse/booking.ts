@@ -14,8 +14,8 @@
 // Lease semantics mirror core/capture-guard.ts's stale-crash guard on purpose:
 // same liveness probe, same "a dead writer means nothing is happening" rule.
 
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
-import { dirname } from "node:path";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface BookingRecord {
   turn_id: string;
@@ -133,6 +133,42 @@ export function acquireBooking(options: AcquireBookingOptions): BookingOutcome {
 
   if (writeExclusive(options.path, record)) return { ok: true, record, reaped: holder };
   return { ok: false, held_by: readBooking(options.path) };
+}
+
+/**
+ * Re-base an existing booking's expiry, for its own turn only.
+ *
+ * The booking has to be taken before the question is spoken, or two asks would
+ * both get as far as speaking; but the lease is meant to bound the phase where
+ * the microphone is open, which starts once the question has played. Without
+ * this the speak time is charged to the capture budget, and a question queued
+ * behind other lines can leave the booking reapable the moment the recorder
+ * starts. Refuses when a different turn holds the lock, so a late renew can
+ * never extend somebody else's reservation.
+ */
+export function renewBooking(path: string, turnId: string, expiresAtMs: number): boolean {
+  const holder = readBooking(path);
+  if (holder === null || holder.turn_id !== turnId) return false;
+  const renewed: BookingRecord = { ...holder, expires_at: new Date(expiresAtMs).toISOString() };
+  // Staged and renamed, for the same reason the capture-state writer is: a
+  // concurrent acquireBooking reads an unparseable lock as "no usable holder"
+  // and reaps it, so a torn read here would hand the microphone away.
+  const staging = join(dirname(path), `.${process.pid}.booking.tmp`);
+  try {
+    writeFileSync(staging, JSON.stringify(renewed), { mode: 0o600 });
+    renameSync(staging, path);
+  } catch {
+    try {
+      unlinkSync(staging);
+    } catch {
+      // Already gone, or never created.
+    }
+    // A lock we cannot rewrite still expires on the original clock, which is the
+    // behavior that shipped before this. Failing the granted turn over it would
+    // discard a question the human already heard.
+    return false;
+  }
+  return true;
 }
 
 export type ReleaseOutcome =

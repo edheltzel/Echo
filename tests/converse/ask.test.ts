@@ -74,7 +74,6 @@ function startCoordinator(core = fakeCore()) {
     config,
     port: 0,
     fetchImpl: core.fetchImpl,
-    sleep: async () => {},
   });
   handles.push(handle);
   return { core, config: { ...config, baseUrl: `http://127.0.0.1:${handle.port}` }, handle };

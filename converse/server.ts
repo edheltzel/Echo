@@ -1,8 +1,8 @@
 // The echo-converse coordinator: a microphone-free booking and sequencing surface.
 //
 // What it owns: the single-microphone booking, speaking the question through
-// core, and observing playback drain. What it deliberately does NOT own: the
-// microphone. A TCC spike on macOS 26.5.2 proved why - a capture opened from a
+// core and waiting for core's verdict on that line. What it deliberately does
+// NOT own: the microphone. A TCC spike on macOS 26.5.2 proved why - a capture opened from a
 // launchd background job gets no responsible process ("Failed to fetch
 // responsible file descriptor"), no prompt surface and no usable grant, while
 // the same capture spawned from the host terminal's process tree attributes
@@ -29,6 +29,7 @@ import {
   acquireBooking,
   readBooking,
   releaseBooking,
+  renewBooking,
   type BookingRecord,
 } from "./booking.ts";
 import type { ConverseConfig } from "./config.ts";
@@ -37,7 +38,6 @@ import {
   readCoreHealth,
   speakQuestion,
   type FetchLike,
-  type SleepLike,
 } from "./playback.ts";
 import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from "./types.ts";
 
@@ -54,11 +54,8 @@ export interface ConverseServerOptions {
   config: ConverseConfig;
   /** Overridden in tests so no test ever reaches the operator's running daemon. */
   fetchImpl?: FetchLike;
-  sleep?: SleepLike;
   now?: () => number;
   isPidAlive?: (pid: number) => boolean;
-  pollIntervalMs?: number;
-  maxPolls?: number;
   log?: (line: string) => void;
   /** 0 binds an ephemeral port; tests use it so they can never collide. */
   port?: number;
@@ -329,13 +326,25 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       );
     }
 
+    // The lease clock starts HERE, at the grant, not when the request arrived.
+    // The lease bounds the phase where the microphone is open, and the
+    // microphone is not open while the question plays - that phase is bounded by
+    // core's own watchdog-derived cap on `await_playback`. Charging the speak
+    // time to the capture budget would let a question queued behind other lines
+    // consume the whole lease before capture began, which is F5's failure mode
+    // wearing a different hat. The booking is re-based to match, or it would
+    // stay reapable on the old clock while the recording ran.
+    const grantedAt = now();
+    const expiresAt = grantedAt + leaseMs;
+    renewBooking(config.bookingLockPath, turnId, expiresAt);
+
     active.set(turnId, {
       turn_id: turnId,
       owner_pid: request.owner_pid,
       source: request.source ?? "unknown",
       question_chars: request.question.length,
       started_at: startedAt,
-      expires_at: startedAt + leaseMs,
+      expires_at: expiresAt,
       ancestry: request.ancestry ?? [],
     });
     log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
@@ -351,7 +360,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       },
       lease: {
         owner_pid: request.owner_pid,
-        expires_at: new Date(startedAt + leaseMs).toISOString(),
+        expires_at: new Date(expiresAt).toISOString(),
       },
     };
     granted = true;
