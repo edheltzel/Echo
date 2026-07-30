@@ -1,8 +1,8 @@
-// Capture guard — hold Echo speech while an external tool captures the mic.
+// Capture guard - hold Echo speech while an external tool captures the mic.
 // Unit half: tolerant reads of the cross-process recording-state file
 // (missing/corrupt/wrong shape ⇒ idle) and pid-liveness (a crashed writer's
 // stale non-idle file must never silence Echo). Gate half: through the real
-// server — a live capture skips the voice line mute-style (no player spawn,
+// server - a live capture skips the voice line mute-style (no player spawn,
 // lifecycle row disposition 'held-for-capture'), an idle file speaks normally,
 // and /health exposes the guard. Harness mirrors notify-queue.test.ts:
 // PORT=0, spawn stubbed, temp state paths, never stops the singleton (#47).
@@ -58,10 +58,10 @@ function writeState(state: string, pid: number = process.pid): void {
 }
 
 // =============================================================================
-// Unit — tolerant reads + pid liveness (no server involved)
+// Unit - tolerant reads + pid liveness (no server involved)
 // =============================================================================
 
-describe("readCaptureState — tolerant reads", () => {
+describe("readCaptureState - tolerant reads", () => {
   const U = mkdtempSync(join(tmpdir(), "capture-unit-"));
   const uPath = join(U, "recording-state.json");
   afterAll(() => rmSync(U, { recursive: true, force: true }));
@@ -109,7 +109,7 @@ describe("readCaptureState — tolerant reads", () => {
   });
 });
 
-describe("resolveCaptureStatePath — env contract", () => {
+describe("resolveCaptureStatePath - env contract", () => {
   test("env-file override is honored and an empty live value disables the guard", () => {
     const saved = process.env.ECHO_CAPTURE_STATE_PATH;
     try {
@@ -152,7 +152,7 @@ describe("resolveCaptureStatePath — env contract", () => {
 });
 
 // =============================================================================
-// Gate — through the real server (mirrors the mute gate's shape)
+// Gate - through the real server (mirrors the mute gate's shape)
 // =============================================================================
 
 let savedEnabled: Record<string, boolean>;
@@ -190,7 +190,7 @@ function readRows(): any[] {
   return readFileSync(LOG, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
 
-describe("capture guard — speak-time gate", () => {
+describe("capture guard - speak-time gate", () => {
   test("live capture: 202, banner fires, no player spawn, lifecycle row held-for-capture", async () => {
     writeState("recording");
 
@@ -234,13 +234,16 @@ describe("capture guard — speak-time gate", () => {
     expect(spawnedCommands.some((c) => /afplay|mpv/.test(c))).toBe(true);
   });
 
-  test("/health exposes the guard's resolved path and current state", async () => {
+  test("/health exposes the guard's resolved path, current state and holder", async () => {
     writeState("transcribing");
     const health = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
-    expect(health.capture_guard).toEqual({ path: STATE, state: "transcribing" });
+    // `pid` is additive: a voice-ask coordinator has to tell its own caller's
+    // hold from another tool's recording. The owner's nonce is never exposed.
+    expect(health.capture_guard).toEqual({ path: STATE, state: "transcribing", pid: process.pid });
+    expect(health.capture_guard.nonce).toBeUndefined();
 
     rmSync(STATE);
     const idle = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
-    expect(idle.capture_guard).toEqual({ path: STATE, state: "idle" });
+    expect(idle.capture_guard).toEqual({ path: STATE, state: "idle", pid: null });
   });
 });
