@@ -1729,6 +1729,9 @@ function acceptNotification(
   if (!messageValidation.valid) {
     throw new Error(`Invalid message: ${messageValidation.error}`);
   }
+  if (!opts.voiceEnabled && opts.captureReservation) {
+    throw new Error("capture_reservation requires voice_enabled");
+  }
 
   // Banner for every accepted notification, voice or not — decoupled from
   // the queue so it shows immediately and survives supersede/age-drop. The
@@ -1739,11 +1742,13 @@ function acceptNotification(
   }
 
   if (!opts.voiceEnabled) {
-    if (opts.captureReservation) throw new Error("capture_reservation requires voice_enabled");
     return;
   }
 
-  trackPlayback(reqId, opts.captureReservation);
+  // Ordinary notifications keep their existing receipt-only behavior and do
+  // not need a retained completion record. Converse opts in with a reservation
+  // so the status map cannot grow with every normal notification.
+  if (opts.captureReservation) trackPlayback(reqId, opts.captureReservation);
 
   playQueue.enqueue({
     id: reqId,
@@ -2061,7 +2066,15 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health", "GET /voices"];
+    const supported = [
+      "POST /notify",
+      "GET /notify/:request_id/completion",
+      "POST /notify/:request_id/capture-release",
+      "POST /notify/personality",
+      "POST /mute",
+      "GET /health",
+      "GET /voices",
+    ];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -2102,5 +2115,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health, GET /voices`);
+log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/:request_id/capture-release, POST /notify/personality, POST /mute, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);

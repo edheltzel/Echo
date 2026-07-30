@@ -39,6 +39,7 @@ function pidAlive(pid: number): boolean {
 function reapExpiredReservation(): void {
   if (activeReservation === null) return;
   if (activeReservation.expires_at <= Date.now() || !pidAlive(activeReservation.owner_pid)) {
+    playback.delete(activeReservation.request_id);
     activeReservation = null;
   }
 }
@@ -113,5 +114,6 @@ export function releaseCaptureReservation(requestId: string): boolean {
   reapExpiredReservation();
   if (activeReservation?.request_id !== requestId) return false;
   activeReservation = null;
+  playback.delete(requestId);
   return true;
 }

@@ -260,14 +260,16 @@ export async function recordReply(
     timeoutMs: config.maxCaptureMs,
     signal,
   });
-  throwIfAborted(signal);
-  try {
-    chmodSync(wavPath, 0o600);
-  } catch {
-    // The size/readability check below reports a missing output; an existing
-    // output that cannot be made private must not be returned to a caller.
-    throw new CaptureError("recorder_failed", `${config.recBin} produced audio with unverifiable permissions`);
+  if (existsSync(wavPath)) {
+    try {
+      chmodSync(wavPath, 0o600);
+    } catch {
+      // An existing output that cannot be made private must not be returned to a
+      // caller. A missing output is handled by the size/readability check below.
+      throw new CaptureError("recorder_failed", `${config.recBin} produced audio with unverifiable permissions`);
+    }
   }
+  throwIfAborted(signal);
   const capture_ms = Date.now() - startedAt;
 
   let bytes = 0;
@@ -318,7 +320,12 @@ function remainingMs(deadline: number): number {
 }
 
 /** Offline rate conversion for whisper, which requires 16kHz mono. */
-async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline: number): Promise<string> {
+async function toWhisperInput(
+  config: ConverseConfig,
+  wavPath: string,
+  deadline: number,
+  signal?: AbortSignal,
+): Promise<string> {
   // A missing resampler is a transcriber-side failure: the recorder did its job,
   // and reporting it as `no_recorder` would send the operator after sox for the
   // wrong reason.
@@ -334,6 +341,7 @@ async function toWhisperInput(config: ConverseConfig, wavPath: string, deadline:
     const result = await run([config.soxBin, wavPath, "-r", "16000", "-c", "1", "-b", "16", converted], {
       timeoutMs: remainingMs(deadline),
       hardKillAfterMs: HARD_KILL_GRACE_MS,
+      signal,
     });
     if (existsSync(converted)) chmodSync(converted, 0o600);
     requireTranscriberSuccess(result, `resampling for whisper (${config.soxBin})`, config.transcribeTimeoutMs);
@@ -368,7 +376,7 @@ export async function transcribeFile(
   if (config.whisperModel === undefined) {
     throw new CaptureError("no_stt_tier", "whisper needs ECHO_CONVERSE_WHISPER_MODEL to point at a ggml model file");
   }
-  const input = await toWhisperInput(config, wavPath, deadline);
+  const input = await toWhisperInput(config, wavPath, deadline, signal);
   try {
     const result = await run(
       [
