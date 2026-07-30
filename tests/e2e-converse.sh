@@ -19,10 +19,10 @@
 #   tests/e2e-converse.sh --audible             # speaks the question for real
 #   ECHO_E2E_PORT=8921 ECHO_E2E_CONVERSE_PORT=8922 tests/e2e-converse.sh
 #
-# Silent is achieved by disabling every TTS provider in the isolated core's own
-# scratch voices.json, not by sending a silent question: the ask forces
+# Silent is achieved by routing the isolated core's local `say` provider to a
+# scratch no-op executable, not by sending a silent question: the ask forces
 # voice_enabled on by design. --audible leaves the real chain in place, which is
-# the only way to exercise real synthesis timing in the drain wait.
+# the only way to exercise real synthesis timing in the completion wait.
 set -euo pipefail
 
 export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,20 +76,21 @@ export VOICES_PATH="${SCRATCH}/voices.json"
 # A voice ask forces `voice_enabled: true` on the question by design - a question
 # nobody heard would record the human against silence - so the notify payload is
 # the wrong place to quiet this test. Instead the isolated core is given a scratch
-# voices.json with every provider disabled, so it accepts and queues the question
-# and the provider loop reaches no player at all. The whole path still runs:
-# validate, sanitize, resolve, enqueue, drain.
+# voices.json with only the local `say` provider enabled, so it accepts and queues
+# the question and the provider completes without an audio device. The whole path
+# still runs: validate, sanitize, resolve, enqueue, play, completion.
 #
 # The cost is timing realism, which is what --audible buys: with real synthesis the
-# drain wait spans seconds and several polls, and with providers disabled the queue
-# empties at once.
+# completion wait spans seconds and several polls, and with the no-op provider the
+# queue settles immediately.
 if [ "$AUDIBLE" -eq 0 ]; then
   bun -e '
     const path = process.env.VOICES_PATH;
     const config = await Bun.file(path).json();
     for (const provider of Object.values(config.providers ?? {})) provider.enabled = false;
+    config.providers.say.enabled = true;
     await Bun.write(path, JSON.stringify(config, null, 2));
-  ' || { echo "could not disable providers in the scratch voices.json" >&2; exit 1; }
+  ' || { echo "could not configure the scratch voices.json" >&2; exit 1; }
 fi
 
 # Converse state, also scratch-only.
@@ -118,6 +119,15 @@ YAP
 chmod +x "${SCRATCH}/fake-rec" "${SCRATCH}/fake-yap"
 export ECHO_CONVERSE_REC_BIN="${SCRATCH}/fake-rec"
 export ECHO_CONVERSE_YAP_BIN="${SCRATCH}/fake-yap"
+
+if [ "$AUDIBLE" -eq 0 ]; then
+  cat >"${SCRATCH}/fake-say" <<'SAY'
+#!/bin/bash
+exit 0
+SAY
+  chmod +x "${SCRATCH}/fake-say"
+  export ECHO_E2E_SAY_BIN="${SCRATCH}/fake-say"
+fi
 
 PORT="$PORT" bun run "$ROOT/core/server.ts" >"$CORE_LOG" 2>&1 &
 CORE_PID=$!
@@ -167,7 +177,7 @@ echo "  recorder/transcriber : stand-ins in ${SCRATCH} (no microphone is opened)
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  audio                : ENABLED - the question will be spoken out loud"
 else
-  echo "  audio                : disabled in the scratch voices.json (nothing plays)"
+  echo "  audio                : disabled via scratch no-op say (nothing plays)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -329,5 +339,5 @@ bun -e '
 echo
 echo "PASS: one-shot voice ask end to end (core :${PORT}, coordinator :${CONVERSE_PORT})"
 if [ "$AUDIBLE" -eq 0 ]; then
-  echo "      silent run (providers disabled); pass --audible to speak the question for real"
+echo "      silent run (scratch no-op say); pass --audible to speak the question for real"
 fi

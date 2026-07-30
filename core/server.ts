@@ -635,6 +635,10 @@ const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_H
 const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES"), 1, 0);
 const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
+// The e2e harness may inject a scratch no-op executable. Production keeps the
+// platform path; the override exists only so the isolated silent run can prove
+// queue completion without requiring an audio device or mutating /usr/bin.
+const MACOS_SAY_BIN = process.env.ECHO_E2E_SAY_BIN || '/usr/bin/say';
 
 class EdgeProcessError extends Error {
   diagnostic: ProviderDiagnostic;
@@ -921,7 +925,7 @@ class MacOSSayProvider implements TTSProvider {
       const fallbackVoice = getMacOSFallbackVoice();
       console.log(`🍎 Using macOS say (voice: ${fallbackVoice})...`);
 
-      const proc = spawn('/usr/bin/say', [
+      const proc = spawn(MACOS_SAY_BIN, [
         '-v', fallbackVoice,
         '-r', String(voicesConfig.default_rate || 175),
         text
