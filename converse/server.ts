@@ -189,99 +189,115 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     const leaseMs = clampLease(request.lease_ms, config.leaseMs);
     const turnId = newTurnId();
 
-    // Book first. Two asks arriving together must not both get as far as
-    // speaking: the human would hear two questions and answer one recording.
-    const booking = acquireBooking({
-      path: config.bookingLockPath,
-      turnId,
-      ownerPid: request.owner_pid,
-      source: request.source ?? "unknown",
-      leaseMs,
-      now,
-      isPidAlive,
-    });
-    if (!booking.ok) {
-      counts.refused++;
-      return fail("microphone_busy", "another turn holds the microphone", 409, {
-        held_by: heldByView(booking.held_by),
+    let bookingAcquired = false;
+    let handedOff = false;
+    try {
+      // Book first. Two asks arriving together must not both get as far as
+      // speaking: the human would hear two questions and answer one recording.
+      const booking = acquireBooking({
+        path: config.bookingLockPath,
+        turnId,
+        ownerPid: request.owner_pid,
+        source: request.source ?? "unknown",
+        leaseMs,
+        now,
+        isPidAlive,
       });
-    }
-    if (booking.reaped) log(`reaped abandoned booking ${booking.reaped.turn_id} (pid ${booking.reaped.owner_pid})`);
+      if (!booking.ok) {
+        counts.refused++;
+        return fail("microphone_busy", "another turn holds the microphone", 409, {
+          held_by: heldByView(booking.held_by),
+        });
+      }
+      bookingAcquired = true;
+      if (booking.reaped) log(`reaped abandoned booking ${booking.reaped.turn_id} (pid ${booking.reaped.owner_pid})`);
 
-    const release = (code: ConverseErrorCode, detail: string, status: number): Response => {
-      releaseBooking(config.bookingLockPath, turnId);
-      counts.refused++;
-      log(`turn ${turnId} refused: ${code} (${detail})`);
-      return fail(code, detail, status);
-    };
+      const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
+      if (!assessment.ok) {
+        counts.refused++;
+        log(`turn ${turnId} refused: ${assessment.code} (${assessment.detail})`);
+        return fail(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
+      }
 
-    const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
-    if (!assessment.ok) {
-      return release(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
-    }
+      // Speak while the capture state is still idle. Publishing `recording` first
+      // would make core's own guard hold back the question converse just asked it
+      // to speak, and the human would be recorded against silence.
+      const spoken = await speakQuestion({
+        coreBaseUrl: config.coreBaseUrl,
+        question: request.question,
+        turnId,
+        voiceId: request.voice_id,
+        title: request.title,
+        source: request.source,
+        fetchImpl,
+      });
+      if (spoken.status < 200 || spoken.status >= 300) {
+        counts.refused++;
+        log(`turn ${turnId} refused: question_not_spoken (core answered HTTP ${spoken.status} to /notify)`);
+        return fail("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
+      }
 
-    // Speak while the capture state is still idle. Publishing `recording` first
-    // would make core's own guard hold back the question converse just asked it
-    // to speak, and the human would be recorded against silence.
-    const spoken = await speakQuestion({
-      coreBaseUrl: config.coreBaseUrl,
-      question: request.question,
-      turnId,
-      voiceId: request.voice_id,
-      title: request.title,
-      source: request.source,
-      fetchImpl,
-    });
-    if (spoken.status < 200 || spoken.status >= 300) {
-      return release("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
-    }
+      const drain = await waitForPlaybackDrain({
+        coreBaseUrl: config.coreBaseUrl,
+        estimateMs: estimateSpeechMs(request.question),
+        fetchImpl,
+        sleep: options.sleep,
+        pollIntervalMs: options.pollIntervalMs,
+        maxPolls: options.maxPolls,
+      });
+      if (!drain.drained) {
+        // Name the cause the operator can act on. Out of readings and out of queue
+        // are the same symptom with opposite fixes, and the rate-limit case is the
+        // likely one: the turn has already spent several requests on core.
+        const detail = drain.refused_reads === drain.polls
+          ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
+            "so whether the question finished playing is unknown"
+          : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
+        counts.refused++;
+        log(`turn ${turnId} refused: question_not_spoken (${detail})`);
+        return fail("question_not_spoken", detail, 503);
+      }
 
-    const drain = await waitForPlaybackDrain({
-      coreBaseUrl: config.coreBaseUrl,
-      estimateMs: estimateSpeechMs(request.question),
-      fetchImpl,
-      sleep: options.sleep,
-      pollIntervalMs: options.pollIntervalMs,
-      maxPolls: options.maxPolls,
-    });
-    if (!drain.drained) {
-      // Name the cause the operator can act on. Out of readings and out of queue
-      // are the same symptom with opposite fixes, and the rate-limit case is the
-      // likely one: the turn has already spent several requests on core.
-      const detail = drain.refused_reads === drain.polls
-        ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
-          "so whether the question finished playing is unknown"
-        : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
-      return release("question_not_spoken", detail, 503);
-    }
-
-    active.set(turnId, {
-      turn_id: turnId,
-      owner_pid: request.owner_pid,
-      source: request.source ?? "unknown",
-      question_chars: request.question.length,
-      started_at: startedAt,
-      expires_at: startedAt + leaseMs,
-      ancestry: request.ancestry ?? [],
-    });
-    log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
-
-    const grant: TurnGrant = {
-      turn_id: turnId,
-      state: "capture_ready",
-      capture_state_path: assessment.capture_state_path,
-      spoke: {
-        notify_status: spoken.status,
-        drained: drain.drained,
-        waited_ms: drain.waited_ms,
-        polls: drain.polls,
-      },
-      lease: {
+      active.set(turnId, {
+        turn_id: turnId,
         owner_pid: request.owner_pid,
-        expires_at: new Date(startedAt + leaseMs).toISOString(),
-      },
-    };
-    return json(grant, 200);
+        source: request.source ?? "unknown",
+        question_chars: request.question.length,
+        started_at: startedAt,
+        expires_at: startedAt + leaseMs,
+        ancestry: request.ancestry ?? [],
+      });
+      handedOff = true;
+      log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
+
+      const grant: TurnGrant = {
+        turn_id: turnId,
+        state: "capture_ready",
+        capture_state_path: assessment.capture_state_path,
+        spoke: {
+          notify_status: spoken.status,
+          drained: drain.drained,
+          waited_ms: drain.waited_ms,
+          polls: drain.polls,
+        },
+        lease: {
+          owner_pid: request.owner_pid,
+          expires_at: new Date(startedAt + leaseMs).toISOString(),
+        },
+      };
+      return json(grant, 200);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unexpected coordinator failure";
+      const code: ConverseErrorCode = bookingAcquired ? "question_not_spoken" : "coordinator_error";
+      const status = bookingAcquired ? 503 : 500;
+      if (!handedOff) {
+        counts.refused++;
+        log(`turn ${turnId} refused: ${code} (${detail})`);
+      }
+      return fail(code, detail, status);
+    } finally {
+      if (bookingAcquired && !handedOff) releaseBooking(config.bookingLockPath, turnId);
+    }
   }
 
   function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Response {
