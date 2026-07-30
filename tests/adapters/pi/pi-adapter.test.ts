@@ -62,6 +62,14 @@ beforeEach(() => {
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_CATCHPHRASE = "Pi session ready.";
   process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
+  // Herdr's own environment must not reach the adapter here. HERDR_SOCKET_PATH /
+  // HERDR_SESSION make the shared notify client route the notification to a LIVE
+  // Herdr instance over a unix socket, which both talks to a real external
+  // service from a unit test and makes the assertion depend on whether that
+  // service answers in time. tests/e2e-converse.sh pins the same thing.
+  delete process.env.HERDR_SOCKET_PATH;
+  delete process.env.HERDR_SESSION;
+  delete process.env.HERDR_CONFIG_PATH;
   Date.now = originalDateNow;
 });
 

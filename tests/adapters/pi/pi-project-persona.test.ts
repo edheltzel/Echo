@@ -164,6 +164,12 @@ beforeEach(() => {
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
   process.env.ECHO_VOICE_ID = "pi";
+  // Never route into a LIVE Herdr instance from a unit test: HERDR_SOCKET_PATH /
+  // HERDR_SESSION make the shared notify client talk to a real external service
+  // over a unix socket, so the assertion would depend on whether it answers.
+  delete process.env.HERDR_SOCKET_PATH;
+  delete process.env.HERDR_SESSION;
+  delete process.env.HERDR_CONFIG_PATH;
   fakeHome = mkdtempSync(join(tmpdir(), "echo-pi-home-"));
   process.env.HOME = fakeHome; // homedir() → fakeHome (no global daidentity there)
   projectDir = mkdtempSync(join(tmpdir(), "echo-pi-int-"));

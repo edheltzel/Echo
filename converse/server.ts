@@ -36,8 +36,13 @@ import {
 import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from "./types.ts";
 
 const MAX_QUESTION_CHARS = 1_000;
-const MIN_LEASE_MS = 10_000;
-const MAX_LEASE_MS = 600_000;
+
+/**
+ * Slack over the operation budget, covering the coordinator's own round trips
+ * (preflight, speaking the question, the completion wait) plus the caller's
+ * bookkeeping call at the end.
+ */
+const LEASE_SLACK_MS = 30_000;
 
 export interface ConverseServerOptions {
   config: ConverseConfig;
@@ -92,9 +97,59 @@ function heldByView(record: BookingRecord | null) {
       };
 }
 
-function clampLease(requested: unknown, fallback: number): number {
-  const value = typeof requested === "number" && Number.isFinite(requested) ? requested : fallback;
-  return Math.min(Math.max(Math.floor(value), MIN_LEASE_MS), MAX_LEASE_MS);
+/**
+ * The budget an ask can actually consume: the capture cap plus the single
+ * transcription-phase cap, which are the only bounded steps a turn has.
+ */
+function operationBudgetMs(config: ConverseConfig): number {
+  return config.maxCaptureMs + config.transcribeTimeoutMs;
+}
+
+/**
+ * Resolve the lease, or refuse.
+ *
+ * The old behavior clamped any requested lease to a hardcoded ten minutes, which
+ * silently converted an honest request into a booking that expired while the
+ * operation it protected was still running - and an expired booking is one a
+ * second ask can take over (F5). Both directions are now refusals with names:
+ * too short to cover the operation, or longer than this coordinator's own
+ * configuration could ever need. Neither is quietly adjusted.
+ */
+function resolveLease(
+  requested: unknown,
+  config: ConverseConfig,
+): { ok: true; leaseMs: number } | { ok: false; code: ConverseErrorCode; detail: string } {
+  const budget = operationBudgetMs(config);
+  const ceiling = budget + LEASE_SLACK_MS;
+
+  if (requested === undefined) return { ok: true, leaseMs: ceiling };
+  if (typeof requested !== "number" || !Number.isFinite(requested)) {
+    return { ok: false, code: "invalid_request", detail: "lease_ms must be a finite number" };
+  }
+
+  const leaseMs = Math.floor(requested);
+  if (leaseMs < budget) {
+    return {
+      ok: false,
+      code: "lease_too_short",
+      detail:
+        `a lease of ${leaseMs}ms cannot cover this coordinator's operation budget of ${budget}ms ` +
+        `(capture ${config.maxCaptureMs}ms + transcription ${config.transcribeTimeoutMs}ms), so the ` +
+        "booking could expire while the microphone was still open",
+    };
+  }
+  if (leaseMs > ceiling) {
+    return {
+      ok: false,
+      code: "lease_unsupported",
+      detail:
+        `a lease of ${leaseMs}ms exceeds what this coordinator can honor (${ceiling}ms: operation ` +
+        `budget ${budget}ms plus ${LEASE_SLACK_MS}ms slack). Align ECHO_CONVERSE_MAX_CAPTURE_MS and ` +
+        "ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS across the caller and the coordinator rather than asking " +
+        "for a longer reservation than the work can need.",
+    };
+  }
+  return { ok: true, leaseMs };
 }
 
 function validateTurnRequest(body: unknown, isPidAlive: (pid: number) => boolean): { ok: true; request: TurnRequest } | { ok: false; detail: string } {
@@ -186,7 +241,15 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     const startedAt = now();
     dropExpiredTurns(startedAt);
 
-    const leaseMs = clampLease(request.lease_ms, config.leaseMs);
+    // Resolved BEFORE the booking is taken: a refusal here must not have to
+    // release anything.
+    const lease = resolveLease(request.lease_ms, config);
+    if (!lease.ok) {
+      counts.refused++;
+      log(`turn refused: ${lease.code} (${lease.detail})`);
+      return fail(lease.code, lease.detail, 400);
+    }
+    const leaseMs = lease.leaseMs;
     const turnId = newTurnId();
 
     // Book first. Two asks arriving together must not both get as far as

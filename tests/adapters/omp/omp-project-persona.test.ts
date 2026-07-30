@@ -162,6 +162,12 @@ beforeEach(() => {
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
   process.env.ECHO_VOICE_PERSONA_NAME = "omp";
   process.env.ECHO_VOICE_ID = "pi";
+  // Never route into a LIVE Herdr instance from a unit test: HERDR_SOCKET_PATH /
+  // HERDR_SESSION make the shared notify client talk to a real external service
+  // over a unix socket, so the assertion would depend on whether it answers.
+  delete process.env.HERDR_SOCKET_PATH;
+  delete process.env.HERDR_SESSION;
+  delete process.env.HERDR_CONFIG_PATH;
   // Isolate the GLOBAL config read: point omp's own PI_CODING_AGENT_DIR override at
   // an empty scratch dir so the resolver never reads Ed's real ~/.omp/agent/config.yml.
   // (homedir() ignores $HOME on macOS, so HOME redirection would NOT isolate it.)

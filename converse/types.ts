@@ -84,6 +84,8 @@ export type ConverseErrorCode =
   | "capture_guard_disabled"
   | "question_not_spoken"
   | "capture_path_mismatch"
+  | "lease_too_short"
+  | "lease_unsupported"
   | "unknown_turn"
   /** An unforeseen fault. Present so even an unplanned failure is machine-readable. */
   | "coordinator_error";
