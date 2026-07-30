@@ -44,12 +44,16 @@ interface FakeCoreOptions {
   unreachable?: boolean;
   /** Successive /health answers; the last one repeats. */
   healthSequence?: CoreHealthSnapshot[];
+  /** Successive per-request completion answers; the last one repeats. */
+  completionSequence?: Array<"playing" | "completed">;
 }
 
 function fakeCore(options: FakeCoreOptions = {}) {
   const calls: string[] = [];
   let healthIndex = 0;
+  let completionIndex = 0;
   const sequence = options.healthSequence ?? [options.health ?? coreHealth()];
+  const completionSequence = options.completionSequence ?? ["completed"];
   return {
     calls,
     fetchImpl: async (url: string, init?: RequestInit) => {
@@ -59,7 +63,11 @@ function fakeCore(options: FakeCoreOptions = {}) {
       if (path === "/notify") {
         if (options.notifyFailure) throw options.notifyFailure;
         const status = options.notifyStatus ?? 202;
-        return new Response(JSON.stringify({ status: "accepted" }), { status });
+        return new Response(JSON.stringify({ status: "accepted", request_id: "request-1" }), { status });
+      }
+      if (path === "/notify/request-1/completion") {
+        const state = completionSequence[Math.min(completionIndex++, completionSequence.length - 1)];
+        return new Response(JSON.stringify({ request_id: "request-1", state, ...(state === "completed" ? { capture_reservation_id: "request-1" } : {}) }), { status: 200 });
       }
       const body = sequence[Math.min(healthIndex++, sequence.length - 1)];
       return new Response(JSON.stringify(body), { status: 200 });
@@ -125,6 +133,44 @@ describe("GET /health", () => {
 });
 
 describe("POST /turn", () => {
+  test("waits for this question's completion and receives a capture reservation", async () => {
+    const calls: string[] = [];
+    let completionReads = 0;
+    const core = {
+      calls,
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        calls.push(`${init?.method ?? "GET"} ${path}`);
+        if (path === "/notify") {
+          return new Response(JSON.stringify({ status: "accepted", request_id: "core-question-1" }), { status: 202 });
+        }
+        if (path === "/notify/core-question-1/completion") {
+          completionReads++;
+          const state = completionReads === 1 ? "playing" : "completed";
+          return new Response(JSON.stringify({
+            request_id: "core-question-1",
+            state,
+            ...(state === "completed" ? { capture_reservation_id: "core-question-1" } : {}),
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify(coreHealth()), { status: 200 });
+      },
+    };
+    const { base } = startServer(core);
+
+    const { status, body } = await postTurn(base, askBody());
+
+    expect(status).toBe(200);
+    expect(body.spoke.completion_state).toBe("completed");
+    expect(body.capture_reservation_id).toBe("core-question-1");
+    expect(calls).toEqual([
+      "GET /health",
+      "POST /notify",
+      "GET /notify/core-question-1/completion",
+      "GET /notify/core-question-1/completion",
+    ]);
+  });
+
   test("books, speaks, waits for drain, then clears the caller to capture", async () => {
     const { base, core } = startServer();
 
@@ -138,8 +184,8 @@ describe("POST /turn", () => {
     expect(body.spoke).toMatchObject({ notify_status: 202, drained: true });
     expect(body.lease.owner_pid).toBe(process.pid);
     expect(Date.parse(body.lease.expires_at)).toBeGreaterThan(Date.now());
-    // The self-hold ordering, in the order core saw it: preflight, speak, drain.
-    expect(core.calls).toEqual(["GET /health", "POST /notify", "GET /health"]);
+    // The self-hold ordering, in the order core saw it: preflight, speak, exact completion.
+    expect(core.calls).toEqual(["GET /health", "POST /notify", "GET /notify/request-1/completion"]);
     expect(readBooking(lockPath)?.turn_id).toBe(body.turn_id);
   });
 
@@ -147,10 +193,8 @@ describe("POST /turn", () => {
     const core = fakeCore({
       healthSequence: [
         coreHealth(),
-        coreHealth({ play_queue: { depth: 1, in_flight_ms: 400, stalled: false } }),
-        coreHealth({ play_queue: { depth: 0, in_flight_ms: 900, stalled: false } }),
-        coreHealth(),
       ],
+      completionSequence: ["playing", "playing", "completed"],
     });
     const { base } = startServer(core);
 
@@ -281,6 +325,7 @@ describe("POST /turn", () => {
 
   test("refuses to open the microphone when playback never drains", async () => {
     const core = fakeCore({
+      completionSequence: ["playing"],
       healthSequence: [coreHealth(), coreHealth({ play_queue: { depth: 2, in_flight_ms: 700, stalled: false } })],
     });
     const { base } = startServer(core, { maxPolls: 2 });
@@ -289,7 +334,7 @@ describe("POST /turn", () => {
 
     expect(status).toBe(503);
     expect(body.error).toBe("question_not_spoken");
-    expect(body.detail).toContain("did not drain");
+    expect(body.detail).toContain("did not report playback completion");
     expect(existsSync(lockPath)).toBe(false);
   });
 });

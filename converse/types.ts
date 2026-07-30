@@ -25,6 +25,7 @@ export type CaptureState = "idle" | "recording" | "transcribing";
 export interface CoreHealthSnapshot {
   mute: { muted: boolean; muted_until: string | null };
   capture_guard: { path: string | null; state: CaptureState };
+  capture_reservation?: { held: boolean; request_id?: string };
   play_queue: { depth: number; in_flight_ms: number | null; stalled: boolean };
 }
 
@@ -43,6 +44,7 @@ export interface TurnRequest {
 export interface SpokenQuestionReport {
   notify_status: number;
   drained: boolean;
+  completion_state?: "completed";
   waited_ms: number;
   polls: number;
 }
@@ -53,6 +55,7 @@ export interface TurnGrant {
   /** The file core told us it reads. The caller writes exactly this path. */
   capture_state_path: string;
   spoke: SpokenQuestionReport;
+  capture_reservation_id?: string;
   lease: { owner_pid: number; expires_at: string };
 }
 

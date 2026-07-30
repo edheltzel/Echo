@@ -51,7 +51,10 @@ function fakeCore(health: CoreHealthSnapshot = coreHealth()) {
         observed.notifyCaptureState = existsSync(capturePath)
           ? String(JSON.parse(readFileSync(capturePath, "utf8")).state)
           : "absent";
-        return new Response(JSON.stringify({ status: "accepted" }), { status: 202 });
+        return new Response(JSON.stringify({ status: "accepted", request_id: "request-1" }), { status: 202 });
+      }
+      if (path === "/notify/request-1/completion") {
+        return new Response(JSON.stringify({ request_id: "request-1", state: "completed", capture_reservation_id: "request-1" }), { status: 200 });
       }
       return new Response(JSON.stringify(health), { status: 200 });
     },

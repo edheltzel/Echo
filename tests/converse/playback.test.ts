@@ -41,7 +41,7 @@ describe("speaking the question through core", () => {
     let body: any;
     const fetchImpl: FetchLike = async (_url, init) => {
       body = JSON.parse(String(init?.body));
-      return jsonResponse({ status: "accepted" }, 202);
+      return jsonResponse({ status: "accepted", request_id: "request-1" }, 202);
     };
 
     const result = await speakQuestion({
@@ -50,6 +50,8 @@ describe("speaking the question through core", () => {
       turnId: "turn-abc",
       voiceId: "pi",
       source: "pi",
+      ownerPid: 1234,
+      leaseMs: 120_000,
       fetchImpl,
     });
 
@@ -58,6 +60,7 @@ describe("speaking the question through core", () => {
     expect(body.voice_enabled).toBe(true);
     expect(body.voice_id).toBe("pi");
     expect(body.source).toBe("pi");
+    expect(body.capture_reservation).toEqual({ owner_pid: 1234, lease_ms: 120_000 });
     // Newest-per-session coalescing must never be able to replace the question
     // with a later host line, so the session id belongs to the turn alone.
     expect(body.session_id).toBe("converse:turn-abc");
