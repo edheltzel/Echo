@@ -26,7 +26,7 @@ import {
   releaseBooking,
   type BookingRecord,
 } from "./booking.ts";
-import type { ConverseConfig } from "./config.ts";
+import { CONVERSE_LEASE_SLACK_MS, type ConverseConfig } from "./config.ts";
 import {
   assessCore,
   estimateSpeechMs,
@@ -40,7 +40,6 @@ import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from ".
 
 const MAX_QUESTION_CHARS = 1_000;
 const MIN_LEASE_MS = 10_000;
-const MAX_LEASE_MS = 600_000;
 
 export interface ConverseServerOptions {
   config: ConverseConfig;
@@ -96,9 +95,9 @@ function heldByView(record: BookingRecord | null) {
       };
 }
 
-function clampLease(requested: unknown, fallback: number): number {
+function clampLease(requested: unknown, fallback: number, maximum: number): number {
   const value = typeof requested === "number" && Number.isFinite(requested) ? requested : fallback;
-  return Math.min(Math.max(Math.floor(value), MIN_LEASE_MS), MAX_LEASE_MS);
+  return Math.min(Math.max(Math.floor(value), MIN_LEASE_MS), Math.max(MIN_LEASE_MS, maximum));
 }
 
 function validateTurnRequest(body: unknown, isPidAlive: (pid: number) => boolean): { ok: true; request: TurnRequest } | { ok: false; detail: string } {
@@ -188,7 +187,8 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     const startedAt = now();
     dropExpiredTurns(startedAt);
 
-    const leaseMs = clampLease(request.lease_ms, config.leaseMs);
+    const leaseBudgetMs = config.maxCaptureMs + config.transcribeTimeoutMs + CONVERSE_LEASE_SLACK_MS;
+    const leaseMs = clampLease(request.lease_ms, config.leaseMs, leaseBudgetMs);
     const turnId = newTurnId();
 
     let bookingAcquired = false;

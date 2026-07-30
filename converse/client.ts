@@ -19,14 +19,13 @@
 
 import { existsSync } from "node:fs";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
-import { resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
+import { CONVERSE_LEASE_SLACK_MS, resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
 import { withCaptureHeld } from "./capture-state.ts";
 import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
 
 const COORDINATOR_START_TIMEOUT_MS = 5_000;
 const COORDINATOR_POLL_MS = 100;
 /** Slack over the bounded work so a lease cannot expire mid-turn. */
-const LEASE_SLACK_MS = 30_000;
 const MAX_ANCESTRY_DEPTH = 12;
 
 export interface AskOptions {
@@ -202,7 +201,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       // bounded step a turn has. Asking for only the capture cap would let a
       // slow-but-healthy transcription outlive the booking, which is the very
       // state that leaves a caller unable to hand the microphone back.
-      lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + LEASE_SLACK_MS,
+      lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + CONVERSE_LEASE_SLACK_MS,
       ancestry,
     }),
     // Deliberately NOT cancellable. Aborting this request would reject before
