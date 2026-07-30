@@ -23,34 +23,38 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 ## Local Contracts
 
 - **The coordinator never opens the microphone and never spawns a subprocess.** macOS gives a
-  background process no TCC responsible process, no prompt surface and no grant, so capture must
-  happen in the calling host's own process tree. Direct imports and spawn sites are guarded by
-  source-level checks in `../tests/converse/architecture-invariants.test.ts`; those checks do not
-  enforce runtime process ancestry or indirect dependency behavior.
+  background process no TCC responsible process, no prompt surface and no grant, so capture stays
+  in the caller-side adapter. Direct Pi/omp ancestry matches the measured terminal topology;
+  Claude Code's MCP ancestry is unverified. Source checks in
+  `../tests/converse/architecture-invariants.test.ts` do not enforce runtime ancestry or indirect
+  dependency behavior.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
-  the coordinator reports this request's playback completed and core has reserved the queue, or core's own guard silences the question converse
-  asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
+  the coordinator reports this request's playback completed and core grants the reservation, or
+  core's own guard silences the question. Use `withCaptureHeld`, which returns to `idle` in its
+  finally.
 - **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
   recorded sample until the transcript exists, and core skips every voice line while it is, so an
   unbounded child mutes Echo for as long as the calling host lives. A turn has exactly two caps:
   the recorder gets `ECHO_CONVERSE_MAX_CAPTURE_MS`, and the whole transcription phase shares one
   `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` budget, so adding a step to that phase must draw from
-  the same deadline rather than take a cap of its own. The turn's lease is derived from both, so
-  the arithmetic breaks the moment a step gets its own cap.
+  the same deadline rather than take a cap of its own. Short or unsupported leases are refused,
+  never clamped, and both booking and core reservation expiry are rebased at the capture grant.
 - **A cancel must never strand the booking.** `POST /turn` is not cancellable: the caller has to
   learn `turn_id`, because a booking nobody can name is a booking nobody can release. A signal
   that fired before capture is honored by aborting the granted turn; during capture it reaches
-  the recorder and the existing catch releases.
+  the recorder. Checks after transcription and after completion bookkeeping make cancellation
+  terminal even when a child has already produced a valid result.
 - **The capture owner writes its own pid** into the capture-state file. Core honors a non-idle
   state only while that pid is alive, so any other pid turns a crash into permanent silence.
 - **Never import `core/`.** Core is reached over HTTP, plus the capture-state path core itself
   reports in `GET /health`. The daemon may run from another clone or a staged payload.
-- **Core's normal `/notify` contract remains receipt-based.** Converse may use the additive
-  `capture_reservation` request field plus per-request completion and reservation-release routes;
-  ordinary callers do not opt in and retain the existing response and queue behavior.
-- Process state is user-owned (`~/.local/state/echo/converse`, `~/Library/Caches/echo/converse`),
-  never `/tmp`. Recordings are deleted once transcribed, and the transcript is never sent to the
-  coordinator.
+- **Core's normal `/notify` contract remains receipt-based.** Converse adds exact completion plus
+  capture-reservation grant/release routes. The coordinator-generated reservation id exists before
+  `/notify`, and every pre-grant exit releases it, so a lost response cannot make accepted core
+  state unnameable. Ordinary callers do not opt in and retain existing queue behavior.
+- Process state is user-owned (`~/.local/state/echo/converse`, `~/Library/Caches/echo/converse`,
+  `~/Library/Logs/echo-converse.log`), never `/tmp`. Every intermediate audio file is `0600` and
+  deleted on every path; the transcript is never sent to the coordinator.
 - `server.ts` exports a factory, not a started server. Importing it must never bind a port.
 
 ## Work Guidance
@@ -64,7 +68,7 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 ## Verification
 
 ```bash
-bun test tests/converse/                                     # unit + invariants
+bun test tests/converse/                                     # unit + invariants + process race
 ECHO_E2E_PORT=8921 ECHO_E2E_CONVERSE_PORT=8922 tests/e2e-converse.sh
 ```
 

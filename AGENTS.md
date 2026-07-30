@@ -80,6 +80,8 @@ PORT=8889 tests/smoke-core.sh
 tests/e2e-adapters.sh       # isolated daemon on :8899; --audible to hear it
 tests/e2e-converse.sh       # isolated core :8921 + coordinator :8922; no microphone needed
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
+bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
+bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -101,7 +103,7 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
-`bun test` + the smoke + both e2e scripts + the Pi and omp builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp, and MCP builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
@@ -124,7 +126,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 ## Documentation map
 
 | Topic | Doc |
-|---|---|
+| --- | --- |
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
 | HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
@@ -146,7 +148,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Purpose | Path |
-|---|---|
+| --- | --- |
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
@@ -188,7 +190,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
-- Do not speak a converse question while the capture state is non-idle, and do not open the microphone before this request's playback completes and core activates its reservation. Core's own guard would hold back the question converse asked it to speak, and the human would be recorded against silence. The capture owner also writes its OWN pid, because core honors a non-idle state only while that pid is alive.
+- Do not speak a converse question while capture state is non-idle, and do not open the microphone before this request's playback completes and core grants its reservation. The coordinator generates the reservation id before `/notify`, releases it on every pre-grant exit, and rebases both core and booking leases at the capture grant. Core's guard would otherwise hold back the question, or a lost response could strand playback. The capture owner writes its OWN pid because core honors a non-idle state only while that pid is alive.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills

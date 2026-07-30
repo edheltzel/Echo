@@ -49,15 +49,18 @@ boundary notes. Mechanism and process topology: [`docs/converse.md`](docs/conver
   (`ECHO_CONVERSE_PORT`) and, like `/notify`, authenticates nobody: any local process can book
   the microphone and cause a recording. Same accepted single-user risk, one rung higher, so do
   not expose it to a network either.
-- **macOS TCC is the real gate.** The capture runs in the calling host's process tree, so the
-  microphone grant attributes to the **terminal application**, not to Echo. No grant means no
-  audio, and there is deliberately no LaunchAgent that could hold one.
+- **macOS TCC is the real gate.** The measured direct-terminal topology attributes capture to
+  the terminal application, and the caller-side code normally spawns capture from the host
+  adapter process rather than Echo's coordinator. Source-level checks keep capture code out of
+  the coordinator; they do not enforce runtime ancestry. Pi and omp use the measured shape, while
+  Claude Code's stdio MCP ancestry remains unverified and is recorded on each turn rather than
+  guaranteed. No TCC grant means no audio, and there is deliberately no LaunchAgent for capture.
 - **Transcription is local-only.** No cloud rung and no API key exists for speech-to-text, so
   a spoken answer never leaves the host.
-- **The audio and the words stay in the capturing process.** The recording is written under
-  `~/Library/Caches/echo/converse` (`mode 0o700`, `ECHO_CONVERSE_CAPTURE_DIR`) and deleted on
-  every path once transcribed; `POST /turn/:id/complete` reports a character count, never the
-  transcript, so the coordinator never sees the text.
+- **The audio and the words stay in the capturing process.** The private capture directory is
+  `0700`; the recorder output and converted whisper input are forced to `0600` before use. Every
+  artifact is deleted on success, cancellation, and failure. `POST /turn/:id/complete` reports a
+  character count, never the transcript, so the coordinator never sees the text.
 
 ## Egress posture
 

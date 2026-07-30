@@ -34,7 +34,11 @@ Primary host-neutral endpoint. Body (every field optional):
   "session_id": "host-session-id",
   "source": "pi",
   "visual_delivery": "native",
-  "capture_reservation": { "owner_pid": 12345, "lease_ms": 120000 }
+  "capture_reservation": {
+    "reservation_id": "t-client-known-token",
+    "owner_pid": 12345,
+    "lease_ms": 120000
+  }
 }
 ```
 
@@ -47,7 +51,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_settings` | — | Pass-through override, see below |
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
 | `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
-| `capture_reservation` | — | Optional converse-only reservation: positive `owner_pid` and `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
+| `capture_reservation` | — | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
 ### Native terminal visual delivery
 
@@ -127,10 +131,16 @@ failures (rejected **before** the line is queued), `500` otherwise.
 
 When `capture_reservation` is present, poll
 `GET /notify/<request_id>/completion` until `state` is `completed` or `failed`. A completed
-response includes `capture_reservation_id`; while that reservation is held, unrelated voice
-lines are accepted but held from playback. Release it with
-`POST /notify/<capture_reservation_id>/capture-release` after capture/transcription. These
-routes are additive and do not change the receipt-based `/notify` response for existing callers.
+response includes the caller's `capture_reservation_id`; while it is held, unrelated voice lines
+are accepted but held from playback. Before opening the microphone, start its protected lease at
+the actual capture grant with
+`POST /notify/capture-reservations/<reservation_id>/grant`. Release it with
+`POST /notify/capture-reservations/<reservation_id>/release` after capture/transcription or on
+any pre-grant failure. Release is idempotent and can arrive before `/notify` acceptance, so a
+lost `/notify` response cannot make the reservation unnameable. The older
+`POST /notify/<request_id>/capture-release` remains compatible for a caller that already knows
+the core request id. These routes are additive and do not change the receipt-based `/notify`
+response for existing callers.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never

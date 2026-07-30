@@ -103,9 +103,10 @@ directions:
   `core/` filesystem paths. The last check is a string scan on purpose: the violation it
   replaced was a `readFileSync` of `core/voices.json`, which no import-based check can see.
 
-`converse/` sits beside `core/`, not inside it, and has its own enforced split:
+`converse/` sits beside `core/`, not inside it, and has a source-checked split:
 `tests/converse/architecture-invariants.test.ts` fails if the coordinator can import a capture
 module or spawn any subprocess, if converse imports `core/`, or if it writes state to `/tmp`.
+These scans catch direct source regressions; they do not enforce runtime process ancestry.
 
 When you add code to `core/`, `converse/`, or an adapter, a boundary violation is a test failure,
 not a review nit.
@@ -232,9 +233,9 @@ are contract.
 - **Never import a host API into `core/`** - no PAI, Pi, Claude Code, or OpenCode.
   Enforced by `tests/core/no-host-strings.test.ts`.
 - **No new host-named endpoints.** The core exposes the host-neutral notification routes plus
-  the opt-in `GET /notify/:request_id/completion` and
-  `POST /notify/:request_id/capture-release` routes used by converse. Unsupported POSTs return
-  JSON 404 with `supported_endpoints`.
+  converse's opt-in completion and capture-reservation grant/release routes under `/notify/`.
+  The legacy request-id release remains compatible. Unsupported POSTs return JSON 404 with
+  `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan - many callers depend on the body shape and status semantics.
 - **All voice traffic is `:3246` by default.** No new `localhost:31337` references (the legacy Pulse

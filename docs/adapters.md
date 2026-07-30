@@ -142,9 +142,10 @@ handing a transcript back as a tool result.
   Ownership is strict like omp's: echo owns that one name, a foreign server holding it is FATAL
   rather than overwritten, and an echo registration hiding under a different name is pruned so no
   session sees the tool twice. `ECHO_MCP_CONFIG_PATH` redirects the target for tests.
-- **Why the host must launch it:** a stdio MCP server is the host's own child, so the capture
-  child it spawns inherits the terminal's process ancestry and the microphone grant attributes to
-  the terminal application rather than to a background service.
+- **Why the host launches it:** capture must stay caller-side rather than in Echo's background
+  coordinator. The measured direct-terminal path attributes to the terminal. Claude Code's stdio
+  MCP path is expected to preserve that ancestry but remains unverified; turns record the observed
+  chain, and source checks do not turn the expectation into runtime enforcement.
 
 ## Pi and omp: the `echo_ask` tool (two-way voice)
 

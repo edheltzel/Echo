@@ -76,9 +76,10 @@ This registers the `echo-converse` MCP server in `~/.claude.json`, which gives C
 tool from their existing adapters, so they need no extra install step.
 
 Echo owns only the `echo-converse` server name; if something else already holds it, the install
-aborts before changing anything. The first ask needs microphone permission, and macOS will ask
-for it on behalf of your **terminal application**, not on behalf of Echo. Full picture, including
-what to install for transcription: [`converse.md`](converse.md). This install preflights `sox`
+aborts before changing anything. The first ask needs microphone permission. Direct Pi/omp
+capture uses the measured terminal-attributed topology; Claude Code's stdio MCP ancestry is still
+unverified, so each turn records what it actually observed instead of promising terminal
+attribution. Full picture: [`converse.md`](converse.md). This install preflights `sox`
 and `rec` before changing host state; `cli/echo doctor` repeats the same check later.
 
 ## Moved or renamed the repo directory?
