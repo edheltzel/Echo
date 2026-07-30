@@ -304,6 +304,13 @@ preflight() {
       ;;
   esac
 
+  case "$ADAPTER" in
+    mcp|pi|omp)
+      echo "> Preflighting echo-converse capture dependencies"
+      bash "$SCRIPT_DIR/converse-dependencies.sh"
+      ;;
+  esac
+
   # Last: refuse a foreign-owned port before any host state is mutated. Placed
   # after the adapter checks so an adapter-preflight failure surfaces first.
   check_port_owner
