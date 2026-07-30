@@ -124,6 +124,13 @@ export function assessCore(read: CoreHealthRead): CoreAssessment {
       detail: `another capture is ${health.capture_guard.state}`,
     };
   }
+  if (health.capture_reservation?.held) {
+    return {
+      ok: false,
+      code: "microphone_busy",
+      detail: "another turn is holding the core playback reservation",
+    };
+  }
   return { ok: true, capture_state_path: capturePath };
 }
 
@@ -134,6 +141,8 @@ export interface SpeakQuestionOptions {
   voiceId?: string;
   title?: string;
   source?: string;
+  ownerPid: number;
+  leaseMs: number;
   fetchImpl: FetchLike;
 }
 
@@ -141,7 +150,7 @@ export interface SpeakQuestionOptions {
  * Post the question. `voice_enabled` is forced on: a silent question would leave
  * the human recorded against a prompt they never heard.
  */
-export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ status: number; body: string }> {
+export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ status: number; body: string; requestId?: string }> {
   const response = await options.fetchImpl(`${options.coreBaseUrl}/notify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -152,9 +161,112 @@ export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ st
       voice_id: options.voiceId,
       session_id: turnSessionId(options.turnId),
       source: options.source ?? "converse",
+      capture_reservation: { owner_pid: options.ownerPid, lease_ms: options.leaseMs },
     }),
   });
-  return { status: response.status, body: await response.text() };
+  const body = await response.text();
+  let requestId: string | undefined;
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    if (typeof parsed.request_id === "string") requestId = parsed.request_id;
+  } catch {
+    // The coordinator reports the HTTP status; a non-JSON body remains a stable
+    // question-not-spoken failure at that boundary.
+  }
+  return { status: response.status, body, requestId };
+}
+
+export type PlaybackCompletionRead =
+  | { status: "ok"; state: "queued" | "playing" | "completed" | "failed"; capture_reservation_id?: string; detail?: string }
+  | { status: "rate_limited" | "unreachable" };
+
+async function readPlaybackCompletion(
+  coreBaseUrl: string,
+  requestId: string,
+  fetchImpl: FetchLike,
+): Promise<PlaybackCompletionRead> {
+  try {
+    const response = await fetchImpl(`${coreBaseUrl}/notify/${encodeURIComponent(requestId)}/completion`);
+    if (response.status === 429) return { status: "rate_limited" };
+    if (!response.ok) return { status: "unreachable" };
+    const body = (await response.json()) as Record<string, unknown>;
+    const state = body.state;
+    if (state === "queued" || state === "playing" || state === "completed" || state === "failed") {
+      return {
+        status: "ok",
+        state,
+        ...(typeof body.capture_reservation_id === "string" ? { capture_reservation_id: body.capture_reservation_id } : {}),
+        ...(typeof body.detail === "string" ? { detail: body.detail } : {}),
+      };
+    }
+    return { status: "unreachable" };
+  } catch {
+    return { status: "unreachable" };
+  }
+}
+
+export interface PlaybackCompletionOptions {
+  coreBaseUrl: string;
+  requestId: string;
+  estimateMs: number;
+  fetchImpl: FetchLike;
+  sleep?: SleepLike;
+  pollIntervalMs?: number;
+  maxPolls?: number;
+}
+
+export interface PlaybackCompletionReport {
+  completed: boolean;
+  state: "completed" | "failed" | "unknown";
+  capture_reservation_id?: string;
+  detail?: string;
+  waited_ms: number;
+  polls: number;
+  refused_reads: number;
+}
+
+/** Wait for the exact /notify request, not a shared queue snapshot. */
+export async function waitForPlaybackCompletion(options: PlaybackCompletionOptions): Promise<PlaybackCompletionReport> {
+  const sleep = options.sleep ?? realSleep;
+  const backoff = options.pollIntervalMs === undefined
+    ? DRAIN_BACKOFF_MS
+    : Array(Math.max((options.maxPolls ?? DRAIN_BACKOFF_MS.length + 1) - 1, 0)).fill(options.pollIntervalMs);
+  const maxPolls = options.maxPolls ?? backoff.length + 1;
+
+  await sleep(options.estimateMs);
+  let waited = options.estimateMs;
+  let refused = 0;
+
+  for (let poll = 1; poll <= maxPolls; poll++) {
+    const read = await readPlaybackCompletion(options.coreBaseUrl, options.requestId, options.fetchImpl);
+    if (read.status !== "ok") {
+      refused++;
+    } else if (read.state === "completed") {
+      return {
+        completed: true,
+        state: "completed",
+        capture_reservation_id: read.capture_reservation_id,
+        waited_ms: waited,
+        polls: poll,
+        refused_reads: refused,
+      };
+    } else if (read.state === "failed") {
+      return {
+        completed: false,
+        state: "failed",
+        detail: read.detail,
+        waited_ms: waited,
+        polls: poll,
+        refused_reads: refused,
+      };
+    }
+    if (poll === maxPolls) break;
+    const gap = backoff[Math.min(poll - 1, backoff.length - 1)] ?? 0;
+    await sleep(gap);
+    waited += gap;
+  }
+
+  return { completed: false, state: "unknown", waited_ms: waited, polls: maxPolls, refused_reads: refused };
 }
 
 export interface DrainOptions {

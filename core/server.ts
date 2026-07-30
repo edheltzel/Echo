@@ -29,6 +29,16 @@ import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
+import {
+  captureReservationHeld,
+  captureReservationView,
+  markPlaybackCompleted,
+  markPlaybackFailed,
+  markPlaybackPlaying,
+  readPlaybackStatus,
+  releaseCaptureReservation,
+  trackPlayback,
+} from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
@@ -1322,7 +1332,7 @@ export async function speakWithFallback(
   // would pollute the user's capture — skip the voice line, mute-style. Checked
   // at speak time (queue-dequeue), so a line whose turn arrives after the
   // capture ends plays normally. The banner already fired at accept.
-  if (isCaptureActive()) {
+  if (captureReservationHeld() || isCaptureActive()) {
     console.log('🎙️  Mic capture active — speech held (capture guard)');
     return { success: false, provider: 'capture-held', voice: null, attempts: [], held_for_capture: true };
   }
@@ -1576,6 +1586,7 @@ async function speakNotification(
     disposition: result.held_for_capture ? 'held-for-capture' : 'played',
   };
   writeAudioLifecycleEvent(event);
+  return result;
 }
 
 // =============================================================================
@@ -1631,10 +1642,13 @@ interface NotifyJobPayload {
 const playQueue = new PlayQueue<NotifyJobPayload>({
   player: async (job) => {
     const p = job.payload;
-    await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    markPlaybackPlaying(p.requestId);
+    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    markPlaybackCompleted(p.requestId, result.success, result.held_for_capture ? "capture guard held playback" : "speech provider failed");
     log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
   },
   onDisposition: (job, disposition, reason) => {
+    markPlaybackFailed(job.id, `${disposition}: ${reason}`);
     log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
     // Minimal lifecycle row (R7): the line never reached the player, so there
     // are no playback metrics — just the disposition and its reason.
@@ -1659,6 +1673,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     });
   },
   onPlayerError: (job, error) => {
+    markPlaybackFailed(job.id, error instanceof Error ? error.message : String(error));
     log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
     // Failure row (R7): speakNotification does not swallow — a speak-path
     // throw or a watchdog timeout lands here, and without this row the
@@ -1703,6 +1718,7 @@ function acceptNotification(
     voiceSettings: Partial<VoiceSettings> | null;
     sessionId: string | null;
     nativeVisualShown: boolean;
+    captureReservation?: { owner_pid: number; lease_ms: number };
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1722,7 +1738,12 @@ function acceptNotification(
     showBanner(titleValidation.sanitized!, messageValidation.sanitized!);
   }
 
-  if (!opts.voiceEnabled) return;
+  if (!opts.voiceEnabled) {
+    if (opts.captureReservation) throw new Error("capture_reservation requires voice_enabled");
+    return;
+  }
+
+  trackPlayback(reqId, opts.captureReservation);
 
   playQueue.enqueue({
     id: reqId,
@@ -1771,6 +1792,7 @@ export const server = serve({
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
+      : url.pathname.startsWith("/notify/") ? `notify-status:${clientIp}`
       : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
@@ -1794,6 +1816,7 @@ export const server = serve({
         const sessionId = data.session_id || null;
         const source = data.source || null;
         const nativeVisualShown = data.visual_delivery === 'native';
+        const captureReservation = data.capture_reservation;
         const ctx: LogContext = { requestId: reqId, sessionId, source };
 
         if (voiceId && typeof voiceId !== 'string') {
@@ -1806,6 +1829,14 @@ export const server = serve({
         const messageCheck = validateInput(message);
         if (!messageCheck.valid) throw new Error(`Invalid message: ${messageCheck.error}`);
 
+        if (captureReservation !== undefined && (
+          typeof captureReservation !== "object" || captureReservation === null ||
+          typeof captureReservation.owner_pid !== "number" || !Number.isInteger(captureReservation.owner_pid) || captureReservation.owner_pid <= 0 ||
+          typeof captureReservation.lease_ms !== "number" || !Number.isFinite(captureReservation.lease_ms) || captureReservation.lease_ms <= 0
+        )) {
+          throw new Error("Invalid capture_reservation");
+        }
+
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
         // 202 on receipt: the banner fires at accept, and synth+play runs
@@ -1814,6 +1845,7 @@ export const server = serve({
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
         acceptNotification(reqId, {
           title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
+          captureReservation,
         });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
@@ -1834,6 +1866,32 @@ export const server = serve({
           }
         );
       }
+    }
+
+    const completion = /^\/notify\/([^/]+)\/completion$/.exec(url.pathname);
+    if (completion && req.method === "GET") {
+      const requestId = completion[1];
+      const status = readPlaybackStatus(requestId);
+      if (status === null) {
+        return new Response(JSON.stringify({ error: "unknown_request", request_id: requestId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404,
+        });
+      }
+      return new Response(JSON.stringify(status), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+      });
+    }
+
+    const reservationRelease = /^\/notify\/([^/]+)\/capture-release$/.exec(url.pathname);
+    if (reservationRelease && req.method === "POST") {
+      const requestId = reservationRelease[1];
+      const released = releaseCaptureReservation(requestId);
+      return new Response(JSON.stringify({ request_id: requestId, released }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: released ? 200 : 404,
+      });
     }
 
     // /notify/personality — compatibility shim
@@ -1970,6 +2028,7 @@ export const server = serve({
             path: resolveCaptureStatePath(),
             state: readCaptureState(),
           },
+          capture_reservation: captureReservationView(),
           // Additive (Phase 2): backlog + consumer liveness. `stalled` means
           // the current job has outlived even the queue's own watchdog —
           // the consumer is genuinely wedged, not just playing a long line.

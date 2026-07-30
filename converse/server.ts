@@ -31,7 +31,7 @@ import {
   estimateSpeechMs,
   readCoreHealth,
   speakQuestion,
-  waitForPlaybackDrain,
+  waitForPlaybackCompletion,
   type FetchLike,
   type SleepLike,
 } from "./playback.ts";
@@ -63,6 +63,7 @@ interface ActiveTurn {
   started_at: number;
   expires_at: number;
   ancestry: string[];
+  capture_reservation_id: string;
 }
 
 export interface ConverseServerHandle {
@@ -229,30 +230,36 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         voiceId: request.voice_id,
         title: request.title,
         source: request.source,
+        ownerPid: request.owner_pid,
+        leaseMs,
         fetchImpl,
       });
-      if (spoken.status < 200 || spoken.status >= 300) {
+      if (spoken.status < 200 || spoken.status >= 300 || spoken.requestId === undefined) {
         counts.refused++;
-        log(`turn ${turnId} refused: question_not_spoken (core answered HTTP ${spoken.status} to /notify)`);
-        return fail("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
+        const detail = spoken.requestId === undefined && spoken.status >= 200 && spoken.status < 300
+          ? "core accepted /notify without a request_id completion token"
+          : `core answered HTTP ${spoken.status} to /notify`;
+        log(`turn ${turnId} refused: question_not_spoken (${detail})`);
+        return fail("question_not_spoken", detail, 503);
       }
 
-      const drain = await waitForPlaybackDrain({
+      const completion = await waitForPlaybackCompletion({
         coreBaseUrl: config.coreBaseUrl,
+        requestId: spoken.requestId,
         estimateMs: estimateSpeechMs(request.question),
         fetchImpl,
         sleep: options.sleep,
         pollIntervalMs: options.pollIntervalMs,
         maxPolls: options.maxPolls,
       });
-      if (!drain.drained) {
+      if (!completion.completed || completion.capture_reservation_id === undefined) {
         // Name the cause the operator can act on. Out of readings and out of queue
         // are the same symptom with opposite fixes, and the rate-limit case is the
         // likely one: the turn has already spent several requests on core.
-        const detail = drain.refused_reads === drain.polls
-          ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
-            "so whether the question finished playing is unknown"
-          : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
+        const detail = completion.detail ?? (completion.refused_reads === completion.polls
+          ? `core refused every completion reading (${completion.polls} of ${completion.polls}, rate limit or unreachable), ` +
+            "so whether this question finished playing is unknown"
+          : `this question did not report playback completion within ${completion.waited_ms}ms`);
         counts.refused++;
         log(`turn ${turnId} refused: question_not_spoken (${detail})`);
         return fail("question_not_spoken", detail, 503);
@@ -266,6 +273,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         started_at: startedAt,
         expires_at: startedAt + leaseMs,
         ancestry: request.ancestry ?? [],
+        capture_reservation_id: completion.capture_reservation_id,
       });
       handedOff = true;
       log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
@@ -276,10 +284,12 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         capture_state_path: assessment.capture_state_path,
         spoke: {
           notify_status: spoken.status,
-          drained: drain.drained,
-          waited_ms: drain.waited_ms,
-          polls: drain.polls,
+          drained: completion.completed,
+          completion_state: "completed",
+          waited_ms: completion.waited_ms,
+          polls: completion.polls,
         },
+        capture_reservation_id: completion.capture_reservation_id,
         lease: {
           owner_pid: request.owner_pid,
           expires_at: new Date(startedAt + leaseMs).toISOString(),
@@ -300,7 +310,19 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     }
   }
 
-  function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Response {
+  async function releaseCoreReservation(turn: ActiveTurn): Promise<void> {
+    try {
+      await fetchImpl(`${config.coreBaseUrl}/notify/${encodeURIComponent(turn.capture_reservation_id)}/capture-release`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch {
+      // The core reservation has the same owner-liveness and lease expiry guard
+      // as the booking, so a lost release cannot hold speech forever.
+    }
+  }
+
+  async function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Promise<Response> {
     const turn = active.get(turnId);
     if (!turn) {
       // A turn dropped for outliving its lease still owns the lock file, and its
@@ -311,6 +333,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 
+    await releaseCoreReservation(turn);
     active.delete(turnId);
     releaseBooking(config.bookingLockPath, turnId);
     if (outcome === "completed") counts.completed++;
