@@ -92,6 +92,32 @@ function requireBinary(bin: string, code: CaptureError["code"], hint: string, wh
   }
 }
 
+const RECORDER_HINT = "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.";
+
+/**
+ * Everything a turn needs before the question is worth asking, and the only
+ * definition of it: the recorder that will capture the reply, and a transcriber
+ * that can read it back.
+ *
+ * The caller runs this BEFORE opening a turn. An adapter registered on a machine
+ * with no sox is a supported state (the installer warns rather than refusing), so
+ * without a check up front the human would hear the question, answer it, and only
+ * then learn the microphone was never opened. Returns the tier the capture will
+ * use, so the check and the choice cannot disagree.
+ */
+export function preflightCapture(config: ConverseConfig, which: Which = defaultWhich): SttTier {
+  requireBinary(config.recBin, "no_recorder", RECORDER_HINT, which);
+  const tier = selectSttTier(config, which);
+  if (tier === null) {
+    throw new CaptureError(
+      "no_stt_tier",
+      `no local transcriber available: install ${config.yapBin} (macOS 26 Tier 1) or ` +
+        `set ECHO_CONVERSE_WHISPER_MODEL for ${config.whisperBin} (Tier 2)`,
+    );
+  }
+  return tier;
+}
+
 /** whisper takes a bare language code; the configured locale is BCP-47. */
 function whisperLanguage(locale: string): string {
   return locale.split("-")[0] || "en";
@@ -247,11 +273,7 @@ export async function recordReply(
   wavPath: string,
   signal?: AbortSignal,
 ): Promise<RecordingReport> {
-  requireBinary(
-    config.recBin,
-    "no_recorder",
-    "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.",
-  );
+  requireBinary(config.recBin, "no_recorder", RECORDER_HINT);
 
   const startedAt = Date.now();
   // No SIGKILL escalation here on purpose: the recorder must be allowed to catch
@@ -405,14 +427,7 @@ export async function transcribeFile(
  */
 export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
   throwIfAborted(signal);
-  const tier = selectSttTier(config);
-  if (tier === null) {
-    throw new CaptureError(
-      "no_stt_tier",
-      `no local transcriber available: install ${config.yapBin} (macOS 26 Tier 1) or ` +
-        `set ECHO_CONVERSE_WHISPER_MODEL for ${config.whisperBin} (Tier 2)`,
-    );
-  }
+  const tier = preflightCapture(config);
 
   mkdirSync(config.captureDir, { recursive: true, mode: 0o700 });
   chmodSync(config.captureDir, 0o700);

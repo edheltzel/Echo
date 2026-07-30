@@ -65,14 +65,15 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 
 | Dependency | Why | Behavior when absent |
 |---|---|---|
-| `sox` (provides `rec`) | Records the reply and ends the turn on silence | The ask refuses before spawning anything, naming `brew install sox` |
+| `sox` (provides `rec`) | Records the reply and ends the turn on silence | The ask refuses before the question is spoken, naming `brew install sox` |
 | `yap` | Tier 1 transcription (Apple SpeechAnalyzer, on device, no model download) | Falls back to the Tier 2 rung unless a tier is pinned |
 | `whisper-cli` + a ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) | Tier 2 transcription, portable | Only the Tier 1 rung is available |
 
 The voice-ask install paths (`--adapter mcp|pi|omp`) check `sox` and `rec` before changing host
 state, and all three answer a missing one the same way: **warn and install anyway**. Capture is
 optional to an install whose notifications need nothing from sox, and the ask refuses at call
-time naming the binary, so nothing is silently broken by continuing.
+time - before it speaks the question - naming the binary, so nothing is silently broken by
+continuing.
 `cli/echo doctor` runs the same check and reports the exact missing binary plus
 `brew install sox`. That row is a **warning** unless this machine actually exposes
 echo-converse, in which case it degrades the run. Any one of these makes it a failure:

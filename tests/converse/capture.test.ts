@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   CaptureError,
   captureAndTranscribe,
+  preflightCapture,
   recordReply,
   recorderArgv,
   selectSttTier,
@@ -133,6 +134,54 @@ describe("transcriber selection", () => {
   test("an explicitly chosen tier is never silently swapped for the other", () => {
     const cfg = config({ sttTier: "whisper", whisperModel: "/models/ggml-base.en.bin" });
     expect(selectSttTier(cfg, present(["yap"]))).toBeNull();
+  });
+});
+
+// The installer only warns about a missing recorder, so "registered, no sox" is a
+// state a turn has to survive. This check is what the caller runs BEFORE the
+// question is spoken, so the human is never asked something nothing can record.
+describe("capture preflight", () => {
+  const present = (bins: string[]) => (bin: string) => (bins.includes(bin) ? `/usr/local/bin/${bin}` : null);
+
+  test("names the recorder and the fix when sox is missing", () => {
+    const failure = (() => {
+      try {
+        preflightCapture(config(), present(["yap"]));
+      } catch (error) {
+        return error as CaptureError;
+      }
+    })();
+
+    expect(failure?.code).toBe("no_recorder");
+    expect(failure?.message).toContain("rec is not available");
+    expect(failure?.message).toContain("brew install sox");
+    expect(failure?.message).toContain("ECHO_CONVERSE_REC_BIN");
+  });
+
+  test("reports a missing transcriber separately from a missing recorder", () => {
+    const failure = (() => {
+      try {
+        preflightCapture(config(), present(["rec"]));
+      } catch (error) {
+        return error as CaptureError;
+      }
+    })();
+
+    expect(failure?.code).toBe("no_stt_tier");
+    expect(failure?.message).toContain("ECHO_CONVERSE_WHISPER_MODEL");
+  });
+
+  test("returns the tier the capture will use, so check and choice cannot disagree", () => {
+    expect(preflightCapture(config(), present(["rec", "yap"]))).toBe("yap");
+    const cfg = config({ whisperModel: "/models/ggml-base.en.bin" });
+    expect(preflightCapture(cfg, present(["rec", "whisper-cli"]))).toBe("whisper");
+  });
+
+  test("honors an executable override outside PATH", () => {
+    const cfg = config({ recBin: fakeRecorder(0), yapBin: fakeBinary("fake-yap", "exit 0") });
+
+    // Nothing on PATH, and it still passes: the overrides are what will be spawned.
+    expect(preflightCapture(cfg, (bin) => (existsSync(bin) ? bin : null))).toBe("yap");
   });
 });
 

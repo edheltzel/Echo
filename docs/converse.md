@@ -155,10 +155,15 @@ The Tier 1 rung needs no conversion at all, which was checked rather than assume
 records at 48kHz, and `yap transcribe` returns the phrase from a 48kHz file. Only whisper.cpp
 requires 16kHz mono, so only that rung pays for the resample.
 
-Both binaries are checked for existence before a turn spawns anything, so a machine with `yap`
-but no `sox` gets "install sox (`brew install sox`), which provides `rec`" rather than an ENOENT
-from inside a turn. That case is worth naming because splitting the Tier 1 row is what created
-it: `sox` is now a Tier 1 dependency.
+Both binaries are checked for existence **before the turn opens**, not just before the capture
+spawns, so a machine with `yap` but no `sox` gets "install sox (`brew install sox`), which
+provides `rec`" instead of an ENOENT from inside a turn - and instead of hearing the question and
+answering into a microphone that was never opened. The installer only warns about a missing
+recorder, so "registered, no sox" is a state a turn has to survive; `preflightCapture` is the one
+definition of what a turn needs, run by the caller before `POST /turn` and again by the capture
+itself. It honors `ECHO_CONVERSE_REC_BIN` and the transcriber overrides, since those are the
+binaries that would actually be spawned. That case is worth naming because splitting the Tier 1
+row is what created it: `sox` is now a Tier 1 dependency.
 
 No speech is a distinct outcome: sox writes a 44-byte header-only file when the endpointer hears
 nothing, and an empty transcript is reported as `no_speech` rather than as an empty answer.

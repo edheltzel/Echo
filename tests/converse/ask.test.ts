@@ -140,6 +140,48 @@ describe("one-shot ask", () => {
     expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
   });
 
+  // The whole point of preflighting: the human must never be asked a question
+  // that nothing can record the answer to. Nothing is booked, nothing is spoken.
+  test("a machine with no recorder is refused before the question is asked", async () => {
+    const { core, config } = startCoordinator();
+
+    const failure = await askOnce(
+      { question: "Which branch should I ship?" },
+      {
+        config,
+        captureEngine: recordingEngine().engine,
+        capturePreflight: () => {
+          throw new CaptureError("no_recorder", "rec is not available. Install sox (`brew install sox`)");
+        },
+        fetchImpl: (u, i) => fetch(u, i),
+      },
+    ).catch((error: AskError) => error);
+
+    // The code and the actionable message survive to the caller unchanged.
+    expect((failure as AskError).code).toBe("no_recorder");
+    expect((failure as AskError).message).toContain("brew install sox");
+    expect(core.observed.calls).toEqual([]);
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+  });
+
+  // No injected engine and no injected preflight, so the default must fire on its
+  // own - the one thing the test above cannot prove. A recorder path that exists
+  // nowhere fails the same way on a machine with sox and on CI without it, and
+  // the empty call log is what catches a preflight that stopped running.
+  test("the real preflight runs by default, before the coordinator is even started", async () => {
+    const { core, config } = startCoordinator();
+
+    const failure = await askOnce(
+      { question: "Which branch should I ship?" },
+      { config: { ...config, recBin: join(scratch, "absent-rec") }, fetchImpl: (u, i) => fetch(u, i) },
+    ).catch((error: AskError) => error);
+
+    expect((failure as AskError).code).toBe("no_recorder");
+    expect((failure as AskError).message).toContain("brew install sox");
+    expect(core.observed.calls).toEqual([]);
+    expect(existsSync(join(scratch, "booking.lock"))).toBe(false);
+  });
+
   test("an already-cancelled ask never books the microphone", async () => {
     const { core, config } = startCoordinator();
     const controller = new AbortController();

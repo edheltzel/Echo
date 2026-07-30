@@ -18,7 +18,7 @@
 //   POST complete   -> booking released; metadata only, never the transcript
 
 import { existsSync } from "node:fs";
-import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
+import { captureAndTranscribe, CaptureError, preflightCapture, type CaptureEngine } from "./capture.ts";
 import { CONVERSE_LEASE_SLACK_MS, resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
 import { withCaptureHeld } from "./capture-state.ts";
 import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
@@ -59,6 +59,12 @@ export class AskError extends Error {
 export interface AskDeps {
   config?: ConverseConfig;
   captureEngine?: CaptureEngine;
+  /**
+   * Checked before the turn opens. Defaults to the real check only while the
+   * default engine is in use, because it names the binaries THAT engine spawns:
+   * a caller who supplies its own engine supplies its own requirements.
+   */
+  capturePreflight?: (config: ConverseConfig) => void;
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
   /** Injected in tests so auto-start can be exercised or suppressed. */
   startCoordinator?: (config: ConverseConfig) => void;
@@ -183,6 +189,16 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
   if (question.length === 0) throw new AskError("invalid_request", "question must not be empty");
   if (options.signal?.aborted) {
     throw new AskError("cancelled", "the ask was cancelled before the question was spoken");
+  }
+
+  // Before the coordinator is started, the microphone booked, or the question
+  // spoken: a turn that cannot capture must not ask the human anything.
+  const preflight = deps.capturePreflight ?? (deps.captureEngine === undefined ? preflightCapture : undefined);
+  try {
+    preflight?.(config);
+  } catch (error) {
+    if (error instanceof CaptureError) throw new AskError(error.code, error.message);
+    throw error;
   }
 
   await ensureCoordinator(config, deps);

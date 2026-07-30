@@ -30,6 +30,13 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
   the coordinator reports this request's playback completed and core has reserved the queue, or core's own guard silences the question converse
   asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
+- **Nothing is spoken that cannot be recorded.** The installer only warns about a missing
+  recorder, so an adapter registered without sox is a supported state, and a check that fires
+  once the capture spawns fires too late - the human has already heard the question. `askOnce`
+  runs `preflightCapture` before it starts the coordinator, books, or speaks. That function is
+  the single definition of what a turn needs (recorder plus a resolvable transcriber) and the
+  capture runs it too, so the two cannot drift. It resolves the configured `ECHO_CONVERSE_*_BIN`
+  overrides, because those are what would be spawned.
 - **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
   recorded sample until the transcript exists, and core skips every voice line while it is, so an
   unbounded child mutes Echo for as long as the calling host lives. A turn has exactly two caps:
