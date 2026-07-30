@@ -235,11 +235,11 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
 and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
-Claude Code hook entries in `~/.claude/settings.json`, the Pi `packages` entry in
-`~/.pi/agent/settings.json`, and the omp `echo-voice` symlink in
-`~/.omp/agent/extensions/` all survive. There is no deregistration tool; remove those
-entries by hand before deleting the repo directory, or hosts will keep pointing at dead
-paths.
+Claude Code hook entries in `~/.claude/settings.json`, the `echo-converse` MCP server in
+`~/.claude.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp
+`echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
+tool; remove those entries by hand before deleting the repo directory, or hosts will keep
+pointing at dead paths.
 
 ## Legacy services
 

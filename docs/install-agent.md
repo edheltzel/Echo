@@ -76,18 +76,17 @@ Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extens
 
 If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually - ownership rules in `docs/adapters.md`.
 
-## 8. Heal after a repo move/rename
-
-## Voice ask (Claude Code MCP server)
+## 8. Install the voice-ask MCP server when needed
 
 ```bash
 bash scripts/install.sh --adapter mcp
 ```
 
-Registers the `echo-converse` MCP server in `~/.claude.json` (`ECHO_MCP_CONFIG_PATH` overrides the
-target). Exit 2 means a foreign server already holds the `echo-converse` name; Echo will not
-overwrite it. Pi and omp expose the same `echo_ask` tool from their existing adapters. See
-[`converse.md`](converse.md).
+Expected: the reconcile reports the `echo-converse` entry in `~/.claude.json` (created, re-pointed, or already current) and the health check passes. `ECHO_MCP_CONFIG_PATH` overrides the target.
+
+If FAIL: exit 2 means a foreign server already holds the `echo-converse` name; Echo will not overwrite it, and aborts before mutating any host state. Pi and omp expose the same `echo_ask` tool from their existing adapters, so they need no extra step. See [`converse.md`](converse.md).
+
+## 9. Heal after a repo move/rename
 
 Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
 
@@ -97,7 +96,7 @@ bash scripts/install.sh --check
 
 Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected - machine-checkable for automation.
 
-## 9. Status
+## 10. Status
 
 ```bash
 bash scripts/status.sh
@@ -105,7 +104,7 @@ bash scripts/status.sh
 
 Expected: neutral service `com.echo` is listed or health returns OK.
 
-## 10. Uninstall
+## 11. Uninstall
 
 ```bash
 bash scripts/uninstall.sh --check  # preview: prints what would be removed, mutates nothing

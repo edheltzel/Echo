@@ -11,6 +11,11 @@ The server core accepts JSON on `localhost:3246` by default and speaks through a
 - `adapters/omp/` - oh-my-pi (omp) extension package integration.
 - direct HTTP - any process can POST to `/notify`.
 
+Echo can also ask: `converse/` speaks a question, records the spoken reply, transcribes it
+locally and hands the text back to the agent. Pi and omp expose that as a tool from their
+existing adapters; Claude Code gets it from the MCP server in `adapters/mcp/`. See
+[docs/converse.md](docs/converse.md).
+
 ## Architecture
 
 ```mermaid
@@ -73,6 +78,7 @@ The quickstart above installs the core only. To also wire a host adapter:
 bash scripts/install.sh --adapter claudecode   # Claude Code hooks
 bash scripts/install.sh --adapter pi           # Pi extension
 bash scripts/install.sh --adapter omp          # oh-my-pi extension
+bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
 ```
 
 Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
