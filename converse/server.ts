@@ -1,7 +1,7 @@
 // The echo-converse coordinator: a microphone-free booking and sequencing surface.
 //
 // What it owns: the single-microphone booking, speaking the question through
-// core, and observing playback drain. What it deliberately does NOT own: the
+// core, and observing exact per-request playback completion. What it deliberately does NOT own: the
 // microphone. A TCC spike on macOS 26.5.2 proved why - a capture opened from a
 // launchd background job gets no responsible process ("Failed to fetch
 // responsible file descriptor"), no prompt surface and no usable grant, while
@@ -266,19 +266,6 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         return fail("question_not_spoken", detail, 503);
       }
 
-      active.set(turnId, {
-        turn_id: turnId,
-        owner_pid: request.owner_pid,
-        source: request.source ?? "unknown",
-        question_chars: request.question.length,
-        started_at: startedAt,
-        expires_at: startedAt + leaseMs,
-        ancestry: request.ancestry ?? [],
-        capture_reservation_id: completion.capture_reservation_id,
-      });
-      handedOff = true;
-      log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
-
       const grant: TurnGrant = {
         turn_id: turnId,
         state: "capture_ready",
@@ -296,7 +283,22 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
           expires_at: new Date(startedAt + leaseMs).toISOString(),
         },
       };
-      return json(grant, 200);
+      // Serialize before handing the lock to the caller. A serialization failure
+      // must still take the booking through the failure path below.
+      const response = json(grant, 200);
+      active.set(turnId, {
+        turn_id: turnId,
+        owner_pid: request.owner_pid,
+        source: request.source ?? "unknown",
+        question_chars: request.question.length,
+        started_at: startedAt,
+        expires_at: startedAt + leaseMs,
+        ancestry: request.ancestry ?? [],
+        capture_reservation_id: completion.capture_reservation_id,
+      });
+      handedOff = true;
+      log(`turn ${turnId} ready for capture (owner pid ${request.owner_pid}, source ${request.source})`);
+      return response;
     } catch (error) {
       const detail = error instanceof Error ? error.message : "unexpected coordinator failure";
       const code: ConverseErrorCode = bookingAcquired ? "question_not_spoken" : "coordinator_error";

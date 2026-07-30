@@ -11,7 +11,7 @@
 //
 // The resulting sequence, which is also the answer to the self-hold trap:
 //
-//   POST /turn      -> coordinator books, speaks the question, waits for drain
+//   POST /turn      -> coordinator books, speaks the question, waits for exact completion
 //   write recording -> only now, so core never holds back its own question
 //   capture child   -> spawned here, in the caller's ancestry
 //   write idle      -> unconditionally, in a finally
@@ -238,6 +238,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
     throw new AskError("cancelled", "the ask was cancelled before the microphone opened");
   }
 
+  let completionSent = false;
   try {
     // The capture state goes to `recording` only now, after the coordinator has
     // confirmed the question finished playing.
@@ -254,6 +255,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       capture_ms: captured.capture_ms,
       transcript_chars: captured.text.length,
     });
+    completionSent = true;
 
     if (options.signal?.aborted) {
       throw new AskError("cancelled", "the ask was cancelled before its result could be returned");
@@ -269,11 +271,13 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
     };
   } catch (error) {
     if (error instanceof AskError) {
-      await finish("abort", { reason: `${error.code}: ${error.message}` });
+      if (!completionSent) await finish("abort", { reason: `${error.code}: ${error.message}` });
       throw error;
     }
     const code = error instanceof CaptureError ? error.code : "capture_failed";
-    await finish("abort", { reason: `${code}: ${error instanceof Error ? error.message : String(error)}` });
+    if (!completionSent) {
+      await finish("abort", { reason: `${code}: ${error instanceof Error ? error.message : String(error)}` });
+    }
     throw error instanceof CaptureError
       ? new AskError(code, error.message)
       : new AskError("capture_failed", error instanceof Error ? error.message : String(error));
