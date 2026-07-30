@@ -257,8 +257,9 @@ echo "$after" | bun -e '
 bun -e '
   const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
   const config = resolveConverseConfig(process.env);
+  const requiredLeaseMs = config.maxCaptureMs + config.transcribeTimeoutMs;
   const body = (question) => JSON.stringify({
-    question, owner_pid: process.pid, source: "e2e-converse", lease_ms: 30000,
+    question, owner_pid: process.pid, source: "e2e-converse", lease_ms: requiredLeaseMs,
   });
   const post = (question) => fetch(`${config.baseUrl}/turn`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: body(question),
@@ -310,9 +311,10 @@ bun -e '
     expires_at: new Date(Date.now() + 600000).toISOString(),
   }));
 
+  const requiredLeaseMs = config.maxCaptureMs + config.transcribeTimeoutMs;
   const response = await fetch(`${config.baseUrl}/turn`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question: "Recovered?", owner_pid: process.pid, source: "e2e-converse", lease_ms: 30000 }),
+    body: JSON.stringify({ question: "Recovered?", owner_pid: process.pid, source: "e2e-converse", lease_ms: requiredLeaseMs }),
   });
   const body = await response.json();
 
