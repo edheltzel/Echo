@@ -31,14 +31,18 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|pi|omp");
+  test("supports core, Claude Code, MCP, Pi, and omp adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|mcp|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
     // registration state aborts before any host state is mutated.
     expect(script).toContain('adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
+    // The MCP server (Claude Code's only route to a model-invokable ask) plugs
+    // into the same three places every adapter must: preflight, install, check.
+    expect(script).toContain('adapters/mcp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/mcp/reconcile.ts" --check || rc=$?');
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
@@ -49,6 +53,55 @@ describe("install script adapter support", () => {
     expect(script).toContain("com.atlas.voicesystem");
     expect(script).toContain("Quarantining legacy LaunchAgent plist");
   });
+
+  // Voice-ask is optional and the daemon does not need sox at all, so a missing
+  // recorder warns and the install continues. The hard error still fires at call
+  // time, where converse/capture.ts refuses before spawning the recorder.
+  test("warns about missing sox without failing the install", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-missing-sox-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      const mcpConfig = join(root, "claude.json");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+
+      const result = await runInstall(["--adapter", "mcp"], {
+        // No sox/rec on this PATH, and PATH excludes the host's own bin dirs
+        // beyond the system ones so a real Homebrew sox cannot rescue the case.
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        ECHO_MCP_CONFIG_PATH: mcpConfig,
+        ECHO_CONVERSE_SOX_BIN: join(bin, "absent-sox"),
+        ECHO_CONVERSE_REC_BIN: join(bin, "absent-rec"),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("Missing echo-converse dependency: sox");
+      expect(result.stderr).toContain("brew install sox");
+      expect(result.stderr).toContain("the daemon is unaffected");
+      // The base install still completed AND the requested adapter registered:
+      // the optional capability's dependency never blocks what the operator
+      // actually asked for.
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      expect(JSON.parse(readFileSync(mcpConfig, "utf8")).mcpServers["echo-converse"].args)
+        .toEqual([resolve("adapters/mcp/server.ts")]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
 
   test("preflights missing Pi before mutating host state", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-install-preflight-"));
@@ -149,6 +202,8 @@ describe("install script adapter support", () => {
 
       writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
       writeExecutable(join(bin, "omp"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "sox"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "rec"), "#!/bin/bash\nexit 0\n");
       writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
       writeExecutable(join(bin, "launchctl"), `#!/bin/bash
 case "$1" in
@@ -172,6 +227,65 @@ exit 0
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // The MCP server is Claude Code's only route to a model-invokable ask, so its
+  // registration has to survive the same install path every other adapter does.
+  // ECHO_MCP_CONFIG_PATH keeps this off the operator's real ~/.claude.json.
+  test("--adapter mcp registers the server and rerunning heals a stale path", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-mcp-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      const mcpConfig = join(root, "claude.json");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+      // A registration left behind by a renamed clone.
+      writeFileSync(
+        mcpConfig,
+        JSON.stringify(
+          { mcpServers: { "echo-converse": { type: "stdio", command: "bun", args: ["/old/clone/adapters/mcp/server.ts"] } } },
+          null,
+          2,
+        ),
+      );
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "sox"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "rec"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+
+      const env = {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        ECHO_MCP_CONFIG_PATH: mcpConfig,
+      };
+      const result = await runInstall(["--adapter", "mcp"], env);
+
+      expect(result.exitCode).toBe(0);
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      const registered = JSON.parse(readFileSync(mcpConfig, "utf8")).mcpServers["echo-converse"];
+      expect(registered.args).toEqual([resolve("adapters/mcp/server.ts")]);
+
+      // Rerunning with no adapter requested still refreshes the installed one,
+      // and changes nothing once it is current (#77).
+      const before = readFileSync(mcpConfig, "utf8");
+      const second = await runInstall(["--adapter", "none"], env);
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).toContain("Refreshing MCP server registration");
+      expect(readFileSync(mcpConfig, "utf8")).toBe(before);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
 
   test("refreshes ALL installed adapters regardless of --adapter, and rerunning is a no-op (#77)", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-refresh-"));
@@ -204,7 +318,7 @@ exit 0
       );
       writeFileSync(piSettings, JSON.stringify({ packages: ["/old/clone/adapters/pi"] }, null, 2) + "\n");
 
-      // Real bun (the adapter tools must actually run); stub the service plumbing —
+      // Real bun (the adapter tools must actually run); stub the service plumbing -
       // `list` must report com.echo so the post-load liveness check passes.
       writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
       writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
@@ -272,7 +386,7 @@ exit 0
       const first = await runInstall(["--adapter", "none"], env);
       expect(first.exitCode).toBe(0);
       expect(first.stdout).toContain("Refreshing oh-my-pi adapter registration");
-      // #109: the dedicated omp adapter — a dead */adapters/pi link heals onto adapters/omp.
+      // #109: the dedicated omp adapter - a dead */adapters/pi link heals onto adapters/omp.
       expect(readlinkSync(join(extensions, "echo-voice"))).toBe(realpathSync(resolve("adapters/omp")));
 
       // After healing, --check reports clean with exit 0.
@@ -339,7 +453,7 @@ exit 0
       mkdirSync(bin, { recursive: true });
 
       // A genuine echo hook registration (detection trips) but no PreToolUse Bash
-      // matcher — restore-hooks exits 2 (FATAL). The refresh must warn and continue.
+      // matcher - restore-hooks exits 2 (FATAL). The refresh must warn and continue.
       const claudeSettings = join(home, ".claude/settings.json");
       writeFileSync(
         claudeSettings,
@@ -453,7 +567,7 @@ exit 0
       mkdirSync(state, { recursive: true });
       mkdirSync(launchAgents, { recursive: true });
       // Both former labels exist on disk; the prior "Atlas" service is the one
-      // actually loaded — the realistic reinstall-from-com.atlas.voicesystem case.
+      // actually loaded - the realistic reinstall-from-com.atlas.voicesystem case.
       writeFileSync(join(launchAgents, "com.pai.voice-server.plist"), "legacy-pai");
       writeFileSync(join(launchAgents, "com.atlas.voicesystem.plist"), "legacy-atlas");
       writeFileSync(join(state, "atlas-legacy-loaded"), "1");

@@ -20,7 +20,7 @@ bash scripts/install.sh --adapter none
 
 Expected: exits 0 and prints `OK echo is healthy on :3246`.
 
-If FAIL: run `cli/echo doctor` — it names the degraded state and a recovery command per row — then inspect `~/Library/Logs/echo.log`. An install that refuses because port 3246 is occupied but not serving Echo wrote nothing to that log.
+If FAIL: run `cli/echo doctor` - it names the degraded state and a recovery command per row - then inspect `~/Library/Logs/echo.log`. An install that refuses because port 3246 is occupied but not serving Echo wrote nothing to that log.
 
 ## 3. Verify health
 
@@ -74,9 +74,19 @@ bash scripts/install.sh --adapter omp
 
 Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extensions/` (created, re-pointed, or already current) and the health check passes. omp has its own package at `adapters/omp/`, but shares the Pi persona and voice defaults.
 
-If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually — ownership rules in `docs/adapters.md`.
+If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually - ownership rules in `docs/adapters.md`.
 
-## 8. Heal after a repo move/rename
+## 8. Install the voice-ask MCP server when needed
+
+```bash
+bash scripts/install.sh --adapter mcp
+```
+
+Expected: the reconcile reports the `echo-converse` entry in `~/.claude.json` (created, re-pointed, or already current) and the health check passes. `ECHO_MCP_CONFIG_PATH` overrides the target.
+
+If FAIL: exit 2 means a foreign server already holds the `echo-converse` name; Echo will not overwrite it, and aborts before mutating any host state. Pi and omp expose the same `echo_ask` tool from their existing adapters, so they need no extra step. See [`converse.md`](converse.md).
+
+## 9. Heal after a repo move/rename
 
 Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
 
@@ -84,9 +94,9 @@ Every install run re-reconciles **all** installed adapter registrations regardle
 bash scripts/install.sh --check
 ```
 
-Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected — machine-checkable for automation.
+Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected - machine-checkable for automation.
 
-## 9. Status
+## 10. Status
 
 ```bash
 bash scripts/status.sh
@@ -94,7 +104,7 @@ bash scripts/status.sh
 
 Expected: neutral service `com.echo` is listed or health returns OK.
 
-## 10. Uninstall
+## 11. Uninstall
 
 ```bash
 bash scripts/uninstall.sh --check  # preview: prints what would be removed, mutates nothing

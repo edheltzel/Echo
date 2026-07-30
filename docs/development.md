@@ -8,7 +8,7 @@
 
 ## Clone & Install
 
-Bun runs TypeScript directly — there is no build step and no third-party dependency to
+Bun runs TypeScript directly - there is no build step and no third-party dependency to
 fetch. One command is still required:
 
 ```bash
@@ -73,14 +73,18 @@ git worktree add -b fix/example .worktrees/fix-example origin/dev
 ## Tests
 
 ```bash
-bun install                  # required before bun test — adapters import @echo/shared
+bun install                  # required before bun test - adapters import @echo/shared
 bun test
 PORT=8889 tests/smoke-core.sh
 tests/e2e-adapters.sh        # adapter boundary e2e against an isolated daemon
+tests/e2e-converse.sh        # one voice-ask turn against an isolated core + coordinator
+bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
+bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
+bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 ```
 
-CI runs the same set (plus the Pi and omp adapter builds) headlessly on every PR into
-`dev`/`master` and every push to those branches — see `.github/workflows/verify.yml`.
+CI runs exactly that set headlessly on every PR into `dev`/`master` and every push to those
+branches - see `.github/workflows/verify.yml`.
 
 ### Never test against the running daemon
 
@@ -89,17 +93,25 @@ retargeting it, overwriting its config, or speaking through it is a live-system 
 a test.
 
 `tests/e2e-adapters.sh` is the safe path. It starts its own `core/server.ts` on its own port
-(`ECHO_E2E_PORT`, default `8899`) with every state path — mute, capture guard, audio cache,
-TTS cache, lifecycle log, `VOICES_PATH` — redirected into a scratch directory, points the
+(`ECHO_E2E_PORT`, default `8899`) with every state path - mute, capture guard, audio cache,
+TTS cache, lifecycle log, `VOICES_PATH` - redirected into a scratch directory, points the
 adapters at it via `ECHO_DAEMON_URL`, and kills only the pid it started. It **refuses to run**
 if the chosen port is `3246` or if anything is already listening there: it never attaches to a
 daemon it does not own. Before sending anything it prints an isolation proof (pid, port,
 adapter target, scratch dir).
 
 ```bash
-tests/e2e-adapters.sh              # silent — safe anywhere
+tests/e2e-adapters.sh              # silent - safe anywhere
 tests/e2e-adapters.sh --audible    # also speaks, on the isolated instance only
 ```
+
+`tests/e2e-converse.sh` applies the same discipline to the voice ask, with two additions of its
+own. It starts a second isolated process (the `echo-converse` coordinator, `ECHO_E2E_CONVERSE_PORT`,
+default `8922`) and refuses `32468` as well as `3246`. And its recorder and transcriber are
+stand-in scripts, so it opens no microphone and needs neither `sox` nor `yap` - which is what lets
+it run on CI. Silence comes from disabling every provider in its own scratch `voices.json`: an ask
+forces `voice_enabled` on by design, so `--audible` is the only way to hear it (and the only way
+to exercise real synthesis timing in the drain wait). See [converse.md](converse.md).
 
 Every spoken test line begins `Echo Test engaged. Beep, boop, bop.` so anything audible is
 unmistakably a test and never mistaken for a real notification.

@@ -1,7 +1,7 @@
 #!/bin/bash
-# echo — stable control & diagnostic CLI for the Echo voice daemon.
+# echo - stable control & diagnostic CLI for the Echo voice daemon.
 #
-# A thin wrapper over scripts/*.sh and the daemon HTTP API — it reimplements no
+# A thin wrapper over scripts/*.sh and the daemon HTTP API - it reimplements no
 # daemon logic. Written in bash on purpose: `echo doctor` must still diagnose a
 # MISSING Bun prerequisite, so the entry point cannot itself require Bun.
 #
@@ -27,12 +27,12 @@ PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 
 usage() {
   cat <<EOF
-echo — control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${ECHO_PORT})
+echo - control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${ECHO_PORT})
 
 Usage: echo <command> [args]
 
 Commands:
-  install [--adapter none|claudecode|pi|omp] [--check]
+  install [--adapter none|claudecode|mcp|pi|omp] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
   doctor               Diagnose every degraded state with a concrete recovery command.
@@ -43,7 +43,7 @@ Commands:
                        Set the default Echo persona (name + edge-tts voice) for pi/omp.
   update [--check]     Re-stage the payload from this checkout and reload the service.
                        --check is read-only and verifies that the plist and host
-                       adapter paths still resolve — it does NOT detect a payload
+                       adapter paths still resolve - it does NOT detect a payload
                        staged from older source at the same version.
   uninstall [--check]  Unload ${SERVICE_NAME} and remove its payload (logs + config kept).
 EOF
@@ -75,7 +75,7 @@ cmd_mute() {
     *)
       local minutes
       if ! minutes="$(parse_duration_minutes "$arg")"; then
-        echo "Unrecognized duration: '$arg' — use 30m, 1h, or a positive number of minutes." >&2
+        echo "Unrecognized duration: '$arg' - use 30m, 1h, or a positive number of minutes." >&2
         exit 2
       fi
       exec bash "$SCRIPTS/mute.sh" on "$minutes"
@@ -134,13 +134,24 @@ has_unhealthy_provider() {
   printf '%s' "$1" | grep -qE "${enabled}[^{}]*${unhealthy}|${unhealthy}[^{}]*${enabled}"
 }
 
+# True when the operator has actually configured echo-converse, i.e. set at least
+# one ECHO_CONVERSE_* value where resolveConverseConfig would read it. Registering
+# an adapter that merely EXPOSES the echo_ask tool is not the same thing, so that
+# stays a warning: a missing recorder must never fail an install or a doctor run
+# for an operator who only wants notifications.
+converse_configured() {
+  local config_path="$HOME/.config/echo/config.json"
+  env | grep -q '^ECHO_CONVERSE_' && return 0
+  [ -f "$config_path" ] && grep -q '"ECHO_CONVERSE_' "$config_path"
+}
+
 read_manifest_version() {
   [ -f "$PAYLOAD_CURRENT/manifest.json" ] || return 0
   { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1; } || true
 }
 
 cmd_doctor() {
-  echo "Echo doctor — ${SERVICE_NAME} on :${ECHO_PORT}"
+  echo "Echo doctor - ${SERVICE_NAME} on :${ECHO_PORT}"
   echo
 
   # 1. Platform
@@ -157,7 +168,22 @@ cmd_doctor() {
     doctor_row fail "bun" "Bun not found on PATH" "Install Bun: curl -fsSL https://bun.sh/install | bash"
   fi
 
-  # 3. Payload
+  # 3. Converse capture dependencies. Intentionally independent of Bun so doctor
+  # can diagnose a missing sox on a machine before install is possible. Voice-ask
+  # is optional, so a missing recorder only DEGRADES the install for an operator
+  # who configured converse; for everyone else it is a warning and doctor still
+  # answers READY.
+  local converse_deps
+  if converse_deps="$(bash "$SCRIPTS/converse-dependencies.sh" 2>&1)"; then
+    doctor_row ok "converse" "$converse_deps"
+  elif converse_configured; then
+    doctor_row fail "converse" "$converse_deps" "Install capture tools: brew install sox"
+  else
+    doctor_row warn "converse" "$converse_deps" \
+      "Only needed for voice-ask (echo_ask), which will fail until this is fixed: brew install sox"
+  fi
+
+  # 4. Payload
   if [ -e "$PAYLOAD_CURRENT/core/server.ts" ]; then
     doctor_row ok "payload" "v$(read_manifest_version) at ${PAYLOAD_CURRENT}"
   else
@@ -220,7 +246,7 @@ cmd_doctor() {
 
   echo
   if [ "$DOCTOR_FAILED" -eq 1 ]; then
-    echo "Result: DEGRADED — fix the ✗ rows above, then rerun: echo doctor"
+    echo "Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor"
     exit 1
   fi
   echo "Result: READY"
