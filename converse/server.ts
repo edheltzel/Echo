@@ -371,14 +371,28 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       return fail(code, detail, status);
     } finally {
       if (bookingAcquired && !handedOff) {
-        await releaseCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
+        await releaseCoreReservation(reservationId, `turn ${turnId} failing before capture`);
         releaseBooking(config.bookingLockPath, turnId);
       }
     }
   }
 
-  async function releaseCoreReservation(reservationId: string): Promise<void> {
-    await releaseCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
+  /**
+   * A release that never lands is the one failure the operator cannot see: core
+   * keeps holding the reservation, every notification is held for capture until
+   * the lease expires, and nothing is recording. Owner-pid reaping cannot rescue
+   * it either, because the owner is the long-lived host process. So the outcome
+   * is checked and logged rather than discarded.
+   */
+  async function releaseCoreReservation(reservationId: string, context: string): Promise<void> {
+    const release = await releaseCoreCaptureReservation(config.coreBaseUrl, reservationId, fetchImpl);
+    if (!release.released) {
+      log(
+        `reservation ${reservationId} could not be released after ${context} ` +
+          `(${release.attempts} attempts: ${release.detail ?? "no detail"}); ` +
+          "core holds it until the lease expires, so voice lines stay held for capture",
+      );
+    }
   }
 
   async function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Promise<Response> {
@@ -388,12 +402,12 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       // caller is the only one who can hand the microphone back. releaseBooking
       // refuses when the holder is a different turn, so this cannot take a lock
       // away from a live one.
-      await releaseCoreReservation(turnId);
+      await releaseCoreReservation(turnId, `finishing unknown turn ${turnId}`);
       releaseBooking(config.bookingLockPath, turnId);
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 
-    await releaseCoreReservation(turn.capture_reservation_id);
+    await releaseCoreReservation(turn.capture_reservation_id, `turn ${turnId} ${outcome}`);
     active.delete(turnId);
     releaseBooking(config.bookingLockPath, turnId);
     if (outcome === "completed") counts.completed++;

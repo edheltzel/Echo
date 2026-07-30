@@ -183,7 +183,7 @@ Resolved through `shared/echo-env.ts` like everything else: live process values 
 | `ECHO_CONVERSE_PORT` | `32468` | coordinator |
 | `ECHO_CONVERSE_URL` | `http://localhost:32468` | callers |
 | `ECHO_CONVERSE_BOOKING_LOCK` | `~/.local/state/echo/converse/booking.lock` | coordinator |
-| `ECHO_CONVERSE_LEASE_MS` | `120000` | coordinator |
+| `ECHO_CONVERSE_LEASE_MS` | capture + transcription budget plus slack (`120000` at the defaults) | coordinator |
 | `ECHO_CONVERSE_LOG_PATH` | `~/Library/Logs/echo-converse.log` | auto-start caller |
 | `ECHO_CONVERSE_CAPTURE_DIR` | `~/Library/Caches/echo/converse` | caller |
 | `ECHO_CONVERSE_MAX_CAPTURE_MS` | `30000` | caller |
@@ -203,8 +203,10 @@ Echo for as long as the calling host lives. A turn has exactly two caps: the rec
 `ECHO_CONVERSE_MAX_CAPTURE_MS`, and the whole transcription phase shares one
 `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` budget, so the whisper tier's resample and its
 transcriber draw from the same clock rather than getting a cap each. A turn's lease is those two
-caps plus slack. The coordinator refuses a lease below the operation budget or above the maximum
-it can honor rather than silently clamping it. Both the booking and core reservation are rebased
+caps plus slack, and that is also where the `ECHO_CONVERSE_LEASE_MS` default comes from, so
+raising either cap cannot leave the default lease below the budget it is checked against. The
+coordinator refuses a lease below the operation budget or above the maximum it can honor rather
+than silently clamping it. Both the booking and core reservation are rebased
 at the capture grant, so question playback does not consume the protected capture interval.
 
 The recorder is stopped with SIGTERM only, because sox has to catch the signal to finalize the

@@ -25,6 +25,9 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_CAPTURE_STATE_PATH", "ECHO_AUDIO_LIFECYCLE_LOG", "ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES",
   "ECHO_RESOLUTION_LOG", "ECHO_RESOLUTION_LOG_MAX_BYTES", "ECHO_VOICE_EVENTS_LOG",
   "ECHO_DAEMON_URL", "ECHO_NOTIFY_URL", "ECHO_VOICE_SURFACES",
+  // The macOS fallback speaker, so the last rung of the provider chain can be
+  // pointed at a wrapper instead of /usr/bin/say.
+  "ECHO_SAY_BIN",
   // echo-converse (one-shot voice ask). Only the coordinator reads PORT/URL and
   // the booking lock; the rest are read in the calling host's process, where the
   // capture actually happens.

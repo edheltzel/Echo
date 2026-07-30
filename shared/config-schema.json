@@ -52,6 +52,10 @@
     "ECHO_DAEMON_URL": { "type": "string" },
     "ECHO_NOTIFY_URL": { "type": "string" },
     "ECHO_VOICE_SURFACES": { "type": "string" },
+    "ECHO_SAY_BIN": {
+      "type": "string",
+      "description": "Executable the macOS say fallback provider spawns. Defaults to /usr/bin/say."
+    },
     "ECHO_CONVERSE_PORT": {
       "default": 32468,
       "description": "Port for the echo-converse coordinator. Core's TTS daemon keeps PORT (3246).",

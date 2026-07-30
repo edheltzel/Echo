@@ -99,16 +99,22 @@ export function resolveConverseConfig(
   homeDir: string = homedir(),
 ): ConverseConfig {
   const port = positiveInt(env.ECHO_CONVERSE_PORT, DEFAULT_CONVERSE_PORT);
+  // The lease default is derived from the same budget the coordinator checks a
+  // requested lease against. Hardcoding it meant raising either cap made every
+  // turn that omits lease_ms fail lease_too_short against a floor it could no
+  // longer reach.
+  const maxCaptureMs = positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000);
+  const transcribeTimeoutMs = positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000);
   return {
     port,
     baseUrl: stripTrailingSlash(env.ECHO_CONVERSE_URL || `http://localhost:${port}`),
     coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
-    leaseMs: positiveInt(env.ECHO_CONVERSE_LEASE_MS, 120_000),
+    leaseMs: positiveInt(env.ECHO_CONVERSE_LEASE_MS, maxCaptureMs + transcribeTimeoutMs + CONVERSE_LEASE_SLACK_MS),
     logPath: env.ECHO_CONVERSE_LOG_PATH || converseLogPath(homeDir),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
-    maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),
-    transcribeTimeoutMs: positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000),
+    maxCaptureMs,
+    transcribeTimeoutMs,
     silenceMs: positiveInt(env.ECHO_CONVERSE_SILENCE_MS, 1_500),
     locale: env.ECHO_CONVERSE_LOCALE || "en-US",
     sttTier: parseTier(env.ECHO_CONVERSE_STT_TIER),

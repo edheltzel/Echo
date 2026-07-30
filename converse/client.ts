@@ -26,7 +26,7 @@ import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
 
 const COORDINATOR_START_TIMEOUT_MS = 5_000;
 const COORDINATOR_POLL_MS = 100;
-/** Slack over the bounded work so a lease cannot expire mid-turn. */
+/** Bound on the process-tree walk that records TCC attribution evidence. */
 const MAX_ANCESTRY_DEPTH = 12;
 
 export interface AskOptions {

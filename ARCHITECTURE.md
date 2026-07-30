@@ -9,8 +9,8 @@ pages for per-area detail.
 Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 **host-neutral core plus out-of-process host adapters**. One long-lived process
 (`core/server.ts`) listens on `localhost:3246` by default and exposes the notification API plus
-two opt-in playback-status routes (`GET /notify/:request_id/completion` and
-`POST /notify/:request_id/capture-release`). Any host - a Claude Code
+its opt-in playback-status and capture-reservation routes (`GET /notify/:request_id/completion`
+and `POST /notify/capture-reservations/:reservation_id/{grant,release}`). Any host - a Claude Code
 session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
 observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
@@ -130,7 +130,7 @@ not a review nit.
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
-| `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for playback to drain, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
+| `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for that request's exact playback completion, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 3246) and the shared occupied-port report, so no two surfaces can disagree. Reads the documented config port when no override is present. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
@@ -234,8 +234,8 @@ are contract.
   Enforced by `tests/core/no-host-strings.test.ts`.
 - **No new host-named endpoints.** The core exposes the host-neutral notification routes plus
   converse's opt-in completion and capture-reservation grant/release routes under `/notify/`.
-  The legacy request-id release remains compatible. Unsupported POSTs return JSON 404 with
-  `supported_endpoints`.
+  A reservation is released only by its caller-generated id, never by core's predictable
+  request id. Unsupported POSTs return JSON 404 with `supported_endpoints`.
 - **Do not change the `/notify` request/response contract** without an explicit
   compatibility plan - many callers depend on the body shape and status semantics.
 - **All voice traffic is `:3246` by default.** No new `localhost:31337` references (the legacy Pulse

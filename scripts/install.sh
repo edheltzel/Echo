@@ -304,10 +304,17 @@ preflight() {
       ;;
   esac
 
+  # echo-converse's capture tools are diagnosed here, never enforced. These
+  # adapters register the echo_ask tool, but voice-ask is optional and the
+  # daemon they are installing alongside does not need sox at all - failing the
+  # base install over it would break an operator who only wants notifications.
+  # The hard, actionable error still fires at call time (converse/capture.ts
+  # refuses before spawning, naming the binary and `brew install sox`).
   case "$ADAPTER" in
     mcp|pi|omp)
-      echo "> Preflighting echo-converse capture dependencies"
-      bash "$SCRIPT_DIR/converse-dependencies.sh"
+      echo "> Checking echo-converse capture dependencies"
+      bash "$SCRIPT_DIR/converse-dependencies.sh" \
+        || echo "WARN: echo-converse voice-ask will fail until its capture tools are installed; the daemon is unaffected" >&2
       ;;
   esac
 

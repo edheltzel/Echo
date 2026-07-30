@@ -134,6 +134,17 @@ has_unhealthy_provider() {
   printf '%s' "$1" | grep -qE "${enabled}[^{}]*${unhealthy}|${unhealthy}[^{}]*${enabled}"
 }
 
+# True when the operator has actually configured echo-converse, i.e. set at least
+# one ECHO_CONVERSE_* value where resolveConverseConfig would read it. Registering
+# an adapter that merely EXPOSES the echo_ask tool is not the same thing, so that
+# stays a warning: a missing recorder must never fail an install or a doctor run
+# for an operator who only wants notifications.
+converse_configured() {
+  local config_path="$HOME/.config/echo/config.json"
+  env | grep -q '^ECHO_CONVERSE_' && return 0
+  [ -f "$config_path" ] && grep -q '"ECHO_CONVERSE_' "$config_path"
+}
+
 read_manifest_version() {
   [ -f "$PAYLOAD_CURRENT/manifest.json" ] || return 0
   { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1; } || true
@@ -157,13 +168,19 @@ cmd_doctor() {
     doctor_row fail "bun" "Bun not found on PATH" "Install Bun: curl -fsSL https://bun.sh/install | bash"
   fi
 
-  # 3. Converse capture dependencies. This is intentionally independent of Bun
-  # so doctor can diagnose a missing sox on a machine before install is possible.
+  # 3. Converse capture dependencies. Intentionally independent of Bun so doctor
+  # can diagnose a missing sox on a machine before install is possible. Voice-ask
+  # is optional, so a missing recorder only DEGRADES the install for an operator
+  # who configured converse; for everyone else it is a warning and doctor still
+  # answers READY.
   local converse_deps
   if converse_deps="$(bash "$SCRIPTS/converse-dependencies.sh" 2>&1)"; then
     doctor_row ok "converse" "$converse_deps"
-  else
+  elif converse_configured; then
     doctor_row fail "converse" "$converse_deps" "Install capture tools: brew install sox"
+  else
+    doctor_row warn "converse" "$converse_deps" \
+      "Only needed for voice-ask (echo_ask), which will fail until this is fixed: brew install sox"
   fi
 
   # 4. Payload

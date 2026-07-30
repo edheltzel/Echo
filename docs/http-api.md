@@ -7,12 +7,20 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
 `429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with two carve-outs that each get their own:
+`localhost` bucket, with four carve-outs that each get their own:
 
 - `POST /mute` — so a notification flood can never starve the mute control (#83).
 - `GET /voices` — adapters read it once per turn immediately before that turn's `/notify`.
   On the shared bucket that would halve every host's notification budget and let the read
   starve the write it precedes.
+- `GET /notify/<request_id>/completion` — a converse turn spends up to five of these polls,
+  which would otherwise eat the notification budget they are waiting on.
+- `POST /notify/capture-reservations/<reservation_id>/{grant,release}` — one of each per turn,
+  and a release that gets rate-limited away leaves the reservation held and every later voice
+  line silently held for capture, so the control pair never shares the polling bucket.
+
+`POST /notify/personality` is **not** carved out: it produces speech, so it belongs on the
+notification bucket the flood guard exists for.
 
 ## `POST /notify`
 
@@ -137,10 +145,11 @@ the actual capture grant with
 `POST /notify/capture-reservations/<reservation_id>/grant`. Release it with
 `POST /notify/capture-reservations/<reservation_id>/release` after capture/transcription or on
 any pre-grant failure. Release is idempotent and can arrive before `/notify` acceptance, so a
-lost `/notify` response cannot make the reservation unnameable. The older
-`POST /notify/<request_id>/capture-release` remains compatible for a caller that already knows
-the core request id. These routes are additive and do not change the receipt-based `/notify`
-response for existing callers.
+lost `/notify` response cannot make the reservation unnameable. Release accepts **only** the
+caller-generated `reservation_id`, never a core `request_id`: request ids come off a
+predictable counter, and a release keyed on one would let any local process drop a live
+microphone interlock by guessing. These routes are additive and do not change the
+receipt-based `/notify` response for existing callers.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never

@@ -54,32 +54,54 @@ describe("install script adapter support", () => {
     expect(script).toContain("Quarantining legacy LaunchAgent plist");
   });
 
-  test("preflights missing sox before an MCP install mutates host state", async () => {
+  // Voice-ask is optional and the daemon does not need sox at all, so a missing
+  // recorder warns and the install continues. The hard error still fires at call
+  // time, where converse/capture.ts refuses before spawning the recorder.
+  test("warns about missing sox without failing the install", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-missing-sox-"));
     try {
       const home = join(root, "home");
       const bin = join(root, "bin");
+      const state = join(root, "state");
+      const mcpConfig = join(root, "claude.json");
       mkdirSync(home, { recursive: true });
       mkdirSync(bin, { recursive: true });
-      const launchctlLog = join(root, "launchctl.log");
+      mkdirSync(state, { recursive: true });
 
-      writeExecutable(join(bin, "bun"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
 
       const result = await runInstall(["--adapter", "mcp"], {
+        // No sox/rec on this PATH, and PATH excludes the host's own bin dirs
+        // beyond the system ones so a real Homebrew sox cannot rescue the case.
         HOME: home,
         PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        ECHO_MCP_CONFIG_PATH: mcpConfig,
+        ECHO_CONVERSE_SOX_BIN: join(bin, "absent-sox"),
+        ECHO_CONVERSE_REC_BIN: join(bin, "absent-rec"),
       });
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain("Missing echo-converse dependency: sox");
       expect(result.stderr).toContain("brew install sox");
-      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
-      expect(existsSync(launchctlLog)).toBe(false);
+      expect(result.stderr).toContain("the daemon is unaffected");
+      // The base install still completed AND the requested adapter registered:
+      // the optional capability's dependency never blocks what the operator
+      // actually asked for.
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      expect(JSON.parse(readFileSync(mcpConfig, "utf8")).mcpServers["echo-converse"].args)
+        .toEqual([resolve("adapters/mcp/server.ts")]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, INSTALL_TIMEOUT_MS);
 
   test("preflights missing Pi before mutating host state", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-install-preflight-"));

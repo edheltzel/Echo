@@ -185,17 +185,11 @@ function releaseRecord(record: PlaybackRecord): void {
   if (record.state === "completed" || record.state === "failed") playback.delete(record.request_id);
 }
 
-/** Compatibility release by core request id. */
-export function releaseCaptureReservation(requestId: string): boolean {
-  reapExpiredReservation();
-  const record = playback.get(requestId);
-  if (!record) return false;
-  releaseRecord(record);
-  return true;
-}
-
 /**
- * Idempotent release by the coordinator-generated reservation id.
+ * Idempotent release by the coordinator-generated reservation id, the ONLY key
+ * a release accepts. Core request ids come off a predictable counter, so a
+ * release keyed on one would let any local process drop a live microphone
+ * interlock by guessing an id.
  *
  * An unmatched release leaves a bounded tombstone so a /notify request whose
  * response was lost cannot arrive a moment later and create an unreleasable

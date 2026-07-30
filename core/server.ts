@@ -37,7 +37,6 @@ import {
   markPlaybackFailed,
   markPlaybackPlaying,
   readPlaybackStatus,
-  releaseCaptureReservation,
   releaseCaptureReservationById,
   trackPlayback,
   type CaptureReservationRequest,
@@ -638,10 +637,11 @@ const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_H
 const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES"), 1, 0);
 const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
-// The e2e harness may inject a scratch no-op executable. Production keeps the
-// platform path; the override exists only so the isolated silent run can prove
-// queue completion without requiring an audio device or mutating /usr/bin.
-const MACOS_SAY_BIN = process.env.ECHO_E2E_SAY_BIN || '/usr/bin/say';
+// The macOS fallback speaker. Configurable like every other Echo path so an
+// operator can point it at a wrapper (and so an isolated run can prove queue
+// completion without an audio device), resolved through the canonical
+// configuration chain rather than read from process.env.
+const MACOS_SAY_BIN = resolveEchoEnv("ECHO_SAY_BIN") || '/usr/bin/say';
 
 class EdgeProcessError extends Error {
   diagnostic: ProviderDiagnostic;
@@ -1651,7 +1651,13 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     const p = job.payload;
     markPlaybackPlaying(p.requestId);
     const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
-    markPlaybackCompleted(p.requestId, result.success, result.held_for_capture ? "capture guard held playback" : "speech provider failed");
+    // Name the actual cause: a caller waiting on completion reports this string
+    // verbatim, and telling a muted operator that a provider failed sends them
+    // to the wrong fix.
+    const failureDetail = result.held_for_capture ? "capture guard held playback"
+      : result.muted ? "echo is muted, so the line was not spoken"
+      : "speech provider failed";
+    markPlaybackCompleted(p.requestId, result.success, failureDetail);
     log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
   },
   onDisposition: (job, disposition, reason) => {
@@ -1776,6 +1782,14 @@ function acceptNotification(
 // HTTP Server
 // =============================================================================
 
+// Declared once: routing and rate-limit bucketing must agree on exactly which
+// paths are converse's opt-in status and control routes, or a path that answers
+// on one list is billed to the wrong bucket on the other.
+const COMPLETION_PATH = /^\/notify\/([^/]+)\/completion$/;
+const CAPTURE_RESERVATION_GRANT_PATH = /^\/notify\/capture-reservations\/([^/]+)\/grant$/;
+const CAPTURE_RESERVATION_RELEASE_PATH = /^\/notify\/capture-reservations\/([^/]+)\/release$/;
+const CAPTURE_RESERVATION_PATH = /^\/notify\/capture-reservations\/[^/]+\/(grant|release)$/;
+
 export const server = serve({
   port: PORT,
   async fetch(req) {
@@ -1801,10 +1815,20 @@ export const server = serve({
     // /notify for that same turn. Sharing the notification bucket would halve
     // every host's effective notification budget and make the read starve the
     // write it precedes — a dropped notification, the worst failure here.
+    //
+    // The converse routes are split by call frequency, not by URL prefix. A turn
+    // spends up to five completion polls but only one grant and one release, so
+    // sharing one bucket would let the polls of one turn 429 the control calls of
+    // the next. A lost release is the expensive one: it leaves core's reservation
+    // held and every later notification silently held for capture.
+    //
+    // POST /notify/personality is deliberately NOT in either bucket. It produces
+    // speech, so it shares the notification bucket the flood guard exists for.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
-      : url.pathname.startsWith("/notify/") ? `notify-status:${clientIp}`
+      : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
+      : CAPTURE_RESERVATION_PATH.test(url.pathname) ? `capture-reservation:${clientIp}`
       : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
@@ -1881,7 +1905,7 @@ export const server = serve({
       }
     }
 
-    const completion = /^\/notify\/([^/]+)\/completion$/.exec(url.pathname);
+    const completion = COMPLETION_PATH.exec(url.pathname);
     if (completion && req.method === "GET") {
       const requestId = completion[1];
       const status = readPlaybackStatus(requestId);
@@ -1897,7 +1921,7 @@ export const server = serve({
       });
     }
 
-    const reservationGrant = /^\/notify\/capture-reservations\/([^/]+)\/grant$/.exec(url.pathname);
+    const reservationGrant = CAPTURE_RESERVATION_GRANT_PATH.exec(url.pathname);
     if (reservationGrant && req.method === "POST") {
       const reservationId = decodeURIComponent(reservationGrant[1]);
       const granted = grantCaptureReservation(reservationId);
@@ -1913,23 +1937,17 @@ export const server = serve({
       });
     }
 
-    const reservationReleaseById = /^\/notify\/capture-reservations\/([^/]+)\/release$/.exec(url.pathname);
+    // Release is keyed ONLY on the coordinator-generated reservation id, never on
+    // core's request id: request ids are a predictable counter, so a release
+    // route keyed on one would let any local process (or a blind cross-origin
+    // POST) drop a live microphone interlock by guessing.
+    const reservationReleaseById = CAPTURE_RESERVATION_RELEASE_PATH.exec(url.pathname);
     if (reservationReleaseById && req.method === "POST") {
       const reservationId = decodeURIComponent(reservationReleaseById[1]);
       const released = releaseCaptureReservationById(reservationId);
       return new Response(JSON.stringify({ reservation_id: reservationId, ...released }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
-      });
-    }
-
-    const reservationRelease = /^\/notify\/([^/]+)\/capture-release$/.exec(url.pathname);
-    if (reservationRelease && req.method === "POST") {
-      const requestId = reservationRelease[1];
-      const released = releaseCaptureReservation(requestId);
-      return new Response(JSON.stringify({ request_id: requestId, released }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: released ? 200 : 404,
       });
     }
 
@@ -2105,7 +2123,6 @@ export const server = serve({
       "GET /notify/:request_id/completion",
       "POST /notify/capture-reservations/:reservation_id/grant",
       "POST /notify/capture-reservations/:reservation_id/release",
-      "POST /notify/:request_id/capture-release",
       "POST /notify/personality",
       "POST /mute",
       "GET /health",
@@ -2151,5 +2168,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/:request_id/capture-release, POST /notify/personality, POST /mute, GET /health, GET /voices`);
+log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);

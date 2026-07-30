@@ -6,7 +6,6 @@ import {
   markPlaybackCompleted,
   markPlaybackPlaying,
   readPlaybackStatus,
-  releaseCaptureReservation,
   releaseCaptureReservationById,
   trackPlayback,
 } from "../../core/playback-reservation";
@@ -29,7 +28,7 @@ describe("core playback completion reservation", () => {
     });
     expect(captureReservationHeld()).toBe(true);
 
-    expect(releaseCaptureReservation(requestId)).toBe(true);
+    expect(releaseCaptureReservationById(reservationId)).toEqual({ acknowledged: true, matched: true });
     expect(captureReservationHeld()).toBe(false);
   });
 

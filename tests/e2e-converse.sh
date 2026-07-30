@@ -126,7 +126,7 @@ if [ "$AUDIBLE" -eq 0 ]; then
 exit 0
 SAY
   chmod +x "${SCRATCH}/fake-say"
-  export ECHO_E2E_SAY_BIN="${SCRATCH}/fake-say"
+  export ECHO_SAY_BIN="${SCRATCH}/fake-say"
 fi
 
 PORT="$PORT" bun run "$ROOT/core/server.ts" >"$CORE_LOG" 2>&1 &
