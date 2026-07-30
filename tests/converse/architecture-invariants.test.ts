@@ -2,8 +2,9 @@ import { describe, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-// Mechanical enforcement of the property the whole capability rests on: the
-// always-on side never opens the microphone.
+// Source-level regression checks for the property the whole capability rests on:
+// the always-on side never opens the microphone. These checks are not runtime
+// enforcement of indirect dependency behavior or process ancestry.
 //
 // The TCC spike measured what happens when it does. A capture under a launchd
 // job produced TCC records with no responsible process ("Failed to fetch
@@ -146,6 +147,30 @@ describe("echo-converse architecture invariants", () => {
       offenders,
       "echo-converse listens on :32468 (keypad ECHOV) and core stays on :3246. The :8890 in the " +
         "older scoping documents is superseded, and :31337 is the retired Pulse port.",
+    );
+  });
+
+  test("does not claim source scans enforce microphone topology at runtime", () => {
+    const server = readFileSync(join(CONVERSE_DIR, "server.ts"), "utf8");
+    const packageContract = readFileSync(join(CONVERSE_DIR, "AGENTS.md"), "utf8");
+    const docs = readFileSync(join("docs", "converse.md"), "utf8");
+    const offenders: string[] = [];
+
+    if (/mechanically\s+enforc/i.test(server)) offenders.push("converse/server.ts overclaims runtime enforcement");
+    if (/enforced by\s+`?tests\/converse\/architecture-invariants/i.test(packageContract)) {
+      offenders.push("converse/AGENTS.md overclaims runtime enforcement");
+    }
+    if (/Both properties are enforced by/i.test(docs)) offenders.push("docs/converse.md overclaims runtime enforcement");
+    if (!/source-level|source scan|not runtime/i.test(docs)) offenders.push("docs/converse.md does not state the enforcement boundary");
+    if (!/Claude Code[\s\S]{0,220}(not|unverified|unconfirmed)/i.test(docs)) {
+      offenders.push("docs/converse.md does not state that Claude Code ancestry is unverified");
+    }
+
+    assertNoOffenders(
+      offenders,
+      "The coordinator/caller topology is a measured design boundary plus source-level regression " +
+        "checks. Do not describe those checks as runtime enforcement, and keep the Claude Code bridge " +
+        "path explicitly unverified until it is measured on the supported host.",
     );
   });
 });
