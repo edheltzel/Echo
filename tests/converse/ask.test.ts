@@ -30,18 +30,19 @@ afterEach(() => {
 function coreHealth(overrides: Partial<CoreHealthSnapshot> = {}): CoreHealthSnapshot {
   return {
     mute: { muted: false, muted_until: null },
-    capture_guard: { path: capturePath, state: "idle" },
+    capture_guard: { path: capturePath, state: "idle", pid: null },
     play_queue: { depth: 0, in_flight_ms: null, stalled: false },
     ...overrides,
   };
 }
 
-/** Reads the capture state at the moment core is asked to speak. */
+/** Reads the capture state, and the nonce presented, at the moment core is asked to speak. */
 function fakeCore(health: CoreHealthSnapshot = coreHealth()) {
-  const observed: { notifyCaptureState: string | null; calls: string[] } = {
-    notifyCaptureState: null,
-    calls: [],
-  };
+  const observed: {
+    notifyCaptureState: string | null;
+    notifyNonce: unknown;
+    calls: string[];
+  } = { notifyCaptureState: null, notifyNonce: undefined, calls: [] };
   return {
     observed,
     fetchImpl: async (url: string, init?: RequestInit) => {
@@ -51,7 +52,11 @@ function fakeCore(health: CoreHealthSnapshot = coreHealth()) {
         observed.notifyCaptureState = existsSync(capturePath)
           ? String(JSON.parse(readFileSync(capturePath, "utf8")).state)
           : "absent";
-        return new Response(JSON.stringify({ status: "accepted" }), { status: 202 });
+        observed.notifyNonce = JSON.parse(String(init?.body)).capture_bypass_nonce;
+        return new Response(
+          JSON.stringify({ status: "played", disposition: "played", request_id: "r-1" }),
+          { status: 200 },
+        );
       }
       return new Response(JSON.stringify(health), { status: 200 });
     },
@@ -63,6 +68,7 @@ function startCoordinator(core = fakeCore()) {
     ...resolveConverseConfig({}, scratch),
     bookingLockPath: join(scratch, "booking.lock"),
     coreBaseUrl: "http://core.test",
+    captureStatePath: capturePath,
   };
   const handle = createConverseServer({
     config,
@@ -98,22 +104,26 @@ describe("one-shot ask", () => {
     expect(result.engine).toBe("yap");
     expect(result.capture_ms).toBe(1_234);
     expect(result.turn_id).toMatch(/^t-/);
-    expect(result.spoke.drained).toBe(true);
+    expect(result.spoke.disposition).toBe("played");
     expect(result.ancestry).toEqual(["1 launchd"]);
     expect(core.observed.calls).toContain("POST /notify");
     expect(sawState).toEqual(["recording"]);
   });
 
-  test("core is never asked to speak while a capture is published", async () => {
-    // The self-hold trap: had the capture state been `recording` at this point,
-    // core's own guard would have held back the question converse just asked it
-    // to speak, and the human would have been recorded against silence.
+  test("the question is spoken into the caller's own hold, with its nonce", async () => {
+    // The self-hold trap, in the shape the interlock now takes. The hold is
+    // deliberately already up when the question is sent - that is what leaves no
+    // gap for another session's audio - so what keeps the question audible is the
+    // owner nonce accompanying it. Without that pairing core would hold back the
+    // very question it was asked to speak.
     const { core, config } = startCoordinator();
     const { engine } = recordingEngine();
 
     await askOnce({ question: "Ready?" }, { config, captureEngine: engine, fetchImpl: (u, i) => fetch(u, i) });
 
-    expect(core.observed.notifyCaptureState).toBe("absent");
+    expect(core.observed.notifyCaptureState).toBe("recording");
+    expect(typeof core.observed.notifyNonce).toBe("string");
+    expect(String(core.observed.notifyNonce).length).toBeGreaterThan(16);
   });
 
   test("the capture state returns to idle once the turn ends", async () => {

@@ -17,6 +17,7 @@
 //   write idle      -> unconditionally, in a finally
 //   POST complete   -> booking released; metadata only, never the transcript
 
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
 import { resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
@@ -188,7 +189,34 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
 
   await ensureCoordinator(config, deps);
 
+  if (config.captureStatePath === null) {
+    throw new AskError(
+      "capture_guard_disabled",
+      "ECHO_CAPTURE_STATE_PATH is empty, so nothing would stop core speaking into the recording",
+    );
+  }
+
   const ancestry = deps.ancestry ?? resolveAncestry();
+
+  // The hold goes up BEFORE the question is asked. That ordering is the
+  // interlock: it leaves no gap between "the question finished" and "the
+  // microphone opened" for another session's audio to start in. The question is
+  // still audible because it carries the nonce below, which is core's proof that
+  // the line belongs to the process holding the microphone.
+  //
+  // The path comes from this caller's own configuration rather than from the
+  // grant, because the hold has to exist before there is a grant to read. The
+  // coordinator checks it against the file core actually reads and refuses on a
+  // mismatch, so the assumption is verified rather than trusted.
+  const nonce = randomBytes(24).toString("hex");
+  return await withCaptureHeld(
+    config.captureStatePath,
+    () => runTurn(),
+    process.pid,
+    nonce,
+  );
+
+  async function runTurn(): Promise<AskResult> {
   const response = await fetchImpl(`${config.baseUrl}/turn`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -204,6 +232,8 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       // state that leaves a caller unable to hand the microphone back.
       lease_ms: config.maxCaptureMs + config.transcribeTimeoutMs + LEASE_SLACK_MS,
       ancestry,
+      capture_state_path: config.captureStatePath,
+      capture_nonce: nonce,
     }),
     // Deliberately NOT cancellable. Aborting this request would reject before
     // the grant arrives, and a booking whose turn_id the caller never learned is
@@ -240,12 +270,9 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
   }
 
   try {
-    // The capture state goes to `recording` only now, after the coordinator has
-    // confirmed the question finished playing.
-    // `recording` covers the transcriber too. Core holds its speech on
-    // `recording` and `transcribing` alike, so splitting the phases here would
-    // add a write that changes nothing core does.
-    const captured = await withCaptureHeld(body.capture_state_path, () => captureEngine(config, options.signal));
+    // The hold is already published by the wrapper around this function, and the
+    // coordinator has confirmed core reported this question as played.
+    const captured = await captureEngine(config, options.signal);
 
     await finish("complete", {
       engine: captured.engine,
@@ -267,5 +294,6 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
     throw error instanceof CaptureError
       ? new AskError(code, error.message)
       : new AskError("capture_failed", error instanceof Error ? error.message : String(error));
+  }
   }
 }

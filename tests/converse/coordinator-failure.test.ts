@@ -33,7 +33,7 @@ afterEach(() => {
 function coreHealth(): CoreHealthSnapshot {
   return {
     mute: { muted: false, muted_until: null },
-    capture_guard: { path: join(scratch, "recording-state.json"), state: "idle" },
+    capture_guard: { path: join(scratch, "recording-state.json"), state: "idle", pid: null },
     play_queue: { depth: 0, in_flight_ms: null, stalled: false },
   };
 }
@@ -47,7 +47,7 @@ function brokenCore(mode: "notify-throws" | "health-throws" | "notify-garbage" |
       // An error status with a body the coordinator cannot parse: the failure
       // must still be reported as converse's own JSON, not passed through.
       if (mode === "notify-garbage") return new Response("<html>bad gateway</html>", { status: 502 });
-      return new Response(JSON.stringify({ status: "accepted" }), { status: 202 });
+      return new Response(JSON.stringify({ status: "played", disposition: "played" }), { status: 200 });
     }
     if (mode === "health-throws") throw new Error("connection reset by peer");
     if (mode === "health-garbage") return new Response("<html>gateway</html>", { status: 200 });
@@ -137,7 +137,9 @@ describe("a transport failure mid-turn", () => {
 
     const working = startServer(async (url: string) => {
       const path = new URL(url).pathname;
-      if (path === "/notify") return new Response(JSON.stringify({ status: "accepted" }), { status: 202 });
+      if (path === "/notify") {
+        return new Response(JSON.stringify({ status: "played", disposition: "played" }), { status: 200 });
+      }
       return new Response(JSON.stringify(coreHealth()), { status: 200 });
     });
     const recovered = await ask(working);

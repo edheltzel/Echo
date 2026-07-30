@@ -76,7 +76,12 @@ export type CoreAssessment =
   | { ok: true; capture_state_path: string }
   | {
       ok: false;
-      code: "core_unreachable" | "core_rate_limited" | "core_muted" | "capture_guard_disabled";
+      code:
+        | "core_unreachable"
+        | "core_rate_limited"
+        | "core_muted"
+        | "capture_guard_disabled"
+        | "capture_path_mismatch";
       detail: string;
     }
   | { ok: false; code: "microphone_busy"; detail: string };
@@ -86,7 +91,19 @@ export type CoreAssessment =
  * turn would otherwise record into a silence the human never heard, or record
  * with no interlock protecting the recording.
  */
-export function assessCore(read: CoreHealthRead): CoreAssessment {
+export interface AssessOptions {
+  /**
+   * The caller that published the hold for THIS turn. Its own capture is not a
+   * busy microphone: the hold goes up before the question by design, so the
+   * preflight has to tell "my caller is holding" from "another tool is
+   * recording".
+   */
+  ownerPid?: number;
+  /** Where the caller published the hold, checked against the file core reads. */
+  expectedCapturePath?: string;
+}
+
+export function assessCore(read: CoreHealthRead, options: AssessOptions = {}): CoreAssessment {
   if (read.status === "rate_limited") {
     return {
       ok: false,
@@ -117,12 +134,33 @@ export function assessCore(read: CoreHealthRead): CoreAssessment {
         "so nothing would stop core speaking into the recording.",
     };
   }
-  if (health.capture_guard.state !== "idle") {
+  if (
+    options.expectedCapturePath !== undefined &&
+    options.expectedCapturePath !== capturePath
+  ) {
     return {
       ok: false,
-      code: "microphone_busy",
-      detail: `another capture is ${health.capture_guard.state}`,
+      code: "capture_path_mismatch",
+      detail:
+        `core reads its capture state from ${capturePath}, but this caller published its hold to ` +
+        `${options.expectedCapturePath}. Core would never see the hold, so the recording would have ` +
+        "no interlock. Point ECHO_CAPTURE_STATE_PATH at the same file for both.",
     };
+  }
+
+  if (health.capture_guard.state !== "idle") {
+    // The caller's own hold is expected here and is not a conflict. A core that
+    // does not report the holder cannot distinguish them, so it stays strict.
+    const holder = health.capture_guard.pid;
+    const heldByThisCaller =
+      options.ownerPid !== undefined && holder !== undefined && holder !== null && holder === options.ownerPid;
+    if (!heldByThisCaller) {
+      return {
+        ok: false,
+        code: "microphone_busy",
+        detail: `another capture is ${health.capture_guard.state}`,
+      };
+    }
   }
   return { ok: true, capture_state_path: capturePath };
 }
@@ -135,13 +173,25 @@ export interface SpeakQuestionOptions {
   title?: string;
   source?: string;
   fetchImpl: FetchLike;
+  /** The caller's capture-state secret, so core speaks into the caller's own hold. */
+  captureNonce?: string;
 }
 
 /**
- * Post the question. `voice_enabled` is forced on: a silent question would leave
- * the human recorded against a prompt they never heard.
+ * Speak the question and wait for core's verdict on THIS question.
+ *
+ * `await_playback` is what makes the interlock real: the response arrives when
+ * the line has reached a terminal disposition, so the answer is about this
+ * session rather than about the global queue. `capture_bypass_nonce` is what
+ * makes it speakable at all, because the caller's hold is already up by now and
+ * would otherwise silence the question it is holding for.
+ *
+ * `voice_enabled` is forced on: a silent question would leave the human recorded
+ * against a prompt they never heard.
  */
-export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ status: number; body: string }> {
+export async function speakQuestion(
+  options: SpeakQuestionOptions,
+): Promise<{ status: number; disposition: string }> {
   const response = await options.fetchImpl(`${options.coreBaseUrl}/notify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -152,9 +202,27 @@ export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ st
       voice_id: options.voiceId,
       session_id: turnSessionId(options.turnId),
       source: options.source ?? "converse",
+      await_playback: true,
+      capture_bypass_nonce: options.captureNonce,
     }),
   });
-  return { status: response.status, body: await response.text() };
+
+  if (response.status < 200 || response.status >= 300) {
+    return { status: response.status, disposition: `http_${response.status}` };
+  }
+
+  // A core too old for await_playback answers 202 on receipt with no
+  // disposition. Reporting that as unknown is the honest reading: this build
+  // cannot prove the question played, so the turn will be refused.
+  try {
+    const body = (await response.json()) as { disposition?: unknown };
+    return {
+      status: response.status,
+      disposition: typeof body.disposition === "string" ? body.disposition : "unknown",
+    };
+  } catch {
+    return { status: response.status, disposition: "unparseable" };
+  }
 }
 
 export interface DrainOptions {

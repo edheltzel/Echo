@@ -28,10 +28,8 @@ import {
 import type { ConverseConfig } from "./config.ts";
 import {
   assessCore,
-  estimateSpeechMs,
   readCoreHealth,
   speakQuestion,
-  waitForPlaybackDrain,
   type FetchLike,
   type SleepLike,
 } from "./playback.ts";
@@ -132,6 +130,8 @@ function validateTurnRequest(body: unknown, isPidAlive: (pid: number) => boolean
       title: typeof raw.title === "string" ? raw.title : undefined,
       lease_ms: typeof raw.lease_ms === "number" ? raw.lease_ms : undefined,
       ancestry: Array.isArray(raw.ancestry) ? raw.ancestry.filter((entry): entry is string => typeof entry === "string") : [],
+      capture_state_path: typeof raw.capture_state_path === "string" ? raw.capture_state_path : undefined,
+      capture_nonce: typeof raw.capture_nonce === "string" ? raw.capture_nonce : undefined,
     },
   };
 }
@@ -222,14 +222,19 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     };
 
     try {
-    const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
+    const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl), {
+      ownerPid: request.owner_pid,
+      expectedCapturePath: request.capture_state_path,
+    });
     if (!assessment.ok) {
       return refuse(assessment.code, assessment.detail, assessment.code === "microphone_busy" ? 409 : 503);
     }
 
-    // Speak while the capture state is still idle. Publishing `recording` first
-    // would make core's own guard hold back the question converse just asked it
-    // to speak, and the human would be recorded against silence.
+    // Speak the question and wait for core's verdict on THIS question. The
+    // caller's hold is already up (it published before asking), so the question
+    // carries the caller's nonce or core would silence the very line it is
+    // holding for.
+    const spokeAt = now();
     const spoken = await speakQuestion({
       coreBaseUrl: config.coreBaseUrl,
       question: request.question,
@@ -237,29 +242,22 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       voiceId: request.voice_id,
       title: request.title,
       source: request.source,
+      captureNonce: request.capture_nonce,
       fetchImpl,
     });
     if (spoken.status < 200 || spoken.status >= 300) {
       return refuse("question_not_spoken", `core answered HTTP ${spoken.status} to /notify`, 503);
     }
-
-    const drain = await waitForPlaybackDrain({
-      coreBaseUrl: config.coreBaseUrl,
-      estimateMs: estimateSpeechMs(request.question),
-      fetchImpl,
-      sleep: options.sleep,
-      pollIntervalMs: options.pollIntervalMs,
-      maxPolls: options.maxPolls,
-    });
-    if (!drain.drained) {
-      // Name the cause the operator can act on. Out of readings and out of queue
-      // are the same symptom with opposite fixes, and the rate-limit case is the
-      // likely one: the turn has already spent several requests on core.
-      const detail = drain.refused_reads === drain.polls
-        ? `core refused every playback reading (${drain.polls} of ${drain.polls}, rate limit or unreachable), ` +
-          "so whether the question finished playing is unknown"
-        : `core's play queue did not drain within ${drain.waited_ms}ms, so the question may still be playing`;
-      return refuse("question_not_spoken", detail, 503);
+    // `played` is the only outcome that clears a microphone to open. Everything
+    // else means the human never heard the question, and recording them against
+    // a question they did not hear is the failure this whole path exists to
+    // prevent - so it is a refusal, not a warning.
+    if (spoken.disposition !== "played") {
+      return refuse(
+        "question_not_spoken",
+        `core reported the question as "${spoken.disposition}" rather than played, so the human did not hear it`,
+        503,
+      );
     }
 
     active.set(turnId, {
@@ -279,9 +277,8 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       capture_state_path: assessment.capture_state_path,
       spoke: {
         notify_status: spoken.status,
-        drained: drain.drained,
-        waited_ms: drain.waited_ms,
-        polls: drain.polls,
+        disposition: spoken.disposition,
+        waited_ms: now() - spokeAt,
       },
       lease: {
         owner_pid: request.owner_pid,

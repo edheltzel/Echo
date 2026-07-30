@@ -31,7 +31,7 @@ afterEach(() => {
 function coreHealth(overrides: Partial<CoreHealthSnapshot> = {}): CoreHealthSnapshot {
   return {
     mute: { muted: false, muted_until: null },
-    capture_guard: { path: CAPTURE_PATH, state: "idle" },
+    capture_guard: { path: CAPTURE_PATH, state: "idle", pid: null },
     play_queue: { depth: 0, in_flight_ms: null, stalled: false },
     ...overrides,
   };
@@ -41,6 +41,10 @@ interface FakeCoreOptions {
   health?: CoreHealthSnapshot;
   notifyStatus?: number;
   unreachable?: boolean;
+  /** What core reports for the question itself; `played` is the only clearing outcome. */
+  disposition?: string;
+  /** Answer like a core predating the completion signal: 202 on receipt, no disposition. */
+  legacyAccepted?: boolean;
   /** Successive /health answers; the last one repeats. */
   healthSequence?: CoreHealthSnapshot[];
 }
@@ -56,8 +60,15 @@ function fakeCore(options: FakeCoreOptions = {}) {
       calls.push(`${init?.method ?? "GET"} ${path}`);
       if (options.unreachable) throw new Error("connection refused");
       if (path === "/notify") {
-        const status = options.notifyStatus ?? 202;
-        return new Response(JSON.stringify({ status: "accepted" }), { status });
+        if (options.legacyAccepted) {
+          return new Response(JSON.stringify({ status: "accepted", request_id: "r-1" }), { status: 202 });
+        }
+        const status = options.notifyStatus ?? 200;
+        const disposition = options.disposition ?? "played";
+        return new Response(
+          JSON.stringify({ status: disposition === "played" ? "played" : "not_played", disposition }),
+          { status },
+        );
       }
       const body = sequence[Math.min(healthIndex++, sequence.length - 1)];
       return new Response(JSON.stringify(body), { status: 200 });
@@ -70,6 +81,7 @@ function startServer(core = fakeCore(), overrides: Partial<Parameters<typeof cre
     ...resolveConverseConfig({}, scratch),
     bookingLockPath: lockPath,
     coreBaseUrl: "http://core.test",
+    captureStatePath: CAPTURE_PATH,
   };
   const handle = createConverseServer({
     config,
@@ -123,7 +135,7 @@ describe("GET /health", () => {
 });
 
 describe("POST /turn", () => {
-  test("books, speaks, waits for drain, then clears the caller to capture", async () => {
+  test("books, speaks, and clears the caller to capture once core says it played", async () => {
     const { base, core } = startServer();
 
     const { status, body } = await postTurn(base, askBody());
@@ -133,29 +145,29 @@ describe("POST /turn", () => {
     expect(body.turn_id).toMatch(/^t-/);
     // The path comes from core's own /health, never guessed by converse.
     expect(body.capture_state_path).toBe(CAPTURE_PATH);
-    expect(body.spoke).toMatchObject({ notify_status: 202, drained: true });
+    expect(body.spoke).toMatchObject({ notify_status: 200, disposition: "played" });
     expect(body.lease.owner_pid).toBe(process.pid);
     expect(Date.parse(body.lease.expires_at)).toBeGreaterThan(Date.now());
-    // The self-hold ordering, in the order core saw it: preflight, speak, drain.
-    expect(core.calls).toEqual(["GET /health", "POST /notify", "GET /health"]);
+    // Preflight, then one question whose response IS the completion signal. The
+    // drain poll is gone: it could never prove this question finished.
+    expect(core.calls).toEqual(["GET /health", "POST /notify"]);
     expect(readBooking(lockPath)?.turn_id).toBe(body.turn_id);
   });
 
-  test("waits through a busy queue before granting capture", async () => {
+  test("a busy queue no longer matters: the verdict is about this question", async () => {
+    // Queue depth was never evidence about a particular line. A core reporting a
+    // busy queue alongside "this question played" grants capture, because the
+    // question is what the microphone is waiting on.
     const core = fakeCore({
-      healthSequence: [
-        coreHealth(),
-        coreHealth({ play_queue: { depth: 1, in_flight_ms: 400, stalled: false } }),
-        coreHealth({ play_queue: { depth: 0, in_flight_ms: 900, stalled: false } }),
-        coreHealth(),
-      ],
+      health: coreHealth({ play_queue: { depth: 3, in_flight_ms: 900, stalled: false } }),
+      disposition: "played",
     });
     const { base } = startServer(core);
 
     const { status, body } = await postTurn(base, askBody());
 
     expect(status).toBe(200);
-    expect(body.spoke.polls).toBe(3);
+    expect(body.spoke.disposition).toBe("played");
   });
 
   test("refuses a second concurrent ask instead of opening a second microphone", async () => {
@@ -260,18 +272,32 @@ describe("POST /turn", () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
-  test("refuses to open the microphone when playback never drains", async () => {
-    const core = fakeCore({
-      healthSequence: [coreHealth(), coreHealth({ play_queue: { depth: 2, in_flight_ms: 700, stalled: false } })],
-    });
-    const { base } = startServer(core, { maxPolls: 2 });
+  test("refuses to open the microphone unless core says the question played", async () => {
+    const core = fakeCore({ disposition: "held" });
+    const { base } = startServer(core);
 
     const { status, body } = await postTurn(base, askBody());
 
     expect(status).toBe(503);
     expect(body.error).toBe("question_not_spoken");
-    expect(body.detail).toContain("did not drain");
+    expect(body.detail).toContain("held");
     expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test("a core too old for the completion signal refuses rather than guessing", async () => {
+    // A 202-on-receipt answer carries no disposition. This build cannot prove the
+    // question played, so it must not open a microphone on the assumption.
+    const core = fakeCore({ legacyAccepted: true });
+    const { base } = startServer(core);
+
+    const { status, body } = await postTurn(base, {
+      question: "Ready?",
+      owner_pid: process.pid,
+      source: "test",
+    });
+
+    expect(status).toBe(503);
+    expect(body.error).toBe("question_not_spoken");
   });
 });
 

@@ -32,6 +32,12 @@ export interface CaptureStateRecord {
   state: CaptureState;
   pid: number;
   updated_at: string;
+  /**
+   * The owner's per-turn secret. Core accepts it on POST /notify as proof that a
+   * line belongs to the process holding the microphone, which is what lets a
+   * voice ask speak its question into its own hold. The file is 0600.
+   */
+  nonce?: string;
 }
 
 /**
@@ -45,8 +51,12 @@ export function writeCaptureState(
   state: CaptureState,
   pid: number = process.pid,
   now: number = Date.now(),
+  nonce?: string,
 ): CaptureStateRecord {
   const record: CaptureStateRecord = { state, pid, updated_at: new Date(now).toISOString() };
+  // Only published while a hold is up. An idle record carries no secret, so a
+  // stale file can never be replayed as a bypass credential.
+  if (nonce !== undefined && state !== "idle") record.nonce = nonce;
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 
   const staging = join(dirname(path), `.${pid}.capture-state.tmp`);
@@ -70,8 +80,9 @@ export async function withCaptureHeld<T>(
   path: string,
   body: (publish: (state: CaptureState) => void) => Promise<T>,
   pid: number = process.pid,
+  nonce?: string,
 ): Promise<T> {
-  const publish = (state: CaptureState) => void writeCaptureState(path, state, pid);
+  const publish = (state: CaptureState) => void writeCaptureState(path, state, pid, Date.now(), nonce);
   publish("recording");
   try {
     return await body(publish);

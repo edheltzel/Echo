@@ -11,9 +11,9 @@
 # scripts in the scratch directory (ECHO_CONVERSE_REC_BIN / _YAP_BIN), which is
 # what makes the whole turn runnable on a machine with no microphone, no yap and
 # no sox - including CI, which runs Linux. What it proves is the wiring: the
-# question really goes through core's /notify, playback really drains before the
-# capture state flips to recording, the transcript really comes back, and the
-# booking is really released afterwards.
+# question really goes through core's /notify, core really reports it as played
+# before capture is granted, the transcript really comes back, and the booking is
+# really released afterwards.
 #
 #   tests/e2e-converse.sh                       # silent (default; safe anywhere)
 #   tests/e2e-converse.sh --audible             # speaks the question for real
@@ -22,7 +22,7 @@
 # Silent is achieved by disabling every TTS provider in the isolated core's own
 # scratch voices.json, not by sending a silent question: the ask forces
 # voice_enabled on by design. --audible leaves the real chain in place, which is
-# the only way to exercise real synthesis timing in the drain wait.
+# the only way to exercise real synthesis timing in the completion wait.
 set -euo pipefail
 
 export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,8 +81,8 @@ export VOICES_PATH="${SCRATCH}/voices.json"
 # validate, sanitize, resolve, enqueue, drain.
 #
 # The cost is timing realism, which is what --audible buys: with real synthesis the
-# drain wait spans seconds and several polls, and with providers disabled the queue
-# empties at once.
+# question takes seconds to reach a played disposition, and with providers disabled
+# it settles at once.
 if [ "$AUDIBLE" -eq 0 ]; then
   bun -e '
     const path = process.env.VOICES_PATH;
@@ -199,7 +199,9 @@ bun -e '
     { question: process.env.TEST_QUESTION, source: "e2e-converse" },
     { config, captureEngine: async (cfg, signal) => {
         // Observe the interlock from inside the capture window, then delegate to
-        // the real engine so the recorder and transcriber subprocesses run.
+        // the real engine so the recorder and transcriber subprocesses run. The
+        // hold went up before the question was even sent, so core has been
+        // holding every other line since before this turn spoke.
         seenDuringCapture.push(readCaptureState(capturePath, () => true));
         const { captureAndTranscribe } = await import(`${process.env.ROOT}/converse/capture.ts`);
         return captureAndTranscribe(cfg, signal);
@@ -209,7 +211,9 @@ bun -e '
   if (result.text !== process.env.TRANSCRIPT) {
     throw new Error(`expected the transcript ${JSON.stringify(process.env.TRANSCRIPT)}, got ${JSON.stringify(result.text)}`);
   }
-  if (!result.spoke.drained) throw new Error("capture was granted before playback drained");
+  if (result.spoke.disposition !== "played") {
+    throw new Error(`capture was granted for a question core reported as ${result.spoke.disposition}`);
+  }
   if (seenDuringCapture[0] !== "recording") {
     throw new Error(`core saw capture state ${seenDuringCapture[0]} while the microphone was open`);
   }
@@ -218,7 +222,7 @@ bun -e '
   }
   if (result.ancestry.length === 0) throw new Error("no process ancestry was recorded for the capture");
 
-  console.log(`  POST /turn -> spoke in ${result.spoke.waited_ms}ms (${result.spoke.polls} poll(s)), engine ${result.engine}`);
+  console.log(`  POST /turn -> question ${result.spoke.disposition} in ${result.spoke.waited_ms}ms, engine ${result.engine}`);
   console.log(`  transcript -> ${JSON.stringify(result.text)}`);
   console.log(`  capture ancestry -> ${result.ancestry.slice(0, 3).join(" <- ")}`);
 ' || fail "the one-shot ask did not complete"

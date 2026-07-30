@@ -31,6 +31,16 @@ export interface ConverseConfig {
   coreBaseUrl: string;
   /** Single-microphone booking lock (atomic create, stale owner reaped). */
   bookingLockPath: string;
+  /**
+   * The capture-state file the caller publishes its hold in.
+   *
+   * Resolved the same way core resolves it, and then CHECKED against the path
+   * core reports in GET /health rather than trusted: the caller has to publish
+   * the hold before the question is spoken, so it cannot wait to be told the
+   * path, and a disagreement has to surface as an error instead of a recording
+   * with no interlock. `null` means the guard is disabled.
+   */
+  captureStatePath: string | null;
   /** How long a booking may be held before it is reapable as abandoned. */
   leaseMs: number;
   /** Directory for capture WAVs. User-owned; never /tmp. */
@@ -81,6 +91,16 @@ function stripTrailingSlash(url: string): string {
  * State lives under `~/.local/state/echo/converse/`, matching the capture-state
  * contract's own `~/.local/state` convention rather than XDG.
  */
+/**
+ * The capture-state file, mirroring core's own resolution: unset means the
+ * documented default, and an explicitly empty value disables the guard.
+ */
+function resolveCaptureStatePath(env: EchoEnvironment, homeDir: string): string | null {
+  const configured = env.ECHO_CAPTURE_STATE_PATH;
+  if (configured !== undefined) return configured === "" ? null : configured;
+  return join(homeDir, ".local", "state", "voicelayer", "recording-state.json");
+}
+
 export function converseStateDir(homeDir: string = homedir()): string {
   return join(homeDir, ".local", "state", "echo", "converse");
 }
@@ -95,6 +115,7 @@ export function resolveConverseConfig(
     baseUrl: stripTrailingSlash(env.ECHO_CONVERSE_URL || `http://localhost:${port}`),
     coreBaseUrl: resolveDaemonBase(env),
     bookingLockPath: env.ECHO_CONVERSE_BOOKING_LOCK || join(converseStateDir(homeDir), "booking.lock"),
+    captureStatePath: resolveCaptureStatePath(env, homeDir),
     leaseMs: positiveInt(env.ECHO_CONVERSE_LEASE_MS, 120_000),
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs: positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000),

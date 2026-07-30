@@ -24,7 +24,12 @@ export type CaptureState = "idle" | "recording" | "transcribing";
 /** The subset of core's GET /health that converse depends on. */
 export interface CoreHealthSnapshot {
   mute: { muted: boolean; muted_until: string | null };
-  capture_guard: { path: string | null; state: CaptureState };
+  capture_guard: {
+    path: string | null;
+    state: CaptureState;
+    /** Which process holds the capture. Absent on a core older than the interlock. */
+    pid?: number | null;
+  };
   play_queue: { depth: number; in_flight_ms: number | null; stalled: boolean };
 }
 
@@ -38,13 +43,27 @@ export interface TurnRequest {
   lease_ms?: number;
   /** Resolved process ancestry, recorded as TCC-attribution evidence. */
   ancestry?: string[];
+  /**
+   * Where the caller published its capture hold. The coordinator refuses when
+   * core reads a different file, because then core would never see the hold.
+   */
+  capture_state_path?: string;
+  /**
+   * The caller's per-turn secret from that file, which lets core speak this one
+   * question into the caller's own hold. Never logged, never returned.
+   */
+  capture_nonce?: string;
 }
 
 export interface SpokenQuestionReport {
   notify_status: number;
-  drained: boolean;
+  /**
+   * What core reported for THIS question: `played` is the only outcome that
+   * clears the caller to record. `held`, `muted`, `dropped` and `not_queued` all
+   * mean the human never heard it.
+   */
+  disposition: string;
   waited_ms: number;
-  polls: number;
 }
 
 export interface TurnGrant {
@@ -64,6 +83,7 @@ export type ConverseErrorCode =
   | "core_muted"
   | "capture_guard_disabled"
   | "question_not_spoken"
+  | "capture_path_mismatch"
   | "unknown_turn"
   /** An unforeseen fault. Present so even an unplanned failure is machine-readable. */
   | "coordinator_error";
