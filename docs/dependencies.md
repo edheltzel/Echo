@@ -5,7 +5,7 @@
 ## Required
 
 | Dependency | Why | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Bun | Runs TypeScript server and scripts | Verified with Bun 1.3.x |
 | macOS | LaunchAgent and `afplay`/`say` support | Linux is best-effort for manual server runs only |
 | One enabled TTS provider | Audio output | The default config enables edge-tts and macOS `say` fallback on macOS |
@@ -13,7 +13,7 @@
 ## Optional providers
 
 | Provider | Cost | Requirements | Behavior when absent |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | edge-tts | Free | Python at `/opt/homebrew/bin/python3` with `edge_tts` module | Synthesis failure is logged with diagnostics, then fallback; repeated real failures open the circuit breaker |
 | ElevenLabs | Paid/cloud | `ELEVENLABS_API_KEY` and provider enabled in `voices.json` | Disabled by default; skipped when no key |
 | Kokoro | Free/local | Local Kokoro-compatible server on `127.0.0.1:8880` | Disabled by default; skipped when unhealthy |
@@ -40,7 +40,7 @@
 ## Optional host adapters
 
 | Host | Path | Status | Install |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
 | Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
@@ -64,23 +64,33 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 `ECHO_CONVERSE_*_BIN`):
 
 | Dependency | Why | Behavior when absent |
-|---|---|---|
-| `sox` (provides `rec`) | Records the reply and ends the turn on silence | The ask refuses before spawning anything, naming `brew install sox` |
+| --- | --- | --- |
+| `sox` (provides `rec`) | Records the reply, ends the turn on silence, and resamples for Whisper | The dependency check fails; without `rec` the ask refuses before capture, and without `sox` Whisper cannot resample |
 | `yap` | Tier 1 transcription (Apple SpeechAnalyzer, on device, no model download) | Falls back to the Tier 2 rung unless a tier is pinned |
 | `whisper-cli` + a ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) | Tier 2 transcription, portable | Only the Tier 1 rung is available |
 
-The voice-ask install paths (`--adapter mcp|pi|omp`) preflight `sox` and `rec` before
-changing host state. `cli/echo doctor` runs the same check and reports the exact missing
-binary plus `brew install sox`; set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
-when the binaries live outside `PATH`.
+Install the recommended macOS 26 path with:
 
-Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1
+```bash
+brew install sox
+brew install yap
+```
+
+The voice-ask install paths (`--adapter mcp|pi|omp`) check `sox` and `rec` before changing host
+state. Missing capture tools produce a warning rather than aborting, because the core notification
+server does not need them. Treat voice ask as not installed until the check passes; at call time a
+missing recorder is refused before capture. `cli/echo doctor` repeats the check and reports the
+exact missing binary plus `brew install sox`;
+set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN` when the binaries live outside `PATH`.
+
+Transcription is local by design: no cloud rung, no API key, no reply-audio egress. The question
+still follows the configured TTS provider and can use the online Edge default. Why `sox` is Tier 1
 rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 
 ## Decision matrix
 
 | Goal | Install |
-|---|---|
+| --- | --- |
 | Minimum local server | Bun + `bash scripts/install.sh --adapter none` |
 | Existing Claude Code workflow | Bun + Claude Code + `bash scripts/install.sh --adapter claudecode` |
 | Pi voice lifecycle | Bun + Pi + `bash scripts/install.sh --adapter pi` |

@@ -11,10 +11,10 @@ The server core accepts JSON on `localhost:3246` by default and speaks through a
 - `adapters/omp/` - oh-my-pi (omp) extension package integration.
 - direct HTTP - any process can POST to `/notify`.
 
-Echo can also ask: `converse/` speaks a question, records the spoken reply, transcribes it
-locally and hands the text back to the agent. Pi and omp expose that as a tool from their
-existing adapters; Claude Code gets it from the MCP server in `adapters/mcp/`. See
-[docs/converse.md](docs/converse.md).
+Echo can also ask: `converse/` speaks one question, records one spoken reply, transcribes it
+locally and hands the text back to the agent. It is a one-shot exchange, not a continuing
+conversation. Pi and omp expose it as a tool from their existing adapters; Claude Code gets it
+from the MCP server in `adapters/mcp/`. See [docs/converse.md](docs/converse.md).
 
 ## Architecture
 
@@ -81,9 +81,47 @@ bash scripts/install.sh --adapter omp          # oh-my-pi extension
 bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
 ```
 
+Voice ask requires one package that notifications do not: `sox`, which provides the hard-required
+`rec` recorder. Install it before trying an ask. You also need one local transcriber; the default
+on-device path uses `yap` on macOS 26:
+
+```bash
+brew install sox
+brew install yap
+```
+
+An adapter install checks `sox` and `rec` but only warns when they are missing, because ordinary
+notifications do not need them. Treat voice ask as not installed until that check passes; a
+missing recorder is refused before capture begins. A local `whisper-cli` plus a model is the
+alternative to `yap`; see [docs/converse.md](docs/converse.md#the-capture-pipeline).
+
 Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
 
-Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/install-agent.md).
+Want a coding agent to do the setup? Ask it to **install Echo by following
+[docs/install-agent.md](docs/install-agent.md) for your host**. Agent-led installation is a
+supported route, not a workaround; that checklist gives the agent an assertion after each step.
+
+### What voice ask does with your microphone
+
+On a fresh macOS permission state, the first ask that reaches the recorder should show a
+microphone prompt. If access was denied before, macOS may not prompt again; re-enable it in
+**System Settings → Privacy & Security → Microphone**. On the measured Pi and omp path, macOS
+attributes the request to the terminal application (Terminal, WezTerm, Ghostty, or iTerm), not to
+Echo's background daemon. Claude Code's MCP process ancestry is expected to reach the terminal
+too, but has not yet been verified, so check which application macOS actually lists.
+
+Echo adds no per-question approval prompt. After macOS grants access, an agent that your coding
+host allows to call `echo_ask` can open the microphone for one reply; any additional tool approval
+comes from the host, not Echo. The macOS grant for the application that owns capture is the durable
+control. For the measured Pi/omp path that application is the terminal; Claude Code may differ.
+
+Each reply is recorded to a temporary WAV inside `~/Library/Caches/echo/converse/` and transcribed
+by the selected local engine. Echo deletes it on handled success, silence, cancellation, and
+failure. An abrupt process crash or `SIGKILL` cannot run cleanup and may leave a file in that
+private cache directory; it is safe to remove. The transcript goes back to the calling agent, while
+the coordinator receives only its character count. The recorded reply never goes to a cloud
+transcription service, but the spoken *question* still uses your configured TTS provider; the
+default Edge provider is online.
 
 ## Operation
 
@@ -181,7 +219,7 @@ daemon's `voices.json` off disk. Contract: [docs/http-api.md](docs/http-api.md).
 
 ### Voice-resolution drop-off log
 
-To make it observable _why_ a `/notify` used the voice it did, the daemon appends one
+To make it observable *why* a `/notify` used the voice it did, the daemon appends one
 structured JSONL event per voice-enabled `/notify` to
 `~/Library/Logs/echo/voice-resolution.jsonl` - separate from the human-readable daemon log
 (`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
@@ -234,20 +272,20 @@ accepted in JSON - keeps living there. See [docs/configuration.md](docs/configur
 
 ## Documentation
 
-| I want to…                                               | Read                                                               |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| Hear my first notification (guided tutorial)             | [docs/getting-started.md](docs/getting-started.md)                 |
-| Install adapters, move the repo, uninstall               | [docs/install-human.md](docs/install-human.md)                     |
-| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md)                           |
-| Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md)              |
-| Install via an agent-runnable checklist                  | [docs/install-agent.md](docs/install-agent.md)                     |
-| Look up the HTTP API                                     | [docs/http-api.md](docs/http-api.md)                               |
-| Change or add voices; per-turn persona voice             | [docs/voices.md](docs/voices.md)                                   |
-| Understand provider egress + the resolution log          | [docs/providers-observability.md](docs/providers-observability.md) |
-| Tune reliability / the circuit breaker                   | [docs/reliability.md](docs/reliability.md)                         |
-| See required and optional dependencies                   | [docs/dependencies.md](docs/dependencies.md)                       |
-| Write or wire a host adapter                             | [docs/adapters.md](docs/adapters.md)                               |
-| Ask the human a question out loud and read their answer  | [docs/converse.md](docs/converse.md)                               |
+| I want to… | Read |
+| --- | --- |
+| Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
+| Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
+| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |
+| Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
+| Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
+| Change or add voices; per-turn persona voice | [docs/voices.md](docs/voices.md) |
+| Understand provider egress + the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
+| Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
+| See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
+| Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
+| Decide whether to enable one-shot voice ask | [docs/converse.md](docs/converse.md) |
 
 ## Development
 

@@ -4,6 +4,50 @@ Echo speaks. `echo-converse` lets it ask. One question out loud, one spoken repl
 one transcript returned to the calling agent. Local transcription, no cloud rung, no
 conversational loop in v1.
 
+## Before you enable it
+
+Voice ask is useful when an agent needs one short answer while you are away from the keyboard. It
+is not a hands-free chat mode: every `echo_ask` call speaks one question, records one reply, returns
+that transcript, and ends.
+
+The notification server does not need recording software, but voice ask does. Install `sox`, which
+provides the required `rec` recorder. The recommended on-device transcriber on macOS 26 is `yap`:
+
+```bash
+brew install sox
+brew install yap
+```
+
+A local `whisper-cli` with `ECHO_CONVERSE_WHISPER_MODEL` can replace `yap`; it does not replace
+`sox`. Installing a Pi, omp, or MCP adapter checks for `sox` and `rec` but only warns if they are
+missing, because the same adapter can still deliver ordinary notifications. At call time Echo
+checks `rec` and the selected transcriber before recording. `sox` itself is invoked later only by
+the Whisper resample, so the installer and doctor check is the support boundary even though a
+custom `rec` plus `yap` path does not execute the `sox` binary.
+
+On a fresh macOS permission state, the first ask that reaches `rec` should show the system
+microphone prompt. If access was denied before, macOS may not prompt again; re-enable it in
+**System Settings → Privacy & Security → Microphone**. In the measured Pi and omp topology, macOS
+shows the terminal application as the requester, not Echo's background daemon. Claude Code's MCP
+ancestry is expected to reach the terminal in the same way, but that path has not yet been
+verified. Echo keeps the observed process ancestry for each turn instead of claiming the
+attribution is guaranteed.
+
+Echo itself does not show a per-question approval prompt. Once macOS permission exists, an agent
+that the coding host allows to call `echo_ask` can start a one-reply recording immediately; a host
+may still apply its own tool policy. The durable microphone control is the macOS grant for the
+application that owns capture. On the measured Pi/omp path that application is the terminal;
+Claude Code may differ.
+
+The reply is a temporary WAV under `~/Library/Caches/echo/converse/`, inside a directory readable
+only by the current user. Echo makes the file mode `0600` before transcription and deletes it in a
+`finally` block on handled success, silence, cancellation, or failure. An abrupt process crash or
+`SIGKILL` cannot run that cleanup and may leave a file in the private cache directory; it is safe
+to remove. Transcription is local. The audio and transcript never go to the coordinator; it
+receives only the transcript character count, while the transcript returns directly to the
+calling host. The question still uses Echo's configured TTS provider, so the default online Edge
+provider may receive the question text.
+
 ```bash
 bun converse/main.ts                       # start the coordinator on :32468
 curl -fsS http://localhost:32468/health    # capability, booking state, core address
@@ -59,7 +103,7 @@ microphone usage description and is a separate architecture decision.
 
 ## The turn
 
-```
+```text
  host tool call
       |
       v
@@ -154,10 +198,10 @@ The Tier 1 rung needs no conversion at all, which was checked rather than assume
 records at 48kHz, and `yap transcribe` returns the phrase from a 48kHz file. Only whisper.cpp
 requires 16kHz mono, so only that rung pays for the resample.
 
-Both binaries are checked for existence before a turn spawns anything, so a machine with `yap`
-but no `sox` gets "install sox (`brew install sox`), which provides `rec`" rather than an ENOENT
-from inside a turn. That case is worth naming because splitting the Tier 1 row is what created
-it: `sox` is now a Tier 1 dependency.
+The recorder and selected transcriber are checked before a turn spawns either one, so a machine
+with `yap` but no `rec` gets "install sox (`brew install sox`), which provides `rec`" rather than
+an ENOENT from inside a turn. That case is worth naming because splitting the Tier 1 row is what
+created it: the `sox` package is now a Tier 1 dependency.
 
 No speech is a distinct outcome: sox writes a 44-byte header-only file when the endpointer hears
 nothing, and an empty transcript is reported as `no_speech` rather than as an empty answer.

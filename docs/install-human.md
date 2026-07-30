@@ -17,7 +17,16 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - macOS - the installer writes a LaunchAgent (Linux is best-effort for manual server runs only; see `docs/dependencies.md`).
 - [Bun](https://bun.sh/).
 
-Optional voice providers and host adapters are described in `docs/dependencies.md`.
+Voice notifications need nothing else. The optional one-shot voice ask has a hard recorder
+dependency, `sox`, and needs one local transcriber. For the recommended macOS 26 path:
+
+```bash
+brew install sox  # provides the required `rec` command
+brew install yap  # on-device transcription
+```
+
+A local `whisper-cli` plus a model can replace `yap`, but not `sox`. Optional voice providers,
+host adapters, and the Whisper setup are described in `docs/dependencies.md`.
 
 ## Install core only
 
@@ -76,11 +85,23 @@ This registers the `echo-converse` MCP server in `~/.claude.json`, which gives C
 tool from their existing adapters, so they need no extra install step.
 
 Echo owns only the `echo-converse` server name; if something else already holds it, the install
-aborts before changing anything. The first ask needs microphone permission. Direct Pi/omp
-capture uses the measured terminal-attributed topology; Claude Code's stdio MCP ancestry is still
-unverified, so each turn records what it actually observed instead of promising terminal
-attribution. Full picture: [`converse.md`](converse.md). This install preflights `sox`
-and `rec` before changing host state; `cli/echo doctor` repeats the same check later.
+aborts before changing anything. The adapter install checks `sox` and `rec` before changing host
+state, but a missing recorder produces a warning rather than blocking the notification install.
+Treat voice ask as not installed until `brew install sox` has supplied both commands and the check
+passes; a missing `rec` is refused before capture begins. `cli/echo doctor` repeats the check later.
+
+On a fresh macOS permission state, the first ask that reaches the recorder should show the system
+microphone prompt. If access was denied before, macOS may not prompt again; re-enable it under
+**System Settings → Privacy & Security → Microphone**. Direct Pi/omp capture uses the measured
+terminal-attributed topology. Claude Code's stdio MCP ancestry is still unverified, so check which
+application macOS lists rather than assuming it is the terminal.
+
+Echo adds no per-question approval prompt after permission is granted, although the coding host
+may apply its own tool policy. One tool call records one answer and ends; it does not start a
+conversation. Temporary reply audio stays under `~/Library/Caches/echo/converse/` for local
+transcription and is deleted on handled success, silence, cancellation, and failure. An abrupt
+process crash or `SIGKILL` may leave a file in that private cache directory; it is safe to remove.
+Full permission, privacy, and provider-egress details: [`converse.md`](converse.md).
 
 ## Moved or renamed the repo directory?
 
