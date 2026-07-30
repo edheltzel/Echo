@@ -336,7 +336,13 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     // stay reapable on the old clock while the recording ran.
     const grantedAt = now();
     const expiresAt = grantedAt + leaseMs;
-    renewBooking(config.bookingLockPath, turnId, expiresAt);
+    if (!renewBooking(config.bookingLockPath, turnId, expiresAt)) {
+      log(
+        `turn ${turnId} granted but its booking could not be re-based to ${new Date(expiresAt).toISOString()}: ` +
+          `the lock at ${config.bookingLockPath} is missing, unreadable, or held by another turn, so it is ` +
+          "reapable while this capture runs. The caller's capture hold is the remaining interlock.",
+      );
+    }
 
     active.set(turnId, {
       turn_id: turnId,

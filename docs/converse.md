@@ -133,9 +133,25 @@ ask must not wedge every later one. A concurrent ask gets `409` rather than an i
 | `POST /turn/:id/abort` | Release the booking and record why. |
 | `GET /health` | Capability, port, booking holder, turn counters, configured core address. Does not probe core. |
 
-Refusals name their reason: `400 invalid_request`, `409 microphone_busy`,
-`503 core_unreachable | core_rate_limited | core_muted | capture_guard_disabled | question_not_spoken`,
-`404 unknown_turn`. Every refusal releases the booking, `404 unknown_turn` included: the turn
+Refusals name their reason, and this is every one of them (`ConverseErrorCode`):
+
+| Status | Code | Means |
+|---|---|---|
+| `400` | `invalid_request` | Malformed body, empty or over-long question, or an `owner_pid` that is not a live process |
+| `400` | `lease_too_short` | The requested lease cannot cover capture plus transcription, so the booking could expire mid-capture |
+| `400` | `lease_unsupported` | The requested lease exceeds what this coordinator's own configuration could need. Align the caps rather than reserving longer |
+| `409` | `microphone_busy` | Another turn holds the booking, or core reports a foreign pid holding the capture |
+| `503` | `core_unreachable` | Core did not answer `GET /health` |
+| `503` | `core_rate_limited` | Core is rate-limiting this client (ten requests a minute, shared with `/notify`) |
+| `503` | `core_muted` | Core is muted, so the question would never be heard. `cli/echo mute off` |
+| `503` | `core_version_skew` | Core reports a capture hold but no owning pid, so this caller's own hold cannot be told from a foreign one. `cli/echo update` |
+| `503` | `capture_guard_disabled` | Core reports no capture-state path, so nothing would stop it speaking into the recording |
+| `503` | `capture_path_mismatch` | The caller published its hold to a different file than the one core reads, so core would never see it |
+| `503` | `question_not_spoken` | Core answered non-2xx to `/notify`, or reported a disposition other than `played` |
+| `404` | `unknown_turn` | No active turn with that id (completed, aborted, or dropped for outliving its lease) |
+| `500` | `coordinator_error` | An unforeseen fault, returned as JSON so even an unplanned failure is machine-readable |
+
+Every refusal releases the booking, `404 unknown_turn` included: the turn
 table is in memory and the booking is on disk, so a caller whose turn the coordinator no longer
 remembers is still the one who has to hand the microphone back.
 

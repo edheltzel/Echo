@@ -105,8 +105,13 @@ describe("the checker is wired into both operator surfaces", () => {
     expect(script).toContain("Checking voice-ask dependencies");
     // Identical treatment across the three adapters that register the tool: a
     // user cannot reason about why one is stricter than another about the same
-    // dependency.
-    expect(script.match(/warn_converse_deps$/gm)?.length).toBe(3);
+    // dependency. Sliced per branch rather than counted, so reformatting a call
+    // site cannot break the assertion without the property changing.
+    const preflight = script.slice(script.indexOf("preflight() {"), script.indexOf("write_plist() {"));
+    for (const adapter of ["mcp)", "pi)", "omp)"]) {
+      const branch = preflight.slice(preflight.indexOf(adapter));
+      expect(branch.slice(0, branch.indexOf(";;"))).toContain("warn_converse_deps");
+    }
   });
 
   test("echo doctor reports a row for it", async () => {

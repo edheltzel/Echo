@@ -211,4 +211,37 @@ describe("the lease clock starts at the grant, not at the request", () => {
     const booking = JSON.parse(readFileSync(lockPath, "utf8"));
     expect(Date.parse(booking.expires_at) - clock.now).toBeGreaterThanOrEqual(requiredBudget(config));
   });
+
+  // The re-base is the one write in the granted path that can fail, and it fails
+  // by leaving the lock reapable for the whole capture. The turn still proceeds
+  // (the caller's capture hold is the remaining interlock), but an operator
+  // reading the log has to be able to see that the first interlock is down.
+  test("a re-base that cannot happen is reported rather than swallowed", async () => {
+    const lines: string[] = [];
+    const config: ConverseConfig = {
+      ...resolveConverseConfig({}, scratch),
+      bookingLockPath: lockPath,
+      coreBaseUrl: "http://core.test",
+      captureStatePath: CAPTURE_PATH,
+    };
+    const handle = createConverseServer({
+      config,
+      port: 0,
+      log: (line) => void lines.push(line),
+      fetchImpl: async (url: string) => {
+        if (new URL(url).pathname === "/notify") {
+          // Something removed the lock between the booking and the grant.
+          rmSync(lockPath, { force: true });
+          return new Response(JSON.stringify({ status: "played", disposition: "played" }), { status: 200 });
+        }
+        return new Response(JSON.stringify(coreHealth()), { status: 200 });
+      },
+    });
+    handles.push(handle);
+
+    const { status } = await postTurn(`http://127.0.0.1:${handle.port}`);
+
+    expect(status).toBe(200);
+    expect(lines.some((line) => line.includes("could not be re-based"))).toBe(true);
+  });
 });
