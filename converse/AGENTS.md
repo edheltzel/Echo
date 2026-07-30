@@ -22,8 +22,11 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 
 - **The coordinator never opens the microphone and never spawns a subprocess.** macOS gives a
   background process no TCC responsible process, no prompt surface and no grant, so capture must
-  happen in the calling host's own process tree. Enforced by
-  `../tests/converse/architecture-invariants.test.ts`.
+  happen in the calling host's own process tree. `../tests/converse/architecture-invariants.test.ts`
+  holds this with a **source scan**, not runtime enforcement: it fails on an import of a capture
+  module or any subprocess spawn in coordinator-reachable code, which catches the regressions
+  people write, and it cannot see a dynamic import or a dependency that spawns on its own. Do not
+  describe it as mechanically guaranteed; that overclaim is what held PR #136.
 - **Speak while idle, capture after drain.** The capture state flips to `recording` only after
   the coordinator reports playback drained, or core's own guard silences the question converse
   asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.

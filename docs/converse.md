@@ -30,13 +30,24 @@ So an always-on service cannot own the microphone: it gets no prompt surface, no
 audio. The capability is split accordingly.
 
 - **The coordinator** (`converse/server.ts`, port **32468**, keypad ECHOV) books the microphone,
-  speaks the question through core and watches playback drain. It never opens the microphone,
-  and it never spawns a subprocess at all. Both properties are enforced by
-  `tests/converse/architecture-invariants.test.ts`, not just documented.
+  speaks the question through core and waits for core's verdict on it. It opens no microphone and
+  spawns no subprocess.
 - **The caller** (`converse/client.ts`, running inside the Pi extension, the omp extension or
-  the MCP server) spawns the capture child per ask, so the recorder inherits the host terminal's
-  process ancestry. Each turn records the resolved ancestry chain, so the attribution claim is
-  something an operator can read back rather than assume.
+  the MCP server) spawns the capture child per ask, so the recorder runs in the host's process
+  tree.
+
+**How strongly those two properties hold, precisely.** An earlier version of this document called
+them "mechanically enforced". That was an overclaim, a reviewer rejected it, and it is the reason
+PR #136 was held. What actually exists:
+
+| Property | What holds it | What that does not cover |
+|---|---|---|
+| The coordinator opens no microphone | `tests/converse/architecture-invariants.test.ts` source-scans coordinator-reachable code and fails on a capture-module import or ANY subprocess spawn | A source scan, not a runtime assertion. A dynamic import, a dependency that spawns on its own, or an unrecognised helper would pass it. |
+| Capture runs in the caller's process tree | Construction: the capture child is spawned by `converse/client.ts` inside the host process | Nothing asserts it at runtime. There is no cheap check: `Bun.spawn` makes the client the parent by definition, so comparing them would always agree and prove nothing. |
+| The grant attributes to the terminal app | The TCC spike measured it for a terminal-spawned child | Measured for a shell-spawned recorder on one host. See the unverified link below. |
+
+Each turn records the process ancestry it resolved and the pid that ran the recorder. That is
+evidence an operator can correlate with a TCC log entry, not proof of attribution.
 
 One link in that chain is expected rather than measured. For Pi and omp the capture child is a
 descendant of the host process itself, which is the shape the spike measured. For Claude Code the

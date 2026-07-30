@@ -185,7 +185,7 @@ interface RunOptions {
 async function run(
   cmd: string[],
   options: RunOptions = {},
-): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; pid: number }> {
   const { timeoutMs, signal, hardKillAfterMs } = options;
   const child = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   // Drain from the moment the child exists; the grace timer is armed only once
@@ -219,7 +219,7 @@ async function run(
       collectWithin(outCollector, OUTPUT_GRACE_MS),
       collectWithin(errCollector, OUTPUT_GRACE_MS),
     ]);
-    return { code, stdout, stderr, timedOut };
+    return { code, stdout, stderr, timedOut, pid: child.pid };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (hardTimer !== undefined) clearTimeout(hardTimer);
@@ -232,6 +232,11 @@ export interface RecordingReport {
   capture_ms: number;
   timed_out: boolean;
   bytes: number;
+  /**
+   * The pid that ran the recorder. Evidence for correlating a turn with a TCC
+   * log, not a guarantee about attribution.
+   */
+  recorder_pid: number;
 }
 
 /** Record one reply. Returns as soon as the endpointer hears the human stop. */
@@ -271,7 +276,18 @@ export async function recordReply(
       `${config.recBin} produced no audio (exit ${result.code}): ${result.stderr.trim() || "no error output"}`,
     );
   }
-  return { wav_path: wavPath, capture_ms, timed_out: result.timedOut, bytes };
+  return {
+    wav_path: wavPath,
+    capture_ms,
+    timed_out: result.timedOut,
+    bytes,
+    // Reported, not enforced. The pid of the process that actually ran the
+    // recorder is real evidence an operator can correlate with a TCC log; it is
+    // NOT a proof of attribution, and there is no cheap runtime check that is.
+    // Bun.spawn makes this process the parent by construction, so comparing the
+    // two would always agree and would prove nothing (see docs/converse.md).
+    recorder_pid: result.pid,
+  };
 }
 
 /**

@@ -11,8 +11,14 @@
 // than a single blocking call. `converse/client.ts` puts the blocking one-shot
 // ask back on top of that lease.
 //
-// The mic-free property is not a comment: tests/converse/architecture-invariants
-// fails if this file ever reaches the capture module or names a capture binary.
+// What holds the mic-free property, stated precisely, because the earlier
+// "mechanically enforced" wording was an overclaim and a reviewer was right to
+// reject it: tests/converse/architecture-invariants.test.ts is a SOURCE SCAN. It
+// fails if this file imports a capture module or spawns any subprocess, which
+// catches the regressions people actually write. It is not runtime enforcement,
+// and it cannot see a dynamic import, a dependency that spawns on its own, or a
+// helper whose name it does not recognise. There is no runtime assertion here
+// that this process never opens an audio device.
 //
 // Exported as a factory. `core/server.ts` exports a started singleton, and
 // sharing one across Bun's module cache is the documented cause of the #47 test

@@ -202,6 +202,12 @@ exit 0
 
       writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
       writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      // The MCP adapter's preflight checks the voice-ask dependencies, so this
+      // stands in for a machine that has them: the scratch PATH deliberately
+      // excludes Homebrew, and a machine without them must fail (asserted below).
+      writeExecutable(join(bin, "rec"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "sox"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "yap"), "#!/bin/bash\nexit 0\n");
       writeExecutable(join(bin, "launchctl"), `#!/bin/bash
 case "$1" in
   list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
@@ -229,6 +235,38 @@ exit 0
       expect(second.exitCode).toBe(0);
       expect(second.stdout).toContain("Refreshing MCP server registration");
       expect(readFileSync(mcpConfig, "utf8")).toBe(before);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
+
+  // F8: sox became a hard dependency when the Tier 1 row split. A machine without
+  // it must hear about that at install time, not at the first ask.
+  test("--adapter mcp refuses a machine that cannot record", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-mcp-deps-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      const launchctlLog = join(root, "launchctl.log");
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+      // No rec, no sox, no yap on this PATH.
+
+      const result = await runInstall(["--adapter", "mcp"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        ECHO_MCP_CONFIG_PATH: join(root, "claude.json"),
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr + result.stdout).toContain("brew install sox");
+      // And nothing was mutated: the failure is a preflight, before host state.
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
+      expect(existsSync(launchctlLog)).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

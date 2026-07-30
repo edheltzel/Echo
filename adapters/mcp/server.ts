@@ -12,7 +12,8 @@
 // tree.
 //
 // That is expected to give the right TCC attribution, and the expectation is
-// worth stating precisely because it has not been measured here. What the spike
+// worth stating precisely because it has NOT been measured here and nothing in
+// this code enforces it. What the spike
 // measured is that a capture spawned from the host terminal's tree attributes to
 // the terminal app while one under a launchd job gets no responsible process at
 // all. Stdio transport means the host spawns this server as its own child, so

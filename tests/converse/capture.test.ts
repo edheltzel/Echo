@@ -98,6 +98,20 @@ describe("recording", () => {
   });
 });
 
+describe("what the recorder reports about itself", () => {
+  // F4: the ancestry property is REPORTED, not enforced. There is no cheap
+  // runtime check for it: Bun.spawn makes this process the recorder's parent by
+  // construction, so comparing the two would always agree and prove nothing. What
+  // is honest to record is the pid that actually ran, which an operator can
+  // correlate with a TCC log entry.
+  test("reports the pid that ran the recorder", async () => {
+    const report = await recordReply(config({ recBin: fakeRecorder(4_096) }), join(scratch, "reply.wav"));
+
+    expect(report.recorder_pid).toBeGreaterThan(0);
+    expect(report.recorder_pid).not.toBe(process.pid);
+  });
+});
+
 describe("transcriber selection", () => {
   const present = (bins: string[]) => (bin: string) => (bins.includes(bin) ? `/usr/local/bin/${bin}` : null);
 
