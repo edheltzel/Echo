@@ -1,7 +1,7 @@
 # HTTP API
 
 The universal core (`core/server.ts`) listens on `localhost:3246` by default (override: `PORT`) and
-exposes five endpoints. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
+exposes the notification API plus two opt-in playback-status routes. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
@@ -33,7 +33,8 @@ Primary host-neutral endpoint. Body (every field optional):
   },
   "session_id": "host-session-id",
   "source": "pi",
-  "visual_delivery": "native"
+  "visual_delivery": "native",
+  "capture_reservation": { "owner_pid": 12345, "lease_ms": 120000 }
 }
 ```
 
@@ -46,6 +47,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_settings` | — | Pass-through override, see below |
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
 | `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
+| `capture_reservation` | — | Optional converse-only reservation: positive `owner_pid` and `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
 ### Native terminal visual delivery
 
@@ -120,6 +122,15 @@ name/id. `speed` is consumed by edge-tts/kokoro; the rest by ElevenLabs.
 Response: `202 {"status":"accepted","message":"Notification queued","request_id":"req-…"}`.
 Errors: `400 {"status":"error","message":"Invalid …","request_id":…}` for validation
 failures (rejected **before** the line is queued), `500` otherwise.
+
+### Converse playback status (opt-in)
+
+When `capture_reservation` is present, poll
+`GET /notify/<request_id>/completion` until `state` is `completed` or `failed`. A completed
+response includes `capture_reservation_id`; while that reservation is held, unrelated voice
+lines are accepted but held from playback. Release it with
+`POST /notify/<capture_reservation_id>/capture-release` after capture/transcription. These
+routes are additive and do not change the receipt-based `/notify` response for existing callers.
 
 **`202` on receipt (Phase 2 serialization).** `/notify` acks as soon as the request is
 validated; the macOS **banner fires immediately at accept** (it is not audio and never

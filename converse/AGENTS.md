@@ -3,8 +3,9 @@
 ## Purpose
 
 `converse/` is the `@echo/converse` workspace package: the one-shot voice ask. It owns the three
-concerns Echo's TTS daemon has never had - microphone capture, a local speech-to-text
-dependency, and a blocking request/response turn - without changing `core/`.
+  concerns Echo's TTS daemon has never had - microphone capture, a local speech-to-text
+  dependency, and a blocking request/response turn. Its opt-in playback reservation protocol
+  extends `core/` additively while preserving the normal `/notify` contract.
 
 Full design, the TCC evidence behind the process topology, the endpoint contract and the known
 v1 limits: **[../docs/converse.md](../docs/converse.md)**.
@@ -12,7 +13,8 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 ## Ownership
 
 - **Coordinator side** (`server.ts`, `main.ts`, `booking.ts`, `playback.ts`, `config.ts`,
-  `types.ts`): books the microphone, speaks the question through core, waits for playback drain.
+  `types.ts`): books the microphone, speaks the question through core, waits for its exact
+  playback completion and capture reservation.
 - **Caller side** (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`): opens the
   microphone, transcribes locally, publishes capture state, and exposes `echo_ask` to hosts.
 - Host wiring lives in `adapters/*`, never here. This package knows nothing about Pi, omp or
@@ -25,8 +27,8 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   happen in the calling host's own process tree. Direct imports and spawn sites are guarded by
   source-level checks in `../tests/converse/architecture-invariants.test.ts`; those checks do not
   enforce runtime process ancestry or indirect dependency behavior.
-- **Speak while idle, capture after drain.** The capture state flips to `recording` only after
-  the coordinator reports playback drained, or core's own guard silences the question converse
+- **Speak while idle, capture after completion.** The capture state flips to `recording` only after
+  the coordinator reports this request's playback completed and core has reserved the queue, or core's own guard silences the question converse
   asked it to speak. Use `withCaptureHeld`, which also guarantees the return to `idle`.
 - **Every subprocess in a turn is bounded.** The capture state stays non-idle from the first
   recorded sample until the transcript exists, and core skips every voice line while it is, so an
@@ -43,9 +45,9 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   state only while that pid is alive, so any other pid turns a crash into permanent silence.
 - **Never import `core/`.** Core is reached over HTTP, plus the capture-state path core itself
   reports in `GET /health`. The daemon may run from another clone or a staged payload.
-- **Do not change core's `/notify` contract or add a core endpoint** to make this easier. The
-  deferred completion signal is named in `../docs/converse.md`; it is a core change with its own
-  compatibility plan.
+- **Core's normal `/notify` contract remains receipt-based.** Converse may use the additive
+  `capture_reservation` request field plus per-request completion and reservation-release routes;
+  ordinary callers do not opt in and retain the existing response and queue behavior.
 - Process state is user-owned (`~/.local/state/echo/converse`, `~/Library/Caches/echo/converse`),
   never `/tmp`. Recordings are deleted once transcribed, and the transcript is never sent to the
   coordinator.
