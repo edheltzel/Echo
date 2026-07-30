@@ -16,6 +16,7 @@ export interface PlaybackStatus {
 interface PlaybackRecord extends PlaybackStatus {
   owner_pid?: number;
   expires_at?: number;
+  created_at: number;
 }
 
 interface CaptureReservation {
@@ -23,6 +24,26 @@ interface CaptureReservation {
   owner_pid: number;
   expires_at: number;
 }
+
+/**
+ * Ceiling on a granted lease, whatever the caller asked for. A held reservation
+ * makes the daemon skip every voice line, `/notify` is unauthenticated, and a
+ * reservation owned by a pid that never dies (`owner_pid: 1`) would otherwise
+ * never be reaped - so the lease, not the owner's liveness, is what bounds the
+ * silence. The reservation only has to bridge playback completion to the moment
+ * the caller publishes its capture state; the capture guard covers the rest of
+ * the turn, so a caller with larger capture and transcription budgets loses
+ * nothing by being clamped here.
+ */
+export const MAX_CAPTURE_LEASE_MS = 120_000;
+
+/**
+ * How long a record outlives its own lease. Records are opt-in, but a converse
+ * turn whose playback ends in `failed` never activates a reservation and so is
+ * never released by the caller: without a lifetime of its own it would sit in
+ * the map for the daemon's whole run, once per failed turn.
+ */
+const RECORD_TTL_MS = MAX_CAPTURE_LEASE_MS + 60_000;
 
 const playback = new Map<string, PlaybackRecord>();
 let activeReservation: CaptureReservation | null = null;
@@ -44,16 +65,33 @@ function reapExpiredReservation(): void {
   }
 }
 
+/** The record backing the active reservation is reaped by its lease, never by age. */
+function reapStaleRecords(): void {
+  const cutoff = Date.now() - RECORD_TTL_MS;
+  for (const [requestId, record] of playback) {
+    if (activeReservation?.request_id === requestId) continue;
+    if (record.created_at <= cutoff) playback.delete(requestId);
+  }
+}
+
+function sweep(): void {
+  reapExpiredReservation();
+  reapStaleRecords();
+}
+
 export function trackPlayback(
   requestId: string,
   reservation?: { owner_pid: number; lease_ms: number },
 ): void {
+  sweep();
+  const now = Date.now();
   playback.set(requestId, {
     request_id: requestId,
     state: "queued",
+    created_at: now,
     ...(reservation && {
       owner_pid: reservation.owner_pid,
-      expires_at: Date.now() + reservation.lease_ms,
+      expires_at: now + Math.min(reservation.lease_ms, MAX_CAPTURE_LEASE_MS),
     }),
   });
 }
@@ -91,27 +129,27 @@ export function markPlaybackCompleted(requestId: string, played: boolean, detail
 }
 
 export function readPlaybackStatus(requestId: string): PlaybackStatus | null {
-  reapExpiredReservation();
+  sweep();
   const record = playback.get(requestId);
   if (!record) return null;
-  const { owner_pid: _ownerPid, expires_at: _expiresAt, ...status } = record;
+  const { owner_pid: _ownerPid, expires_at: _expiresAt, created_at: _createdAt, ...status } = record;
   return { ...status };
 }
 
 export function captureReservationHeld(): boolean {
-  reapExpiredReservation();
+  sweep();
   return activeReservation !== null;
 }
 
 export function captureReservationView(): { held: boolean; request_id?: string } {
-  reapExpiredReservation();
+  sweep();
   return activeReservation === null
     ? { held: false }
     : { held: true, request_id: activeReservation.request_id };
 }
 
 export function releaseCaptureReservation(requestId: string): boolean {
-  reapExpiredReservation();
+  sweep();
   if (activeReservation?.request_id !== requestId) return false;
   activeReservation = null;
   playback.delete(requestId);

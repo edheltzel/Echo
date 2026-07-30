@@ -134,6 +134,27 @@ has_unhealthy_provider() {
   printf '%s' "$1" | grep -qE "${enabled}[^{}]*${unhealthy}|${unhealthy}[^{}]*${enabled}"
 }
 
+# True when this machine actually exposes echo-converse: a host that registers
+# the echo_ask tool (the MCP server, Pi, or omp), or an operator who configured a
+# converse setting. A core-only or Claude-Code-only install never opens a
+# microphone, so a missing sox must not degrade it. Detection mirrors
+# scripts/install.sh's own matchers, including its OMP_EXTENSIONS_DIR override.
+converse_wanted() {
+  local mcp_config="${ECHO_MCP_CONFIG_PATH:-$HOME/.claude.json}"
+  if [ -f "$mcp_config" ] && grep -qE '"[^"]*/adapters/mcp/server\.ts"' "$mcp_config"; then
+    return 0
+  fi
+  local pi_settings="$HOME/.pi/agent/settings.json"
+  if [ -f "$pi_settings" ] && grep -qE '"([^":]*/)?adapters/pi/?"' "$pi_settings"; then
+    return 0
+  fi
+  if [ -L "${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}/echo-voice" ]; then
+    return 0
+  fi
+  local config_json="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}"
+  [ -f "$config_json" ] && grep -q "ECHO_CONVERSE_" "$config_json"
+}
+
 read_manifest_version() {
   [ -f "$PAYLOAD_CURRENT/manifest.json" ] || return 0
   { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PAYLOAD_CURRENT/manifest.json" | head -1; } || true
@@ -159,11 +180,17 @@ cmd_doctor() {
 
   # 3. Converse capture dependencies. This is intentionally independent of Bun
   # so doctor can diagnose a missing sox on a machine before install is possible.
+  # echo-converse is an optional capability, so a missing sox only degrades the
+  # run when this machine is set up to use it.
   local converse_deps
   if converse_deps="$(bash "$SCRIPTS/converse-dependencies.sh" 2>&1)"; then
     doctor_row ok "converse" "$converse_deps"
-  else
+  elif converse_wanted; then
     doctor_row fail "converse" "$converse_deps" "Install capture tools: brew install sox"
+  else
+    doctor_row warn "converse" "$converse_deps" \
+      "Only needed for the echo-converse voice ask; notifications work without it.
+Install capture tools: brew install sox"
   fi
 
   # 4. Payload

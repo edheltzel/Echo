@@ -431,6 +431,59 @@ describe("finishing a turn", () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
+  test("completing hands core's capture reservation back", async () => {
+    const { base, core } = startServer();
+    const { body: grant } = await postTurn(base, askBody());
+
+    await fetch(`${base}/turn/${grant.turn_id}/complete`, { method: "POST" });
+
+    expect(core.calls).toContain("POST /notify/request-1/capture-release");
+  });
+
+  // Core skips EVERY voice line while it holds a reservation, so a release that
+  // answered 429 (the release shares no bucket with the polls, but a busy client
+  // can still hit one) must be retried rather than assumed to have worked.
+  test("a refused release is retried instead of being read as success", async () => {
+    const releases: number[] = [];
+    let attempts = 0;
+    const core = fakeCore();
+    const retrying = {
+      calls: core.calls,
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        if (new URL(url).pathname === "/notify/request-1/capture-release") {
+          attempts++;
+          releases.push(attempts);
+          return new Response("rate limited", { status: attempts === 1 ? 429 : 200 });
+        }
+        return core.fetchImpl(url, init);
+      },
+    };
+    const { base } = startServer(retrying);
+    const { body: grant } = await postTurn(base, askBody());
+
+    await fetch(`${base}/turn/${grant.turn_id}/complete`, { method: "POST" });
+
+    expect(releases).toEqual([1, 2]);
+  });
+
+  // Dropping the bookkeeping is not enough: the expired turn's caller is gone,
+  // so if this path does not release both holds, the microphone stays booked and
+  // core stays silent for the rest of the lease.
+  test("a turn dropped for outliving its lease releases the booking and the reservation", async () => {
+    let clock = 1_700_000_000_000;
+    const core = fakeCore();
+    const { base } = startServer(core, { now: () => clock });
+    const { body: expired } = await postTurn(base, askBody({ lease_ms: 10_000 }));
+
+    clock += 11_000;
+    const next = await postTurn(base, askBody());
+
+    expect(core.calls).toContain(`POST /notify/request-1/capture-release`);
+    expect(next.status).toBe(200);
+    expect(next.body.turn_id).not.toBe(expired.turn_id);
+    expect(readBooking(lockPath)?.turn_id).toBe(next.body.turn_id);
+  });
+
   test("the microphone is free for the next ask after a completed turn", async () => {
     const { base } = startServer();
     const first = await postTurn(base, askBody());

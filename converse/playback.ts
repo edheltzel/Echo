@@ -6,22 +6,22 @@
 // it - notify acks 202 on receipt, so the caller never learns when the line
 // actually played, and the microphone must not open until it has.
 //
+// So the question opts into core's per-request completion state and the wait
+// polls THAT request's own outcome: `completed` (with the capture reservation
+// core activated in the same turn), `failed`, or no verdict inside the budget.
+// A question dropped by the queue's age cap therefore reads as `failed` rather
+// than being indistinguishable from one that played.
+//
 // Two constraints shape the waiting strategy, and the second one is easy to miss:
 //
-//  * GET /health shares /notify's rate-limit bucket (10 requests per minute per
-//    client). Polling in a tight loop would 429 itself and, worse, starve the
-//    host's own notifications - a dropped notification is the failure the
-//    bucket exists to prevent. So converse estimates the speech duration from
-//    the question's length, sleeps that out, and only then polls sparsely.
+//  * Completion reads have their own rate-limit bucket, but it is the same size
+//    as every other (10 requests per minute per client) and one turn also spends
+//    a /health and a /notify. So converse estimates the speech duration from the
+//    question's length, sleeps that out, and only then polls sparsely.
 //  * The question is posted under a session id unique to the turn. The play
 //    queue coalesces newest-per-session, so sharing the host's session id would
 //    let a later host line replace the question - core would then stay silent
 //    while the caller happily recorded.
-//
-// Known residual, called out in the plan and not fixed here: a question dropped
-// by the queue's age cap is indistinguishable from one that played, because
-// telling them apart needs a per-request completion signal that would change the
-// /notify contract. The wait is bounded and the outcome is reported instead.
 
 import type { CoreHealthSnapshot } from "./types.ts";
 
@@ -30,17 +30,17 @@ const SPEECH_OVERHEAD_MS = 1_200;
 const MS_PER_CHARACTER = 70;
 
 // Backoff rather than a fixed cadence, and this is a budget decision as much as
-// a latency one. Core's /health shares its /notify bucket at ten requests a
-// minute per client, so one ask can afford about three or four core requests
-// before it starts eating the host's own notification budget. Early polls stay
-// close together (the human should not sit in silence after the question), then
-// widen fast so a slow synthesis costs one more request, not six.
-const DRAIN_BACKOFF_MS = [750, 1_250, 2_000, 3_500] as const;
+// a latency one. Every core bucket allows ten requests a minute per client, so
+// one ask can afford about four completion reads before a second ask inside the
+// same minute starts getting 429s. Early polls stay close together (the human
+// should not sit in silence after the question), then widen fast so a slow
+// synthesis costs one more request, not six.
+const COMPLETION_BACKOFF_MS = [750, 1_250, 2_000, 3_500] as const;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 export type SleepLike = (ms: number) => Promise<void>;
 
-const realSleep: SleepLike = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export const realSleep: SleepLike = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function estimateSpeechMs(question: string): number {
   return SPEECH_OVERHEAD_MS + question.length * MS_PER_CHARACTER;
@@ -229,8 +229,8 @@ export interface PlaybackCompletionReport {
 export async function waitForPlaybackCompletion(options: PlaybackCompletionOptions): Promise<PlaybackCompletionReport> {
   const sleep = options.sleep ?? realSleep;
   const backoff = options.pollIntervalMs === undefined
-    ? DRAIN_BACKOFF_MS
-    : Array(Math.max((options.maxPolls ?? DRAIN_BACKOFF_MS.length + 1) - 1, 0)).fill(options.pollIntervalMs);
+    ? COMPLETION_BACKOFF_MS
+    : Array(Math.max((options.maxPolls ?? COMPLETION_BACKOFF_MS.length + 1) - 1, 0)).fill(options.pollIntervalMs);
   const maxPolls = options.maxPolls ?? backoff.length + 1;
 
   await sleep(options.estimateMs);
@@ -269,61 +269,3 @@ export async function waitForPlaybackCompletion(options: PlaybackCompletionOptio
   return { completed: false, state: "unknown", waited_ms: waited, polls: maxPolls, refused_reads: refused };
 }
 
-export interface DrainOptions {
-  coreBaseUrl: string;
-  estimateMs: number;
-  fetchImpl: FetchLike;
-  sleep?: SleepLike;
-  pollIntervalMs?: number;
-  maxPolls?: number;
-}
-
-export interface DrainReport {
-  drained: boolean;
-  waited_ms: number;
-  polls: number;
-  /**
-   * Polls core refused or failed to answer. Non-zero with `drained: false` means
-   * the wait ran out of readings, not that the queue was busy - the difference
-   * between "your play queue is backed up" and "you asked twice in a minute".
-   */
-  refused_reads: number;
-}
-
-function queueIsIdle(health: CoreHealthSnapshot): boolean {
-  return health.play_queue.depth === 0 && health.play_queue.in_flight_ms === null;
-}
-
-/**
- * Wait for core's play queue to go idle: sleep out the estimated speech first,
- * then poll. The queue holds the job from the moment /notify acks, so an idle
- * reading after the estimate means the question is done rather than not started.
- */
-export async function waitForPlaybackDrain(options: DrainOptions): Promise<DrainReport> {
-  const sleep = options.sleep ?? realSleep;
-  const backoff = options.pollIntervalMs === undefined
-    ? DRAIN_BACKOFF_MS
-    : Array(Math.max((options.maxPolls ?? DRAIN_BACKOFF_MS.length + 1) - 1, 0)).fill(options.pollIntervalMs);
-  const maxPolls = options.maxPolls ?? backoff.length + 1;
-
-  await sleep(options.estimateMs);
-  let waited = options.estimateMs;
-  let refused = 0;
-
-  for (let poll = 1; poll <= maxPolls; poll++) {
-    const read = await readCoreHealth(options.coreBaseUrl, options.fetchImpl);
-    // A rate-limited or failed read is not evidence the queue is empty. Keep
-    // waiting: opening the microphone on a guess is the expensive mistake.
-    if (read.status !== "ok") refused++;
-    else if (queueIsIdle(read.health)) {
-      return { drained: true, waited_ms: waited, polls: poll, refused_reads: refused };
-    }
-    if (poll === maxPolls) {
-      return { drained: false, waited_ms: waited, polls: poll, refused_reads: refused };
-    }
-    const gap = backoff[Math.min(poll - 1, backoff.length - 1)] ?? 0;
-    await sleep(gap);
-    waited += gap;
-  }
-  return { drained: false, waited_ms: waited, polls: maxPolls, refused_reads: refused };
-}

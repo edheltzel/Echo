@@ -79,7 +79,8 @@ Echo owns only the `echo-converse` server name; if something else already holds 
 aborts before changing anything. The first ask needs microphone permission, and macOS will ask
 for it on behalf of your **terminal application**, not on behalf of Echo. Full picture, including
 what to install for transcription: [`converse.md`](converse.md). This install preflights `sox`
-and `rec` before changing host state; `cli/echo doctor` repeats the same check later.
+and `rec` before changing host state - blocking for `--adapter mcp`, a warning for `pi` and
+`omp`; `cli/echo doctor` repeats the same check later.
 
 ## Moved or renamed the repo directory?
 

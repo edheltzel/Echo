@@ -101,7 +101,7 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
-`bun test` + the smoke + both e2e scripts + the Pi and omp builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp and MCP builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning

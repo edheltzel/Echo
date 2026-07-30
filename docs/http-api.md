@@ -7,12 +7,18 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
 `429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with two carve-outs that each get their own:
+`localhost` bucket, with four carve-outs that each get their own (matched by exact route, so
+the `POST /notify/personality` shim stays on the shared notification bucket):
 
 - `POST /mute` — so a notification flood can never starve the mute control (#83).
 - `GET /voices` — adapters read it once per turn immediately before that turn's `/notify`.
   On the shared bucket that would halve every host's notification budget and let the read
   starve the write it precedes.
+- `GET /notify/:request_id/completion` - one converse turn spends several polls on it, which
+  would otherwise eat the notification budget of the host it is running inside.
+- `POST /notify/:request_id/capture-release` - the control that ends a daemon-wide speech
+  hold, so it must not be starved by the polls of the turn that is releasing it. Its own
+  bucket means a release always has budget, whatever the polling cost.
 
 ## `POST /notify`
 
@@ -47,7 +53,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_settings` | — | Pass-through override, see below |
 | `session_id`, `source` | — | Echoed into the daemon log for correlation |
 | `visual_delivery` | — | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence — see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner — raw HTTP callers are unaffected |
-| `capture_reservation` | — | Optional converse-only reservation: positive `owner_pid` and `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
+| `capture_reservation` | — | Optional converse-only reservation: positive `owner_pid` and `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. `lease_ms` is clamped to at most 120000; the reservation only has to bridge playback completion to the caller publishing its capture state, and the lease is what bounds the hold when the owner pid never exits. Ordinary callers should omit it |
 
 ### Native terminal visual delivery
 

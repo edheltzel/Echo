@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -143,6 +143,95 @@ describe("echo doctor", () => {
       // The Bun prerequisite is diagnosed (doctor itself runs without needing it).
       expect(r.stdout).toContain("bun");
       expect(r.stdout).toContain("converse");
+      expect(r.stdout).toContain("brew install sox");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // echo-converse is optional. A notification-only install never opens a
+  // microphone, so a missing sox is a warning there: reporting DEGRADED on a
+  // fully working install is what makes doctor's verdict worthless.
+  test("a missing sox only warns when this machine does not use echo-converse", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-sox-optional-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 7\n");
+
+      // sox is absent from this PATH, and nothing here wants the voice ask.
+      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+
+      expect(r.stdout).toContain("!  converse");
+      expect(r.stdout).not.toContain("✗  converse");
+      expect(r.stdout).toContain("brew install sox");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Pi and omp register the same echo_ask tool, so on those machines the ask is
+  // exposed and would fail at call time - the state doctor exists to name.
+  test("a missing sox degrades the run once a pi or omp host exposes the ask", async () => {
+    for (const host of ["pi", "omp"] as const) {
+      const root = mkdtempSync(join(tmpdir(), `echo-doctor-sox-${host}-`));
+      try {
+        const home = join(root, "home");
+        const bin = join(root, "bin");
+        mkdirSync(home, { recursive: true });
+        mkdirSync(bin, { recursive: true });
+        writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+        writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 7\n");
+
+        const env: Record<string, string> = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` };
+        if (host === "pi") {
+          mkdirSync(join(home, ".pi/agent"), { recursive: true });
+          writeFileSync(
+            join(home, ".pi/agent/settings.json"),
+            JSON.stringify({ packages: ["/clone/adapters/pi"] }),
+          );
+        } else {
+          const extensions = join(root, "extensions");
+          mkdirSync(extensions, { recursive: true });
+          symlinkSync(join(root, "clone/adapters/omp"), join(extensions, "echo-voice"));
+          env.OMP_EXTENSIONS_DIR = extensions;
+        }
+
+        const r = await runCli(["doctor"], env);
+
+        expect(r.exitCode, host).toBe(1);
+        expect(r.stdout, host).toContain("✗  converse");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("a missing sox degrades the run once the MCP voice ask is registered", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-sox-required-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 7\n");
+      writeFileSync(
+        join(home, ".claude.json"),
+        JSON.stringify({
+          mcpServers: {
+            "echo-converse": { type: "stdio", command: "bun", args: ["/clone/adapters/mcp/server.ts"] },
+          },
+        }),
+      );
+
+      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain("✗  converse");
       expect(r.stdout).toContain("brew install sox");
     } finally {
       rmSync(root, { recursive: true, force: true });

@@ -69,9 +69,13 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 | `yap` | Tier 1 transcription (Apple SpeechAnalyzer, on device, no model download) | Falls back to the Tier 2 rung unless a tier is pinned |
 | `whisper-cli` + a ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) | Tier 2 transcription, portable | Only the Tier 1 rung is available |
 
-The voice-ask install paths (`--adapter mcp|pi|omp`) preflight `sox` and `rec` before
-changing host state. `cli/echo doctor` runs the same check and reports the exact missing
-binary plus `brew install sox`; set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
+The voice-ask install paths preflight `sox` and `rec` before changing host state.
+`--adapter mcp` **blocks** on a missing one: that adapter exists only to expose the ask.
+`--adapter pi|omp` warns and installs anyway, because both also register notifications that
+need nothing from sox. `cli/echo doctor` runs the same check and reports the exact missing
+binary plus `brew install sox`; it is a **warning** row unless this machine actually uses
+echo-converse (the MCP server is registered, or an `ECHO_CONVERSE_*` setting is configured),
+in which case it degrades the run. Set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
 when the binaries live outside `PATH`.
 
 Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1

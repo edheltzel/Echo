@@ -99,6 +99,15 @@ filesystem picks the winner rather than a check-then-act race. A holder counts o
 owner process is alive and its lease is unexpired; anything else is reaped, because a crashed
 ask must not wedge every later one. A concurrent ask gets `409` rather than an invisible queue.
 
+**A turn holds two things, and they are always released together.** The booking is what stops a
+second microphone; core's capture reservation is what stops core speaking into the recording, and
+while core holds one it skips *every* voice line. So completing, aborting, and being dropped for
+outliving the lease all run the same cleanup, and a release core refuses is retried and then
+logged rather than assumed to have worked. Core clamps the reservation's `lease_ms` to two
+minutes whatever the coordinator asks for: the reservation only bridges playback completion to
+the caller publishing `recording`, the capture guard covers the rest of the turn, and a bounded
+lease is what guarantees the silence ends even when the owner pid never exits.
+
 ## Endpoints (`:32468`)
 
 | Route | Meaning |
@@ -153,9 +162,9 @@ nothing, and an empty transcript is reported as `no_speech` rather than as an em
 ## Known limits in v1
 
 - **An ask still spends multiple core requests.** It preflights, submits one opt-in `/notify`,
-  polls that request's completion, and releases the reservation at the end. Completion/status
-  reads have their own rate-limit bucket, but asks remain for occasional questions rather than
-  tight loops.
+  polls that request's completion, and releases the reservation at the end. Completion reads and
+  the reservation release each have their own rate-limit bucket, but asks remain for occasional
+  questions rather than tight loops.
 - **The coordinator reports only the core completion outcome.** A successful completed state is
   exact for the request it submitted; provider playback details remain in core's lifecycle log.
 - Out of scope for v1: barge-in, a transcript-polish model, cloned voices, waveform streaming,

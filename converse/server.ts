@@ -31,6 +31,7 @@ import {
   assessCore,
   estimateSpeechMs,
   readCoreHealth,
+  realSleep,
   speakQuestion,
   waitForPlaybackCompletion,
   type FetchLike,
@@ -40,6 +41,8 @@ import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from ".
 
 const MAX_QUESTION_CHARS = 1_000;
 const MIN_LEASE_MS = 10_000;
+const RELEASE_ATTEMPTS = 2;
+const RELEASE_RETRY_DELAY_MS = 250;
 
 export interface ConverseServerOptions {
   config: ConverseConfig;
@@ -150,17 +153,25 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     }
   });
   const log = options.log ?? (() => {});
+  const sleep = options.sleep ?? realSleep;
 
   const active = new Map<string, ActiveTurn>();
   const counts = { completed: 0, aborted: 0, refused: 0 };
 
-  /** Abandoned turns are dropped here rather than by a timer, so nothing leaks and no interval outlives a test. */
-  function dropExpiredTurns(at: number): void {
+  /**
+   * Abandoned turns are dropped here rather than by a timer, so nothing leaks and
+   * no interval outlives a test. Dropping the bookkeeping is not enough: an
+   * expired turn still holds the microphone booking AND core's capture
+   * reservation, and its caller is gone, so this is the only place either gets
+   * handed back.
+   */
+  async function dropExpiredTurns(at: number): Promise<void> {
     for (const [id, turn] of active) {
       if (turn.expires_at <= at) {
         active.delete(id);
         counts.aborted++;
         log(`turn ${id} expired without completing`);
+        await cleanupTurn(turn);
       }
     }
   }
@@ -185,7 +196,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     const request = validated.request;
 
     const startedAt = now();
-    dropExpiredTurns(startedAt);
+    await dropExpiredTurns(startedAt);
 
     const leaseBudgetMs = config.maxCaptureMs + config.transcribeTimeoutMs + CONVERSE_LEASE_SLACK_MS;
     const leaseMs = clampLease(request.lease_ms, config.leaseMs, leaseBudgetMs);
@@ -313,32 +324,58 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     }
   }
 
+  /**
+   * Hand core's reservation back, and say so when that fails. While core holds
+   * one it skips EVERY voice line, so an unnoticed non-2xx (a 429 from a busy
+   * turn, a 404 from a reservation that never activated) is the operator's Echo
+   * going silent for the rest of the lease. One retry covers the transient case;
+   * beyond that the lease and the owner-liveness guard are the backstop, and the
+   * log names it rather than reporting success.
+   */
   async function releaseCoreReservation(turn: ActiveTurn): Promise<void> {
-    try {
-      await fetchImpl(`${config.coreBaseUrl}/notify/${encodeURIComponent(turn.capture_reservation_id)}/capture-release`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch {
-      // The core reservation has the same owner-liveness and lease expiry guard
-      // as the booking, so a lost release cannot hold speech forever.
+    const url = `${config.coreBaseUrl}/notify/${encodeURIComponent(turn.capture_reservation_id)}/capture-release`;
+    for (let attempt = 1; attempt <= RELEASE_ATTEMPTS; attempt++) {
+      let detail: string;
+      try {
+        const response = await fetchImpl(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        // 404 means core is not holding this reservation, which is the same
+        // end state as a successful release.
+        if (response.status === 200 || response.status === 404) return;
+        detail = `core answered HTTP ${response.status}`;
+      } catch (error) {
+        detail = error instanceof Error ? error.message : "core unreachable";
+      }
+      log(`turn ${turn.turn_id} capture-release attempt ${attempt} failed: ${detail}`);
+      if (attempt < RELEASE_ATTEMPTS) await sleep(RELEASE_RETRY_DELAY_MS);
     }
+    log(
+      `turn ${turn.turn_id} could not release core reservation ${turn.capture_reservation_id}; ` +
+        "core stays silent until its lease expires",
+    );
+  }
+
+  /** Every path out of a turn goes through here, so neither hold can be freed without the other. */
+  async function cleanupTurn(turn: ActiveTurn): Promise<void> {
+    await releaseCoreReservation(turn);
+    releaseBooking(config.bookingLockPath, turn.turn_id);
   }
 
   async function finishTurn(turnId: string, outcome: "completed" | "aborted", detail: string): Promise<Response> {
     const turn = active.get(turnId);
     if (!turn) {
-      // A turn dropped for outliving its lease still owns the lock file, and its
-      // caller is the only one who can hand the microphone back. releaseBooking
-      // refuses when the holder is a different turn, so this cannot take a lock
-      // away from a live one.
+      // A turn dropped for outliving its lease has already had both holds
+      // released by dropExpiredTurns; this covers the lock file surviving a
+      // coordinator restart. releaseBooking refuses when the holder is a
+      // different turn, so this cannot take a lock away from a live one.
       releaseBooking(config.bookingLockPath, turnId);
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 
-    await releaseCoreReservation(turn);
     active.delete(turnId);
-    releaseBooking(config.bookingLockPath, turnId);
+    await cleanupTurn(turn);
     if (outcome === "completed") counts.completed++;
     else counts.aborted++;
     log(`turn ${turnId} ${outcome}${detail ? `: ${detail}` : ""}`);

@@ -206,6 +206,49 @@ exit 0
     }
   });
 
+  // omp (and Pi) register the voice ask alongside notifications that need nothing
+  // from sox, and both installed fine without it before the preflight existed.
+  // Blocking them on a missing recorder turns an optional capability into a hard
+  // install failure; only --adapter mcp, which exists solely for the ask, blocks.
+  test("a missing sox warns but does not block an omp install", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-omp-no-sox-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      const extensions = join(root, "extensions");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+
+      // No sox, no rec: exactly the machine the blocking preflight refused.
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "omp"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+
+      const result = await runInstall(["--adapter", "omp"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        OMP_EXTENSIONS_DIR: extensions,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("Missing echo-converse dependency: sox");
+      expect(result.stderr).toContain("WARN: the echo_ask voice ask stays unavailable");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      expect(lstatSync(join(extensions, "echo-voice")).isSymbolicLink()).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
+
   // The MCP server is Claude Code's only route to a model-invokable ask, so its
   // registration has to survive the same install path every other adapter does.
   // ECHO_MCP_CONFIG_PATH keeps this off the operator's real ~/.claude.json.

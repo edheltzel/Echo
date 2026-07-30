@@ -1773,6 +1773,11 @@ function acceptNotification(
 // HTTP Server
 // =============================================================================
 
+// The two opt-in converse routes, matched in one place so routing and
+// rate-limit bucketing cannot disagree about what a route is.
+const COMPLETION_ROUTE = /^\/notify\/([^/]+)\/completion$/;
+const CAPTURE_RELEASE_ROUTE = /^\/notify\/([^/]+)\/capture-release$/;
+
 export const server = serve({
   port: PORT,
   async fetch(req) {
@@ -1798,10 +1803,17 @@ export const server = serve({
     // /notify for that same turn. Sharing the notification bucket would halve
     // every host's effective notification budget and make the read starve the
     // write it precedes — a dropped notification, the worst failure here.
+    //
+    // The two converse routes get one bucket each, matched by exact route shape
+    // so the /notify/personality shim keeps sharing the notification bucket it
+    // has always shared. Completion polling and the reservation release must not
+    // share either: a turn spends several polls, and the release is the control
+    // that ends the daemon-wide speech hold - /mute's argument exactly.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
-      : url.pathname.startsWith("/notify/") ? `notify-status:${clientIp}`
+      : COMPLETION_ROUTE.test(url.pathname) ? `notify-completion:${clientIp}`
+      : CAPTURE_RELEASE_ROUTE.test(url.pathname) ? `capture-release:${clientIp}`
       : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
@@ -1877,7 +1889,7 @@ export const server = serve({
       }
     }
 
-    const completion = /^\/notify\/([^/]+)\/completion$/.exec(url.pathname);
+    const completion = COMPLETION_ROUTE.exec(url.pathname);
     if (completion && req.method === "GET") {
       const requestId = completion[1];
       const status = readPlaybackStatus(requestId);
@@ -1893,7 +1905,7 @@ export const server = serve({
       });
     }
 
-    const reservationRelease = /^\/notify\/([^/]+)\/capture-release$/.exec(url.pathname);
+    const reservationRelease = CAPTURE_RELEASE_ROUTE.exec(url.pathname);
     if (reservationRelease && req.method === "POST") {
       const requestId = reservationRelease[1];
       const released = releaseCaptureReservation(requestId);

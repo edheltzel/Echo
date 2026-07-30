@@ -4,7 +4,7 @@ import {
   estimateSpeechMs,
   speakQuestion,
   turnSessionId,
-  waitForPlaybackDrain,
+  waitForPlaybackCompletion,
   type FetchLike,
 } from "../../converse/playback.ts";
 import type { CoreHealthSnapshot } from "../../converse/types.ts";
@@ -20,20 +20,6 @@ function health(overrides: Partial<CoreHealthSnapshot> = {}): CoreHealthSnapshot
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
-/** A core stand-in that records the calls made against it, in order. */
-function fakeCore(healthSequence: (CoreHealthSnapshot | null)[]) {
-  const calls: string[] = [];
-  let healthIndex = 0;
-  const fetchImpl: FetchLike = async (url, init) => {
-    const path = new URL(url).pathname;
-    calls.push(`${init?.method ?? "GET"} ${path}`);
-    if (path === "/notify") return jsonResponse({ status: "accepted", request_id: "r-1" }, 202);
-    const next = healthSequence[Math.min(healthIndex++, healthSequence.length - 1)];
-    return next === null ? new Response("rate limited", { status: 429 }) : jsonResponse(next);
-  };
-  return { calls, fetchImpl };
 }
 
 describe("speaking the question through core", () => {
@@ -74,112 +60,123 @@ describe("speaking the question through core", () => {
 });
 
 describe("waiting for the question to finish playing", () => {
+  /** A core stand-in that answers this request's own completion route, in sequence. */
+  function completionCore(states: Array<"queued" | "playing" | "completed" | "failed" | null>) {
+    const calls: string[] = [];
+    let index = 0;
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname;
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      const state = states[Math.min(index++, states.length - 1)];
+      if (state === null) return new Response("rate limited", { status: 429 });
+      return jsonResponse({
+        request_id: "r-1",
+        state,
+        ...(state === "completed" ? { capture_reservation_id: "r-1" } : {}),
+        ...(state === "failed" ? { detail: "dropped by the age cap" } : {}),
+      });
+    };
+    return { calls, fetchImpl };
+  }
+
+  const wait = (core: { fetchImpl: FetchLike }, overrides = {}) =>
+    waitForPlaybackCompletion({
+      coreBaseUrl: "http://localhost:8899",
+      requestId: "r-1",
+      estimateMs: 0,
+      fetchImpl: core.fetchImpl,
+      sleep: async () => {},
+      ...overrides,
+    });
+
   test("sleeps out the estimated speech before spending a single poll", async () => {
     const slept: number[] = [];
-    const core = fakeCore([health()]);
+    const core = completionCore(["completed"]);
 
-    const report = await waitForPlaybackDrain({
+    const report = await waitForPlaybackCompletion({
       coreBaseUrl: "http://localhost:8899",
+      requestId: "r-1",
       estimateMs: 4_000,
       fetchImpl: core.fetchImpl,
       sleep: async (ms) => void slept.push(ms),
     });
 
-    // The estimate carries the wait; /health shares /notify's 10-per-minute
-    // bucket, so a tight poll loop would starve the host's notifications.
+    // The estimate carries the wait; every core bucket allows ten requests a
+    // minute, so a tight poll loop would 429 the next ask.
     expect(slept[0]).toBe(4_000);
-    expect(report).toEqual({ drained: true, waited_ms: 4_000, polls: 1, refused_reads: 0 });
-    expect(core.calls).toEqual(["GET /health"]);
+    expect(report.completed).toBe(true);
+    expect(report.capture_reservation_id).toBe("r-1");
+    expect(report.polls).toBe(1);
+    expect(core.calls).toEqual(["GET /notify/r-1/completion"]);
   });
 
-  test("keeps waiting while the queue is still busy", async () => {
-    const core = fakeCore([
-      health({ play_queue: { depth: 1, in_flight_ms: null, stalled: false } }),
-      health({ play_queue: { depth: 0, in_flight_ms: 800, stalled: false } }),
-      health(),
-    ]);
+  test("keeps waiting while the question is still queued or playing", async () => {
+    const core = completionCore(["queued", "playing", "completed"]);
 
-    const report = await waitForPlaybackDrain({
-      coreBaseUrl: "http://localhost:8899",
-      estimateMs: 100,
-      fetchImpl: core.fetchImpl,
-      sleep: async () => {},
-      pollIntervalMs: 1_000,
-    });
+    const report = await wait(core, { pollIntervalMs: 1_000 });
 
-    expect(report.drained).toBe(true);
+    expect(report.completed).toBe(true);
     expect(report.polls).toBe(3);
-    expect(report.waited_ms).toBe(2_100);
+    expect(report.waited_ms).toBe(2_000);
   });
 
-  test("a rate-limited poll is not read as an empty queue", async () => {
-    // 429 twice, then an idle queue: a refused read must never be mistaken for
-    // "nothing is playing", or the microphone opens over the question.
-    const core = fakeCore([null, null, health()]);
+  // The whole point of the per-request record: a question the queue dropped is
+  // reported as failed instead of being indistinguishable from one that played.
+  test("a dropped question reads as failed, with core's own reason", async () => {
+    const report = await wait(completionCore(["failed"]));
 
-    const report = await waitForPlaybackDrain({
-      coreBaseUrl: "http://localhost:8899",
-      estimateMs: 0,
-      fetchImpl: core.fetchImpl,
-      sleep: async () => {},
-    });
+    expect(report.completed).toBe(false);
+    expect(report.state).toBe("failed");
+    expect(report.detail).toBe("dropped by the age cap");
+    expect(report.capture_reservation_id).toBeUndefined();
+  });
 
-    expect(report.drained).toBe(true);
+  test("a rate-limited poll is not read as a finished question", async () => {
+    // 429 twice, then completed: a refused read must never be mistaken for
+    // "the question is done", or the microphone opens over the question.
+    const report = await wait(completionCore([null, null, "completed"]));
+
+    expect(report.completed).toBe(true);
     expect(report.polls).toBe(3);
+    expect(report.refused_reads).toBe(2);
   });
 
   test("gives up after a bounded number of polls instead of waiting forever", async () => {
-    const core = fakeCore([health({ play_queue: { depth: 3, in_flight_ms: 500, stalled: false } })]);
-
-    const report = await waitForPlaybackDrain({
-      coreBaseUrl: "http://localhost:8899",
-      estimateMs: 0,
-      fetchImpl: core.fetchImpl,
-      sleep: async () => {},
-      maxPolls: 3,
-    });
+    const report = await wait(completionCore(["playing"]), { maxPolls: 3 });
 
     // 0 + 750 + 1250: the gaps come from the backoff schedule.
-    expect(report).toEqual({ drained: false, waited_ms: 2_000, polls: 3, refused_reads: 0 });
+    expect(report.completed).toBe(false);
+    expect(report.state).toBe("unknown");
+    expect(report.waited_ms).toBe(2_000);
+    expect(report.polls).toBe(3);
+    expect(report.refused_reads).toBe(0);
   });
 
-  test("a wait that ran out of readings is distinguishable from a busy queue", async () => {
+  test("a wait that ran out of readings is distinguishable from a slow queue", async () => {
     // Same symptom, opposite fixes: "your play queue is backed up" versus "you
     // asked twice inside a minute". The count is what lets the caller say which.
-    const refused = fakeCore([null]);
-    const busy = fakeCore([health({ play_queue: { depth: 4, in_flight_ms: 200, stalled: false } })]);
-    const wait = (core: ReturnType<typeof fakeCore>) =>
-      waitForPlaybackDrain({
-        coreBaseUrl: "http://localhost:8899",
-        estimateMs: 0,
-        fetchImpl: core.fetchImpl,
-        sleep: async () => {},
-        maxPolls: 3,
-      });
+    const refused = await wait(completionCore([null]), { maxPolls: 3 });
+    const busy = await wait(completionCore(["playing"]), { maxPolls: 3 });
 
-    const refusedReport = await wait(refused);
-    const busyReport = await wait(busy);
-
-    expect(refusedReport.drained).toBe(false);
-    expect(refusedReport.refused_reads).toBe(3);
-    expect(busyReport.drained).toBe(false);
-    expect(busyReport.refused_reads).toBe(0);
+    expect(refused.refused_reads).toBe(3);
+    expect(busy.refused_reads).toBe(0);
   });
 
   test("polls back off so a slow synthesis costs one more request, not six", async () => {
     const slept: number[] = [];
-    const core = fakeCore([health({ play_queue: { depth: 1, in_flight_ms: 900, stalled: false } })]);
+    const core = completionCore(["playing"]);
 
-    const report = await waitForPlaybackDrain({
+    const report = await waitForPlaybackCompletion({
       coreBaseUrl: "http://localhost:8899",
+      requestId: "r-1",
       estimateMs: 2_000,
       fetchImpl: core.fetchImpl,
       sleep: async (ms) => void slept.push(ms),
     });
 
-    // An ask can afford three or four core requests before it starts eating the
-    // host's own notification budget, so the gaps widen instead of repeating.
-    expect(report.drained).toBe(false);
+    // An ask can afford about four completion reads before a second ask inside
+    // the same minute starts getting 429s, so the gaps widen instead of repeating.
+    expect(report.completed).toBe(false);
     expect(report.polls).toBeLessThanOrEqual(5);
     expect(slept).toEqual([2_000, 750, 1_250, 2_000, 3_500]);
     expect(slept.slice(1)).toEqual([...slept.slice(1)].sort((a, b) => a - b));
