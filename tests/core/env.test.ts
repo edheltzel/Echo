@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,28 +83,29 @@ describe("parseBoundedInt - degenerate env values fall back to default", () => {
 
 // resolveEchoEnv is the import-pure replacement for the daemon's old
 // hydrate-process.env-at-import loop (the pi-adapter "Atlas" pollution):
-// live process value wins, env-file values are a read-only fallback, and
-// resolving NEVER writes to process.env.
-describe("resolveEchoEnv - import-pure env resolution", () => {
+// config.json wins, old process values are a deprecated fallback, legacy
+// dotenv values come last, and resolving NEVER writes to process.env.
+describe("resolveEchoEnv - import-pure config resolution", () => {
   afterEach(() => {
     primeEchoFileEnv(undefined); // restore lazy real-file loading
     delete process.env.ECHO_ENV_TEST_KEY;
   });
 
-  test("a live process value wins over the file layer", () => {
+  test("the resolved config layer wins over a live process value", () => {
     primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    process.env.ECHO_ENV_TEST_KEY = "from-process";
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
+  });
+
+  test("falls back to a live process value when resolved config is absent", () => {
+    primeEchoFileEnv({});
     process.env.ECHO_ENV_TEST_KEY = "from-process";
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-process");
   });
 
-  test("falls back to the file layer when the process value is absent", () => {
-    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
-    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
-  });
-
-  test("an empty live process value still wins over the file layer", () => {
-    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
-    process.env.ECHO_ENV_TEST_KEY = "";
+  test("an empty resolved value still wins over the live process layer", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "" });
+    process.env.ECHO_ENV_TEST_KEY = "from-process";
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("");
   });
 
@@ -173,17 +174,58 @@ describe("resolveEchoEnv - import-pure env resolution", () => {
     }
   });
 
-  test("live values override config.json without mutating process.env", () => {
+  test("config.json overrides deprecated live values without mutating process.env", () => {
     const home = mkdtempSync(join(tmpdir(), "echo-json-precedence-"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
       mkdirSync(join(home, ".config", "echo"), { recursive: true });
       writeFileSync(echoConfigPath(home), JSON.stringify({ PORT: 3246, ECHO_VOICE_PERSONA_NAME: "File" }));
-      const resolved = loadEchoConfiguration({ PORT: "9999", ECHO_VOICE_PERSONA_NAME: "Live" }, home);
-      expect(resolved.PORT).toBe("9999");
-      expect(resolved.ECHO_VOICE_PERSONA_NAME).toBe("Live");
+      const { env, config } = loadEchoConfigurationWithStatus(
+        { PORT: "9999", ECHO_VOICE_PERSONA_NAME: "Live", ELEVENLABS_API_KEY: "secret" },
+        home,
+      );
+      expect(env.PORT).toBe("3246");
+      expect(env.ECHO_VOICE_PERSONA_NAME).toBe("File");
+      expect(env.ELEVENLABS_API_KEY).toBe("secret");
+      expect(config.deprecatedEnvironment).toEqual(["ECHO_VOICE_PERSONA_NAME", "PORT"]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("ECHO_VOICE_PERSONA_NAME, PORT"));
       expect(process.env.PORT).not.toBe("9999");
       expect(process.env.ECHO_VOICE_PERSONA_NAME).toBeUndefined();
     } finally {
+      warn.mockRestore();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("deprecated environment and dotenv fallbacks warn while third-party secrets do not", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-deprecated-env-"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "echo", ".env"),
+        "ECHO_DEFAULT_TITLE=Legacy file\nELEVENLABS_API_KEY=file-secret\n",
+      );
+      const { env, config } = loadEchoConfigurationWithStatus(
+        { ATLAS_VOICE_ID: "legacy-alias", ECHO_VOICE_TITLE: "Live", ELEVENLABS_API_KEY: "live-secret" },
+        home,
+      );
+
+      expect(env.ECHO_DEFAULT_TITLE).toBe("Legacy file");
+      expect(env.ECHO_VOICE_TITLE).toBe("Live");
+      expect(env.ATLAS_VOICE_ID).toBe("legacy-alias");
+      expect(env.ELEVENLABS_API_KEY).toBe("live-secret");
+      expect(config.deprecatedEnvironment).toEqual([
+        "ATLAS_VOICE_ID",
+        "ECHO_DEFAULT_TITLE",
+        "ECHO_VOICE_TITLE",
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("ATLAS_VOICE_ID, ECHO_DEFAULT_TITLE, ECHO_VOICE_TITLE"),
+      );
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("ELEVENLABS_API_KEY"));
+    } finally {
+      warn.mockRestore();
       rmSync(home, { recursive: true, force: true });
     }
   });

@@ -1,15 +1,12 @@
 #!/bin/bash
-# Sourced helper: the port these shell surfaces talk to - `PORT` when exported,
-# else 3246 - plus the one report install.sh and cli/echo both give when that
-# port is occupied by something that will not answer /health.
+# Sourced helper: the port these shell surfaces talk to. config.json is
+# authoritative, an exported PORT is a deprecated one-release fallback, and
+# 3246 is the built-in default.
 #
 # Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
-# cli/echo all target 3246 and make no attempt to discover a daemon listening
-# anywhere else. It does not read legacy dotenv files - and neither does the
-# daemon, for PORT specifically (shared/echo-env.ts), so the two sides cannot
-# disagree; scripts/install.sh migrates an existing dotenv PORT into config.json
-# first. With no live PORT override, the helper reads the flat JSON PORT property
-# so the CLI and lifecycle scripts follow the daemon's documented config.
+# cli/echo all target the resolved port and make no attempt to discover a daemon
+# listening anywhere else. This helper does not read legacy dotenv files, and
+# neither does the daemon for PORT specifically (shared/echo-env.ts).
 #
 # Pure bash on purpose: sourced by scripts that must work without Bun. Values stay
 # script-local - every script sources this for itself, nothing is exported.
@@ -44,12 +41,12 @@ config_port() {
   echo "$port"
 }
 
+ECHO_PORT="$(config_port)"
 if [ -n "${PORT:-}" ]; then
-  ECHO_PORT="$PORT"
-else
-  ECHO_PORT="$(config_port)"
-  ECHO_PORT="${ECHO_PORT:-3246}"
+  echo "WARNING: PORT environment configuration is deprecated; move it to $HOME/.config/echo/config.json. config.json takes precedence." >&2
+  ECHO_PORT="${ECHO_PORT:-$PORT}"
 fi
+ECHO_PORT="${ECHO_PORT:-3246}"
 ECHO_BASE_URL="http://localhost:${ECHO_PORT}"
 # shellcheck disable=SC2034  # read by the scripts that source this file, not here
 HEALTH_URL="${ECHO_BASE_URL}/health"

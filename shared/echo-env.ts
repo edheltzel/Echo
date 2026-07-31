@@ -39,6 +39,17 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_CONVERSE_WHISPER_BIN", "ECHO_CONVERSE_WHISPER_MODEL",
 ]);
 
+const DEPRECATED_ENV_ALIASES = new Set([
+  "ATLAS_VOICE_NOTIFY_URL", "ATLAS_VOICE_ID", "ATLAS_VOICE_TITLE",
+  "ATLAS_VOICE_CATCHPHRASE", "ATLAS_VOICE_PERSONA_NAME", "ATLAS_VOICE_ENABLED",
+  "ATLAS_VOICE_GREET_ON_START", "ATLAS_VOICE_SPEAK_COMPLETIONS",
+  "ATLAS_VOICE_SUPPRESS", "ATLAS_VOICE_SUPPRESS_SUBAGENTS",
+]);
+
+function isDeprecatedEnvironmentKey(key: string): boolean {
+  return ECHO_CONFIG_KEYS.has(key) || DEPRECATED_ENV_ALIASES.has(key);
+}
+
 // Retired in this release: an old alias left in a dotenv file is ignored rather
 // than migrated, so the canonical name is the only thing that can configure Echo.
 const RETIRED_ALIAS_PREFIX = "VOICESYSTEM_";
@@ -58,6 +69,8 @@ export interface EchoConfigStatus {
   /** Keys dropped from an otherwise-usable file; every other key still applies. */
   ignored: string[];
   errors: string[];
+  /** Echo settings supplied through the one-release environment compatibility layer. */
+  deprecatedEnvironment: string[];
 }
 
 /**
@@ -140,7 +153,13 @@ export function validateEchoConfig(value: unknown): string[] {
  * reported through EchoConfigStatus and surfaced in GET /health.
  */
 function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>; status: EchoConfigStatus } {
-  const status: EchoConfigStatus = { path, present: false, ignored: [], errors: [] };
+  const status: EchoConfigStatus = {
+    path,
+    present: false,
+    ignored: [],
+    errors: [],
+    deprecatedEnvironment: [],
+  };
   if (!existsSync(path)) return { values: {}, status };
   status.present = true;
 
@@ -227,7 +246,11 @@ export function legacyEchoEnvPaths(homeDir: string = homedir()): string[] {
   ];
 }
 
-function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironment {
+function loadLegacyEnvFiles(
+  env: EchoEnvironment,
+  homeDir: string,
+  deprecatedEnvironment: Set<string>,
+): EchoEnvironment {
   const envPaths = [
     ...(env.ECHO_ENV_PATHS?.split(":").filter(Boolean) ?? []),
     ...legacyEchoEnvPaths(homeDir),
@@ -237,12 +260,14 @@ function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironm
   for (const envPath of envPaths) {
     // The .env reader is migration-only (plus the permanent home for
     // ELEVENLABS_API_KEY, the one secret config.json rejects). It retains the
-    // old first-file-wins behavior but never overwrites a process or
-    // JSON-configured value.
+    // old first-file-wins behavior but never overwrites a process value.
     for (const [key, value] of Object.entries(parseDotenvFile(envPath))) {
       if (key.startsWith(RETIRED_ALIAS_PREFIX)) continue;
       if (DOTENV_EXCLUDED_KEYS.has(key)) continue;
-      if (env[key] === undefined) env[key] = value;
+      if (env[key] === undefined) {
+        env[key] = value;
+        if (isDeprecatedEnvironmentKey(key)) deprecatedEnvironment.add(key);
+      }
     }
   }
   return env;
@@ -250,21 +275,33 @@ function loadLegacyEnvFiles(env: EchoEnvironment, homeDir: string): EchoEnvironm
 
 /**
  * Resolve Echo configuration and report what the config file contributed.
- * Precedence: live process/explicit env object, config.json, then legacy .env.
- * The final layer exists to keep an upgrade from silently changing behavior and
- * to hold ELEVENLABS_API_KEY; scripts/migrate-config.ts moves everything else
- * into config.json.
+ * Precedence: config.json, deprecated live process/explicit env object, then
+ * legacy .env. The compatibility layers keep one upgrade from silently
+ * breaking existing setups; third-party secrets remain environment-only.
  */
 export function loadEchoConfigurationWithStatus(
   env: EchoEnvironment = { ...process.env },
   homeDir: string = homedir(),
 ): { env: EchoEnvironment; config: EchoConfigStatus } {
-  const resolved: EchoEnvironment = { ...env };
+  const deprecatedEnvironment = new Set(
+    Object.keys(env).filter((key) => env[key] !== undefined && isDeprecatedEnvironmentKey(key)),
+  );
   const { values, status } = readJsonConfig(echoConfigPath(homeDir, env));
-  for (const [key, value] of Object.entries(values)) {
-    if (resolved[key] === undefined) resolved[key] = String(value);
+  const resolved = loadLegacyEnvFiles({ ...env }, homeDir, deprecatedEnvironment);
+
+  // Persistent Echo configuration is authoritative. Old environment values are
+  // accepted for one release only and cannot silently override config.json.
+  for (const [key, value] of Object.entries(values)) resolved[key] = String(value);
+
+  status.deprecatedEnvironment = [...deprecatedEnvironment].sort((left, right) => left.localeCompare(right));
+  if (status.deprecatedEnvironment.length > 0) {
+    console.warn(
+      `⚠️  Echo environment configuration is deprecated: ${status.deprecatedEnvironment.join(", ")}. ` +
+        `Move these settings to ${status.path}; config.json values take precedence. ` +
+        "Third-party secrets remain environment-only.",
+    );
   }
-  return { env: loadLegacyEnvFiles(resolved, homeDir), config: status };
+  return { env: resolved, config: status };
 }
 
 /** Resolve Echo configuration without mutating process.env. */
