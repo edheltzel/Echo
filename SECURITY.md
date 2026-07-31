@@ -46,10 +46,18 @@ The optional voice-ask capability adds a microphone to the picture, so it gets i
 boundary notes. Mechanism and process topology: [`docs/converse.md`](docs/converse.md).
 
 - **A second unauthenticated localhost surface.** The coordinator binds `127.0.0.1:32468`
-  (`ECHO_CONVERSE_PORT`) and, like `/notify`, authenticates nobody: any local process can book
-  the microphone and cause a recording. Same accepted single-user risk, one rung higher, so do
-  not expose it to a network either.
-- **macOS TCC is the real gate.** The measured direct-terminal topology attributes capture to
+  (`ECHO_CONVERSE_PORT`) and, like `/notify`, authenticates nobody: any local process can book a
+  turn and cause a question to be spoken. The coordinator never records; the shipped host tools
+  require their own live-session consent before calling it. This is still an accepted
+  single-user local surface, one rung higher, so do not expose it to a network.
+- **Host-session consent is separate from TCC.** `echo_ask` fails closed before capture unless
+  its live Pi, omp or MCP session granted once through a human-facing prompt. Grants and denials
+  exist only in adapter memory and expire at the host boundary each adapter can enforce. MCP has
+  no conversation lifecycle, so Claude Code's enforceable boundary is the stdio MCP process,
+  not a guessed conversation id; see [`docs/converse.md`](docs/converse.md) for exact state and
+  expiry behavior. This gate protects the shipped tools, not arbitrary local programs that call
+  the unauthenticated coordinator and implement their own recorder.
+- **macOS TCC remains the OS gate.** The measured direct-terminal topology attributes capture to
   the terminal application, and the caller-side code normally spawns capture from the host
   adapter process rather than Echo's coordinator. Source-level checks keep capture code out of
   the coordinator; they do not enforce runtime ancestry. Pi and omp use the measured shape, while

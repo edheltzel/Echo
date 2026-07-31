@@ -15,8 +15,9 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
 - **Coordinator side** (`server.ts`, `main.ts`, `booking.ts`, `playback.ts`, `config.ts`,
   `types.ts`): books the microphone, speaks the question through core, waits for its exact
   playback completion and capture reservation.
-- **Caller side** (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`): opens the
-  microphone, transcribes locally, publishes capture state, and exposes `echo_ask` to hosts.
+- **Caller side** (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`,
+  `session-consent.ts`): requires a live host-session grant, opens the microphone, transcribes
+  locally, publishes capture state, and exposes `echo_ask` to hosts.
 - Host wiring lives in `adapters/*`, never here. This package knows nothing about Pi, omp or
   Claude Code beyond the `source` tag a caller passes.
 
@@ -28,6 +29,11 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   Claude Code's MCP ancestry is unverified. Source checks in
   `../tests/converse/architecture-invariants.test.ts` do not enforce runtime ancestry or indirect
   dependency behavior.
+- **Consent once per live host session, fail closed otherwise.** `runAskTool` must receive a
+  `granted` decision before it can call `askOnce`. `SessionConsent` keeps one grant or denial in
+  memory, shares concurrent prompts, and invalidates late answers at session end. Pi/omp bind it
+  to extension session lifecycle; MCP can bind only to its stdio process because the protocol has
+  no conversation lifecycle. Exact surfaces and expiry: `../docs/converse.md`.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
   the coordinator reports this request's playback completed and core grants the reservation, or
   core's own guard silences the question. Use `withCaptureHeld`, which returns to `idle` in its

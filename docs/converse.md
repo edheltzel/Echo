@@ -13,7 +13,8 @@ tests/e2e-converse.sh                      # isolated end-to-end turn, no microp
 
 Hosts do not call the HTTP surface directly. Pi and omp register an `echo_ask` tool inside
 their existing adapters; Claude Code consumes the same tool through `adapters/mcp/`. All three
-route to one place: `askOnce` in `converse/client.ts`.
+route to one place: `askOnce` in `converse/client.ts`, but only after the caller proves that its
+live host session granted microphone consent.
 
 ## Before you enable it
 
@@ -95,6 +96,31 @@ a guarantee.
 There is deliberately **no LaunchAgent** for this capability. The coordinator starts on demand
 (`ensureCoordinator`) and its lifetime tracks actual use.
 
+## Session-scoped consent
+
+The macOS TCC grant is necessary but not sufficient. TCC remembers the terminal application's
+microphone permission, so later recorder children can otherwise open silently. Echo therefore
+requires a separate informed decision once per live host session. The first valid `echo_ask`
+call presents that session's consent surface before it can reach `askOnce`; a grant is reused,
+and a denial is also remembered so refusal cannot degrade into per-call prompting. Calls with no
+live session identity or no usable consent surface fail closed with `session_consent_required`.
+Nothing is persisted to disk.
+
+| Host | Consent surface | Where state lives | Expiry |
+| --- | --- | --- | --- |
+| Pi | `ctx.ui.confirm` on the first valid call | One `SessionConsent` object in the active `adapters/pi` extension instance, keyed by `sessionManager.getSessionFile()` then `getSessionId()` | `session_shutdown`; `session_start` creates a fresh scope, including after `/reload`, `/new`, `/resume` or `/fork` |
+| omp | `ctx.ui.confirm` on the first valid call | One `SessionConsent` object in the active `adapters/omp` extension instance, keyed by the same session-manager identity | Same lifecycle as Pi |
+| Claude Code through MCP | A macOS `osascript` dialog from the stdio MCP child on the first valid call | One `SessionConsent` object in `runStdioServer`, keyed by a random connection id | MCP stdin closes or the MCP process exits |
+| Claude Code hooks | No independent surface: hooks cannot return a transcript, so they do not expose `echo_ask` | None; the Claude Code route is the MCP row above | Not applicable |
+
+MCP has no conversation-start or conversation-end message. Its enforceable session boundary is
+therefore one stdio connection/process, not a guessed Claude conversation id. If a client reuses
+one MCP process across its own conversation reset, the grant conditionally lasts for that reused
+connection; Echo cannot claim a narrower boundary the protocol does not publish. Pi/omp sessions
+without UI (`print`/`json`) refuse rather than substituting an ambient or model-supplied grant.
+A cancelled or broken prompt fails closed, and an answer that arrives after session shutdown
+cannot grant the replacement session.
+
 For the measured direct-terminal topology, the human grants microphone access to the terminal
 application (WezTerm, iTerm, Ghostty, Terminal), not to `yap`, `rec` or Echo's coordinator. Pi and
 omp use that shape. Claude Code remains the explicit unverified case above. If the product later
@@ -106,6 +132,9 @@ microphone usage description and is a separate architecture decision.
 ```text
  host tool call
       |
+      +-- live-session consent? -- no --> refuse before coordinator/capture
+      |               |
+      |              yes (grant reused only in this session)
       v
  POST /turn ------------------> coordinator:32468
                                   1. book the microphone (atomic lock)
@@ -126,7 +155,10 @@ microphone usage description and is a separate architecture decision.
 
 **Core changes are additive and opt-in.** It stays on `:3246` and keeps the existing receipt-based
 `/notify` response for ordinary callers. Converse adds a `capture_reservation` request field and
-uses per-request completion plus grant/release routes. The reservation id is the coordinator's
+uses per-request completion plus grant/release routes; aggregate queue-idle polling is never a
+capture authorization. Core refuses the reservation grant while that exact request is queued or
+playing, publishes `completed` only after its playback call returns successfully, then holds later
+speech from completion through capture release. The reservation id is the coordinator's
 turn id, known before `/notify`; if core accepts the request but its response is lost, the
 coordinator can still release that id. A release arriving before acceptance leaves a bounded
 cancellation tombstone, so the late request cannot activate a leaked reservation. The question
@@ -139,7 +171,10 @@ Ordering is therefore not optional: the question is spoken while the state is id
 flips to `recording` only after this request completes and core holds the reservation. Otherwise
 core would hold back the very question it was asked to speak. `withCaptureHeld` expresses that in
 code, and the test in
-`tests/converse/ask.test.ts` reads the state file at the moment core is asked to speak.
+`tests/converse/ask.test.ts` reads the state file at the moment core is asked to speak. The same
+suite forces the completion response to remain pending and proves the capture engine does not
+start; `tests/core/playback-reservation.test.ts` separately proves core refuses a capture grant
+while the tracked question is still `playing`.
 
 **The writer publishes its own pid.** Core honors a non-idle state only while that pid is alive,
 so the capture owner writes its own, and a crashed host frees core immediately instead of
@@ -273,7 +308,8 @@ both processes itself on isolated ports, redirects every state path to scratch, 
 attach to a port it does not own, and prints an isolation proof first. Its recorder and
 transcriber are stand-in scripts, so the whole turn runs with no microphone and no platform
 audio tooling. `bun test` covers the booking lock, the capture-state contract against core's own
-reader, the self-hold ordering, a real two-process booking race, the endpoint contract, the
+reader, the forced playback-before-capture race, the session-consent state machine and adapter
+expiry hooks, the self-hold ordering, a real two-process booking race, the endpoint contract, the
 capture subprocess handling, the adapters' tool registration and the MCP wire protocol.
 
 ## Related
