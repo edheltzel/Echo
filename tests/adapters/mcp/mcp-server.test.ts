@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { handleMessage, SUPPORTED_PROTOCOL_VERSIONS } from "../../../adapters/mcp/server.ts";
+import { handleMessage, requestMcpSessionConsent, SUPPORTED_PROTOCOL_VERSIONS } from "../../../adapters/mcp/server.ts";
 import { ECHO_ASK_PARAMETERS } from "../../../converse/host-tool.ts";
 
 // The MCP server is Claude Code's only route to a two-way turn: its hooks are
@@ -128,6 +128,13 @@ describe("tools/call", () => {
 
     expect(response.result.isError).toBe(false);
     expect(seen).toBe(controller.signal);
+  });
+
+  test("a cancellation before the consent dialog is presented stays retryable", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    expect(await requestMcpSessionConsent(controller.signal)).toBe("unavailable");
   });
 
   test("refuses capture when the MCP session has no consent gate", async () => {

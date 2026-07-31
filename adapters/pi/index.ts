@@ -67,11 +67,13 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
  * One informed microphone-consent prompt for this Pi session's echo_ask calls.
  *
  * No UI means no consent surface: the human never saw a prompt, so the call is
- * "unavailable" (retryable) rather than a sticky denial. An explicit decline or
- * an abort while the prompt is up is a human signal and stays sticky.
+ * "unavailable" (retryable) rather than a sticky denial. The same holds for a
+ * cancellation that lands before the prompt is presented. An explicit decline
+ * or an abort while the prompt is up is a human signal and stays sticky.
  */
 async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<SessionConsentDecision> {
   if (ctx.hasUI !== true) return "unavailable";
+  if (signal?.aborted) return "unavailable";
   try {
     const allowed = await ctx.ui.confirm(
       "Allow Echo voice replies for this Pi session?",

@@ -122,8 +122,9 @@ one MCP process across its own conversation reset, the grant conditionally lasts
 connection; Echo cannot claim a narrower boundary the protocol does not publish. Pi/omp sessions
 without UI (`print`/`json`) refuse rather than substituting an ambient or model-supplied grant.
 An abort while the prompt is up is a human signal and denies the session; a broken or
-unpresentable surface fails only that call and stays retryable. An answer that arrives after
-session shutdown cannot grant the replacement session.
+unpresentable surface, or a cancellation that lands before any prompt is presented, fails only
+that call and stays retryable. An answer that arrives after session shutdown cannot grant the
+replacement session.
 
 For the measured direct-terminal topology, the human grants microphone access to the terminal
 application (WezTerm, iTerm, Ghostty, Terminal), not to `yap`, `rec` or Echo's coordinator. Pi and

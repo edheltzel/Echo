@@ -94,12 +94,13 @@ const TOOL_DESCRIPTOR = {
  *
  * The decision distinguishes a human signal from a missing surface: clicking
  * Deny (osascript's cancel button, error -128) or aborting the tool call while
- * the dialog is up is a sticky denial, while a platform or GUI-session where
- * the dialog cannot be presented at all stays "unavailable" and retryable.
+ * the dialog is up is a sticky denial. A platform or GUI-session where the
+ * dialog cannot be presented, or a cancellation that lands before it is ever
+ * shown, produced no human signal and stays "unavailable" and retryable.
  */
 export async function requestMcpSessionConsent(signal?: AbortSignal): Promise<SessionConsentDecision> {
   if (process.platform !== "darwin") return "unavailable";
-  if (signal?.aborted) return "denied";
+  if (signal?.aborted) return "unavailable";
 
   const script = [
     'set answer to button returned of (display dialog "Echo can record and transcribe microphone audio whenever echo_ask runs in this Claude Code/MCP session. You will not be prompted again until this session ends."',

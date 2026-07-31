@@ -44,6 +44,15 @@ export interface CaptureReleaseResult {
   matched: boolean;
 }
 
+/**
+ * Largest lease /notify accepts. A reservation holds every later voice line
+ * once its playback completes, so an unbounded caller-chosen lease would let
+ * one unauthenticated localhost POST silence the daemon indefinitely. Five
+ * minutes sits comfortably above the coordinator's default ~120s capture and
+ * transcription budget while bounding how long a hostile lease can mute Echo.
+ */
+export const MAX_CAPTURE_LEASE_MS = 5 * 60 * 1_000;
+
 const PREACCEPT_RELEASE_TTL_MS = 24 * 60 * 60 * 1_000;
 const STALE_PLAYBACK_TTL_MS = 15 * 60 * 1_000;
 const playback = new Map<string, PlaybackRecord>();

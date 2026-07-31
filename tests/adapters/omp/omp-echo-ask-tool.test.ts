@@ -114,6 +114,39 @@ describe("omp adapter: echo_ask tool", () => {
     expect(prompts).toBe(1);
   });
 
+  test("a cancellation before the consent prompt is presented stays retryable", async () => {
+    const host = mockHost();
+    echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}));
+    const tool = host.tools.get(ECHO_ASK_TOOL_NAME)!;
+    const start = host.handlers.get("session_start") as (event: unknown, ctx: unknown) => Promise<void>;
+    let prompts = 0;
+    const ctx = {
+      cwd: "/repo",
+      hasUI: true,
+      sessionManager: {
+        getSessionFile: () => "session-a",
+        getSessionId: () => "session-a",
+      },
+      ui: {
+        confirm: async () => {
+          prompts++;
+          return false;
+        },
+      },
+    };
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await start({ reason: "reload" }, ctx);
+    const cancelled = await tool.execute("call-1", { question: "Ready?" }, aborted.signal, undefined, ctx);
+    expect(cancelled.details.error).toBe("session_consent_required");
+    expect(prompts).toBe(0);
+
+    const prompted = await tool.execute("call-2", { question: "Ready now?" }, undefined, undefined, ctx);
+    expect(prompted.details.error).toBe("session_consent_denied");
+    expect(prompts).toBe(1);
+  });
+
   test("a runtime without registerTool still gets the voice adapter", () => {
     const host = mockHost({ withToolApi: false });
 
