@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="com.echo"
 PLIST_PATH="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 LOG_PATH="$HOME/Library/Logs/echo.log"
-# Versioned daemon payload staged by install.sh (Stage 1) — Echo-owned, so
+# Versioned daemon payload staged by install.sh (Stage 1) - Echo-owned, so
 # uninstall removes it. Its own `payload/` subdir keeps this removal off sibling
 # daemon state (mute.json in the same case-insensitive `echo` dir). Logs and the
 # user's persona config are preserved.

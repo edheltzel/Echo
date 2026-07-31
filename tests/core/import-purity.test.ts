@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 // Runtime companion to the static scan in architecture-invariants.test.ts
 // ("core/ never writes to process.env"). A source regex can only see the
-// decidable write forms — the regression this file exists to catch was
+// decidable write forms - the regression this file exists to catch was
 // `loadEchoEnvironment(process.env)`, a plain function call that mutates its
 // argument. Only actually importing the daemon proves the module graph leaves
 // the environment alone.
@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 // import-time hydration turns this red.
 //
 // The child runs in its own process with every daemon state path redirected
-// into scratch — it must never read or rewrite the operator's real mute state,
+// into scratch - it must never read or rewrite the operator's real mute state,
 // capture state, caches, logs, or voice config.
 
 const ROOT = process.cwd();
@@ -25,7 +25,7 @@ const scratch = mkdtempSync(join(tmpdir(), "echo-import-purity-"));
 
 // Importing the daemon runs its top-level `await getProviderStatus()`, which
 // spawns the edge-tts health probe. Bun.spawnSync blocks this thread, so the
-// bun-test timeout below cannot preempt it — the child must carry its own
+// bun-test timeout below cannot preempt it - the child must carry its own
 // deadline, kept under the test's so a stall fails readably here instead of
 // wedging the suite until the CI job dies.
 const CHILD_TIMEOUT_MS = 60_000;
@@ -99,7 +99,7 @@ function importCoreServer(): { added: string[]; changed: string[]; fileLayerProb
   return JSON.parse(readFileSync(result, "utf8"));
 }
 
-describe("core import purity — importing the daemon must not mutate process.env", () => {
+describe("core import purity - importing the daemon must not mutate process.env", () => {
   test("env-file values stay in the read-only file layer, never hydrated into process.env", () => {
     const { added, changed, fileLayerProbe } = importCoreServer();
 

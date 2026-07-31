@@ -1,13 +1,13 @@
 // Single owner of the edge-tts voice-name grammar.
 //
 // The daemon (`core/server.ts`) and the adapters' `/echo-voice` scaffold both have to
-// answer "is this string an edge-tts voice name?" — the daemon to decide whether a
+// answer "is this string an edge-tts voice name?" - the daemon to decide whether a
 // caller-supplied `voice_id` is a literal provider voice, the scaffold to reject a typo
 // before writing it into a project config. That is ONE invariant, so it lives in ONE
 // place. `shared/` sits below both (core imports it, adapters import it, it imports
 // neither), which makes it the only module both sides can legally reach.
 //
-// The scaffold validates offline, at command time, with the daemon possibly down — so
+// The scaffold validates offline, at command time, with the daemon possibly down - so
 // this is deliberately a shared module and not a daemon HTTP lookup.
 
 // An edge-tts voice name (e.g. "en-US-AndrewNeural", "en-GB-RyanNeural",

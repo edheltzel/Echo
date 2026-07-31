@@ -1,9 +1,9 @@
-// Issue #83 — scripts/mute.sh: one-command mute control.
+// Issue #83 - scripts/mute.sh: one-command mute control.
 //
 // Thin curl wrapper over POST /mute and GET /health, exercised against the
 // shared ephemeral test daemon (PORT=0 harness pattern). The script's curl
 // carries no x-forwarded-for, so its requests land in the suite-wide
-// 'localhost' rate-limit bucket (10/min) — this file spends 5 of them;
+// 'localhost' rate-limit bucket (10/min) - this file spends 5 of them;
 // TypeScript-side tests use their own buckets to preserve that headroom.
 process.env.PORT = "0";
 
@@ -43,7 +43,7 @@ afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
 });
 
-describe("issue #83 — scripts/mute.sh", () => {
+describe("issue #83 - scripts/mute.sh", () => {
   test("on → daemon muted indefinitely", async () => {
     const result = await runMute(["on"]);
     expect(result.exitCode).toBe(0);

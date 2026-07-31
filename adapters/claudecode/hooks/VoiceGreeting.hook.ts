@@ -7,7 +7,7 @@
  * Runs as an async hook so it doesn't block session startup.
  *
  * For named subagents (Intern, Engineer, etc.), announces with THAT agent's
- * voice settings instead of Atlas's — giving each agent a distinct audio identity.
+ * voice settings instead of Atlas's - giving each agent a distinct audio identity.
  *
  * TRIGGER: SessionStart (async: true)
  *
@@ -18,7 +18,7 @@
  * 1. CLAUDE_CODE_AGENT_TASK_ID is set → skip (Task tool subagents)
  * 2. CLAUDE_AGENT_TYPE === "loop-worker" → skip (algorithm.ts workers)
  * 3. CLAUDE_PROJECT_DIR contains /.claude/Agents/ → skip
- * 4. Source check via stdin JSON — ONLY greet when source="startup" is confirmed.
+ * 4. Source check via stdin JSON - ONLY greet when source="startup" is confirmed.
  *    If stdin parsing fails (source="unknown"), we do NOT greet (safe default).
  * 5. CLAUDE_AGENT_TYPE is a named agent (Intern, Engineer, etc.) → agent voice
  *
@@ -107,7 +107,7 @@ const isNamedAgent = agentType != null && NAMED_AGENT_TYPES.includes(agentType);
 // ── Layer 4: Source check (confirmed startup only) ───────────────────────────
 // Claude Code passes { source } in stdin JSON. Only greet when source is
 // confirmed as "startup". If stdin parsing fails (async hook timeout),
-// source stays "unknown" and we skip — false silence beats duplicate greetings.
+// source stays "unknown" and we skip - false silence beats duplicate greetings.
 let hookSource = 'unknown';
 let hookSessionId: string | undefined;
 try {
@@ -127,16 +127,16 @@ try {
     hookSessionId = input.session_id || input.sessionId || undefined;
   }
 } catch {
-  // stdin parse failed — expected for async hooks
+  // stdin parse failed - expected for async hooks
 }
 
 hookLog('VoiceGreeting', 'SessionStart', `source="${hookSource}"`, { pid: process.pid });
 console.error(`[VoiceGreeting] source="${hookSource}", pid=${process.pid}`);
 
-// Only greet on confirmed startup — never on unknown source.
+// Only greet on confirmed startup - never on unknown source.
 // The settings.json matcher already filters to "startup" events, but async hooks
 // may fail to parse stdin (1s timeout), leaving source as "unknown". In that case,
-// we DON'T greet — false silence is better than duplicate greetings.
+// we DON'T greet - false silence is better than duplicate greetings.
 if (hookSource !== 'startup') {
   hookLog('VoiceGreeting', 'SessionStart', `skip: source="${hookSource}" (not startup)`);
   console.error(`[VoiceGreeting] skip: source="${hookSource}" (only greeting on confirmed startup)`);
@@ -183,7 +183,7 @@ function parseAgentFrontmatter(content: string): AgentFrontmatter {
 
     if (indent === 0) {
       if (val) {
-        // Simple scalar — strip surrounding quotes
+        // Simple scalar - strip surrounding quotes
         result[key] = val.replace(/^["']|["']$/g, '');
         currentKey = '';
         currentObj = null;

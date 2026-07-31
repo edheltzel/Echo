@@ -8,7 +8,7 @@ import { loadProjectPersona } from "../../../adapters/omp/config";
 
 // The `/echo-voice` command registered by the omp adapter writes a `daidentity`
 // persona into <cwd>/.omp/config.yml (YAML), and the SAME reader used at
-// session_start (loadProjectPersona) must resolve it — a writer↔reader round-trip
+// session_start (loadProjectPersona) must resolve it - a writer↔reader round-trip
 // that also proves Bun.YAML stringify↔parse agree.
 
 const bunYaml = (Bun as unknown as { YAML: { parse: (s: string) => any } }).YAML;
@@ -51,7 +51,7 @@ afterEach(() => {
   rmSync(emptyAgentDir, { recursive: true, force: true });
 });
 
-describe("omp /echo-voice — writer↔reader round-trip (YAML)", () => {
+describe("omp /echo-voice - writer↔reader round-trip (YAML)", () => {
   test("writes .omp/config.yml that loadProjectPersona resolves", async () => {
     const { handler, notes } = registerAndGetEchoVoice();
     await handler("Libby en-GB-LibbyNeural", ctx(cwd, notes));

@@ -1,9 +1,9 @@
-// Phase 1 / U3 — hook voice-event logging.
+// Phase 1 / U3 - hook voice-event logging.
 //
 // Two guarantees:
-//   R2 — a client abort after POST is labeled 'aborted', not 'failed' (the
+//   R2 - a client abort after POST is labeled 'aborted', not 'failed' (the
 //        daemon received the request and plays independently).
-//   R3 — events write to ~/.agents/Echo/ (env-overridable), dir created without
+//   R3 - events write to ~/.agents/Echo/ (env-overridable), dir created without
 //        group/other access, correlatable with the daemon log by session_id.
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -25,7 +25,7 @@ afterEach(() => {
   else process.env.ECHO_VOICE_EVENTS_LOG = savedEnv;
 });
 
-describe("isAbortError (R2) — abort vs. genuine failure", () => {
+describe("isAbortError (R2) - abort vs. genuine failure", () => {
   test("an AbortController abort is recognized", () => {
     const err = new Error("The operation was aborted.");
     err.name = "AbortError";

@@ -1,4 +1,4 @@
-// Issue #24 — voice-resolution drop-off log.
+// Issue #24 - voice-resolution drop-off log.
 //
 // Two guarantees:
 //   1. Exactly ONE structured resolution event is written per /notify, with the
@@ -49,11 +49,11 @@ const TMP = mkdtempSync(join(tmpdir(), "vrlog-"));
 const HTTP_LOG = join(TMP, "http-resolution.jsonl");
 process.env.ECHO_RESOLUTION_LOG = HTTP_LOG;
 // The agent-key test drives a stubbed edgetts speak, which creates real temp
-// dirs under AUDIO_CACHE_DIR (a module-load const) — point it at scratch. If a
+// dirs under AUDIO_CACHE_DIR (a module-load const) - point it at scratch. If a
 // sibling file already imported the daemon its own scratch dir won, which is
 // equally safe.
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
-// Pin the runtime-mute state (#83) away from the operator's real mute.json —
+// Pin the runtime-mute state (#83) away from the operator's real mute.json -
 // a live muted state would suppress the `say`/edgetts positive controls here.
 process.env.ECHO_MUTE_STATE_PATH ??= join(TMP, "mute.json");
 
@@ -98,13 +98,13 @@ afterAll(() => {
   // Do NOT stop the shared singleton server here. `export const server` in
   // core/server.ts is created once and cached across every test file (Bun module
   // cache); stopping it from one file's afterAll tears it down for sibling files
-  // whose tests then hit it — the source of the #47 flake (port 0 / connection
+  // whose tests then hit it - the source of the #47 flake (port 0 / connection
   // refused, nondeterministic with file order). The ephemeral PORT=0 server is
   // reclaimed when the `bun test` process exits.
   rmSync(TMP, { recursive: true, force: true });
 });
 
-describe("issue #24 — one resolution event per /notify", () => {
+describe("issue #24 - one resolution event per /notify", () => {
   test("POST /notify writes exactly one event with the expected fields", async () => {
     if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
 
@@ -172,7 +172,7 @@ describe("issue #24 — one resolution event per /notify", () => {
 
     // Enable only edgetts (the primary provider); the spawn stub makes its
     // health probe, synthesis, and playback all "succeed", so the event records
-    // the voice the daemon actually resolved for the pi agent key — the
+    // the voice the daemon actually resolved for the pi agent key - the
     // daemon-side half of the Pi adapter's default voice_id contract.
     (voicesConfig.providers as any).edgetts.enabled = true;
 
@@ -200,16 +200,16 @@ describe("issue #24 — one resolution event per /notify", () => {
     expect(ev.voice).toBe("en-GB-RyanNeural"); // agents.pi.edgetts.voice (#81)
     expect(ev.success).toBe(true);
     expect(ev.attempts[0]).toEqual({ provider: "edgetts", outcome: "success" });
-    expect(ev.hops).toBe(0); // primary provider spoke — no fallback hops
+    expect(ev.hops).toBe(0); // primary provider spoke - no fallback hops
   });
 });
 
-describe("issue #24 — rolling size-cap prune", () => {
+describe("issue #24 - rolling size-cap prune", () => {
   test("never exceeds the cap and keeps the newest lines", () => {
     const path = join(TMP, "prune.jsonl");
     if (existsSync(path)) rmSync(path);
 
-    const CAP = 700; // bytes — holds a few ~200-byte events
+    const CAP = 700; // bytes - holds a few ~200-byte events
     const N = 60;
     for (let i = 0; i < N; i++) {
       writeResolutionEvent(eventFor(`voice-${i}`), path, CAP);

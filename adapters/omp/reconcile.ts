@@ -3,7 +3,7 @@
 // per the reconcile-and-prune contract (#77). Echo owns exactly ONE entry in
 // ~/.omp/agent/extensions/: the `echo-voice` symlink pointing at THIS repo's
 // dedicated `adapters/omp` directory (omp loads the entries declared in
-// package.json's `pi` field through it). No other entry is ever touched —
+// package.json's `pi` field through it). No other entry is ever touched -
 // including links under other names whose target happens to end in adapters/omp
 // or adapters/pi.
 //
@@ -12,9 +12,9 @@
 // onto `adapters/omp`. The `echo-voice` entry is healed/migrated only when it
 // provably belongs to Echo: a dead target spelled */adapters/{pi,omp} (a clone
 // before a rename), or a live target whose package.json name is `@echo/omp-adapter`
-// (a dedicated omp clone) or `@echo/pi-adapter` (the pre-split shared adapter —
-// migrated). Anything else occupying the name — a real file/dir, an unrelated
-// symlink, or a live non-Echo adapters/{pi,omp} target — is FATAL (exit 2), never
+// (a dedicated omp clone) or `@echo/pi-adapter` (the pre-split shared adapter -
+// migrated). Anything else occupying the name - a real file/dir, an unrelated
+// symlink, or a live non-Echo adapters/{pi,omp} target - is FATAL (exit 2), never
 // replaced.
 //
 // Safe to run repeatedly. `--check` reports without mutating (exit 3 =
@@ -36,7 +36,7 @@ const CHECK_ONLY = process.argv.includes("--check");
 const CANONICAL_DIR = realpathSync(ADAPTER_DIR);
 const CANONICAL_LINK = join(EXTENSIONS_DIR, LINK_NAME);
 
-// An Echo clone's adapter dir spelling — the dedicated omp adapter, or the
+// An Echo clone's adapter dir spelling - the dedicated omp adapter, or the
 // pre-split shared pi adapter we migrate from.
 function isEchoCloneSpelling(target: string): boolean {
   return /(^|\/)adapters\/(omp|pi)\/?$/.test(target);
@@ -80,7 +80,7 @@ try {
 
 if (linkStat) {
   if (!linkStat.isSymbolicLink()) {
-    fatal(`${CANONICAL_LINK} exists but is not a symlink — refusing to replace it`);
+    fatal(`${CANONICAL_LINK} exists but is not a symlink - refusing to replace it`);
   }
   const target = readlinkSync(CANONICAL_LINK);
   const real = resolveTarget(target);
@@ -93,12 +93,12 @@ if (linkStat) {
     log.push(`~ extensions: ${LINK_NAME} ${target} (dead) → ${CANONICAL_DIR}`);
   } else if (real !== null && isEchoCloneSpelling(target) && isEchoAdapterPackage(real)) {
     // Live link into an Echo clone (adapters/pi = pre-split shared adapter, or
-    // another omp clone) — reconcile migrates/re-points it at this adapters/omp.
+    // another omp clone) - reconcile migrates/re-points it at this adapters/omp.
     op = "replace";
     const kind = /adapters\/pi\/?$/.test(target) ? "migrating from adapters/pi" : "other Echo clone";
     log.push(`~ extensions: ${LINK_NAME} ${target} (${kind}) → ${CANONICAL_DIR}`);
   } else {
-    fatal(`${CANONICAL_LINK} is a symlink to ${target}, which is not an Echo adapter checkout — refusing to replace it`);
+    fatal(`${CANONICAL_LINK} is a symlink to ${target}, which is not an Echo adapter checkout - refusing to replace it`);
   }
 } else {
   log.push(`+ extensions += ${LINK_NAME} → ${CANONICAL_DIR}`);
@@ -107,7 +107,7 @@ if (linkStat) {
 if (CHECK_ONLY) {
   // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
   const pending = op !== "none";
-  log.push(pending ? "✓ preflight passed — omp registration would be updated" : "✓ preflight passed — omp registration already current");
+  log.push(pending ? "✓ preflight passed - omp registration would be updated" : "✓ preflight passed - omp registration already current");
   console.log(log.join("\n"));
   process.exit(pending ? 3 : 0);
 }

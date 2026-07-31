@@ -1,11 +1,11 @@
 
 ## CodeGraph
 
-This project has a CodeGraph index — a tree-sitter-parsed knowledge graph of every symbol, edge, and file. Reads are sub-millisecond and return structural information grep cannot.
+This project has a CodeGraph index - a tree-sitter-parsed knowledge graph of every symbol, edge, and file. Reads are sub-millisecond and return structural information grep cannot.
 
 ### When to prefer codegraph over native search
 
-Use codegraph for **structural** questions — what calls what, what would break, where is X defined, what is X's signature. Use native grep/read only for **literal text** queries (string contents, comments, log messages) or after you already have a specific file open.
+Use codegraph for **structural** questions - what calls what, what would break, where is X defined, what is X's signature. Use native grep/read only for **literal text** queries (string contents, comments, log messages) or after you already have a specific file open.
 
 | Question | Tool |
 |---|---|
@@ -21,9 +21,9 @@ Use codegraph for **structural** questions — what calls what, what would break
 
 ### Rules of thumb
 
-- **Answer directly — don't delegate exploration.** For "how does X work" / architecture / trace questions, answer with 2-3 codegraph calls: `codegraph_context` first, then ONE `codegraph_explore` for the source of the symbols it surfaces. Codegraph IS the pre-built index, so a grep + read loop repeats work it already did and costs more for the same answer.
+- **Answer directly - don't delegate exploration.** For "how does X work" / architecture / trace questions, answer with 2-3 codegraph calls: `codegraph_context` first, then ONE `codegraph_explore` for the source of the symbols it surfaces. Codegraph IS the pre-built index, so a grep + read loop repeats work it already did and costs more for the same answer.
 - **Trust codegraph results.** They come from a full AST parse. Do NOT re-verify them with grep.
 - **Don't grep first** when looking up a symbol by name. `codegraph_search` is faster and returns kind + location + signature in one call.
-- **Don't chain `codegraph_search` + `codegraph_node`** when you just want context — `codegraph_context` is one call.
-- **Don't loop `codegraph_node` over many symbols** — one `codegraph_explore` call returns several symbols' source grouped in a single capped call.
+- **Don't chain `codegraph_search` + `codegraph_node`** when you just want context - `codegraph_context` is one call.
+- **Don't loop `codegraph_node` over many symbols** - one `codegraph_explore` call returns several symbols' source grouped in a single capped call.
 - **Index lag**: the file watcher debounces ~500ms behind writes; don't re-query immediately after editing a file in the same turn.

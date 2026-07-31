@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // scripts/migrate-config.ts drains legacy dotenv Echo settings into config.json
-// so an upgrading user keeps their configuration — and, for PORT, so the daemon
+// so an upgrading user keeps their configuration - and, for PORT, so the daemon
 // and every bash surface read it from the same place. Each run uses a temp HOME;
 // nothing here touches the operator's real config.
 
@@ -64,7 +64,7 @@ describe("scripts/migrate-config.ts", () => {
 
       expect(r.stdout).toContain("PORT");
       expect(r.stdout).toContain("ELEVENLABS_API_KEY");
-      // The dotenv file is the permanent home of the secret — say so, and leave it.
+      // The dotenv file is the permanent home of the secret - say so, and leave it.
       expect(r.stdout).toContain("Do not delete");
       expect(existsSync(join(configDir, ".env"))).toBe(true);
     }),
@@ -103,7 +103,7 @@ describe("scripts/migrate-config.ts", () => {
   );
 
   // install.sh runs this in preflight under `set -euo pipefail`, so an unreadable
-  // config.json has to report and step aside — a throw here fails the install.
+  // config.json has to report and step aside - a throw here fails the install.
   test(
     "reports and skips when config.json cannot be read",
     withHome("echo-migrate-unreadable-", async (home, configDir) => {
@@ -124,7 +124,7 @@ describe("scripts/migrate-config.ts", () => {
   );
 
   // Quote stripping keeps padding inside the quotes, and the JSON port grammar
-  // accepts none — migrating verbatim would drop the port the user had.
+  // accepts none - migrating verbatim would drop the port the user had.
   test(
     "migrates a padded dotenv PORT into a canonical config value",
     withHome("echo-migrate-padded-port-", async (home, configDir) => {
@@ -142,7 +142,7 @@ describe("scripts/migrate-config.ts", () => {
 
   // Writing a value the daemon then drops at startup is the worst outcome here:
   // the setting stops working and the report claims it moved. An inline comment
-  // is the everyday way to reach it — dotenv keeps it in the value.
+  // is the everyday way to reach it - dotenv keeps it in the value.
   test(
     "names a dotenv value the daemon would reject instead of reporting it migrated",
     withHome("echo-migrate-invalid-port-", async (home, configDir) => {
@@ -166,7 +166,7 @@ describe("scripts/migrate-config.ts", () => {
   );
 
   // Naming the wrong file is how the user deletes the one the daemon reads the
-  // key from — the exact outcome this notice exists to prevent.
+  // key from - the exact outcome this notice exists to prevent.
   test(
     "names the file the secret actually lives in",
     withHome("echo-migrate-secret-source-", async (home, configDir) => {
@@ -192,7 +192,7 @@ describe("scripts/migrate-config.ts", () => {
     }),
   );
 
-  // ~/.env is a shared user dotfile, so it is never rewritten — but a PORT there
+  // ~/.env is a shared user dotfile, so it is never rewritten - but a PORT there
   // used to move the daemon and no longer does, which is exactly the silent
   // behavior change an upgrade must not make.
   test(

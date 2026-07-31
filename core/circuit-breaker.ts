@@ -1,5 +1,5 @@
 // =============================================================================
-// Circuit Breaker — host-neutral provider failure tracking
+// Circuit Breaker - host-neutral provider failure tracking
 // =============================================================================
 //
 // Tracks consecutive PROVIDER failures (synthesis / network) per TTS provider.
@@ -8,7 +8,7 @@
 //
 // Attribution rule (issue #25): only genuine provider failures are recorded
 // here. Local audio playback failures (afplay/mpv) are NOT provider failures
-// and must never be passed to recordProviderFailure — a local audio problem
+// and must never be passed to recordProviderFailure - a local audio problem
 // must not disable a healthy online provider.
 
 import { parseBoundedInt, resolveEchoEnv } from "./env";

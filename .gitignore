@@ -11,7 +11,7 @@ node_modules/
 # Local agent scratch / draft issues (promoted to GitHub Issues, not committed)
 .scratch/
 
-# Project-local Atlas scratch artifacts and worktrees — canonical plans/handoffs live in docs/
+# Project-local Atlas scratch artifacts and worktrees - canonical plans/handoffs live in docs/
 .agents/atlas/
 .agents/.worktrees/
 .worktrees/

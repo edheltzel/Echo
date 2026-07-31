@@ -8,14 +8,14 @@ issue: 15
 
 > **Status: Shipped.** Delivered in PR #46 (squash-merged to `dev`). This doc is the
 > original design/scout report, preserved for rationale. The shipped behavior is summarized
-> in [`../adapters.md`](../adapters.md) → *Pi adapter — per-turn completions* and in
+> in [`../adapters.md`](../adapters.md) → *Pi adapter - per-turn completions* and in
 > [`../voices.md`](../voices.md). Where this doc and the code disagree, the code and
 > [`../../AGENTS.md`](../../AGENTS.md) win.
 
 **Original author:** Explorer (reporting to Themis) · **Design date:** 2026-06-23
 **Decision enabled (Ed's call):** make Pi speak a per-turn completion by **injecting the
 PAI-style `🗣️` spoken-completion convention into Pi's system prompt**, mirroring the Claude
-Code hook path — so Pi "speaks like Atlas." (We are NOT using the "extract a line without a
+Code hook path - so Pi "speaks like Atlas." (We are NOT using the "extract a line without a
 tag" approach.)
 
 **Headline:** ✅ **The injection seam exists.** Pi's `before_agent_start` event lets an
@@ -46,7 +46,7 @@ Returns `null` otherwise.
 **Net:** Pi's own models are never told to emit a `🗣️` line (no system-prompt convention
 instructs them), so `extractVoiceLineFromText` returns `null` on every real completion and
 `speakAssistantCompletion` silently no-ops. The greeting fires because it bypasses extraction
-entirely. **`before_agent_start` was not subscribed at all** — so nothing injected the
+entirely. **`before_agent_start` was not subscribed at all** - so nothing injected the
 convention. This matched the reported symptom: greeting audible, completions silent.
 
 ## 2. The injection seam (the key finding)
@@ -61,7 +61,7 @@ convention. This matched the reported symptom: greeting audible, completions sil
    INSTRUCTION }`.
 
 This is the structural equivalent of PAI's "global response format" convention living in the
-system prompt — except contributed at runtime by the extension instead of by a static config
+system prompt - except contributed at runtime by the extension instead of by a static config
 file.
 
 **Version sensitivity:** issue #575's *original* text said `before_agent_start` *"currently
@@ -70,9 +70,9 @@ only allows appending via `systemPromptAppend`."* The issue is now **closed** an
 `peerDependencies["@earendil-works/pi-coding-agent"]: ">=0.78.0"`. The shipped code uses the
 return form and **feature-detects** so it degrades safely on an older runtime.
 
-> **Source:** Pi extension docs —
+> **Source:** Pi extension docs -
 > https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md;
-> issue #575 — https://github.com/earendil-works/pi/issues/575; package —
+> issue #575 - https://github.com/earendil-works/pi/issues/575; package -
 > https://www.npmjs.com/package/@earendil-works/pi-coding-agent
 
 ## 3. PAI mirror (how Claude Code already does this)
@@ -91,7 +91,7 @@ Pi parity = inject the same convention (step 1) and let the **existing**
 
 ## 4. Shipped design (files + changes)
 
-### 4.1 Subscribe to `before_agent_start` and inject the convention — `adapters/pi/index.ts`
+### 4.1 Subscribe to `before_agent_start` and inject the convention - `adapters/pi/index.ts`
 
 A `before_agent_start` handler appends the voice-line instruction to `event.systemPrompt`,
 using the configured persona name (`ECHO_VOICE_PERSONA_NAME`, default `"Atlas"`), gated on
@@ -99,11 +99,11 @@ using the configured persona name (`ECHO_VOICE_PERSONA_NAME`, default `"Atlas"`)
 (`hasUI === false`) neither emit the tag nor speak. Feature-detects `event.systemPrompt` and
 no-ops if absent (older runtime → degrade safely).
 
-### 4.2 Stop the persona name from being spoken — `shared/voice-line.ts` (REQUIRED)
+### 4.2 Stop the persona name from being spoken - `shared/voice-line.ts` (REQUIRED)
 
 The one non-obvious gotcha. The original `extractVoiceLineFromText` only stripped the `🗣️`
 emoji and a single leading `:`/`-`. For `🗣️ Atlas: Tests passed.` it would return
-**`"Atlas: Tests passed."`** — speaking the persona name aloud. The fix mirrors PAI's
+**`"Atlas: Tests passed."`** - speaking the persona name aloud. The fix mirrors PAI's
 `parseFinalVoiceLine` by stripping an optional leading `<Name>:` token after the emoji,
 keeping backward compatibility (lines without a name pass through unchanged).
 
@@ -115,15 +115,15 @@ keeping backward compatibility (lines without a name pass through unchanged).
   `session_id` from `resolveSessionId(ctx)`.
 - **Subagent / child suppression:** `shouldSuppressVoice` already suppresses speaking when
   `hasUI === false` or `mode` is `json`/`print`.
-- **Daemon:** **no change** — the daemon already resolves a request `voice_id` name key to a
+- **Daemon:** **no change** - the daemon already resolves a request `voice_id` name key to a
   provider voice.
-- **Dedupe:** unchanged — `stableMessageKey` + the 5s window collapse the
+- **Dedupe:** unchanged - `stableMessageKey` + the 5s window collapse the
   `message_end`+`turn_end` double-fire.
 
 ## 5. Risks / unknowns (at design time)
 
 1. **Model compliance (medium).** Pi may run smaller/non-Claude models that won't reliably
-   end every turn with the tag. Failure mode is *graceful* — `extractVoiceLineFromText`
+   end every turn with the tag. Failure mode is *graceful* - `extractVoiceLineFromText`
    returns `null`, so a missing tag just means "no voice this turn," never an error.
 2. **SDK version of the `systemPrompt` return (medium).** Mitigated by feature-detection +
    `systemPromptAppend` fallback.

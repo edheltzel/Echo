@@ -130,7 +130,7 @@ describe("Claude Code restore-hooks registration", () => {
       const repoCmd = join(resolve("adapters/claudecode/hooks"), "VoiceCompletion.hook.ts");
 
       expect(first.exitCode).toBe(0);
-      // Replaced in place — same position, no duplicate added.
+      // Replaced in place - same position, no duplicate added.
       expect(settings.hooks.Stop[0].hooks).toEqual([
         { type: "command", command: "/some/LastResponseCache.hook.ts" },
         { type: "command", command: repoCmd },
@@ -339,7 +339,7 @@ describe("Claude Code restore-hooks registration", () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-restore-symlink-spelling-"));
     try {
       // A symlink whose target is the real repo: same live hook files, different spelling.
-      // Realpath comparison must recognize it as canonical and normalize in place — not
+      // Realpath comparison must recognize it as canonical and normalize in place - not
       // prune it and append a duplicate registration.
       const repoLink = join(root, "repo-link");
       symlinkSync(resolve("."), repoLink);
@@ -362,7 +362,7 @@ describe("Claude Code restore-hooks registration", () => {
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
 
       expect(first.exitCode).toBe(0);
-      // Exactly one registration, in the tool's own canonical spelling — no duplicate.
+      // Exactly one registration, in the tool's own canonical spelling - no duplicate.
       expect(settings.hooks.PreToolUse[0].hooks).toEqual([{ type: "command", command: canonicalGate }]);
       expect(second.stdout).toContain("already current");
     } finally {

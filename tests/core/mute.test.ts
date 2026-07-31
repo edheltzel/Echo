@@ -1,4 +1,4 @@
-// Issue #83 — runtime mute: state module + speech-stage gate.
+// Issue #83 - runtime mute: state module + speech-stage gate.
 //
 // Two layers:
 //   1. core/mute.ts unit behavior: tolerant reads (missing/corrupt = unmuted,
@@ -86,10 +86,10 @@ afterAll(() => {
 });
 
 // =============================================================================
-// core/mute.ts — state module
+// core/mute.ts - state module
 // =============================================================================
 
-describe("mute state — tolerant reads", () => {
+describe("mute state - tolerant reads", () => {
   test("missing state file → unmuted default", () => {
     expect(readMuteState(join(TMP, "nope.json"))).toEqual({ muted: false, muted_until: null });
   });
@@ -119,7 +119,7 @@ describe("mute state — tolerant reads", () => {
   });
 });
 
-describe("mute state — set / toggle / lazy expiry", () => {
+describe("mute state - set / toggle / lazy expiry", () => {
   test("indefinite mute persists with null deadline", () => {
     const p = join(TMP, "set.json");
     expect(setMuteState(true, undefined, p)).toEqual({ muted: true, muted_until: null });
@@ -179,10 +179,10 @@ describe("mute state — set / toggle / lazy expiry", () => {
 });
 
 // =============================================================================
-// Speech-stage gate — /notify while muted
+// Speech-stage gate - /notify while muted
 // =============================================================================
 
-// Unique rate-limit bucket per request — the shared daemon caps 10/min per
+// Unique rate-limit bucket per request - the shared daemon caps 10/min per
 // client IP, and the suite-wide 'localhost' bucket has no headroom to spare.
 let bucket = 0;
 async function postNotify(): Promise<Response> {
@@ -193,7 +193,7 @@ async function postNotify(): Promise<Response> {
   });
 }
 
-describe("issue #83 — speech-stage mute gate", () => {
+describe("issue #83 - speech-stage mute gate", () => {
   test("unmuted (no state file) → say provider actually spawns", async () => {
     (voicesConfig.providers as any).say.enabled = true;
 
@@ -207,7 +207,7 @@ describe("issue #83 — speech-stage mute gate", () => {
     (voicesConfig.providers as any).say.enabled = true;
 
     // Baseline: unmuted response. Drain so the baseline's spawns + log write
-    // finish before we reset state — otherwise they'd leak into the muted asserts.
+    // finish before we reset state - otherwise they'd leak into the muted asserts.
     const unmutedRes = await postNotify();
     const unmutedBody = await unmutedRes.json();
     await drainNotifications();
@@ -221,14 +221,14 @@ describe("issue #83 — speech-stage mute gate", () => {
     const body = await res.json();
     await drainNotifications();
 
-    // R2: /notify contract byte-identical (same status, keys, and values —
+    // R2: /notify contract byte-identical (same status, keys, and values -
     // request_id is per-request by design).
     expect(res.status).toBe(unmutedRes.status);
     expect(Object.keys(body).sort()).toEqual(Object.keys(unmutedBody).sort());
     expect(body.status).toBe(unmutedBody.status);
     expect(body.message).toBe(unmutedBody.message);
 
-    // R1: zero provider invocations — no say, no audio player. The macOS
+    // R1: zero provider invocations - no say, no audio player. The macOS
     // banner (osascript) is visual, not audio, and still fires.
     expect(spawnedCommands).not.toContain("/usr/bin/say");
     expect(spawnedCommands).not.toContain("/usr/bin/afplay");

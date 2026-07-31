@@ -1,11 +1,11 @@
-// Phase 2 / U5 — the overlap acceptance test (R1/R7 headline).
+// Phase 2 / U5 - the overlap acceptance test (R1/R7 headline).
 //
 // Fires concurrent /notify requests against an ephemeral-port daemon with a
 // deterministic injected player (the spawn stub delays afplay's exit by a
 // fixed PLAY_MS; no real audio) and asserts the audio-lifecycle rows record
 // NON-INTERSECTING play windows: one voice at a time, globally. This test
 // fails against pre-serialization behavior (each /notify spawned its own
-// concurrent afplay → intersecting windows) — the red→green anchor for the
+// concurrent afplay → intersecting windows) - the red→green anchor for the
 // serialization plan.
 //
 // Harness mirrors audio-lifecycle-server.test.ts: PORT=0, node:child_process
@@ -39,7 +39,7 @@ function stubSpawn(command: string): any {
   child.kill = () => {};
   child.pid = 4242;
   // The playback binary is platform-dependent (afplay on darwin, mpv
-  // elsewhere — core/server.ts speak path); delay BOTH so play windows
+  // elsewhere - core/server.ts speak path); delay BOTH so play windows
   // are measurable on Linux CI too.
   if (/afplay|mpv/.test(String(command))) {
     setTimeout(() => child.emit("exit", 0), PLAY_MS);
@@ -116,7 +116,7 @@ async function waitForRows(count: number, timeoutMs = 5000): Promise<any[]> {
 }
 
 // Sorted play windows must not intersect: each next line starts at or after
-// the previous line ended. (Equal boundaries are fine — serial back-to-back.)
+// the previous line ended. (Equal boundaries are fine - serial back-to-back.)
 function expectNonIntersecting(rows: any[]): void {
   const windows = rows
     .map((r) => ({ start: Date.parse(r.play_started_at), end: Date.parse(r.play_ended_at) }))
@@ -127,7 +127,7 @@ function expectNonIntersecting(rows: any[]): void {
 }
 
 describe("playback overlap acceptance (R1/R7)", () => {
-  test("two concurrent /notify from distinct sessions play serially — non-intersecting windows", async () => {
+  test("two concurrent /notify from distinct sessions play serially - non-intersecting windows", async () => {
     const [a, b] = await Promise.all([
       notify("first overlapping line", "sess-a"),
       notify("second overlapping line", "sess-b"),

@@ -43,7 +43,7 @@ interface ElevenLabsNotificationPayload {
 // 'aborted' = the 12s client AbortController fired after the POST was already
 // received by the daemon (which plays independently). Distinct from 'failed'
 // (a real network/HTTP error) so the log stops mislabeling played audio as a
-// failure — the #24-style honesty the resolution log already gives the daemon.
+// failure - the #24-style honesty the resolution log already gives the daemon.
 interface VoiceEvent {
   timestamp: string;
   session_id: string;
@@ -153,7 +153,7 @@ async function sendNotification(
   const controller = new AbortController();
   // The daemon returns 202 on receipt (synth+play run async), so the POST resolves
   // in ~tens of ms. A short guard against an unreachable daemon is all that's
-  // needed now — the old 12 s wait covered synthesis+playback and produced the
+  // needed now - the old 12 s wait covered synthesis+playback and produced the
   // false `failed`/`aborted` events this retires.
   const timeout = setTimeout(() => controller.abort(), 5000);
 
@@ -217,12 +217,12 @@ async function sendNotification(
  *  - treat Markdown indented code blocks (≥4 leading spaces or a tab) as code;
  *  - take the last non-blank, non-code line and accept a 🗣️ <Name>: tag only at
  *    column 0. So a demonstrated/quoted voice line (in a fence, indented block,
- *    list, or prose) can never win — pervasive in this repo's own docs.
+ *    list, or prose) can never win - pervasive in this repo's own docs.
  *
  * Self-cleaning: the moment the model stops emitting `🗣️ Themis:`, the next
  * turn resolves to null and reverts to the DA voice. No marker/registry state.
  *
- * NOTE: this only extracts the name — caller must still validate it against the
+ * NOTE: this only extracts the name - caller must still validate it against the
  * configured agents (see selectVoice) so an unknown name never becomes an
  * unresolvable voice_id (which would degrade to the daemon default, Ava).
  *
@@ -244,7 +244,7 @@ export function resolvePersonaKey(text: string, daName: string): string | null {
 // a different VOICES_PATH, and a Claude Code install is not guaranteed to sit
 // beside a core/ directory at all. The daemon's own answer is the only correct one.
 //
-// Cached per process — the Stop hook is a fresh process each turn, so this is at
+// Cached per process - the Stop hook is a fresh process each turn, so this is at
 // most one localhost GET per turn.
 let cachedAgentKeys: Set<string> | null = null;
 const AGENT_KEYS_TIMEOUT_MS = 2000;
@@ -283,12 +283,12 @@ export interface VoiceSelection {
 
 /**
  * Choose the voice for this turn. A main-session persona (signalled by its
- * `🗣️ <Name>:` voice line) speaks in its own voice — but ONLY when the resolved
+ * `🗣️ <Name>:` voice line) speaks in its own voice - but ONLY when the resolved
  * name is a configured agent in voices.json; we send that name key and the
  * daemon resolves it (e.g. `themis` → en-US-MichelleNeural). An unknown name, a
  * DA line, or no line → the DA voice (mainDAVoiceID + prosody), byte-for-byte
  * the previous behavior. We never send an unresolvable key (which would degrade
- * to the daemon default, Ava — the exact bug this fixes).
+ * to the daemon default, Ava - the exact bug this fixes).
  */
 export function selectVoice(
   parsed: ParsedTranscript,
@@ -312,7 +312,7 @@ export function selectVoice(
 }
 
 /**
- * Build the voice-server payload for a resolved voice selection. Pure — keeps
+ * Build the voice-server payload for a resolved voice selection. Pure - keeps
  * the "what gets sent" decision testable without the network or settings I/O.
  */
 export function buildVoicePayload(
@@ -366,7 +366,7 @@ export async function handleVoice(
     return;
   }
 
-  // Skip startup catchphrase — already spoken by VoiceGreeting.hook.ts at SessionStart.
+  // Skip startup catchphrase - already spoken by VoiceGreeting.hook.ts at SessionStart.
   // Without this, the AI's first 🗣️ line echoing the greeting causes a double-fire.
   // Uses the same layered identity VoiceGreeting resolves, so a project persona's
   // catchphrases are deduped in that repo (not the global pool).

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 // The `echo` CLI is a thin bash wrapper over scripts/*.sh + the daemon API.
-// Every test runs in a temp HOME with stubbed launchctl/curl — it never touches
+// Every test runs in a temp HOME with stubbed launchctl/curl - it never touches
 // the operator's real daemon. `doctor` and `status` are read-only by design.
 
 const CLI = "cli/echo";
@@ -30,7 +30,7 @@ async function runCli(args: string[], env: Record<string, string>) {
 }
 
 const bunDir = join(Bun.which("bun")!, "..");
-// Driving install.sh costs a 2s launchd settle per run — more than bun's 5s
+// Driving install.sh costs a 2s launchd settle per run - more than bun's 5s
 // default allows once a test also runs doctor (which shells out to install --check).
 const INSTALL_TIMEOUT_MS = 30_000;
 
@@ -70,7 +70,7 @@ describe("echo CLI dispatch", () => {
   });
 
   // The daemon drops a PORT it would resolve differently, so every such value
-  // must send the CLI to 3246 too — otherwise the shell surfaces probe a port the
+  // must send the CLI to 3246 too - otherwise the shell surfaces probe a port the
   // daemon never bound. `03246` and `1e4` are the sharp ones: reading only the
   // leading digits would put the CLI on :03246 (octal 1702 to bash) and :1.
   test.each(["99999", "0", "03246", "1e4", "0x0C9E"])(
@@ -97,7 +97,7 @@ describe("echo CLI dispatch", () => {
   );
 
   // A last property carries no trailing comma, so the value token has to be
-  // readable without one — that is how migrate-config.ts pretty-prints.
+  // readable without one - that is how migrate-config.ts pretty-prints.
   test("reads the configured port from multi-line JSON", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-cli-multiline-port-"));
     try {
@@ -150,7 +150,7 @@ describe("echo doctor", () => {
   });
 
   // The port is occupied and /health is silent. These three launchd states are
-  // indistinguishable from outside — a foreign owner on :3246 is what stops our
+  // indistinguishable from outside - a foreign owner on :3246 is what stops our
   // service binding, so launchd respawns it and reports no stable PID. Doctor
   // must therefore give the same, non-committal answer in all three, naming the
   // listener and offering both recoveries rather than guessing.
@@ -168,7 +168,7 @@ describe("echo doctor", () => {
         'echo "COMMAND   PID USER"\necho "bun      4242 ed"\nexit 0\n',
     );
     // `launchctl list <label>` reports a PID for a running service and exits 113
-    // when the label has none — the real tool's shape.
+    // when the label has none - the real tool's shape.
     const launchctl = {
       "echo-pid-matches":
         '#!/bin/bash\nif [ "$1" = "list" ] && [ -n "$2" ]; then echo \'{ "PID" = 4242; };\'; exit 0; fi\ncase "$1" in list) echo "4242 0 com.echo" ;; esac\nexit 0\n',
@@ -210,7 +210,7 @@ describe("echo doctor", () => {
       mkdirSync(bin, { recursive: true });
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
       // `healthy` BEFORE `enabled`, with another key wedged between them, and a
-      // healthy provider ahead of it — the row must not depend on field order.
+      // healthy provider ahead of it - the row must not depend on field order.
       const body =
         '{"status":"healthy","providers":' +
         '{"edgetts":{"enabled":true,"healthy":true,"wouldEgress":true},' +

@@ -2,7 +2,7 @@
 
 The DOX **Core Contract** and **Child DOX Index** live in [`../AGENTS.md`](../AGENTS.md) →
 *DOX framework*. This page holds the procedural how-to: read it before editing any docs in
-this repo. Do not rely on memory — re-read the applicable DOX chain in the current session
+this repo. Do not rely on memory - re-read the applicable DOX chain in the current session
 before editing.
 
 ## Read Before Editing

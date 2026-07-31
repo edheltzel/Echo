@@ -8,7 +8,7 @@ import { loadEchoConfigurationWithStatus } from "../../shared/echo-env";
 // Differential test over the ONE thing three independent readers must agree on:
 // which port a config.json names. The daemon resolves it in TypeScript, and
 // cli/echo, the lifecycle scripts and install.sh's health probe resolve it in
-// pure bash with a sed capture — so a spelling the two read differently puts the
+// pure bash with a sed capture - so a spelling the two read differently puts the
 // daemon on one port while every CLI surface reports it down, permanently.
 //
 // Each round of review found a different input where two readers disagreed
@@ -83,7 +83,7 @@ const CASES: { body: string; label: string; port: number }[] = [
   },
 ];
 
-describe("config.json PORT grammar — the daemon and the shell readers agree", () => {
+describe("config.json PORT grammar - the daemon and the shell readers agree", () => {
   test.each(CASES)("$label", async ({ body, port }) => {
     const home = mkdtempSync(join(tmpdir(), "echo-port-grammar-"));
     try {

@@ -16,7 +16,7 @@ const SETTINGS_PATH = process.env.PI_SETTINGS_PATH || join(homedir(), ".pi/agent
 const CHECK_ONLY = process.argv.includes("--check");
 
 if (!existsSync(SETTINGS_PATH)) {
-  console.log(`= no Pi settings at ${SETTINGS_PATH} — nothing to reconcile`);
+  console.log(`= no Pi settings at ${SETTINGS_PATH} - nothing to reconcile`);
   process.exit(0);
 }
 
@@ -24,12 +24,12 @@ type Settings = { packages?: string[]; [k: string]: unknown };
 const settings = JSON.parse(readFileSync(SETTINGS_PATH, "utf8")) as Settings;
 settings.packages ??= [];
 if (!Array.isArray(settings.packages)) {
-  console.error(`FATAL: "packages" in ${SETTINGS_PATH} is not an array — refusing to rewrite`);
+  console.error(`FATAL: "packages" in ${SETTINGS_PATH} is not an array - refusing to rewrite`);
   process.exit(2);
 }
 
 // Pi resolves relative package paths against the settings file's nominal directory
-// (~/.pi/agent), not the symlink target's directory — canonicalize relative to it.
+// (~/.pi/agent), not the symlink target's directory - canonicalize relative to it.
 const SETTINGS_DIR = dirname(SETTINGS_PATH);
 const CANONICAL_DIR = realpathSync(ADAPTER_DIR);
 const CANONICAL_ENTRY = relative(SETTINGS_DIR, CANONICAL_DIR);
@@ -63,7 +63,7 @@ for (const entry of settings.packages) {
     packages.push(entry);
     log.push(`= packages already has ${entry}`);
   } else if (!kept) {
-    // Stale (dead or foreign) entry — replace in place so ordering survives.
+    // Stale (dead or foreign) entry - replace in place so ordering survives.
     kept = true;
     packages.push(CANONICAL_ENTRY);
     changed = true;
@@ -82,7 +82,7 @@ settings.packages = packages;
 
 if (CHECK_ONLY) {
   // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
-  log.push(changed ? "✓ preflight passed — Pi settings would be updated" : "✓ preflight passed — Pi settings already current");
+  log.push(changed ? "✓ preflight passed - Pi settings would be updated" : "✓ preflight passed - Pi settings already current");
   console.log(log.join("\n"));
   process.exit(changed ? 3 : 0);
 }
@@ -99,7 +99,7 @@ if (changed) {
   renameSync(temp, realPath);
   log.push(`✓ Pi settings updated (backup: ${backup})`);
 } else {
-  log.push("✓ Pi settings already current — no write");
+  log.push("✓ Pi settings already current - no write");
 }
 
 console.log(log.join("\n"));

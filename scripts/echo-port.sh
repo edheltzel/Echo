@@ -1,18 +1,18 @@
 #!/bin/bash
-# Sourced helper: the port these shell surfaces talk to — `PORT` when exported,
-# else 3246 — plus the one report install.sh and cli/echo both give when that
+# Sourced helper: the port these shell surfaces talk to - `PORT` when exported,
+# else 3246 - plus the one report install.sh and cli/echo both give when that
 # port is occupied by something that will not answer /health.
 #
 # Stage 1 is single-port: install.sh, start/stop/status/mute/uninstall and
 # cli/echo all target 3246 and make no attempt to discover a daemon listening
-# anywhere else. It does not read legacy dotenv files — and neither does the
+# anywhere else. It does not read legacy dotenv files - and neither does the
 # daemon, for PORT specifically (shared/echo-env.ts), so the two sides cannot
 # disagree; scripts/install.sh migrates an existing dotenv PORT into config.json
 # first. With no live PORT override, the helper reads the flat JSON PORT property
 # so the CLI and lifecycle scripts follow the daemon's documented config.
 #
 # Pure bash on purpose: sourced by scripts that must work without Bun. Values stay
-# script-local — every script sources this for itself, nothing is exported.
+# script-local - every script sources this for itself, nothing is exported.
 #
 # Sets ECHO_PORT, ECHO_BASE_URL, HEALTH_URL.
 
@@ -23,12 +23,12 @@
 # whitespace, 1-65535. A value only one reader accepts would send every shell
 # surface probing a port the daemon never bound.
 #
-# The value is read WHOLE — everything between the quotes, or the bare token —
+# The value is read WHOLE - everything between the quotes, or the bare token -
 # never just its leading digits, so a spelling the readers would resolve
 # differently is rejected here instead of silently truncated: `"1e4"` would
 # otherwise read as port 1, `" 3457 "` as nothing at all, and bash arithmetic
 # treats a leading-zero operand as octal (`03246` → 1702). 0 is out of range on
-# every side too — it means an ephemeral bind, which no CLI can address, and it
+# every side too - it means an ephemeral bind, which no CLI can address, and it
 # reaches the daemon only as a live process value in tests.
 config_port() {
   local config_path="$HOME/.config/echo/config.json" port
@@ -58,7 +58,7 @@ ECHO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # --- occupied port ----------------------------------------------------------
 # Echo deliberately does NOT classify who owns the port. A foreign process on
 # :3246 is what makes our own service fail to bind, so launchd respawns it and
-# reports no stable PID — the two states co-occur, and every "is it ours" test
+# reports no stable PID - the two states co-occur, and every "is it ours" test
 # is guesswork in exactly the case that matters. So: name what lsof saw, give
 # both recoveries, let the operator decide. install.sh and cli/echo print these
 # same lines so they can never disagree about the same port.
@@ -82,6 +82,6 @@ port_occupied_summary() {
 }
 
 port_occupied_advice() {
-  echo "If this is Echo's own daemon it may be wedged or crash-looping — check ${LOG_PATH:-$HOME/Library/Logs/echo.log}, then: bash ${ECHO_SCRIPTS_DIR}/restart.sh"
-  echo "If another process owns the port, stop it and rerun — Echo never kills the port owner."
+  echo "If this is Echo's own daemon it may be wedged or crash-looping - check ${LOG_PATH:-$HOME/Library/Logs/echo.log}, then: bash ${ECHO_SCRIPTS_DIR}/restart.sh"
+  echo "If another process owns the port, stop it and rerun - Echo never kills the port owner."
 }

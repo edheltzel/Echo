@@ -9,12 +9,12 @@
  * ROOT CAUSE THIS FIXES:
  * Subagents inherit full host context (CLAUDE.md → SKILL.md → Algorithm),
  * which mandates voice curls at every phase. Without this gate, every
- * spawned agent triggers voice announcements — flooding the voice server.
+ * spawned agent triggers voice announcements - flooding the voice server.
  *
  * TRIGGER: PreToolUse (matcher: Bash)
  *
  * SUBAGENT DETECTION:
- * Uses stdin JSON `agent_id` field — present when hook fires inside a
+ * Uses stdin JSON `agent_id` field - present when hook fires inside a
  * subagent context. Claude Code delivers agent context via stdin JSON,
  * NOT via environment variables. The old CLAUDE_CODE_AGENT_TASK_ID env
  * var check was unreliable/broken (that env var doesn't exist).
@@ -60,7 +60,7 @@ async function main() {
     return;
   }
 
-  // It's a voice curl — check if we're in a subagent context
+  // It's a voice curl - check if we're in a subagent context
   // agent_id is present in stdin JSON when the hook fires inside a subagent
   const agentId = input.agent_id;
   const agentType = input.agent_type;

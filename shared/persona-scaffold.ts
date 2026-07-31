@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { looksLikeEdgeVoice } from "./edge-voice.ts";
 
-// Persona scaffold — the host-neutral core of the pi/omp `/echo-voice` command.
+// Persona scaffold - the host-neutral core of the pi/omp `/echo-voice` command.
 //
 // Writes a project-local `daidentity` persona (name + edge-tts voice) into a host's
 // native config, the deterministic writer analog of the Claude Code `/echo-voice`
@@ -11,9 +11,9 @@ import { looksLikeEdgeVoice } from "./edge-voice.ts";
 // format-independent lives here and is unit-tested here.
 //
 // Invariant (the brief's central "never clobber"): merging preserves every existing
-// key — other top-level settings AND other `daidentity` sub-keys (startupCatchphrases,
+// key - other top-level settings AND other `daidentity` sub-keys (startupCatchphrases,
 // extra voices). The readers (adapters' `loadProjectPersona`) are deliberately lenient
-// with a malformed file (→ no override); this WRITER is deliberately strict — a present
+// with a malformed file (→ no override); this WRITER is deliberately strict - a present
 // but unparseable file ABORTS rather than overwriting the user's content with `{}`.
 
 /** Thrown when an existing config file is present but cannot be parsed. */
@@ -79,8 +79,8 @@ function parseJsonConfig(raw: string | null): Record<string, any> {
   return parsed as Record<string, any>;
 }
 
-// Bun's native YAML parser/serializer (Bun >= 1.2). Accessed LAZILY inside functions —
-// never at module scope — because a host's extension loader may evaluate this module in
+// Bun's native YAML parser/serializer (Bun >= 1.2). Accessed LAZILY inside functions -
+// never at module scope - because a host's extension loader may evaluate this module in
 // a context where the `Bun` global is not yet defined (a top-level reference throws
 // "Bun is not defined" at import and fails the whole extension). Mirrors omp/config.ts.
 // Cast because the installed @types/bun may predate the typing; `stringify(obj, null, 2)`
@@ -120,8 +120,8 @@ export function mergePersonaYaml(raw: string | null, name: string, voiceId: stri
 
 // ── `/echo-voice` command factory (shared by the pi + omp adapters) ───────────
 // The two adapters' command handlers are identical except for the config file
-// (path + format), so the whole flow — parse args, prompt for anything missing,
-// validate the edge-tts voice, merge-preserving-write, confirm — lives here.
+// (path + format), so the whole flow - parse args, prompt for anything missing,
+// validate the edge-tts voice, merge-preserving-write, confirm - lives here.
 
 /** Minimal structural view of the host UI the command needs (pi + omp both satisfy it). */
 export interface ScaffoldUi {
@@ -159,20 +159,20 @@ export function createEchoVoiceCommand(opts: EchoVoiceCommandOptions): EchoVoice
     handler: async (args, ctx) => {
       const cwd = typeof ctx.cwd === "string" && ctx.cwd.length > 0 ? ctx.cwd : undefined;
       if (!cwd) {
-        ctx.ui.notify("No project directory — open Echo inside a repo to set a persona.", "error");
+        ctx.ui.notify("No project directory - open Echo inside a repo to set a persona.", "error");
         return;
       }
 
       const parsed = parsePersonaArgs(args);
       const name = (parsed.name ?? (await ctx.ui.input("Persona name", "e.g. Echo")))?.trim();
       if (!name) {
-        ctx.ui.notify("Cancelled — no persona name given.", "warning");
+        ctx.ui.notify("Cancelled - no persona name given.", "warning");
         return;
       }
 
       const voice = (parsed.voice ?? (await ctx.ui.input("edge-tts voice id", "e.g. en-US-AndrewNeural")))?.trim();
       if (!voice) {
-        ctx.ui.notify("Cancelled — no voice given.", "warning");
+        ctx.ui.notify("Cancelled - no voice given.", "warning");
         return;
       }
       if (!looksLikeEdgeVoice(voice)) {
@@ -191,7 +191,7 @@ export function createEchoVoiceCommand(opts: EchoVoiceCommandOptions): EchoVoice
         writeFileSync(target, merged);
       } catch (error) {
         const reason = error instanceof MalformedConfigError
-          ? `${error.message} — fix it by hand first`
+          ? `${error.message} - fix it by hand first`
           : error instanceof Error
             ? error.message
             : String(error);

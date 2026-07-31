@@ -1,8 +1,8 @@
-// Audio lifecycle log (Phase 1 / U1) — the instrument that makes playback
+// Audio lifecycle log (Phase 1 / U1) - the instrument that makes playback
 // truncation measurable.
 //
 // Pure module: imports only core/audio-log.ts, so these tests never boot the
-// server singleton (KTD2) — fast, and free of the #47 shared-server flake.
+// server singleton (KTD2) - fast, and free of the #47 shared-server flake.
 //
 // Guarantees mirrored from the resolution-log design:
 //   1. Exactly one parseable JSON line per write.
@@ -51,7 +51,7 @@ function eventFor(session: string): AudioLifecycleEvent {
   };
 }
 
-describe("writeAudioLifecycleEvent — one event per write", () => {
+describe("writeAudioLifecycleEvent - one event per write", () => {
   test("writes exactly one parseable JSON line with the expected fields", () => {
     const path = join(TMP, "one.jsonl");
     if (existsSync(path)) rmSync(path);
@@ -80,7 +80,7 @@ describe("writeAudioLifecycleEvent — one event per write", () => {
     expect(statSync(join(TMP, "nested", "Echo")).mode & 0o077).toBe(0);
   });
 
-  test("a write to an unwritable path is swallowed — never throws", () => {
+  test("a write to an unwritable path is swallowed - never throws", () => {
     // A path whose parent is a file, not a dir → mkdir/append fail internally.
     const filePath = join(TMP, "blocker");
     writeAudioLifecycleEvent(eventFor("x"), filePath, 1_000_000); // creates a file
@@ -89,7 +89,7 @@ describe("writeAudioLifecycleEvent — one event per write", () => {
   });
 });
 
-describe("writeAudioLifecycleEvent — rolling size-cap prune", () => {
+describe("writeAudioLifecycleEvent - rolling size-cap prune", () => {
   test("never exceeds the cap and keeps the newest lines", () => {
     const path = join(TMP, "prune.jsonl");
     if (existsSync(path)) rmSync(path);
@@ -120,7 +120,7 @@ describe("writeAudioLifecycleEvent — rolling size-cap prune", () => {
   });
 });
 
-describe("writeAudioLifecycleEvent — disposition (Phase 2 / R7)", () => {
+describe("writeAudioLifecycleEvent - disposition (Phase 2 / R7)", () => {
   test("a played row carries disposition and the play window", () => {
     const path = join(TMP, "disposition-played.jsonl");
     if (existsSync(path)) rmSync(path);
@@ -197,7 +197,7 @@ describe("writeAudioLifecycleEvent — disposition (Phase 2 / R7)", () => {
   });
 });
 
-describe("classifyPlaybackOutcome — pure exit-reason derivation (KTD6)", () => {
+describe("classifyPlaybackOutcome - pure exit-reason derivation (KTD6)", () => {
   test("timed-out wins over everything", () => {
     expect(classifyPlaybackOutcome({ timedOut: true, errored: true, exitCode: 0 })).toBe("timed-out");
   });
@@ -212,7 +212,7 @@ describe("classifyPlaybackOutcome — pure exit-reason derivation (KTD6)", () =>
   });
 });
 
-describe("classifyPlaybackError — parse waitForProcess rejections", () => {
+describe("classifyPlaybackError - parse waitForProcess rejections", () => {
   test("timeout message → timedOut", () => {
     expect(classifyPlaybackError("afplay timed out after 60000ms")).toEqual({ timedOut: true, exitCode: null, errored: false });
   });

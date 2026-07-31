@@ -1,4 +1,4 @@
-// Phase 1 / U2 — the daemon writes one audio-lifecycle event per spoken /notify,
+// Phase 1 / U2 - the daemon writes one audio-lifecycle event per spoken /notify,
 // correlated by session_id, with the playback metrics the two playback sites
 // deposit via AsyncLocalStorage.
 //
@@ -59,7 +59,7 @@ beforeEach(() => {
     savedEnabled[name] = (voicesConfig.providers as any)[name].enabled;
     (voicesConfig.providers as any)[name].enabled = false;
   }
-  // Only edgetts (the user's active provider) — its stubbed synth + playback
+  // Only edgetts (the user's active provider) - its stubbed synth + playback
   // both "succeed", so the row records a clean edgetts playback.
   (voicesConfig.providers as any).edgetts.enabled = true;
 });

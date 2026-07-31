@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runtime mute control (#83) — thin curl wrapper over POST /mute + GET /health.
+# Runtime mute control (#83) - thin curl wrapper over POST /mute + GET /health.
 #   mute.sh on [minutes] | off | toggle | status
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +30,7 @@ case "$cmd" in
   on)
     if [ $# -ge 2 ]; then
       [[ "$2" =~ ^[0-9]+$ ]] || usage
-      minutes=$((10#$2)) # normalize leading zeros — 007 is not a legal JSON number
+      minutes=$((10#$2)) # normalize leading zeros - 007 is not a legal JSON number
       [ "$minutes" -gt 0 ] || usage
       body="{\"muted\": true, \"duration_minutes\": $minutes}"
     else

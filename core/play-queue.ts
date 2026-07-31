@@ -1,24 +1,24 @@
 // =============================================================================
-// Play Queue — host-neutral global playback serialization (Phase 2)
+// Play Queue - host-neutral global playback serialization (Phase 2)
 // =============================================================================
 //
 // One voice at a time, globally (R1): an in-process FIFO drained by a single
 // async consumer that awaits an injected `player` for one job at a time. The
-// queue holds opaque payloads and knows nothing about TTS or hosts (KTD2) —
+// queue holds opaque payloads and knows nothing about TTS or hosts (KTD2) -
 // the daemon hands it the ALS speak path; tests hand it a fake player.
 //
 // Semantics:
 // - Newest-per-session coalescing (R4/KTD3): enqueueing a job whose sessionId
 //   matches a QUEUED job replaces that job in place (keeping its queue slot)
 //   and reports it `superseded`. The in-flight job was already dequeued, so it
-//   is never touched (R3 — no barge-in).
+//   is never touched (R3 - no barge-in).
 // - Age cap at dequeue (R5/KTD7): a job that waited longer than `ageCapMs`
-//   since receipt is reported `dropped-stale` instead of played — better
+//   since receipt is reported `dropped-stale` instead of played - better
 //   silent than stale.
 // - Depth cap (belt-and-suspenders): enqueueing beyond `maxDepth` drops the
 //   oldest queued job as `dropped-stale`.
 // - Resilience (R6): player rejections are caught and reported; the consumer
-//   always advances. Callback failures are swallowed — reporting must never
+//   always advances. Callback failures are swallowed - reporting must never
 //   stall playback. When idle the consumer awaits a wake signal (no polling).
 
 import { parseBoundedInt, resolveEchoEnv } from "./env";
@@ -61,8 +61,8 @@ export class PlayQueue<T> {
     //
     // Age cap (default 5 min): a STALENESS guard for lines stuck waiting, not
     // a bound tied to any single timeout. It must comfortably exceed one
-    // line's worst-case occupancy of the consumer — synthesis retries with
-    // adaptive timeouts plus a full playback can approach ~2 minutes — or an
+    // line's worst-case occupancy of the consumer - synthesis retries with
+    // adaptive timeouts plus a full playback can approach ~2 minutes - or an
     // ordinary slow line would mass-drop everything 202-acked behind it.
     // Newest-per-session coalescing already bounds the backlog to one line
     // per session, so a generous cap cannot grow the queue.
@@ -74,7 +74,7 @@ export class PlayQueue<T> {
     // borrowed from the player. Every subprocess in the speak path is
     // process-timeout-bounded, so a player exceeding this is wedged in
     // non-subprocess work; the queue reports it via onPlayerError and
-    // advances. (The abandoned player promise is detached, not cancelled —
+    // advances. (The abandoned player promise is detached, not cancelled -
     // its own bounded subprocesses are already dead by this point.)
     this.playerTimeoutMs = opts.playerTimeoutMs
       ?? parseBoundedInt(resolveEchoEnv("ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS"), 120_000, 1_000);
@@ -161,7 +161,7 @@ export class PlayQueue<T> {
       }
 
       // One catch-all per job: nothing inside (an injected now(), the age
-      // check, the player, the watchdog) may kill this loop — a dead consumer
+      // check, the player, the watchdog) may kill this loop - a dead consumer
       // would silently end global playback while /notify keeps acking 202.
       let watchdog: ReturnType<typeof setTimeout> | undefined;
       try {

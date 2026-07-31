@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>atlas-voicesystem — CodeGraph Knowledge Map</title>
+<title>atlas-voicesystem - CodeGraph Knowledge Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -218,7 +218,7 @@
     <div class="kpi"><div class="kpi__num">1.03<small style="font-size:16px">MB</small></div><div class="kpi__label">INDEX DB · WAL</div></div>
   </div>
 
-  <p class="section-label animate" style="--i:3">Module topology — from real graph edges</p>
+  <p class="section-label animate" style="--i:3">Module topology - from real graph edges</p>
   <section class="diagram-shell animate" style="--i:3">
     <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom · drag to pan · double-click to fit · ⛶ opens full size</p>
     <div class="mermaid-wrap">
@@ -236,26 +236,26 @@
     </div>
     <script type="text/plain" class="diagram-source">
       flowchart TD
-        subgraph LEGACY["claudecode/.claude/PAI — legacy compat tree"]
+        subgraph LEGACY["claudecode/.claude/PAI - legacy compat tree"]
           WRAP["server.ts wrapper<br/>env shims, legacy paths"]
           LDUP["hooks/lib duplicates<br/>identity · validators · logger"]
         end
 
-        subgraph PAI["adapters/pai — Claude Code hooks"]
+        subgraph PAI["adapters/pai - Claude Code hooks"]
           GREET["VoiceGreeting.hook<br/>41 symbols"]
           NOTIF["VoiceNotification<br/>handler"]
           PLIBS["lib/<br/>paths · identity · validators<br/>logger · time"]
           RESTORE["restore-hooks.ts<br/>36 symbols"]
         end
 
-        subgraph PI["adapters/pi — Pi extension package"]
+        subgraph PI["adapters/pi - Pi extension package"]
           PIIDX["index.ts<br/>extension entry"]
           PICFG["config.ts"]
           PIVL["voice-line.ts<br/>🗣 extraction + dedupe"]
           PINC["notify-client.ts"]
         end
 
-        subgraph CORE["core — host-neutral daemon :8888"]
+        subgraph CORE["core - host-neutral daemon :8888"]
           SERVER["server.ts<br/>95 symbols · /notify · /health<br/>provider chain + breakers"]
           TYPES["types.ts<br/>NotifyPayload · NotifyResult"]
           CNC["notify-client.ts"]
@@ -316,7 +316,7 @@
     </div>
   </div>
 
-  <p class="section-label green animate" style="--i:6">Cross-file symbol hotspots — highest in-degree</p>
+  <p class="section-label green animate" style="--i:6">Cross-file symbol hotspots - highest in-degree</p>
   <div class="table-wrap animate" style="--i:6">
     <table>
       <thead>
@@ -325,10 +325,10 @@
       <tbody>
         <tr><td><code>paiPath</code></td><td><span class="path">adapters/pai/hooks/lib/paths.ts</span></td><td><span class="pill pill--pai">pai</span></td><td class="num">6</td><td>Single source for every PAI filesystem path</td></tr>
         <tr><td><code>hookLog</code></td><td><span class="path">adapters/pai/hooks/lib/hook-logger.ts</span></td><td><span class="pill pill--pai">pai</span></td><td class="num">5</td><td>Shared hook decision logging</td></tr>
-        <tr><td><code>NotifyPayload</code></td><td><span class="path">core/types.ts</span></td><td><span class="pill pill--core">core</span></td><td class="num">4</td><td>The /notify contract type — shared client shape</td></tr>
-        <tr><td><code>PiVoiceConfig</code></td><td><span class="path">adapters/pi/config.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">3</td><td>Pi adapter config — PAI-independent by design</td></tr>
+        <tr><td><code>NotifyPayload</code></td><td><span class="path">core/types.ts</span></td><td><span class="pill pill--core">core</span></td><td class="num">4</td><td>The /notify contract type - shared client shape</td></tr>
+        <tr><td><code>PiVoiceConfig</code></td><td><span class="path">adapters/pi/config.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">3</td><td>Pi adapter config - PAI-independent by design</td></tr>
         <tr><td><code>NotifyResult</code></td><td><span class="path">core/types.ts</span></td><td><span class="pill pill--core">core</span></td><td class="num">2</td><td>Notify response shape for adapter clients</td></tr>
-        <tr><td><code>paiPath</code> <small style="color:var(--text-dim)">(copy)</small></td><td><span class="path">claudecode/…/hooks/lib/paths.ts</span></td><td><span class="pill pill--legacy">legacy</span></td><td class="num">2</td><td>Duplicate of the adapter version — drift surface</td></tr>
+        <tr><td><code>paiPath</code> <small style="color:var(--text-dim)">(copy)</small></td><td><span class="path">claudecode/…/hooks/lib/paths.ts</span></td><td><span class="pill pill--legacy">legacy</span></td><td class="num">2</td><td>Duplicate of the adapter version - drift surface</td></tr>
         <tr><td><code>shouldSuppressVoice</code></td><td><span class="path">adapters/pi/config.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">1</td><td>Subagent audio-flood suppression gate</td></tr>
         <tr><td><code>stableMessageKey</code></td><td><span class="path">adapters/pi/voice-line.ts</span></td><td><span class="pill pill--pi">pi</span></td><td class="num">1</td><td>Dedupe hash for double-fired lifecycle events</td></tr>
       </tbody>
@@ -340,19 +340,19 @@
     <div class="callout callout--green">
       <strong>✓ Core isolation invariant holds</strong>
       The graph initially showed one <code>core → adapters</code> edge. Verified by hand: it's a resolver
-      artifact — a local <code>const text</code> in <code>server.ts</code> name-collided with
+      artifact - a local <code>const text</code> in <code>server.ts</code> name-collided with
       <code>text()</code> in <code>adapters/pi/voice-line.ts</code>. Core imports nothing from any adapter;
       its only "adapters" mention is a comment.
     </div>
     <div class="callout callout--rust">
       <strong>Legacy tree is a drifting mirror</strong>
       <code>claudecode/.claude/PAI/USER/Voice/hooks/lib/</code> carries byte-for-byte symbol twins of the
-      adapter libs (identity: 25 = 25, validators: 17 = 17). Two copies of the same graph cluster — every
+      adapter libs (identity: 25 = 25, validators: 17 = 17). Two copies of the same graph cluster - every
       edit to one silently strands the other.
     </div>
     <div class="callout">
       <strong>core/server.ts is the gravity well</strong>
-      95 symbols in one file — 21% of the entire graph — with zero exports. Everything reaches it over
+      95 symbols in one file - 21% of the entire graph - with zero exports. Everything reaches it over
       HTTP (<code>POST /notify</code>), never by import. Good for decoupling; bad for unit-testing the
       provider chain and circuit breakers locked inside.
     </div>
@@ -360,7 +360,7 @@
       <strong>Adapters never touch each other</strong>
       Zero static edges between <code>adapters/pai</code> and <code>adapters/pi</code>. Each cluster is
       internally cohesive (pi: index → config/voice-line/notify-client; pai: hooks → lib/) and converges
-      only at the core's HTTP boundary — the architecture's promise, confirmed by the data.
+      only at the core's HTTP boundary - the architecture's promise, confirmed by the data.
     </div>
   </div>
 
@@ -436,7 +436,7 @@
       svg.style.width = (svgW * zoom) + 'px';
       svg.style.height = (svgH * zoom) + 'px';
       canvas.style.transform = `translate(${panX}px, ${panY}px)`;
-      label.textContent = Math.round(zoom * 100) + '% — ' + fitMode;
+      label.textContent = Math.round(zoom * 100) + '% - ' + fitMode;
     }
     function canPan() {
       return svgW * zoom + config.fitPadding * 2 > viewport.clientWidth

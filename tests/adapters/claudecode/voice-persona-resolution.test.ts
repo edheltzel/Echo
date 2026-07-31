@@ -13,7 +13,7 @@ import { parseTranscript } from "../../../adapters/claudecode/hooks/lib/Transcri
 import type { Identity } from "../../../adapters/claudecode/hooks/lib/identity";
 import type { ParsedTranscript } from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
 
-// Atlas (DA) identity fixture — mirrors the hardcoded path the bug degraded to Ava.
+// Atlas (DA) identity fixture - mirrors the hardcoded path the bug degraded to Ava.
 const ATLAS: Identity = {
   name: "Atlas",
   fullName: "Atlas",
@@ -38,7 +38,7 @@ function parsedWith(currentResponseText: string, lastMessage = ""): ParsedTransc
   };
 }
 
-describe("resolvePersonaKey — persona detection from the 🗣️ speaker tag", () => {
+describe("resolvePersonaKey - persona detection from the 🗣️ speaker tag", () => {
   test("returns the lowercase persona key for a main-session persona", () => {
     expect(resolvePersonaKey("Status update.\n🗣️ Themis: coordinating the next worker.", "Atlas")).toBe("themis");
   });
@@ -72,7 +72,7 @@ describe("resolvePersonaKey — persona detection from the 🗣️ speaker tag",
 
   test("does NOT match an inline mention/quote (must begin its own line)", () => {
     // An Atlas turn that merely references a tag inside a sentence must not flip voice.
-    expect(resolvePersonaKey("I will brief 🗣️ Themis: do the thing — inline mention.", "Atlas")).toBeNull();
+    expect(resolvePersonaKey("I will brief 🗣️ Themis: do the thing - inline mention.", "Atlas")).toBeNull();
     expect(resolvePersonaKey("The hook reads the `🗣️ Themis:` tag from the response.", "Atlas")).toBeNull();
   });
 
@@ -99,7 +99,7 @@ describe("resolvePersonaKey — persona detection from the 🗣️ speaker tag",
   });
 });
 
-describe("resolvePersonaKey — final-line anchoring (code fences / demos must not win)", () => {
+describe("resolvePersonaKey - final-line anchoring (code fences / demos must not win)", () => {
   const FENCE = "```";
 
   test("a 🗣️ tag inside a code fence does NOT win (Atlas turn, no trailing voice line)", () => {
@@ -166,7 +166,7 @@ describe("resolvePersonaKey — final-line anchoring (code fences / demos must n
   });
 });
 
-describe("selectVoice — what the Stop-hook path sends to the voice server", () => {
+describe("selectVoice - what the Stop-hook path sends to the voice server", () => {
   test("known persona → sends the resolvable persona key, NOT the hardcoded mainDAVoiceID", () => {
     const sel = selectVoice(parsedWith("🗣️ Themis: coordinating."), ATLAS, KNOWN);
     expect(sel.voiceId).toBe("themis");
@@ -179,7 +179,7 @@ describe("selectVoice — what the Stop-hook path sends to the voice server", ()
 
   test("#33: speaker is the original-case display name while voiceId stays the lowercase key", () => {
     const sel = selectVoice(parsedWith("🗣️ Themis: coordinating."), ATLAS, KNOWN);
-    // voice_id must remain the lowercase key the daemon resolves — unchanged.
+    // voice_id must remain the lowercase key the daemon resolves - unchanged.
     expect(sel.voiceId).toBe("themis");
     // title source is the display name from the tag, not the resolved key.
     expect(sel.speaker).toBe("Themis");
@@ -196,7 +196,7 @@ describe("selectVoice — what the Stop-hook path sends to the voice server", ()
   });
 
   test("UNKNOWN persona key → DA voice fallback, never an unresolvable key (would be Ava)", () => {
-    // "Gandalf" is not in voices.json — sending it would resolve to null → daemon
+    // "Gandalf" is not in voices.json - sending it would resolve to null → daemon
     // default (Ava) = the exact #27 bug. selectVoice must fall back to the DA voice.
     const sel = selectVoice(parsedWith("🗣️ Gandalf: you shall not pass."), ATLAS, KNOWN);
     expect(sel.voiceId).toBe(ATLAS.mainDAVoiceID);
@@ -237,7 +237,7 @@ describe("selectVoice — what the Stop-hook path sends to the voice server", ()
   });
 });
 
-describe("buildVoicePayload — the exact payload sent to the voice server", () => {
+describe("buildVoicePayload - the exact payload sent to the voice server", () => {
   test("persona selection → lowercase name key for voice, display-name title, no Atlas prosody", () => {
     // Mirrors what selectVoice produces post-#33: voice_id is the resolvable
     // lowercase key, title carries the original-case display name.
@@ -281,7 +281,7 @@ describe("resolved persona keys are resolvable by the daemon (voices.json)", () 
   });
 });
 
-describe("integration — full Stop-hook chain (transcript → parse → selectVoice)", () => {
+describe("integration - full Stop-hook chain (transcript → parse → selectVoice)", () => {
   // Proves currentResponseText actually carries the 🗣️ tag through real parsing,
   // not just hand-built ParsedTranscript fixtures. No mocks.
   function withTranscript(lines: object[], fn: (path: string) => void) {
@@ -324,7 +324,7 @@ describe("integration — full Stop-hook chain (transcript → parse → selectV
   });
 });
 
-describe("fetchKnownAgentKeys — persona keys come from the daemon, not its config file", () => {
+describe("fetchKnownAgentKeys - persona keys come from the daemon, not its config file", () => {
   const originalFetch = globalThis.fetch;
   let requestedUrls: string[] = [];
 
@@ -363,7 +363,7 @@ describe("fetchKnownAgentKeys — persona keys come from the daemon, not its con
     expect(requestedUrls).toEqual(["http://localhost:8899/voices"]);
   });
 
-  test("caches per process — one GET per hook run", async () => {
+  test("caches per process - one GET per hook run", async () => {
     stubDaemon(() => Response.json({ agents: ["themis"] }));
 
     await fetchKnownAgentKeys();

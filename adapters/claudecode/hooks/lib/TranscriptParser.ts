@@ -6,7 +6,7 @@
  * Used by Stop hooks for voice, tab state, and response capture.
  *
  * Vendored into the Claude Code adapter (echo) so the adapter owns
- * its Stop-hook pipeline end-to-end. Host-specific transcript logic — must not
+ * its Stop-hook pipeline end-to-end. Host-specific transcript logic - must not
  * live in core/. The only change from the upstream copy is the identity import
  * path (repo-local ./identity instead of the live ~/.claude tree).
  *
@@ -137,7 +137,7 @@ export function collectCurrentResponseText(transcriptContent: string): string {
           if (typeof content === 'string') {
             lastHumanIndex = i;
           } else if (Array.isArray(content)) {
-            // Check for text blocks — indicates a real user prompt
+            // Check for text blocks - indicates a real user prompt
             const hasText = content.some((b: any) => b?.type === 'text' && b?.text?.trim());
             if (hasText) {
               lastHumanIndex = i;
@@ -203,7 +203,7 @@ export interface VoiceLine {
  * ~~~), and NOT an indented code block (≥4 spaces or a tab). This is the single
  * fence/indent-aware line scan shared by the canonical voice-line parser
  * (parseFinalVoiceLine) and the legacy 🎯 COMPLETED: fallback, so both honor
- * code fences and indents identically — the scanner lives here once, never
+ * code fences and indents identically - the scanner lives here once, never
  * forked. CRLF tolerant: lines keep any trailing \r, which the per-line content
  * regexes ignore (`.` excludes \r).
  */
@@ -253,7 +253,7 @@ export function parseFinalVoiceLine(text: string): VoiceLine | null {
   const lastContentLine = lines[lines.length - 1];
   if (lastContentLine === undefined) return null;
   // Column 0 only. The portion up to the colon is byte-identical to the original
-  // resolvePersonaKey regex (no end anchor — `.` excludes `\r`, so `(.*)` stops
+  // resolvePersonaKey regex (no end anchor - `.` excludes `\r`, so `(.*)` stops
   // before a CRLF carriage return and a trailing `$` would break CRLF lines).
   const match = lastContentLine.match(
     /^🗣️[ \t]*\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)/,
@@ -263,7 +263,7 @@ export function parseFinalVoiceLine(text: string): VoiceLine | null {
 }
 
 /**
- * Extract voice completion line for TTS — the spoken words of the FINAL 🗣️
+ * Extract voice completion line for TTS - the spoken words of the FINAL 🗣️
  * voice line for ANY speaker (a persona speaks its own words; the DA path is
  * unchanged). Shares parseFinalVoiceLine with the voice resolver so words and
  * voice always agree. Falls back to a 🎯 COMPLETED: marker when no voice line.
@@ -284,7 +284,7 @@ export function extractVoiceCompletion(text: string): string {
   // the same fence/indent-aware scan as the voice line (contentLines) so a
   // COMPLETED inside a code fence or an indented block never wins; the LAST
   // content-line marker is used (the marker sits at the end of a response).
-  // Per-line `(.+)` is CRLF tolerant — `.` excludes the trailing \r.
+  // Per-line `(.+)` is CRLF tolerant - `.` excludes the trailing \r.
   const completed = /🎯\s*\*{0,2}COMPLETED:?\*{0,2}\s*(.+)/i;
   for (const line of contentLines(text).reverse()) {
     const m = line.match(completed);
@@ -335,7 +335,7 @@ export function extractCompletionPlain(text: string): string {
     return summary.length > 27 ? summary.slice(0, 27) + '…' : summary;
   }
 
-  // No voice line found — return empty, let downstream handle fallback
+  // No voice line found - return empty, let downstream handle fallback
   return '';
 }
 
