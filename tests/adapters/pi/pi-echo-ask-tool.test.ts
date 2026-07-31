@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import atlasVoicePiAdapter from "../../../adapters/pi/index.ts";
 import { loadPiVoiceConfig } from "../../../adapters/pi/config.ts";
 import { ECHO_ASK_PARAMETERS, ECHO_ASK_TOOL_NAME } from "../../../converse/host-tool.ts";
@@ -15,7 +14,7 @@ interface Doubles {
   handlers: Map<string, unknown>;
   commands: Map<string, unknown>;
   tools: Map<string, Record<string, any>>;
-  api: ExtensionAPI;
+  api: Parameters<typeof atlasVoicePiAdapter>[0];
 }
 
 function mockHost(options: { withToolApi?: boolean } = {}): Doubles {
@@ -29,7 +28,7 @@ function mockHost(options: { withToolApi?: boolean } = {}): Doubles {
   if (options.withToolApi !== false) {
     api.registerTool = (definition: Record<string, any>) => tools.set(String(definition.name), definition);
   }
-  return { handlers, commands, tools, api: api as unknown as ExtensionAPI };
+  return { handlers, commands, tools, api: api as unknown as Parameters<typeof atlasVoicePiAdapter>[0] };
 }
 
 describe("Pi adapter: echo_ask tool", () => {

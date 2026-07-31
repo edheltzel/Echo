@@ -59,7 +59,9 @@ export interface AskToolOptions {
 
 /** The one host capability this needs. Optional, because older runtimes lack it. */
 export interface ToolRegisteringHost {
-  registerTool?: (definition: Record<string, unknown>) => void;
+  // Host SDKs expose incompatible generic ToolDefinition signatures. Registration
+  // is feature-detected, then narrowed to the shared JSON definition below.
+  registerTool?: unknown;
 }
 
 export interface AskToolHostOptions {
@@ -85,8 +87,9 @@ export interface AskToolHostOptions {
  */
 export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolHostOptions): boolean {
   if (typeof host.registerTool !== "function") return false;
+  const registerTool = host.registerTool as (definition: Record<string, unknown>) => void;
 
-  host.registerTool({
+  registerTool({
     name: ECHO_ASK_TOOL_NAME,
     label: ECHO_ASK_TOOL_LABEL,
     description: ECHO_ASK_TOOL_DESCRIPTION,

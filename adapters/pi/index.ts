@@ -64,8 +64,8 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
 }
 
 /** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
-async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<boolean> {
-  if (ctx.hasUI !== true) return false;
+function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<boolean> {
+  if (ctx.hasUI !== true) return Promise.resolve(false);
   return ctx.ui.confirm(
     "Allow Echo voice replies for this Pi session?",
     "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
@@ -162,7 +162,11 @@ export default function atlasVoicePiAdapter(
   // Inject the 🗣️ convention into Pi's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
-  pi.on("before_agent_start", (event, ctx) => {
+  const onBeforeAgentStart = pi.on as unknown as (
+    event: "before_agent_start",
+    handler: (event: unknown, ctx: ExtensionContext) => unknown,
+  ) => void;
+  onBeforeAgentStart("before_agent_start", (event, ctx) => {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.speakCompletions) return undefined;
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
@@ -226,7 +230,7 @@ export default function atlasVoicePiAdapter(
     },
   });
 
-  // `echo_ask` - the model-invokable two-way turn: speak a question, capture the
+  // `echo_ask` - the model-invocable two-way turn: speak a question, capture the
   // spoken reply, return the transcript. A tool, not a command: a command is
   // human-initiated, and this has to be something the model itself can decide to
   // call mid-turn. The capture child is spawned from THIS process, which is what

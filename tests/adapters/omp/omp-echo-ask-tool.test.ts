@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import echoVoiceOmpAdapter from "../../../adapters/omp/index.ts";
 import { loadOmpVoiceConfig } from "../../../adapters/omp/config.ts";
 import { ECHO_ASK_PARAMETERS, ECHO_ASK_TOOL_NAME } from "../../../converse/host-tool.ts";
@@ -22,7 +21,7 @@ function mockHost(options: { withToolApi?: boolean } = {}) {
   if (options.withToolApi !== false) {
     api.registerTool = (definition: Record<string, any>) => tools.set(String(definition.name), definition);
   }
-  return { handlers, commands, tools, api: api as unknown as ExtensionAPI };
+  return { handlers, commands, tools, api: api as unknown as Parameters<typeof echoVoiceOmpAdapter>[0] };
 }
 
 describe("omp adapter: echo_ask tool", () => {
