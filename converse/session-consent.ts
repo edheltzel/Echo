@@ -1,15 +1,17 @@
 export type SessionConsentDecision = "granted" | "denied" | "unavailable";
 
-export type SessionConsentPrompt = () => Promise<boolean>;
+export type SessionConsentPrompt = () => Promise<SessionConsentDecision>;
 
 type ConsentState = "unasked" | "pending" | "granted" | "denied";
 
 /**
  * In-memory consent for one live host session.
  *
- * A denial is sticky as well as a grant: one host session gets at most one
- * consent prompt. Ending the session invalidates an in-flight answer so a late
- * click can never grant the next session.
+ * A grant and a human denial are both sticky: one host session gets at most
+ * one answered consent prompt. A prompt that could not reach the human at all
+ * ("unavailable" - no consent surface, or a broken one) does not consume the
+ * session's prompt and stays retryable. Ending the session invalidates an
+ * in-flight answer so a late click can never grant the next session.
  */
 export class SessionConsent {
   private sessionId: string | null = null;
@@ -45,16 +47,17 @@ export class SessionConsent {
     const activeSession = this.sessionId;
     this.state = "pending";
     const pending = (async (): Promise<SessionConsentDecision> => {
-      let allowed = false;
+      let decision: SessionConsentDecision = "unavailable";
       try {
-        allowed = await prompt();
+        decision = await prompt();
       } catch {
-        // A broken or dismissed consent surface fails closed for this session.
+        // A broken consent surface produced no human signal: fail closed for
+        // this call, but leave the session retryable once a surface exists.
       }
 
       if (this.generation !== generation || this.sessionId !== activeSession) return "unavailable";
-      this.state = allowed ? "granted" : "denied";
-      return allowed ? "granted" : "denied";
+      this.state = decision === "unavailable" ? "unasked" : decision;
+      return decision;
     })();
     this.pending = pending;
     try {

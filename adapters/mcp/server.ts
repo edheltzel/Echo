@@ -35,7 +35,7 @@ import {
   runAskTool,
   type AskToolOptions,
 } from "@echo/converse/host-tool.ts";
-import { SessionConsent } from "@echo/converse/session-consent.ts";
+import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 import manifest from "./package.json";
 
 /**
@@ -60,7 +60,7 @@ export interface McpServerDeps {
   ask?: AskToolOptions["ask"];
   ensureConsent?: AskToolOptions["ensureConsent"];
   /** Injected by tests; the real stdio session uses the macOS dialog below. */
-  requestConsent?: (signal?: AbortSignal) => Promise<boolean>;
+  requestConsent?: (signal?: AbortSignal) => Promise<SessionConsentDecision>;
   /** Aborted when the host cancels this request, which closes the microphone. */
   signal?: AbortSignal;
 }
@@ -89,9 +89,17 @@ const TOOL_DESCRIPTOR = {
   inputSchema: ECHO_ASK_PARAMETERS,
 };
 
-/** Ask once per MCP process/stdio session, independently of generic tool permissions. */
-export async function requestMcpSessionConsent(signal?: AbortSignal): Promise<boolean> {
-  if (process.platform !== "darwin" || signal?.aborted) return false;
+/**
+ * Ask once per MCP process/stdio session, independently of generic tool permissions.
+ *
+ * The decision distinguishes a human signal from a missing surface: clicking
+ * Deny (osascript's cancel button, error -128) or aborting the tool call while
+ * the dialog is up is a sticky denial, while a platform or GUI-session where
+ * the dialog cannot be presented at all stays "unavailable" and retryable.
+ */
+export async function requestMcpSessionConsent(signal?: AbortSignal): Promise<SessionConsentDecision> {
+  if (process.platform !== "darwin") return "unavailable";
+  if (signal?.aborted) return "denied";
 
   const script = [
     'set answer to button returned of (display dialog "Echo can record and transcribe microphone audio whenever echo_ask runs in this Claude Code/MCP session. You will not be prompted again until this session ends."',
@@ -101,13 +109,19 @@ export async function requestMcpSessionConsent(signal?: AbortSignal): Promise<bo
   const child = Bun.spawn(["/usr/bin/osascript", "-e", script], {
     stdin: "ignore",
     stdout: "pipe",
-    stderr: "ignore",
+    stderr: "pipe",
   });
   const abort = () => child.kill();
   signal?.addEventListener("abort", abort, { once: true });
   try {
-    const [exitCode, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
-    return exitCode === 0 && output.trim() === "Allow for Session";
+    const [exitCode, output, errorOutput] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (exitCode === 0 && output.trim() === "Allow for Session") return "granted";
+    if (signal?.aborted || errorOutput.includes("-128")) return "denied";
+    return "unavailable";
   } finally {
     signal?.removeEventListener("abort", abort);
   }

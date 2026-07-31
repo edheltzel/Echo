@@ -101,10 +101,13 @@ There is deliberately **no LaunchAgent** for this capability. The coordinator st
 The macOS TCC grant is necessary but not sufficient. TCC remembers the terminal application's
 microphone permission, so later recorder children can otherwise open silently. Echo therefore
 requires a separate informed decision once per live host session. The first valid `echo_ask`
-call presents that session's consent surface before it can reach `askOnce`; a grant is reused,
-and a denial is also remembered so refusal cannot degrade into per-call prompting. Calls with no
-live session identity or no usable consent surface fail closed with `session_consent_required`.
-Nothing is persisted to disk.
+call presents that session's consent surface before it can reach `askOnce`. The outcome splits
+on whether the human produced a signal: a grant is reused, and a prompt the human explicitly
+declines or aborts is a sticky denial for that session (`session_consent_denied`, never
+re-prompted), so refusal cannot degrade into per-call prompting. A call with no live session
+identity or no usable consent surface produced no human signal: it fails closed with
+`session_consent_required` without consuming the session's prompt, and becomes promptable again
+once a surface exists. Nothing is persisted to disk.
 
 | Host | Consent surface | Where state lives | Expiry |
 | --- | --- | --- | --- |
@@ -118,8 +121,9 @@ therefore one stdio connection/process, not a guessed Claude conversation id. If
 one MCP process across its own conversation reset, the grant conditionally lasts for that reused
 connection; Echo cannot claim a narrower boundary the protocol does not publish. Pi/omp sessions
 without UI (`print`/`json`) refuse rather than substituting an ambient or model-supplied grant.
-A cancelled or broken prompt fails closed, and an answer that arrives after session shutdown
-cannot grant the replacement session.
+An abort while the prompt is up is a human signal and denies the session; a broken or
+unpresentable surface fails only that call and stays retryable. An answer that arrives after
+session shutdown cannot grant the replacement session.
 
 For the measured direct-terminal topology, the human grants microphone access to the terminal
 application (WezTerm, iTerm, Ghostty, Terminal), not to `yap`, `rec` or Echo's coordinator. Pi and

@@ -82,6 +82,38 @@ describe("omp adapter: echo_ask tool", () => {
     expect(prompts).toBe(2);
   });
 
+  test("a session without UI stays retryable instead of recording a sticky denial", async () => {
+    const host = mockHost();
+    echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}));
+    const tool = host.tools.get(ECHO_ASK_TOOL_NAME)!;
+    const start = host.handlers.get("session_start") as (event: unknown, ctx: unknown) => Promise<void>;
+    let prompts = 0;
+    const ctx = {
+      cwd: "/repo",
+      hasUI: false,
+      sessionManager: {
+        getSessionFile: () => "session-a",
+        getSessionId: () => "session-a",
+      },
+      ui: {
+        confirm: async () => {
+          prompts++;
+          return false;
+        },
+      },
+    } as { hasUI: boolean; [key: string]: unknown };
+
+    await start({ reason: "reload" }, ctx);
+    const headless = await tool.execute("call-1", { question: "Ready?" }, undefined, undefined, ctx);
+    expect(headless.details.error).toBe("session_consent_required");
+    expect(prompts).toBe(0);
+
+    ctx.hasUI = true;
+    const prompted = await tool.execute("call-2", { question: "Ready now?" }, undefined, undefined, ctx);
+    expect(prompted.details.error).toBe("session_consent_denied");
+    expect(prompts).toBe(1);
+  });
+
   test("a runtime without registerTool still gets the voice adapter", () => {
     const host = mockHost({ withToolApi: false });
 

@@ -14,7 +14,7 @@ import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voic
 import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
-import { SessionConsent } from "@echo/converse/session-consent.ts";
+import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -63,15 +63,26 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
   return undefined;
 }
 
-/** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
-function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<boolean> {
-  if (ctx.hasUI !== true) return Promise.resolve(false);
-  return ctx.ui.confirm(
-    "Allow Echo voice replies for this Pi session?",
-    "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
-      "You will not be prompted again until this session ends.",
-    signal ? { signal } : undefined,
-  );
+/**
+ * One informed microphone-consent prompt for this Pi session's echo_ask calls.
+ *
+ * No UI means no consent surface: the human never saw a prompt, so the call is
+ * "unavailable" (retryable) rather than a sticky denial. An explicit decline or
+ * an abort while the prompt is up is a human signal and stays sticky.
+ */
+async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<SessionConsentDecision> {
+  if (ctx.hasUI !== true) return "unavailable";
+  try {
+    const allowed = await ctx.ui.confirm(
+      "Allow Echo voice replies for this Pi session?",
+      "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
+        "You will not be prompted again until this session ends.",
+      signal ? { signal } : undefined,
+    );
+    return allowed ? "granted" : "denied";
+  } catch {
+    return signal?.aborted ? "denied" : "unavailable";
+  }
 }
 
 function buildVoiceLineInstruction(personaName: string): string {
