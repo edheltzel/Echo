@@ -32,6 +32,21 @@ describe("core playback completion reservation", () => {
     expect(captureReservationHeld()).toBe(false);
   });
 
+  test("cannot grant capture while the question is still playing", () => {
+    const requestId = `request-${crypto.randomUUID()}`;
+    const reservationId = `reservation-${crypto.randomUUID()}`;
+    trackPlayback(requestId, { reservation_id: reservationId, owner_pid: process.pid, lease_ms: 60_000 });
+    markPlaybackPlaying(requestId);
+
+    expect(grantCaptureReservation(reservationId)).toEqual({ granted: false, reason: "not_ready" });
+    expect(captureReservationHeld()).toBe(false);
+
+    markPlaybackCompleted(requestId, true);
+    expect(grantCaptureReservation(reservationId).granted).toBe(true);
+    expect(captureReservationHeld()).toBe(true);
+    releaseCaptureReservationById(reservationId);
+  });
+
   test("starts the protected lease at the explicit capture grant", () => {
     const originalNow = Date.now;
     let now = 1_700_000_000_000;

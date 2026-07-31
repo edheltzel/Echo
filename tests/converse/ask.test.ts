@@ -121,6 +121,67 @@ describe("one-shot ask", () => {
     expect(sawState).toEqual(["recording"]);
   });
 
+  test("does not open capture while core still reports the question playing", async () => {
+    let reservationId = "";
+    let completionRead!: () => void;
+    let finishPlayback!: () => void;
+    const completionStarted = new Promise<void>((resolve) => { completionRead = resolve; });
+    const playbackFinished = new Promise<void>((resolve) => { finishPlayback = resolve; });
+    const core = {
+      observed: { notifyCaptureState: null, calls: [] as string[] },
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        if (path === "/health") return new Response(JSON.stringify(coreHealth()), { status: 200 });
+        if (path === "/notify") {
+          reservationId = (JSON.parse(String(init?.body)) as { capture_reservation: { reservation_id: string } })
+            .capture_reservation.reservation_id;
+          return new Response(JSON.stringify({ status: "accepted", request_id: "raced-question" }), { status: 202 });
+        }
+        if (path === "/notify/raced-question/completion") {
+          completionRead();
+          await playbackFinished;
+          return new Response(JSON.stringify({
+            request_id: "raced-question",
+            state: "completed",
+            capture_reservation_id: reservationId,
+          }), { status: 200 });
+        }
+        if (path.endsWith(`/capture-reservations/${reservationId}/grant`)) {
+          return new Response(JSON.stringify({
+            granted: true,
+            reservation_id: reservationId,
+            request_id: "raced-question",
+            expires_at: new Date(Date.now() + 120_000).toISOString(),
+          }), { status: 200 });
+        }
+        if (path.endsWith(`/capture-reservations/${reservationId}/release`)) {
+          return new Response(JSON.stringify({ reservation_id: reservationId, acknowledged: true }), { status: 200 });
+        }
+        throw new Error(`unexpected fake-core request: ${path}`);
+      },
+    };
+    const { config } = startCoordinator(core);
+    let captures = 0;
+    const engine: CaptureEngine = async () => {
+      captures++;
+      return { text: "after playback", engine: "yap", capture_ms: 1, timed_out: false };
+    };
+
+    const ask = askOnce({ question: "Did playback finish?" }, {
+      config,
+      captureEngine: engine,
+      fetchImpl: (url, init) => fetch(url, init),
+    });
+    await completionStarted;
+
+    expect(captures).toBe(0);
+    expect(existsSync(capturePath)).toBe(false);
+
+    finishPlayback();
+    expect((await ask).text).toBe("after playback");
+    expect(captures).toBe(1);
+  });
+
   test("core is never asked to speak while a capture is published", async () => {
     // The self-hold trap: had the capture state been `recording` at this point,
     // core's own guard would have held back the question converse just asked it
