@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +18,7 @@ import {
 // voice system (issue #25). A degenerate value (NaN / negative / below floor)
 // must fall back to the documented DEFAULT, never to a value that masks a real
 // outage (0ms timeout, 0 retries, threshold that opens on the first failure).
-describe("parseBoundedInt — degenerate env values fall back to default", () => {
+describe("parseBoundedInt - degenerate env values fall back to default", () => {
   test("valid in-range values are parsed", () => {
     expect(parseBoundedInt("30000", 15000, 1)).toBe(30000);
     expect(parseBoundedInt("3", 1, 0)).toBe(3);
@@ -38,7 +38,7 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
 
   // PORT's ceiling: an out-of-range value would throw inside Bun.serve and leave
   // launchd crash-looping the daemon. Floor 0 is deliberate for the LIVE process
-  // value — PORT=0 is the tests' ephemeral-bind mode and must never fall back to
+  // value - PORT=0 is the tests' ephemeral-bind mode and must never fall back to
   // the real :3246. A configured 0 never reaches here; config.json validation
   // rejects it (see the PORT range test below).
   test("values above the max fall back; no max means unbounded", () => {
@@ -58,7 +58,7 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
     });
 
     // retries floor 0: 0 retries is a LEGITIMATE config (single attempt), so it
-    // must be honored — only NaN/negative fall back.
+    // must be honored - only NaN/negative fall back.
     test("EDGETTS_SYNTH_RETRIES floor allows 0 but rejects NaN/negative", () => {
       expect(parseBoundedInt("0", 1, 0)).toBe(0);
       expect(parseBoundedInt("abc", 1, 0)).toBe(1);
@@ -83,28 +83,29 @@ describe("parseBoundedInt — degenerate env values fall back to default", () =>
 
 // resolveEchoEnv is the import-pure replacement for the daemon's old
 // hydrate-process.env-at-import loop (the pi-adapter "Atlas" pollution):
-// live process value wins, env-file values are a read-only fallback, and
-// resolving NEVER writes to process.env.
-describe("resolveEchoEnv — import-pure env resolution", () => {
+// config.json wins, old process values are a deprecated fallback, legacy
+// dotenv values come last, and resolving NEVER writes to process.env.
+describe("resolveEchoEnv - import-pure config resolution", () => {
   afterEach(() => {
     primeEchoFileEnv(undefined); // restore lazy real-file loading
     delete process.env.ECHO_ENV_TEST_KEY;
   });
 
-  test("a live process value wins over the file layer", () => {
+  test("the resolved config layer wins over a live process value", () => {
     primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
+    process.env.ECHO_ENV_TEST_KEY = "from-process";
+    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
+  });
+
+  test("falls back to a live process value when resolved config is absent", () => {
+    primeEchoFileEnv({});
     process.env.ECHO_ENV_TEST_KEY = "from-process";
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-process");
   });
 
-  test("falls back to the file layer when the process value is absent", () => {
-    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
-    expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("from-file");
-  });
-
-  test("an empty live process value still wins over the file layer", () => {
-    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "from-file" });
-    process.env.ECHO_ENV_TEST_KEY = "";
+  test("an empty resolved value still wins over the live process layer", () => {
+    primeEchoFileEnv({ ECHO_ENV_TEST_KEY: "" });
+    process.env.ECHO_ENV_TEST_KEY = "from-process";
     expect(resolveEchoEnv("ECHO_ENV_TEST_KEY")).toBe("");
   });
 
@@ -173,17 +174,58 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     }
   });
 
-  test("live values override config.json without mutating process.env", () => {
+  test("config.json overrides deprecated live values without mutating process.env", () => {
     const home = mkdtempSync(join(tmpdir(), "echo-json-precedence-"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
       mkdirSync(join(home, ".config", "echo"), { recursive: true });
       writeFileSync(echoConfigPath(home), JSON.stringify({ PORT: 3246, ECHO_VOICE_PERSONA_NAME: "File" }));
-      const resolved = loadEchoConfiguration({ PORT: "9999", ECHO_VOICE_PERSONA_NAME: "Live" }, home);
-      expect(resolved.PORT).toBe("9999");
-      expect(resolved.ECHO_VOICE_PERSONA_NAME).toBe("Live");
+      const { env, config } = loadEchoConfigurationWithStatus(
+        { PORT: "9999", ECHO_VOICE_PERSONA_NAME: "Live", ELEVENLABS_API_KEY: "secret" },
+        home,
+      );
+      expect(env.PORT).toBe("3246");
+      expect(env.ECHO_VOICE_PERSONA_NAME).toBe("File");
+      expect(env.ELEVENLABS_API_KEY).toBe("secret");
+      expect(config.deprecatedEnvironment).toEqual(["ECHO_VOICE_PERSONA_NAME", "PORT"]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("ECHO_VOICE_PERSONA_NAME, PORT"));
       expect(process.env.PORT).not.toBe("9999");
       expect(process.env.ECHO_VOICE_PERSONA_NAME).toBeUndefined();
     } finally {
+      warn.mockRestore();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("deprecated environment and dotenv fallbacks warn while third-party secrets do not", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-deprecated-env-"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "echo", ".env"),
+        "ECHO_DEFAULT_TITLE=Legacy file\nELEVENLABS_API_KEY=file-secret\n",
+      );
+      const { env, config } = loadEchoConfigurationWithStatus(
+        { ATLAS_VOICE_ID: "legacy-alias", ECHO_VOICE_TITLE: "Live", ELEVENLABS_API_KEY: "live-secret" },
+        home,
+      );
+
+      expect(env.ECHO_DEFAULT_TITLE).toBe("Legacy file");
+      expect(env.ECHO_VOICE_TITLE).toBe("Live");
+      expect(env.ATLAS_VOICE_ID).toBe("legacy-alias");
+      expect(env.ELEVENLABS_API_KEY).toBe("live-secret");
+      expect(config.deprecatedEnvironment).toEqual([
+        "ATLAS_VOICE_ID",
+        "ECHO_DEFAULT_TITLE",
+        "ECHO_VOICE_TITLE",
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("ATLAS_VOICE_ID, ECHO_DEFAULT_TITLE, ECHO_VOICE_TITLE"),
+      );
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("ELEVENLABS_API_KEY"));
+    } finally {
+      warn.mockRestore();
       rmSync(home, { recursive: true, force: true });
     }
   });
@@ -238,7 +280,7 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
       writeFileSync(custom, JSON.stringify({ ECHO_DEFAULT_TITLE: "From override" }));
       expect(echoConfigPath(home, { ECHO_CONFIG_FILE: custom })).toBe(custom);
       expect(loadEchoConfiguration({ ECHO_CONFIG_FILE: custom }, home).ECHO_DEFAULT_TITLE).toBe("From override");
-      // Default resolution stays deterministic — an ambient override in the
+      // Default resolution stays deterministic - an ambient override in the
       // operator's environment must not reach a caller that did not pass it.
       expect(echoConfigPath(home)).toBe(join(home, ".config", "echo", "config.json"));
     } finally {
@@ -256,7 +298,7 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
 
   // A configured port the bash surfaces cannot target is a permanent split-brain:
   // the daemon binds it, every CLI and health probe stays on 3246. 0 is the
-  // sharpest case — an ephemeral bind has no address to hand a CLI at all.
+  // sharpest case - an ephemeral bind has no address to hand a CLI at all.
   test("a configured PORT outside 1-65535 is rejected, including 0", () => {
     expect(validateEchoConfig({ PORT: 0 })).toHaveLength(1);
     expect(validateEchoConfig({ PORT: "0" })).toHaveLength(1);
@@ -325,7 +367,7 @@ describe("resolveEchoEnv — import-pure env resolution", () => {
     expect(schema.additionalProperties).toBe(false);
     expect(schema.properties.PORT.default).toBe(3246);
     // The declared grammar is what config.json validation enforces and what
-    // scripts/echo-port.sh accepts — all three must agree or the daemon and the
+    // scripts/echo-port.sh accepts - all three must agree or the daemon and the
     // CLI end up on different ports. `minimum`/`maximum` are numeric keywords
     // and say nothing about the string form, so that branch carries the pattern.
     // Compared against the live regex, not a copy of it: the schema is what a
