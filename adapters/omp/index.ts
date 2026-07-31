@@ -14,6 +14,7 @@ import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voic
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
+import { SessionConsent } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -64,6 +65,16 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
 }
 
 /** Instruction that makes omp's model emit the PAI-style trailing voice line. */
+async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<boolean> {
+  if (ctx.hasUI !== true) return false;
+  return ctx.ui.confirm(
+    "Allow Echo voice replies for this omp session?",
+    "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
+      "You will not be prompted again until this session ends.",
+    signal ? { signal } : undefined,
+  );
+}
+
 function buildVoiceLineInstruction(personaName: string): string {
   return [
     "## Spoken completion (required)",
@@ -79,6 +90,7 @@ export default function echoVoiceOmpAdapter(
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
+  const askConsent = new SessionConsent();
 
   // Per-project config: layer a persona override from omp's native config
   // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key -
@@ -174,6 +186,7 @@ export default function echoVoiceOmpAdapter(
   });
 
   omp.on("session_start", async (event, ctx) => {
+    askConsent.begin(resolveSessionId(ctx));
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
@@ -189,6 +202,7 @@ export default function echoVoiceOmpAdapter(
   });
 
   omp.on("session_shutdown", () => {
+    askConsent.end();
     spoken.clear();
     pending.clear();
   });
@@ -216,6 +230,10 @@ export default function echoVoiceOmpAdapter(
   // attributes the microphone grant to the host terminal (docs/converse.md).
   registerEchoAskTool(omp, {
     source: "omp",
+    ensureConsent: (ctx, signal) => {
+      const extensionContext = ctx as ExtensionContext;
+      return askConsent.ensure(resolveSessionId(extensionContext), () => promptForAskConsent(extensionContext, signal));
+    },
     resolveVoice: (ctx) => {
       const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
       return { voiceId: cfg.voiceId, title: cfg.title };

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { handleMessage, SUPPORTED_PROTOCOL_VERSIONS } from "../../../adapters/mcp/server.ts";
 import { ECHO_ASK_PARAMETERS } from "../../../converse/host-tool.ts";
 
@@ -11,6 +12,8 @@ import { ECHO_ASK_PARAMETERS } from "../../../converse/host-tool.ts";
 // 2025-11-25, lifecycle and tools), not remembered ones.
 //
 // No test here starts a real turn: `ask` is injected.
+
+const consentGranted = async () => "granted" as const;
 
 const askReturns = (text: string) => async () => ({
   text,
@@ -82,7 +85,7 @@ describe("tools/call", () => {
   test("returns the transcript as tool content", async () => {
     const response: any = await handleMessage(
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "echo_ask", arguments: { question: "Ready?" } } },
-      { ask: askReturns("yes, go ahead") },
+      { ask: askReturns("yes, go ahead"), ensureConsent: consentGranted },
     );
 
     expect(response.result.content).toEqual([{ type: "text", text: "yes, go ahead" }]);
@@ -93,6 +96,7 @@ describe("tools/call", () => {
     const response: any = await handleMessage(
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "echo_ask", arguments: { question: "Ready?" } } },
       {
+        ensureConsent: consentGranted,
         ask: async () => {
           throw new Error("the recording contained no speech");
         },
@@ -114,6 +118,7 @@ describe("tools/call", () => {
       { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "echo_ask", arguments: { question: "Ready?" } } },
       {
         signal: controller.signal,
+        ensureConsent: consentGranted,
         ask: async (options) => {
           seen = options.signal;
           return { ...(await askReturns("ok")()), text: "ok" };
@@ -123,6 +128,23 @@ describe("tools/call", () => {
 
     expect(response.result.isError).toBe(false);
     expect(seen).toBe(controller.signal);
+  });
+
+  test("refuses capture when the MCP session has no consent gate", async () => {
+    let asked = 0;
+    const response: any = await handleMessage(
+      { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "echo_ask", arguments: { question: "Ready?" } } },
+      {
+        ask: async () => {
+          asked++;
+          return askReturns("never")();
+        },
+      },
+    );
+
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0].text).toContain("without consent");
+    expect(asked).toBe(0);
   });
 
   test("an unknown tool name is an invalid-params error", async () => {
@@ -213,21 +235,20 @@ describe("stdio transport", () => {
   // whole window, so the host could neither health-check the server nor call the
   // turn off - which made the abort plumbing dead code on this transport.
   test("a ping is answered while an ask is still in flight", async () => {
-    // Nothing real is touched: the coordinator address is a port that refuses,
-    // and the stand-in entry point exits immediately, so the ask sits in its
-    // start-up poll instead of reaching a coordinator, a daemon or a microphone.
-    const standIn = join(mkdtempSync(join(tmpdir(), "echo-mcp-")), "main.ts");
-    writeFileSync(standIn, "// stand-in coordinator entry point; binds nothing\n");
-    const child = Bun.spawn(["bun", "adapters/mcp/server.ts"], {
+    // Nothing real is touched: the injected consent surface never resolves, so
+    // the ask cannot reach a coordinator, daemon or microphone. The stdio loop
+    // must still answer ping while that one session-scoped prompt is pending.
+    const entry = join(mkdtempSync(join(tmpdir(), "echo-mcp-")), "server.ts");
+    const serverUrl = pathToFileURL(join(process.cwd(), "adapters/mcp/server.ts")).href;
+    writeFileSync(
+      entry,
+      `import { runStdioServer } from ${JSON.stringify(serverUrl)};\n` +
+        "await runStdioServer({ requestConsent: async () => new Promise(() => {}) });\n",
+    );
+    const child = Bun.spawn(["bun", entry], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
-      env: {
-        ...process.env,
-        ECHO_CONVERSE_URL: "http://127.0.0.1:1",
-        ECHO_CONVERSE_PORT: "8931",
-        ECHO_CONVERSE_MAIN: standIn,
-      },
     });
 
     child.stdin.write(

@@ -14,6 +14,7 @@ import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voic
 import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
+import { SessionConsent } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -63,6 +64,16 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
 }
 
 /** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
+async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<boolean> {
+  if (ctx.hasUI !== true) return false;
+  return ctx.ui.confirm(
+    "Allow Echo voice replies for this Pi session?",
+    "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
+      "You will not be prompted again until this session ends.",
+    signal ? { signal } : undefined,
+  );
+}
+
 function buildVoiceLineInstruction(personaName: string): string {
   return [
     "## Spoken completion (required)",
@@ -78,6 +89,7 @@ export default function atlasVoicePiAdapter(
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
+  const askConsent = new SessionConsent();
 
   // Per-project config: layer a persona override from Pi's native settings.json
   // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key -
@@ -176,6 +188,7 @@ export default function atlasVoicePiAdapter(
   });
 
   pi.on("session_start", async (event, ctx) => {
+    askConsent.begin(resolveSessionId(ctx));
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
@@ -191,6 +204,7 @@ export default function atlasVoicePiAdapter(
   });
 
   pi.on("session_shutdown", () => {
+    askConsent.end();
     spoken.clear();
     pending.clear();
   });
@@ -220,6 +234,10 @@ export default function atlasVoicePiAdapter(
   // to a background service (docs/converse.md).
   registerEchoAskTool(pi, {
     source: "pi",
+    ensureConsent: (ctx, signal) => {
+      const extensionContext = ctx as ExtensionContext;
+      return askConsent.ensure(resolveSessionId(extensionContext), () => promptForAskConsent(extensionContext, signal));
+    },
     resolveVoice: (ctx) => {
       const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
       return { voiceId: cfg.voiceId, title: cfg.title };

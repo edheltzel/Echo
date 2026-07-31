@@ -35,6 +35,7 @@ import {
   runAskTool,
   type AskToolOptions,
 } from "@echo/converse/host-tool.ts";
+import { SessionConsent } from "@echo/converse/session-consent.ts";
 import manifest from "./package.json";
 
 /**
@@ -57,6 +58,9 @@ interface JsonRpcRequest {
 
 export interface McpServerDeps {
   ask?: AskToolOptions["ask"];
+  ensureConsent?: AskToolOptions["ensureConsent"];
+  /** Injected by tests; the real stdio session uses the macOS dialog below. */
+  requestConsent?: (signal?: AbortSignal) => Promise<boolean>;
   /** Aborted when the host cancels this request, which closes the microphone. */
   signal?: AbortSignal;
 }
@@ -84,6 +88,30 @@ const TOOL_DESCRIPTOR = {
   description: ECHO_ASK_TOOL_DESCRIPTION,
   inputSchema: ECHO_ASK_PARAMETERS,
 };
+
+/** Ask once per MCP process/stdio session, independently of generic tool permissions. */
+export async function requestMcpSessionConsent(signal?: AbortSignal): Promise<boolean> {
+  if (process.platform !== "darwin" || signal?.aborted) return false;
+
+  const script = [
+    'set answer to button returned of (display dialog "Echo can record and transcribe microphone audio whenever echo_ask runs in this Claude Code/MCP session. You will not be prompted again until this session ends."',
+    'with title "Allow Echo voice replies?" buttons {"Deny", "Allow for Session"} default button "Deny" cancel button "Deny" with icon caution)',
+    "return answer",
+  ].join(" ");
+  const child = Bun.spawn(["/usr/bin/osascript", "-e", script], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const abort = () => child.kill();
+  signal?.addEventListener("abort", abort, { once: true });
+  try {
+    const [exitCode, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+    return exitCode === 0 && output.trim() === "Allow for Session";
+  } finally {
+    signal?.removeEventListener("abort", abort);
+  }
+}
 
 /**
  * Handle one JSON-RPC message. Returns null for a notification, which by
@@ -121,7 +149,12 @@ export async function handleMessage(message: JsonRpcRequest, deps: McpServerDeps
       });
     }
 
-    const outcome = await runAskTool(params.arguments, { source: "mcp", ask: deps.ask, signal: deps.signal });
+    const outcome = await runAskTool(params.arguments, {
+      source: "mcp",
+      ask: deps.ask,
+      signal: deps.signal,
+      ensureConsent: deps.ensureConsent,
+    });
     // A turn nobody answered is a tool-level failure, not a protocol error: the
     // model asked a question and needs to read what happened.
     return result(id, {
@@ -158,6 +191,10 @@ export async function runStdioServer(deps: McpServerDeps = {}): Promise<void> {
   let buffered = "";
   const inFlight = new Map<string | number, AbortController>();
   const pending = new Set<Promise<void>>();
+  const sessionId = `mcp-${crypto.randomUUID()}`;
+  const consent = new SessionConsent();
+  consent.begin(sessionId);
+  const requestConsent = deps.requestConsent ?? requestMcpSessionConsent;
 
   const send = (payload: object) => {
     // One write per message, and JSON.stringify escapes newlines inside strings,
@@ -173,7 +210,11 @@ export async function runStdioServer(deps: McpServerDeps = {}): Promise<void> {
 
     const task = (async () => {
       try {
-        const response = await handleMessage(message, { ...deps, signal: controller.signal });
+        const response = await handleMessage(message, {
+          ...deps,
+          signal: controller.signal,
+          ensureConsent: deps.ensureConsent ?? (() => consent.ensure(sessionId, () => requestConsent(controller.signal))),
+        });
         // A cancelled request gets no response, per the specification.
         if (response !== null && !controller.signal.aborted) send(response);
       } catch (thrown) {
@@ -225,6 +266,7 @@ export async function runStdioServer(deps: McpServerDeps = {}): Promise<void> {
   // stdin closing does not entitle an in-flight ask to be dropped: the human may
   // already be speaking, and the recorder is a child of this process.
   await Promise.all([...pending]);
+  consent.end();
 }
 
 if (import.meta.main) {

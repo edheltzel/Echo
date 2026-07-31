@@ -44,6 +44,52 @@ describe("Pi adapter: echo_ask tool", () => {
     expect(typeof tool!.execute).toBe("function");
   });
 
+  test("refuses without a live Pi session consent grant", async () => {
+    const host = mockHost();
+    atlasVoicePiAdapter(host.api, loadPiVoiceConfig({}));
+    const tool = host.tools.get(ECHO_ASK_TOOL_NAME)!;
+
+    const result = await tool.execute("call-1", { question: "Ready?" }, undefined, undefined, {});
+
+    expect(result.isError).toBe(true);
+    expect(result.details.error).toBe("session_consent_required");
+  });
+
+  test("prompts at most once per Pi session and expires the denial on shutdown", async () => {
+    const host = mockHost();
+    atlasVoicePiAdapter(host.api, loadPiVoiceConfig({}));
+    const tool = host.tools.get(ECHO_ASK_TOOL_NAME)!;
+    const start = host.handlers.get("session_start") as (event: unknown, ctx: unknown) => Promise<void>;
+    const shutdown = host.handlers.get("session_shutdown") as () => void;
+    let sessionId = "session-a";
+    let prompts = 0;
+    const ctx = {
+      cwd: "/repo",
+      hasUI: true,
+      sessionManager: {
+        getSessionFile: () => sessionId,
+        getSessionId: () => sessionId,
+      },
+      ui: {
+        confirm: async () => {
+          prompts++;
+          return false;
+        },
+      },
+    };
+
+    await start({ reason: "reload" }, ctx);
+    await tool.execute("call-1", { question: "Ready?" }, undefined, undefined, ctx);
+    await tool.execute("call-2", { question: "Still ready?" }, undefined, undefined, ctx);
+    expect(prompts).toBe(1);
+
+    shutdown();
+    sessionId = "session-b";
+    await start({ reason: "reload" }, ctx);
+    await tool.execute("call-3", { question: "Now ready?" }, undefined, undefined, ctx);
+    expect(prompts).toBe(2);
+  });
+
   test("a runtime without registerTool still gets the voice adapter", () => {
     const host = mockHost({ withToolApi: false });
 
