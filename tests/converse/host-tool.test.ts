@@ -23,6 +23,8 @@ function hostThatRegisters(): { host: ToolRegisteringHost; tools: Map<string, Re
   };
 }
 
+const consentGranted = async () => "granted" as const;
+
 const askThatReturns = (text: string) => async () => ({
   text,
   turn_id: "t-1",
@@ -56,7 +58,11 @@ describe("registering the ask tool", () => {
 
   test("execute speaks the question and returns the transcript to the model", async () => {
     const { host, tools } = hostThatRegisters();
-    registerEchoAskTool(host, { source: "pi", ask: askThatReturns("ship it on Friday") });
+    registerEchoAskTool(host, {
+      source: "pi",
+      ensureConsent: consentGranted,
+      ask: askThatReturns("ship it on Friday"),
+    });
 
     const result = await tools.get(ECHO_ASK_TOOL_NAME)!.execute(
       "call-1",
@@ -77,6 +83,7 @@ describe("registering the ask tool", () => {
     let source = "";
     registerEchoAskTool(host, {
       source: "omp",
+      ensureConsent: consentGranted,
       ask: async (options) => {
         source = options.source ?? "";
         return (await askThatReturns("ok")())!;
@@ -93,6 +100,7 @@ describe("registering the ask tool", () => {
     const seen: unknown[] = [];
     registerEchoAskTool(host, {
       source: "omp",
+      ensureConsent: consentGranted,
       resolveVoice: (ctx) => {
         seen.push(ctx);
         return { voiceId: "pi", title: "Echo" };
@@ -111,6 +119,7 @@ describe("registering the ask tool", () => {
     let received: AbortSignal | undefined;
     registerEchoAskTool(host, {
       source: "pi",
+      ensureConsent: consentGranted,
       ask: async (options) => {
         received = options.signal;
         return (await askThatReturns("ok")())!;
@@ -124,9 +133,25 @@ describe("registering the ask tool", () => {
 });
 
 describe("tool outcomes", () => {
+  test("refuses before capture when no live session consent grant exists", async () => {
+    let asked = 0;
+    const outcome = await runAskTool({ question: "Ready?" }, {
+      source: "pi",
+      ask: async () => {
+        asked++;
+        return (await askThatReturns("never")())!;
+      },
+    });
+
+    expect(outcome.isError).toBe(true);
+    expect(outcome.details.error).toBe("session_consent_required");
+    expect(asked).toBe(0);
+  });
+
   test("a failed turn is tool text, not a thrown host error", async () => {
     const outcome = await runAskTool({ question: "Ready?" }, {
       source: "pi",
+      ensureConsent: consentGranted,
       ask: async () => {
         throw new AskError("no_speech", "the recording contained no speech");
       },
@@ -140,6 +165,7 @@ describe("tool outcomes", () => {
   test("a busy microphone tells the model to try again rather than failing silently", async () => {
     const outcome = await runAskTool({ question: "Ready?" }, {
       source: "pi",
+      ensureConsent: consentGranted,
       ask: async () => {
         throw new AskError("microphone_busy", "another turn holds the microphone");
       },
@@ -155,6 +181,7 @@ describe("tool outcomes", () => {
       let asked = 0;
       const outcome = await runAskTool(params, {
         source: "pi",
+        ensureConsent: consentGranted,
         ask: async () => {
           asked++;
           return (await askThatReturns("never")())!;
@@ -170,6 +197,7 @@ describe("tool outcomes", () => {
     let spoken = "";
     await runAskTool({ question: "  Ready to ship?  " }, {
       source: "pi",
+      ensureConsent: consentGranted,
       ask: async (options) => {
         spoken = options.question;
         return (await askThatReturns("yes")())!;

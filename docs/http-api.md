@@ -60,7 +60,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_settings` | - | Pass-through override, see below |
 | `session_id`, `source` | - | Echoed into the daemon log for correlation |
 | `visual_delivery` | - | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence - see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner - raw HTTP callers are unaffected |
-| `capture_reservation` | - | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms`. It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
+| `capture_reservation` | - | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms` (at most 300000, five minutes - a completed reservation holds every later voice line, so the daemon rejects a lease that could silence it indefinitely). It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
 ### Native terminal visual delivery
 

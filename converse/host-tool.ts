@@ -10,6 +10,7 @@
 // and the adapters dependency-free.
 
 import { askOnce, AskError, type AskOptions, type AskResult } from "./client.ts";
+import type { SessionConsentDecision } from "./session-consent.ts";
 
 export const ECHO_ASK_TOOL_NAME = "echo_ask";
 
@@ -50,13 +51,17 @@ export interface AskToolOptions {
   voiceId?: string;
   title?: string;
   signal?: AbortSignal;
+  /** Must return granted before this call may reach the microphone. */
+  ensureConsent?: () => Promise<SessionConsentDecision>;
   /** Injected in tests; the real one runs a full turn. */
   ask?: (options: AskOptions) => Promise<AskResult>;
 }
 
 /** The one host capability this needs. Optional, because older runtimes lack it. */
 export interface ToolRegisteringHost {
-  registerTool?: (definition: Record<string, unknown>) => void;
+  // Host SDKs expose incompatible generic ToolDefinition signatures. Registration
+  // is feature-detected, then narrowed to the shared JSON definition below.
+  registerTool?: unknown;
 }
 
 export interface AskToolHostOptions {
@@ -67,6 +72,8 @@ export interface AskToolHostOptions {
    * the call arrives.
    */
   resolveVoice?: (ctx: unknown) => { voiceId?: string; title?: string };
+  /** Resolve or request the one consent decision for this live host session. */
+  ensureConsent?: (ctx: unknown, signal?: AbortSignal) => Promise<SessionConsentDecision>;
   ask?: AskToolOptions["ask"];
 }
 
@@ -80,14 +87,15 @@ export interface AskToolHostOptions {
  */
 export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolHostOptions): boolean {
   if (typeof host.registerTool !== "function") return false;
+  const registerTool = host.registerTool as (definition: Record<string, unknown>) => void;
 
-  host.registerTool({
+  registerTool({
     name: ECHO_ASK_TOOL_NAME,
     label: ECHO_ASK_TOOL_LABEL,
     description: ECHO_ASK_TOOL_DESCRIPTION,
     parameters: ECHO_ASK_PARAMETERS,
-    // Read-tier: the turn mutates nothing, and an approval prompt in front of a
-    // spoken question would defeat the point of asking out loud.
+    // Keep the host's generic tool gate read-tier so it does not prompt on every
+    // call. Echo performs its own informed microphone prompt once per session.
     approval: "read",
     // Argument order per the extension tool wrapper, which passes
     // (toolCallId, params, signal, onUpdate, ctx). The file-based CustomTool API
@@ -100,11 +108,15 @@ export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolH
       ctx: unknown,
     ) => {
       const voice = options.resolveVoice?.(ctx) ?? {};
+      const ensureConsent = options.ensureConsent;
       const outcome = await runAskTool(params, {
         source: options.source,
         voiceId: voice.voiceId,
         title: voice.title,
         signal,
+        ensureConsent: ensureConsent
+          ? () => ensureConsent(ctx, signal)
+          : undefined,
         ask: options.ask,
       });
       return {
@@ -137,6 +149,18 @@ export async function runAskTool(params: unknown, options: AskToolOptions): Prom
       text: "echo_ask needs a non-empty `question` string.",
       isError: true,
       details: { error: "invalid_request" },
+    };
+  }
+
+  const consent = await options.ensureConsent?.() ?? "unavailable";
+  if (consent !== "granted") {
+    const denied = consent === "denied";
+    return {
+      text: denied
+        ? "echo_ask did not open the microphone because consent was denied for this host session."
+        : "echo_ask cannot open the microphone without consent from a live host session.",
+      isError: true,
+      details: { error: denied ? "session_consent_denied" : "session_consent_required" },
     };
   }
 

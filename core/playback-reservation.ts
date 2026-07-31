@@ -24,6 +24,7 @@ interface PlaybackRecord extends PlaybackStatus {
   owner_pid?: number;
   lease_ms?: number;
   released?: boolean;
+  stale_at: number;
 }
 
 interface CaptureReservation {
@@ -43,7 +44,17 @@ export interface CaptureReleaseResult {
   matched: boolean;
 }
 
+/**
+ * Largest lease /notify accepts. A reservation holds every later voice line
+ * once its playback completes, so an unbounded caller-chosen lease would let
+ * one unauthenticated localhost POST silence the daemon indefinitely. Five
+ * minutes sits comfortably above the coordinator's default ~120s capture and
+ * transcription budget while bounding how long a hostile lease can mute Echo.
+ */
+export const MAX_CAPTURE_LEASE_MS = 5 * 60 * 1_000;
+
 const PREACCEPT_RELEASE_TTL_MS = 24 * 60 * 60 * 1_000;
+const STALE_PLAYBACK_TTL_MS = 15 * 60 * 1_000;
 const playback = new Map<string, PlaybackRecord>();
 const releasedBeforeAcceptance = new Map<string, number>();
 let activeReservation: CaptureReservation | null = null;
@@ -71,12 +82,27 @@ function reapExpiredReservation(): void {
   }
 }
 
+/**
+ * Drop records a crashed coordinator never released. A record parked in any
+ * state without a release call would otherwise live for the daemon's lifetime;
+ * the active reservation is exempt because its own lease already reaps it.
+ */
+function pruneStalePlayback(now: number = Date.now()): void {
+  for (const [requestId, record] of playback) {
+    if (record.stale_at > now) continue;
+    if (activeReservation?.request_id === requestId) continue;
+    playback.delete(requestId);
+  }
+}
+
 export function trackPlayback(requestId: string, reservation?: CaptureReservationRequest): void {
   pruneReleaseTombstones();
+  pruneStalePlayback();
   const released = reservation !== undefined && releasedBeforeAcceptance.delete(reservation.reservation_id);
   playback.set(requestId, {
     request_id: requestId,
     state: "queued",
+    stale_at: Date.now() + STALE_PLAYBACK_TTL_MS,
     ...(reservation && !released && {
       reservation_id: reservation.reservation_id,
       owner_pid: reservation.owner_pid,
@@ -88,7 +114,9 @@ export function trackPlayback(requestId: string, reservation?: CaptureReservatio
 
 export function markPlaybackPlaying(requestId: string): void {
   const record = playback.get(requestId);
-  if (record) record.state = "playing";
+  if (!record) return;
+  record.state = "playing";
+  record.stale_at = Date.now() + STALE_PLAYBACK_TTL_MS;
 }
 
 export function markPlaybackFailed(requestId: string, detail: string): void {
@@ -100,6 +128,7 @@ export function markPlaybackFailed(requestId: string, detail: string): void {
   }
   record.state = "failed";
   record.detail = detail;
+  record.stale_at = Date.now() + STALE_PLAYBACK_TTL_MS;
 }
 
 /** Mark successful playback complete and block later speech before capture can start. */
@@ -116,6 +145,7 @@ export function markPlaybackCompleted(requestId: string, played: boolean, detail
   }
 
   record.state = "completed";
+  record.stale_at = Date.now() + STALE_PLAYBACK_TTL_MS;
   if (
     record.reservation_id !== undefined &&
     record.owner_pid !== undefined &&
@@ -136,6 +166,7 @@ export function markPlaybackCompleted(requestId: string, played: boolean, detail
 
 export function readPlaybackStatus(requestId: string): PlaybackStatus | null {
   reapExpiredReservation();
+  pruneStalePlayback();
   const record = playback.get(requestId);
   if (!record) return null;
   const {
@@ -143,6 +174,7 @@ export function readPlaybackStatus(requestId: string): PlaybackStatus | null {
     owner_pid: _ownerPid,
     lease_ms: _leaseMs,
     released: _released,
+    stale_at: _staleAt,
     ...status
   } = record;
   return { ...status };

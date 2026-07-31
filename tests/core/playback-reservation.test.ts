@@ -4,6 +4,7 @@ import {
   captureReservationView,
   grantCaptureReservation,
   markPlaybackCompleted,
+  markPlaybackFailed,
   markPlaybackPlaying,
   readPlaybackStatus,
   releaseCaptureReservationById,
@@ -30,6 +31,21 @@ describe("core playback completion reservation", () => {
 
     expect(releaseCaptureReservationById(reservationId)).toEqual({ acknowledged: true, matched: true });
     expect(captureReservationHeld()).toBe(false);
+  });
+
+  test("cannot grant capture while the question is still playing", () => {
+    const requestId = `request-${crypto.randomUUID()}`;
+    const reservationId = `reservation-${crypto.randomUUID()}`;
+    trackPlayback(requestId, { reservation_id: reservationId, owner_pid: process.pid, lease_ms: 60_000 });
+    markPlaybackPlaying(requestId);
+
+    expect(grantCaptureReservation(reservationId)).toEqual({ granted: false, reason: "not_ready" });
+    expect(captureReservationHeld()).toBe(false);
+
+    markPlaybackCompleted(requestId, true);
+    expect(grantCaptureReservation(reservationId).granted).toBe(true);
+    expect(captureReservationHeld()).toBe(true);
+    releaseCaptureReservationById(reservationId);
   });
 
   test("starts the protected lease at the explicit capture grant", () => {
@@ -65,6 +81,26 @@ describe("core playback completion reservation", () => {
 
     expect(releaseCaptureReservationById(reservationId)).toEqual({ acknowledged: true, matched: true });
     expect(captureReservationHeld()).toBe(false);
+  });
+
+  test("prunes records a crashed coordinator never released", () => {
+    const originalNow = Date.now;
+    let now = 1_700_000_000_000;
+    Date.now = () => now;
+    const requestId = `request-${crypto.randomUUID()}`;
+    const reservationId = `reservation-${crypto.randomUUID()}`;
+
+    try {
+      trackPlayback(requestId, { reservation_id: reservationId, owner_pid: process.pid, lease_ms: 60_000 });
+      markPlaybackFailed(requestId, "playback error");
+      expect(readPlaybackStatus(requestId)?.state).toBe("failed");
+
+      now += 15 * 60 * 1_000 + 1;
+      expect(readPlaybackStatus(requestId)).toBeNull();
+    } finally {
+      releaseCaptureReservationById(reservationId);
+      Date.now = originalNow;
+    }
   });
 
   test("a release that races ahead of notify acceptance prevents later activation", () => {

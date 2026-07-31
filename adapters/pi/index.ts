@@ -14,6 +14,7 @@ import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voic
 import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
+import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -62,7 +63,30 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
   return undefined;
 }
 
-/** Instruction that makes Pi's model emit the PAI-style trailing voice line. */
+/**
+ * One informed microphone-consent prompt for this Pi session's echo_ask calls.
+ *
+ * No UI means no consent surface: the human never saw a prompt, so the call is
+ * "unavailable" (retryable) rather than a sticky denial. The same holds for a
+ * cancellation that lands before the prompt is presented. An explicit decline
+ * or an abort while the prompt is up is a human signal and stays sticky.
+ */
+async function promptForAskConsent(ctx: ExtensionContext, signal?: AbortSignal): Promise<SessionConsentDecision> {
+  if (ctx.hasUI !== true) return "unavailable";
+  if (signal?.aborted) return "unavailable";
+  try {
+    const allowed = await ctx.ui.confirm(
+      "Allow Echo voice replies for this Pi session?",
+      "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
+        "You will not be prompted again until this session ends.",
+      signal ? { signal } : undefined,
+    );
+    return allowed ? "granted" : "denied";
+  } catch {
+    return signal?.aborted ? "denied" : "unavailable";
+  }
+}
+
 function buildVoiceLineInstruction(personaName: string): string {
   return [
     "## Spoken completion (required)",
@@ -78,6 +102,7 @@ export default function atlasVoicePiAdapter(
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
+  const askConsent = new SessionConsent();
 
   // Per-project config: layer a persona override from Pi's native settings.json
   // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key -
@@ -150,7 +175,11 @@ export default function atlasVoicePiAdapter(
   // Inject the 🗣️ convention into Pi's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
-  pi.on("before_agent_start", (event, ctx) => {
+  const onBeforeAgentStart = pi.on as unknown as (
+    event: "before_agent_start",
+    handler: (event: unknown, ctx: ExtensionContext) => unknown,
+  ) => void;
+  onBeforeAgentStart("before_agent_start", (event, ctx) => {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.speakCompletions) return undefined;
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
@@ -176,6 +205,7 @@ export default function atlasVoicePiAdapter(
   });
 
   pi.on("session_start", async (event, ctx) => {
+    askConsent.begin(resolveSessionId(ctx));
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
@@ -191,6 +221,7 @@ export default function atlasVoicePiAdapter(
   });
 
   pi.on("session_shutdown", () => {
+    askConsent.end();
     spoken.clear();
     pending.clear();
   });
@@ -212,7 +243,7 @@ export default function atlasVoicePiAdapter(
     },
   });
 
-  // `echo_ask` - the model-invokable two-way turn: speak a question, capture the
+  // `echo_ask` - the model-invocable two-way turn: speak a question, capture the
   // spoken reply, return the transcript. A tool, not a command: a command is
   // human-initiated, and this has to be something the model itself can decide to
   // call mid-turn. The capture child is spawned from THIS process, which is what
@@ -220,6 +251,10 @@ export default function atlasVoicePiAdapter(
   // to a background service (docs/converse.md).
   registerEchoAskTool(pi, {
     source: "pi",
+    ensureConsent: (ctx, signal) => {
+      const extensionContext = ctx as ExtensionContext;
+      return askConsent.ensure(resolveSessionId(extensionContext), () => promptForAskConsent(extensionContext, signal));
+    },
     resolveVoice: (ctx) => {
       const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
       return { voiceId: cfg.voiceId, title: cfg.title };

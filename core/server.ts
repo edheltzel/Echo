@@ -36,6 +36,7 @@ import {
   markPlaybackCompleted,
   markPlaybackFailed,
   markPlaybackPlaying,
+  MAX_CAPTURE_LEASE_MS,
   readPlaybackStatus,
   releaseCaptureReservationById,
   trackPlayback,
@@ -1872,6 +1873,9 @@ export const server = serve({
           typeof captureReservation.lease_ms !== "number" || !Number.isFinite(captureReservation.lease_ms) || captureReservation.lease_ms <= 0
         )) {
           throw new Error("Invalid capture_reservation");
+        }
+        if (captureReservation !== undefined && captureReservation.lease_ms > MAX_CAPTURE_LEASE_MS) {
+          throw new Error(`Invalid capture_reservation: lease_ms exceeds the ${MAX_CAPTURE_LEASE_MS}ms maximum`);
         }
 
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
