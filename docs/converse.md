@@ -237,5 +237,5 @@ capture subprocess handling, the adapters' tool registration and the MCP wire pr
 - [adapters.md](adapters.md) - adapter boundary and the reconcile-and-prune registration contract
 - [http-api.md](http-api.md) - core's `/notify` and `/health`, which converse consumes
 - [../ARCHITECTURE.md](../ARCHITECTURE.md) - where this sits in the tree
-- [plans/2026-07-13-voiceask-scoping.md](plans/2026-07-13-voiceask-scoping.md) - the validated
+- [plans/archive/2026-07-13-voiceask-scoping.md](plans/archive/2026-07-13-voiceask-scoping.md) - the validated
   scoping this was built from. Its provisional `:8890` is superseded by `32468`.

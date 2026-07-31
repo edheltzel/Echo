@@ -3,7 +3,7 @@
 **From:** Themis (session ef7ee340) · **To:** next Themis instance
 **Repo:** `/Users/ed/Developer/atlasEcho` · **Branch:** `dev` @ v0.5.0 released
 **Reads first:** `AGENTS.md`, `ARCHITECTURE.md`, this file, then
-`docs/plans/2026-07-13-voiceask-scoping.md` (the validated scoping) and its three
+`docs/plans/archive/2026-07-13-voiceask-scoping.md` (the validated scoping) and its three
 source reports + two RedTeam verdicts in `docs/plans/support/voiceask-scoping/`.
 
 ---

@@ -1,9 +1,9 @@
 # voice_ask for Echo — Scoping Synthesis (Themis)
 
 **Date:** 2026-07-13 · **Status:** VALIDATED — all RedTeam verdicts in (see
-`support/voiceask-scoping/redteam-stack-verdicts.md` and
-`support/voiceask-scoping/redteam-pi-sdk-verdicts.md`); awaiting Ed's build decisions
-**Sources:** three explorer reports in `support/voiceask-scoping/`
+`../support/voiceask-scoping/redteam-stack-verdicts.md` and
+`../support/voiceask-scoping/redteam-pi-sdk-verdicts.md`); awaiting Ed's build decisions
+**Sources:** three explorer reports in `../support/voiceask-scoping/`
 (`vl-anatomy.md` — VL codegraph-grounded · `ts-portability.md` — cross-vendor bridge ·
 `echo-integration.md` — Echo codegraph-grounded) + RedTeam verdict files (same directory).
 
