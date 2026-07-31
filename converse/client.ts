@@ -124,7 +124,7 @@ export function spawnCoordinator(config: ConverseConfig): void {
     throw new AskError(
       "coordinator_unavailable",
       `cannot start the coordinator: no entry at ${main}. Start it once with ` +
-        "`bun converse/main.ts`, or set ECHO_CONVERSE_MAIN to that file.",
+        "`bun converse/main.ts`; ECHO_CONVERSE_MAIN is reserved for test/development path injection.",
     );
   }
   // Never inherit these streams: MCP uses stdout for JSON-RPC. The default
@@ -136,7 +136,6 @@ export function spawnCoordinator(config: ConverseConfig): void {
       stdin: "ignore",
       stdout: logFd ?? "ignore",
       stderr: logFd ?? "ignore",
-      env: { ...process.env, ECHO_CONVERSE_PORT: String(config.port) },
     });
     child.unref();
   } finally {

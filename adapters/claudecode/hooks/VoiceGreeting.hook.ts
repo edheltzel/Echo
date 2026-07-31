@@ -7,7 +7,7 @@
  * Runs as an async hook so it doesn't block session startup.
  *
  * For named subagents (Intern, Engineer, etc.), announces with THAT agent's
- * voice settings instead of Atlas's — giving each agent a distinct audio identity.
+ * voice settings instead of Atlas's - giving each agent a distinct audio identity.
  *
  * TRIGGER: SessionStart (async: true)
  *
@@ -18,7 +18,7 @@
  * 1. CLAUDE_CODE_AGENT_TASK_ID is set → skip (Task tool subagents)
  * 2. CLAUDE_AGENT_TYPE === "loop-worker" → skip (algorithm.ts workers)
  * 3. CLAUDE_PROJECT_DIR contains /.claude/Agents/ → skip
- * 4. Source check via stdin JSON — ONLY greet when source="startup" is confirmed.
+ * 4. Source check via stdin JSON - ONLY greet when source="startup" is confirmed.
  *    If stdin parsing fails (source="unknown"), we do NOT greet (safe default).
  * 5. CLAUDE_AGENT_TYPE is a named agent (Intern, Engineer, etc.) → agent voice
  *
@@ -33,10 +33,12 @@ import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 import { resolveStartupCatchphrase } from './lib/greeting';
 import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
+import { loadEchoConfiguration } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { createHookNativeVisualContext } from './lib/native-terminal';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
+const ECHO_CONFIG = loadEchoConfiguration();
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
 // in ~tens of ms. A short guard is enough to avoid hanging if the daemon is down;
 // it no longer needs to cover synthesis + playback (that was the old 12 s wait
@@ -107,7 +109,7 @@ const isNamedAgent = agentType != null && NAMED_AGENT_TYPES.includes(agentType);
 // ── Layer 4: Source check (confirmed startup only) ───────────────────────────
 // Claude Code passes { source } in stdin JSON. Only greet when source is
 // confirmed as "startup". If stdin parsing fails (async hook timeout),
-// source stays "unknown" and we skip — false silence beats duplicate greetings.
+// source stays "unknown" and we skip - false silence beats duplicate greetings.
 let hookSource = 'unknown';
 let hookSessionId: string | undefined;
 try {
@@ -127,16 +129,16 @@ try {
     hookSessionId = input.session_id || input.sessionId || undefined;
   }
 } catch {
-  // stdin parse failed — expected for async hooks
+  // stdin parse failed - expected for async hooks
 }
 
 hookLog('VoiceGreeting', 'SessionStart', `source="${hookSource}"`, { pid: process.pid });
 console.error(`[VoiceGreeting] source="${hookSource}", pid=${process.pid}`);
 
-// Only greet on confirmed startup — never on unknown source.
+// Only greet on confirmed startup - never on unknown source.
 // The settings.json matcher already filters to "startup" events, but async hooks
 // may fail to parse stdin (1s timeout), leaving source as "unknown". In that case,
-// we DON'T greet — false silence is better than duplicate greetings.
+// we DON'T greet - false silence is better than duplicate greetings.
 if (hookSource !== 'startup') {
   hookLog('VoiceGreeting', 'SessionStart', `skip: source="${hookSource}" (not startup)`);
   console.error(`[VoiceGreeting] skip: source="${hookSource}" (only greeting on confirmed startup)`);
@@ -183,7 +185,7 @@ function parseAgentFrontmatter(content: string): AgentFrontmatter {
 
     if (indent === 0) {
       if (val) {
-        // Simple scalar — strip surrounding quotes
+        // Simple scalar - strip surrounding quotes
         result[key] = val.replace(/^["']|["']$/g, '');
         currentKey = '';
         currentObj = null;
@@ -251,7 +253,7 @@ if (isNamedAgent && agentType) {
 
     console.error(`[VoiceGreeting] speaking: "${message}" (agent: ${agentType})`);
     const t0 = Date.now();
-    const resp = await postNotification(resolveNotifyUrl(process.env), body, hookSessionId);
+    const resp = await postNotification(resolveNotifyUrl(ECHO_CONFIG), body, hookSessionId);
     console.error(`[VoiceGreeting] fetch_ok: ${resp.status} in ${Date.now() - t0}ms`);
   } catch (err) {
     console.error(`[VoiceGreeting] agent_voice_fail: ${err}`);
@@ -272,8 +274,8 @@ try {
   const personality = identity.personality;
 
   const url = personality?.baseVoice
-    ? resolvePersonalityUrl(process.env)
-    : resolveNotifyUrl(process.env);
+    ? resolvePersonalityUrl(ECHO_CONFIG)
+    : resolveNotifyUrl(ECHO_CONFIG);
 
   const body: Record<string, unknown> = personality?.baseVoice
     ? {

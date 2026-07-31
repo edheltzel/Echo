@@ -1,7 +1,7 @@
 // Configuration for the echo-converse capability.
 //
-// Resolution goes through @echo/shared's read-only resolver: live process values
-// win, then ~/.config/echo/config.json, then a legacy dotenv file. Nothing here
+// Resolution goes through @echo/shared's read-only resolver: config.json wins,
+// followed by deprecated process values and legacy dotenv files. Nothing here
 // writes process.env - converse is loaded inside long-lived host processes (a Pi
 // extension, an MCP server), where hydrating the environment would leak the
 // operator's identity into whatever else that process runs.

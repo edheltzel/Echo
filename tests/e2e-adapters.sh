@@ -5,7 +5,7 @@
 # `core/server.ts` on its own port with every state path redirected into a
 # scratch directory, asserts the instance it is about to talk to is the one it
 # started, and kills only that PID. It refuses to run if anything is already
-# listening on the chosen port — it will not attach to a daemon it does not own.
+# listening on the chosen port - it will not attach to a daemon it does not own.
 #
 #   tests/e2e-adapters.sh              # silent (default; safe anywhere)
 #   tests/e2e-adapters.sh --audible    # also speaks the test opener out loud
@@ -41,6 +41,7 @@ fi
 
 SCRATCH="$(mktemp -d)"
 LOG="${SCRATCH}/daemon.log"
+export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 
 # Every piece of daemon state redirected into scratch, so the test instance can
 # neither read nor rewrite the operator's real mute state, capture state, audio
@@ -55,10 +56,25 @@ cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
 
 # Adapters address the daemon through this base, so both hosts under test point
-# at the isolated instance rather than the default :3246.
+# at the isolated instance rather than the default :3246. Exported canonical
+# values are inline test-script plumbing; runtime configuration comes from this
+# scratch file and cannot be overridden by the operator's config.
 export ECHO_DAEMON_URL="http://localhost:${PORT}"
+cat >"$ECHO_CONFIG_FILE" <<JSON
+{
+  "PORT": $PORT,
+  "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
+  "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
+  "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
+  "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",
+  "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",
+  "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
+  "VOICES_PATH": "$VOICES_PATH",
+  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL"
+}
+JSON
 
-PORT="$PORT" bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
+bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
   kill "$PID" >/dev/null 2>&1 || true
@@ -75,7 +91,7 @@ done
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Isolation proof — run BEFORE anything is sent, audible or not.
+# Isolation proof - run BEFORE anything is sent, audible or not.
 # ---------------------------------------------------------------------------
 health="$(curl -fsS "http://localhost:${PORT}/health")" || fail "test daemon never came up (see $LOG)"
 reported_port="$(echo "$health" | bun -e 'const d=JSON.parse(await Bun.stdin.text()); console.log(d.port)')"
@@ -136,7 +152,7 @@ bun -e '
 ' || fail "Pi adapter could not notify the isolated daemon"
 
 # ---------------------------------------------------------------------------
-# 4. Optional audible pass — only after isolation is proven above.
+# 4. Optional audible pass - only after isolation is proven above.
 # ---------------------------------------------------------------------------
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""

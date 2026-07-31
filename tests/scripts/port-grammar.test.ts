@@ -100,6 +100,30 @@ describe("config.json PORT grammar - the daemon and the shell readers agree", ()
     }
   });
 
+  test("ECHO_CONFIG_FILE redirects the shell reader for isolated tests", async () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-port-selector-home-"));
+    const scratch = mkdtempSync(join(tmpdir(), "echo-port-selector-config-"));
+    const configFile = join(scratch, "config.json");
+    try {
+      writeFileSync(configFile, '{"PORT": 3458}');
+      const proc = Bun.spawn(["/bin/bash", "-c", '. scripts/echo-port.sh; echo "$ECHO_PORT"'], {
+        env: { HOME: home, PATH: process.env.PATH ?? "", ECHO_CONFIG_FILE: configFile },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exit, stdout] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+      ]);
+
+      expect(exit).toBe(0);
+      expect(stdout.trim()).toBe("3458");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   test("config.json wins over deprecated PORT and the shell warns", async () => {
     const home = mkdtempSync(join(tmpdir(), "echo-port-precedence-"));
     try {

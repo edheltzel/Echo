@@ -58,6 +58,7 @@ done
 SCRATCH="$(mktemp -d)"
 CORE_LOG="${SCRATCH}/core.log"
 CONVERSE_LOG="${SCRATCH}/converse.log"
+export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 
 # Every piece of daemon state redirected into scratch, so neither test process
 # can read or rewrite the operator's real mute state, capture state, caches,
@@ -127,9 +128,35 @@ exit 0
 SAY
   chmod +x "${SCRATCH}/fake-say"
   export ECHO_SAY_BIN="${SCRATCH}/fake-say"
+else
+  export ECHO_SAY_BIN="/usr/bin/say"
 fi
 
-PORT="$PORT" bun run "$ROOT/core/server.ts" >"$CORE_LOG" 2>&1 &
+# Exported canonical values above are test-script plumbing for inline assertions.
+# Both runtime processes read the same scratch config, never the operator's file.
+cat >"$ECHO_CONFIG_FILE" <<JSON
+{
+  "PORT": $PORT,
+  "VOICES_PATH": "$VOICES_PATH",
+  "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
+  "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
+  "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
+  "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",
+  "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",
+  "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
+  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL",
+  "ECHO_SAY_BIN": "$ECHO_SAY_BIN",
+  "ECHO_CONVERSE_PORT": $ECHO_CONVERSE_PORT,
+  "ECHO_CONVERSE_URL": "$ECHO_CONVERSE_URL",
+  "ECHO_CONVERSE_BOOKING_LOCK": "$ECHO_CONVERSE_BOOKING_LOCK",
+  "ECHO_CONVERSE_CAPTURE_DIR": "$ECHO_CONVERSE_CAPTURE_DIR",
+  "ECHO_CONVERSE_MAX_CAPTURE_MS": $ECHO_CONVERSE_MAX_CAPTURE_MS,
+  "ECHO_CONVERSE_REC_BIN": "$ECHO_CONVERSE_REC_BIN",
+  "ECHO_CONVERSE_YAP_BIN": "$ECHO_CONVERSE_YAP_BIN"
+}
+JSON
+
+bun run "$ROOT/core/server.ts" >"$CORE_LOG" 2>&1 &
 CORE_PID=$!
 bun run "$ROOT/converse/main.ts" >"$CONVERSE_LOG" 2>&1 &
 CONVERSE_PID=$!
@@ -202,7 +229,7 @@ bun -e '
   const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
   const capturePath = process.env.ECHO_CAPTURE_STATE_PATH;
 
-  const config = resolveConverseConfig(process.env);
+  const config = resolveConverseConfig();
   const seenDuringCapture = [];
 
   const result = await askOnce(
@@ -256,7 +283,7 @@ echo "$after" | bun -e '
 # ---------------------------------------------------------------------------
 bun -e '
   const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
-  const config = resolveConverseConfig(process.env);
+  const config = resolveConverseConfig();
   const requiredLeaseMs = config.maxCaptureMs + config.transcribeTimeoutMs;
   const body = (question) => JSON.stringify({
     question, owner_pid: process.pid, source: "e2e-converse", lease_ms: requiredLeaseMs,
@@ -302,7 +329,7 @@ bun -e '
 bun -e '
   const { writeFileSync } = await import("node:fs");
   const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
-  const config = resolveConverseConfig(process.env);
+  const config = resolveConverseConfig();
 
   // A crashed ask: a live-looking lease owned by a pid that no longer exists.
   writeFileSync(config.bookingLockPath, JSON.stringify({

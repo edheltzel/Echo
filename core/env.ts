@@ -29,9 +29,9 @@ export function parseBoundedInt(
 // files; see shared/echo-env.ts.
 //
 // IMPORT-PURITY CONTRACT: resolving config must NEVER write to process.env.
-// Host adapters (and their tests) read identity config (ECHO_VOICE_*) from
-// process.env; the daemon historically hydrated process.env from the files at
-// module load, which leaked the operator's identity (e.g. a configured
+// Host adapters resolve identity config (ECHO_VOICE_*) through the shared
+// loader; the daemon historically hydrated process.env from files at module
+// load, which leaked the operator's identity (e.g. a configured
 // persona name) into any same-process adapter code loaded later - adapter
 // persona tests then saw the operator's name instead of their default, an
 // AGENTS.md #47 class file-order hazard. Core code therefore reads config

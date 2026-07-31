@@ -28,7 +28,7 @@
 # every side too - it means an ephemeral bind, which no CLI can address, and it
 # reaches the daemon only as a live process value in tests.
 config_port() {
-  local config_path="$HOME/.config/echo/config.json" port
+  local config_path="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}" port
   [ -f "$config_path" ] || return 0
   port="$(sed -nE 's/.*"PORT"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$config_path" | head -1)"
   if [ -z "$port" ]; then
@@ -43,7 +43,7 @@ config_port() {
 
 ECHO_PORT="$(config_port)"
 if [ -n "${PORT:-}" ]; then
-  echo "WARNING: PORT environment configuration is deprecated; move it to $HOME/.config/echo/config.json. config.json takes precedence." >&2
+  echo "WARNING: PORT environment configuration is deprecated; move it to ${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}. config.json takes precedence." >&2
   ECHO_PORT="${ECHO_PORT:-$PORT}"
 fi
 ECHO_PORT="${ECHO_PORT:-3246}"
