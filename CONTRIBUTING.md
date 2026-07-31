@@ -11,6 +11,9 @@
 - Prefer `import` syntax; do not add CommonJS `require`.
 - Keep universal code under `core/` host-neutral.
 - Do not add Python code under `core/`; Python is only an out-of-process provider dependency for edge-tts.
+- Use a plain dash (`-`), never an em dash, in code, comments, strings, and docs. Where the
+  characters themselves matter (e.g. the separator-stripping regex in `shared/voice-line.ts`),
+  write them as unicode escapes. The generated `CHANGELOG.md` is exempt.
 
 ## Commit Format
 
