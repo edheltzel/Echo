@@ -33,10 +33,12 @@ import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 import { resolveStartupCatchphrase } from './lib/greeting';
 import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
+import { loadEchoConfiguration } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { createHookNativeVisualContext } from './lib/native-terminal';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
+const ECHO_CONFIG = loadEchoConfiguration();
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
 // in ~tens of ms. A short guard is enough to avoid hanging if the daemon is down;
 // it no longer needs to cover synthesis + playback (that was the old 12 s wait
@@ -251,7 +253,7 @@ if (isNamedAgent && agentType) {
 
     console.error(`[VoiceGreeting] speaking: "${message}" (agent: ${agentType})`);
     const t0 = Date.now();
-    const resp = await postNotification(resolveNotifyUrl(process.env), body, hookSessionId);
+    const resp = await postNotification(resolveNotifyUrl(ECHO_CONFIG), body, hookSessionId);
     console.error(`[VoiceGreeting] fetch_ok: ${resp.status} in ${Date.now() - t0}ms`);
   } catch (err) {
     console.error(`[VoiceGreeting] agent_voice_fail: ${err}`);
@@ -272,8 +274,8 @@ try {
   const personality = identity.personality;
 
   const url = personality?.baseVoice
-    ? resolvePersonalityUrl(process.env)
-    : resolveNotifyUrl(process.env);
+    ? resolvePersonalityUrl(ECHO_CONFIG)
+    : resolveNotifyUrl(ECHO_CONFIG);
 
   const body: Record<string, unknown> = personality?.baseVoice
     ? {

@@ -52,6 +52,10 @@
     "ECHO_DAEMON_URL": { "type": "string" },
     "ECHO_NOTIFY_URL": { "type": "string" },
     "ECHO_VOICE_SURFACES": { "type": "string" },
+    "ECHO_PYTHON3_PATH": {
+      "type": "string",
+      "description": "Python interpreter used by scripts/preview-voices.ts. Defaults to /opt/homebrew/bin/python3."
+    },
     "ECHO_SAY_BIN": {
       "type": "string",
       "description": "Executable the macOS say fallback provider spawns. Defaults to /usr/bin/say."

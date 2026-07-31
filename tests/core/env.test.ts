@@ -207,7 +207,12 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
         "ECHO_DEFAULT_TITLE=Legacy file\nELEVENLABS_API_KEY=file-secret\n",
       );
       const { env, config } = loadEchoConfigurationWithStatus(
-        { ATLAS_VOICE_ID: "legacy-alias", ECHO_VOICE_TITLE: "Live", ELEVENLABS_API_KEY: "live-secret" },
+        {
+          ATLAS_VOICE_ID: "legacy-alias",
+          ECHO_VOICE_TITLE: "Live",
+          ELEVENLABS_API_KEY: "live-secret",
+          PYTHON3_PATH: "/legacy/python3",
+        },
         home,
       );
 
@@ -215,13 +220,15 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
       expect(env.ECHO_VOICE_TITLE).toBe("Live");
       expect(env.ATLAS_VOICE_ID).toBe("legacy-alias");
       expect(env.ELEVENLABS_API_KEY).toBe("live-secret");
+      expect(env.PYTHON3_PATH).toBe("/legacy/python3");
       expect(config.deprecatedEnvironment).toEqual([
         "ATLAS_VOICE_ID",
         "ECHO_DEFAULT_TITLE",
         "ECHO_VOICE_TITLE",
+        "PYTHON3_PATH",
       ]);
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("ATLAS_VOICE_ID, ECHO_DEFAULT_TITLE, ECHO_VOICE_TITLE"),
+        expect.stringContaining("ATLAS_VOICE_ID, ECHO_DEFAULT_TITLE, ECHO_VOICE_TITLE, PYTHON3_PATH"),
       );
       expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("ELEVENLABS_API_KEY"));
     } finally {

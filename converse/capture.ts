@@ -257,7 +257,7 @@ export async function recordReply(
   requireBinary(
     config.recBin,
     "no_recorder",
-    "Install sox (`brew install sox`), which provides `rec`, or set ECHO_CONVERSE_REC_BIN.",
+    "Install sox (`brew install sox`), which provides `rec`, or configure ECHO_CONVERSE_REC_BIN in config.json.",
   );
 
   const startedAt = Date.now();
@@ -339,7 +339,7 @@ async function toWhisperInput(
   requireBinary(
     config.soxBin,
     "transcriber_failed",
-    "whisper needs 16kHz mono; install sox (`brew install sox`) or set ECHO_CONVERSE_SOX_BIN.",
+    "whisper needs 16kHz mono; install sox (`brew install sox`) or configure ECHO_CONVERSE_SOX_BIN in config.json.",
   );
 
   const converted = `${wavPath.replace(/\.wav$/, "")}.16k.wav`;
@@ -417,7 +417,7 @@ export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
     throw new CaptureError(
       "no_stt_tier",
       `no local transcriber available: install ${config.yapBin} (macOS 26 Tier 1) or ` +
-        `set ECHO_CONVERSE_WHISPER_MODEL for ${config.whisperBin} (Tier 2)`,
+        `configure ECHO_CONVERSE_WHISPER_MODEL in config.json for ${config.whisperBin} (Tier 2)`,
     );
   }
 

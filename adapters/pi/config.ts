@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 
 export interface PiVoiceConfig {
   endpoint: string;
@@ -45,10 +46,10 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-export function loadPiVoiceConfig(env: Record<string, string | undefined> = process.env): PiVoiceConfig {
-  // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* names remain
-  // as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
-  // environment variables"). The notify endpoint is resolved by @echo/shared, so
+export function loadPiVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): PiVoiceConfig {
+  // Canonical config.json values are read first; legacy ATLAS_VOICE_* process
+  // values remain deprecated fallbacks (see docs/configuration.md). The notify
+  // endpoint is resolved by @echo/shared, so
   // ECHO_DAEMON_URL retargets it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
@@ -167,7 +168,7 @@ export interface RunContext {
 
 export function shouldSuppressVoice(
   ctx: RunContext = {},
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = loadEchoConfiguration(),
 ): boolean {
   if (booleanEnv(env.ECHO_VOICE_SUPPRESS ?? env.ATLAS_VOICE_SUPPRESS, false)) return true;
   // Pi spawns subagents as a child `pi --mode json -p --no-session`. Those headless

@@ -16,7 +16,7 @@
  * Usage:
  *   bun scripts/precache-catchphrases.ts "Atlas, standing by" "Atlas online"
  *   bun scripts/precache-catchphrases.ts --settings ~/.claude/settings.json
- *   ECHO_NOTIFY_URL=http://localhost:3246/notify bun scripts/precache-catchphrases.ts ...
+ *   Set ECHO_NOTIFY_URL in ~/.config/echo/config.json, then run this script.
  */
 
 import { loadEchoConfiguration } from "../shared/echo-env.ts";
