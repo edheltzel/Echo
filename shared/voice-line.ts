@@ -59,7 +59,7 @@ export function extractVoiceLineFromText(text: string): string | null {
     // Single name token, mirroring PAI's parseFinalVoiceLine; lines without a
     // "<Name>:" prefix pass through unchanged.
     .replace(/^\*{0,2}[A-Za-z][A-Za-z0-9_-]*\*{0,2}[ \t]*:\*{0,2}[ \t]*/, "")
-    .replace(/^[:\-–—]\s*/, "")
+    .replace(/^[:\-–-]\s*/, "")
     .trim();
 
   return isValidVoiceLine(cleaned) ? cleaned : null;

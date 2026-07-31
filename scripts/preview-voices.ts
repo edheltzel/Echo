@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Audition the available English edge-tts voices so per-persona voice/rate
-// choices in core/voices.json can be made by ear. Dev tooling only — not on
+// choices in core/voices.json can be made by ear. Dev tooling only - not on
 // the runtime request path.
 //
 //   bun scripts/preview-voices.ts --list

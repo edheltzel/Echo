@@ -1,5 +1,5 @@
 #!/bin/bash
-# echo — block direct pushes to master.
+# echo - block direct pushes to master.
 # Master is protected on GitHub too (required_pull_request_reviews); this hook
 # catches the mistake before it leaves the laptop.
 protected_branch="master"

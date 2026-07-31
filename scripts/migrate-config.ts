@@ -5,11 +5,11 @@
 // PORT is in config.json by the time the CLI, the lifecycle scripts and the
 // daemon each resolve one. Non-destructive in both directions: a key already in
 // config.json is never overwritten, and the dotenv file is never edited or
-// removed — it stays the permanent home of ELEVENLABS_API_KEY, the one secret
+// removed - it stays the permanent home of ELEVENLABS_API_KEY, the one secret
 // config.json rejects.
 //
 // Idempotent: a second run finds every migratable key already present and
-// reports nothing. Never fails the install — an unusable config.json is
+// reports nothing. Never fails the install - an unusable config.json is
 // reported and left alone.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -39,7 +39,7 @@ for (const path of [
 ]) {
   const port = parseDotenvFile(path).PORT;
   if (port === undefined) continue;
-  console.log(`> PORT=${port} in ${path} is no longer honored — Echo reads PORT from config.json only.`);
+  console.log(`> PORT=${port} in ${path} is no longer honored - Echo reads PORT from config.json only.`);
   console.log(`  That file is not migrated automatically. Add "PORT": ${port} to ${configFile}`);
   console.log("  to keep it, or remove the line to accept the default 3246.");
 }
@@ -48,7 +48,7 @@ if (legacyPaths.length === 0) process.exit(0);
 
 // First file wins per key, matching the daemon's dotenv precedence. The winning
 // file is tracked per key so a report can name the file the value actually came
-// from — telling a user to keep the wrong one is how the secret gets deleted.
+// from - telling a user to keep the wrong one is how the secret gets deleted.
 const legacy: Record<string, { value: string; source: string }> = {};
 for (const path of legacyPaths) {
   for (const [key, value] of Object.entries(parseDotenvFile(path))) {
@@ -92,7 +92,7 @@ if (existing === null) skip("is not a JSON object");
 const config: Record<string, unknown> = existing ?? {};
 
 // Only canonical Echo keys move. That drops the retired VOICESYSTEM_* aliases,
-// the host-owned variables, and the secret — writing any of them would produce a
+// the host-owned variables, and the secret - writing any of them would produce a
 // config.json the daemon's own validation rejects.
 //
 // PORT is written trimmed: a dotenv `PORT=" 8888 "` keeps its padding through
@@ -144,10 +144,10 @@ console.log(`> Migrated ${migrated.length} setting(s) into ${configFile}: ${migr
 console.log(`  Source: ${legacyPaths.join(", ")} (left in place, unchanged)`);
 
 // Said at the one moment the user might otherwise "finish" the migration by
-// deleting the file the daemon still reads the key from — so it has to name the
+// deleting the file the daemon still reads the key from - so it has to name the
 // file that actually holds it, not just the first location searched.
 const secret = legacy[SECRET_KEY];
 if (secret !== undefined) {
-  console.log(`> ${SECRET_KEY} stays in ${secret.source} — it is a secret and config.json rejects it.`);
+  console.log(`> ${SECRET_KEY} stays in ${secret.source} - it is a secret and config.json rejects it.`);
   console.log("  Do not delete that file: it is where the daemon reads the key from.");
 }

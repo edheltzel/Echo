@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * VoiceCompletion.hook.ts — Send completion voice line to TTS server
+ * VoiceCompletion.hook.ts - Send completion voice line to TTS server
  *
  * PURPOSE:
  * Extracts the 🗣️ voice line from Claude's response and sends it to

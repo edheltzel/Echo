@@ -15,7 +15,7 @@ import {
 
 // Host-neutral core of the pi/omp `/echo-voice` command: validate an edge-tts
 // voice, parse args, and merge a `daidentity` persona into JSON/YAML config while
-// preserving every other key. The writer is STRICT — a present-but-unparseable
+// preserving every other key. The writer is STRICT - a present-but-unparseable
 // file aborts rather than clobbering it (unlike the lenient config readers).
 
 const bunYaml = (Bun as unknown as { YAML: { parse: (s: string) => any } }).YAML;
@@ -45,7 +45,7 @@ describe("parsePersonaArgs", () => {
   });
 });
 
-describe("applyPersona — sets persona keys, preserves siblings", () => {
+describe("applyPersona - sets persona keys, preserves siblings", () => {
   test("preserves top-level keys, daidentity siblings, and other voices", () => {
     const out = applyPersona(
       {
@@ -112,8 +112,8 @@ describe("mergePersonaYaml", () => {
   });
 });
 
-// ── createEchoVoiceCommand — the interactive flow (mock ctx, tmp cwd) ─────────
-describe("createEchoVoiceCommand — flow + never-clobber", () => {
+// ── createEchoVoiceCommand - the interactive flow (mock ctx, tmp cwd) ─────────
+describe("createEchoVoiceCommand - flow + never-clobber", () => {
   let cwd: string;
   const notes: Array<{ msg: string; type?: string }> = [];
 

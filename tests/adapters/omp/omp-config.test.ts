@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { loadOmpVoiceConfig } from "../../../adapters/omp/config";
 
-describe("omp voice config — notify endpoint resolution", () => {
+describe("omp voice config - notify endpoint resolution", () => {
   test("defaults to the local daemon", () => {
     expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:3246/notify");
   });

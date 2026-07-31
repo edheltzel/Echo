@@ -229,7 +229,7 @@ describe("Pi adapter lifecycle", () => {
     const { api, handlers } = createMockPi();
     registerAdapter(api);
 
-    // omp with an empty assembled prompt is legitimate — the instruction still lands.
+    // omp with an empty assembled prompt is legitimate - the instruction still lands.
     const result = (await handlers.get("before_agent_start")?.(
       { prompt: "x", systemPrompt: [] },
       createContext(),

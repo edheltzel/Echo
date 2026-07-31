@@ -42,7 +42,7 @@ describe("Pi adapter registration reconcile", () => {
       const canonical = relative(root, CANONICAL_ADAPTER_DIR);
 
       expect(first.exitCode).toBe(0);
-      // Replaced in place — same position, npm entries untouched, no duplicate appended.
+      // Replaced in place - same position, npm entries untouched, no duplicate appended.
       expect(settings.packages).toEqual(["npm:pi-mcp-adapter", canonical, "npm:pi-subagents"]);
       expect(settings.theme).toBe("dark");
       // Second run is a no-op.

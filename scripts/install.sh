@@ -13,7 +13,7 @@ LOG_PATH="$HOME/Library/Logs/echo.log"
 # Sets ECHO_PORT (PORT when exported, else 3246) and its URLs. No env-file reading.
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPT_DIR/echo-port.sh"
-# Versioned daemon payload — a self-contained copy of core/ + shared/ under a
+# Versioned daemon payload - a self-contained copy of core/ + shared/ under a
 # user-owned application-support directory, NOT the git clone. The LaunchAgent
 # points at ${PAYLOAD_CURRENT}, so moving or deleting the checkout never breaks
 # the running service (Stage 1). `current` is a symlink to the active version,
@@ -47,7 +47,7 @@ Every run also re-reconciles all already-installed adapter registrations, so a
 repo directory rename heals with one rerun (#77).
 --check reports stale echo-related paths across the plist and host settings
 without mutating anything. Exit 0 when everything is current, 3 when stale
-paths were detected. It checks that those paths still resolve — it does not
+paths were detected. It checks that those paths still resolve - it does not
 compare the staged payload's contents against this checkout.
 EOF
 }
@@ -91,7 +91,7 @@ is_loaded() {
   launchctl list 2>/dev/null | grep "$1" >/dev/null 2>&1
 }
 
-# Read the payload version from a package.json WITHOUT invoking bun — the daemon
+# Read the payload version from a package.json WITHOUT invoking bun - the daemon
 # payload is named by version, and install must stage it even when bun is absent.
 read_payload_version() {
   { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1; } || true
@@ -105,7 +105,7 @@ health_ok() {
 
 # Refuse to install onto a port that is occupied by something not answering
 # /health, whoever owns it. Echo's invariant forbids broad-killing the port
-# owner, and it does not guess whether the owner is its own daemon — it reports
+# owner, and it does not guess whether the owner is its own daemon - it reports
 # what lsof saw and both recoveries (scripts/echo-port.sh), which doctor prints
 # verbatim too. A healthy daemon short-circuits at health_ok, so an ordinary
 # reinstall never reaches here; if lsof is unavailable we cannot see the port at
@@ -128,13 +128,13 @@ check_port_owner() {
 
 # Stage a versioned, self-contained daemon payload (core/ + shared/) under
 # ${PAYLOAD_HOME} and atomically repoint ${PAYLOAD_CURRENT} at it. The copy is
-# what lets the daemon survive a checkout move/removal. Pure cp/sed/mkdir/ln/mv —
-# no bun — so it runs before the daemon (and its runtime) even exist.
+# what lets the daemon survive a checkout move/removal. Pure cp/sed/mkdir/ln/mv -
+# no bun - so it runs before the daemon (and its runtime) even exist.
 stage_payload() {
   local version ver_dir stage keep live
   version="$(read_payload_version "$REPO_ROOT/package.json")"
   if [ -z "$version" ]; then
-    echo "Could not read version from $REPO_ROOT/package.json — cannot stage payload." >&2
+    echo "Could not read version from $REPO_ROOT/package.json - cannot stage payload." >&2
     exit 1
   fi
   ver_dir="$PAYLOAD_VERSIONS/$version"
@@ -179,7 +179,7 @@ EOF
 # before this run and reload that, so the operator is left on a working daemon.
 rollback_payload() {
   if [ -z "$PAYLOAD_ROLLBACK" ] || [ ! -d "$PAYLOAD_ROLLBACK" ]; then
-    echo "No previously working payload to roll back to — leaving the newly staged one in place." >&2
+    echo "No previously working payload to roll back to - leaving the newly staged one in place." >&2
     return 0
   fi
   echo "> Rolling back payload to $PAYLOAD_ROLLBACK" >&2
@@ -220,7 +220,7 @@ pi_installed() {
   [ -f "$PI_SETTINGS" ] && grep -qE '"([^":]*/)?adapters/pi/?"' "$PI_SETTINGS"
 }
 
-# Anchored to the one entry Echo owns (#18): the echo-voice symlink — present
+# Anchored to the one entry Echo owns (#18): the echo-voice symlink - present
 # even when its target is dead (a renamed clone), which is exactly the state
 # refresh-all must heal. Foreign entries never trigger detection.
 omp_installed() {
@@ -229,10 +229,10 @@ omp_installed() {
 
 # Materialize the workspace links every adapter depends on. Each adapter package
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
-# `bun install` must have run before a host can load one. Idempotent and offline —
+# `bun install` must have run before a host can load one. Idempotent and offline -
 # every workspace member is local, so this makes no network request.
 #
-# ECHO_SKIP_WORKSPACE_LINK=1 opts a run out of managing the links entirely — it
+# ECHO_SKIP_WORKSPACE_LINK=1 opts a run out of managing the links entirely - it
 # neither creates them here nor verifies them in check_installation. It exists so
 # tests can drive install.sh without `bun install` mutating the checkout's
 # node_modules mid-`bun test`; it is not a supported way to install.
@@ -274,7 +274,7 @@ preflight() {
   case "$ADAPTER" in
     claudecode)
       echo "> Preflighting Claude Code adapter hook registration"
-      # --check exits 3 when changes are pending — normal before an install; only
+      # --check exits 3 when changes are pending - normal before an install; only
       # a real failure (unparseable settings, missing Bash matcher) aborts.
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
@@ -397,7 +397,7 @@ migrate_legacy_service() {
 }
 
 # Returns non-zero (never exits) so the caller can roll the payload back first.
-# Every failure path returns explicitly — errexit is suppressed inside a function
+# Every failure path returns explicitly - errexit is suppressed inside a function
 # used as a condition, so a bare failing command here would fall through.
 reload_core_service() {
   if is_loaded "$SERVICE_NAME"; then
@@ -479,11 +479,11 @@ install_adapter() {
 refresh_installed_adapters() {
   # A directory rename leaves stale paths in every registered host config (#77):
   # re-reconcile each installed adapter on every run, regardless of --adapter.
-  # A broken secondary adapter config must not fail the requested install — warn instead.
+  # A broken secondary adapter config must not fail the requested install - warn instead.
   if [ "$ADAPTER" != "claudecode" ] && claudecode_installed; then
     echo "> Refreshing Claude Code adapter hook registrations"
     bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
-      || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
+      || echo "WARN: Claude Code hook refresh failed - run adapters/claudecode/restore-hooks.ts manually" >&2
     link_claudecode_commands
   fi
   if [ "$ADAPTER" != "mcp" ] && mcp_installed; then
@@ -494,12 +494,12 @@ refresh_installed_adapters() {
   if [ "$ADAPTER" != "pi" ] && pi_installed; then
     echo "> Refreshing Pi adapter registration"
     bun run "$REPO_ROOT/adapters/pi/reconcile.ts" \
-      || echo "WARN: Pi registration refresh failed — run adapters/pi/reconcile.ts manually" >&2
+      || echo "WARN: Pi registration refresh failed - run adapters/pi/reconcile.ts manually" >&2
   fi
   if [ "$ADAPTER" != "omp" ] && omp_installed; then
     echo "> Refreshing oh-my-pi adapter registration"
     bun run "$REPO_ROOT/adapters/omp/reconcile.ts" \
-      || echo "WARN: omp registration refresh failed — run adapters/omp/reconcile.ts manually" >&2
+      || echo "WARN: omp registration refresh failed - run adapters/omp/reconcile.ts manually" >&2
   fi
 }
 
@@ -530,7 +530,7 @@ check_installation() {
       fi
     done
   else
-    echo "= no $PLIST_PATH — core not installed"
+    echo "= no $PLIST_PATH - core not installed"
   fi
 
   # --check is read-only and always reports: a failing adapter check must not
@@ -585,7 +585,7 @@ check_installation() {
   fi
 
   if [ "$stale" -eq 1 ]; then
-    echo "Stale paths found — rerun scripts/install.sh to reconcile." >&2
+    echo "Stale paths found - rerun scripts/install.sh to reconcile." >&2
     exit 3
   fi
 }

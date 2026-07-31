@@ -8,7 +8,7 @@ import {
   shouldSkipProvider,
 } from "../../core/circuit-breaker";
 
-// Reset shared breaker state before each test — the breaker map is a module
+// Reset shared breaker state before each test - the breaker map is a module
 // singleton.
 beforeEach(() => {
   for (const breaker of Object.values(circuitBreakers)) {
@@ -18,7 +18,7 @@ beforeEach(() => {
   }
 });
 
-describe("circuit breaker — issue #25 fallback tuning", () => {
+describe("circuit breaker - issue #25 fallback tuning", () => {
   test("default threshold tolerates one isolated failure (>= 2)", () => {
     // Tuning C: a single post-retry failure must not open the breaker.
     expect(CIRCUIT_BREAKER_THRESHOLD).toBeGreaterThanOrEqual(2);
@@ -38,7 +38,7 @@ describe("circuit breaker — issue #25 fallback tuning", () => {
     expect(shouldSkipProvider("edgetts")).toBe(false);
   });
 
-  test("sustained failures (>= threshold) STILL open the breaker — no masking", () => {
+  test("sustained failures (>= threshold) STILL open the breaker - no masking", () => {
     for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
       recordProviderFailure("edgetts");
     }
@@ -71,7 +71,7 @@ describe("circuit breaker — issue #25 fallback tuning", () => {
   test("NOT recording a failure leaves the breaker closed (playback-failure attribution)", () => {
     // Attribution fix B: a local playback failure must not touch the breaker.
     // The provider's speak() records SUCCESS once synthesis works, then returns
-    // false on playback failure WITHOUT recording a provider failure — so the
+    // false on playback failure WITHOUT recording a provider failure - so the
     // edge-tts breaker stays closed.
     recordProviderSuccess("edgetts"); // synthesis succeeded
     // (no recordProviderFailure call for the playback failure)
@@ -81,7 +81,7 @@ describe("circuit breaker — issue #25 fallback tuning", () => {
   });
 
   test("the breaker map is shared across providers (threshold blast radius)", () => {
-    // Tuning C is a GLOBAL threshold change — document the shared scope.
+    // Tuning C is a GLOBAL threshold change - document the shared scope.
     expect(Object.keys(circuitBreakers).sort()).toEqual([
       "edgetts",
       "elevenlabs",

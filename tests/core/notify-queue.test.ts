@@ -1,4 +1,4 @@
-// Phase 2 / U2 — /notify acks on receipt and plays async from the queue (R2):
+// Phase 2 / U2 - /notify acks on receipt and plays async from the queue (R2):
 // 202 returned before playback finishes, the job played by the queue consumer
 // (lifecycle row `played`), validation still 4xx BEFORE anything, the banner
 // fired at accept time OUTSIDE the queue, and mute still suppresses inside
@@ -32,7 +32,7 @@ function stubSpawn(command: string): any {
   child.kill = () => {};
   child.pid = 4242;
   // The playback binary is platform-dependent (afplay on darwin, mpv
-  // elsewhere — core/server.ts speak path); delay BOTH so "playback"
+  // elsewhere - core/server.ts speak path); delay BOTH so "playback"
   // measurably outlives the request on Linux CI too.
   if (/afplay|mpv/.test(String(command))) {
     setTimeout(() => child.emit("exit", 0), PLAY_MS);
@@ -79,7 +79,7 @@ beforeEach(() => {
 
 afterEach(() => {
   // The lifecycle row is the player's LAST act (the banner fires at accept
-  // time), so once a test has polled its row the job is done — no drain wait.
+  // time), so once a test has polled its row the job is done - no drain wait.
   spawnImpl = realSpawn;
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];
@@ -127,7 +127,7 @@ describe("/notify acks on receipt (R2)", () => {
     expect(rows[0].play_time_ms).toBeGreaterThanOrEqual(PLAY_MS - 10);
   });
 
-  test("invalid message still fails 4xx before enqueue — no job, no row", async () => {
+  test("invalid message still fails 4xx before enqueue - no job, no row", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
       headers: HEADERS,
@@ -169,7 +169,7 @@ describe("/notify acks on receipt (R2)", () => {
     });
     expect(res.status).toBe(202);
 
-    // The banner fires immediately at accept — no queue wait.
+    // The banner fires immediately at accept - no queue wait.
     await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
     // Never enqueued: no lifecycle row ever appears (per-spoken-line log).
     await Bun.sleep(150);

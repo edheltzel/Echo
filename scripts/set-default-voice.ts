@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// `echo voice <name> <voice-id>` — set the default Echo persona (name + edge-tts
+// `echo voice <name> <voice-id>` - set the default Echo persona (name + edge-tts
 // voice) in ~/.config/echo/config.json for pi and omp agent sessions. Claude Code
 // reads its persona from ~/.claude/settings.json instead.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -52,5 +52,5 @@ renameSync(tmp, CONFIG_FILE);
 
 console.log(`Set default persona "${name}" (${voice}) in ${CONFIG_FILE}.`);
 console.log("Applies to pi and omp sessions. Claude Code reads its persona from");
-console.log("~/.claude/settings.json — set it there or with the /echo-voice command.");
+console.log("~/.claude/settings.json - set it there or with the /echo-voice command.");
 console.log("Start a new agent session to hear it.");

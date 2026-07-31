@@ -18,7 +18,7 @@ export interface PiVoiceConfig {
 
 // Default greeting pool, mirroring the Claude Code adapter's startupCatchphrases
 // mechanism (VoiceGreeting.hook.ts): short neutral session-ready lines, random
-// pick per session_start. No hardcoded persona/DA name — Pi and omp share this
+// pick per session_start. No hardcoded persona/DA name - Pi and omp share this
 // adapter (neutral-default-identity rule). A catchphrase env override replaces
 // the pool with that single line, pinning the greeting.
 export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
@@ -67,9 +67,9 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = proc
 // ── Project persona override (Pi-native settings.json) ───────────────────────
 // A project can override the persona name + voice (+ catchphrases) for THIS repo
 // only, via the SAME convention as the Claude Code adapter: a `daidentity` block
-// in the host's native settings.json. Pi layers config exactly like Claude Code —
+// in the host's native settings.json. Pi layers config exactly like Claude Code -
 // `<cwd>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
-// project wins per key — so Echo reads the `daidentity` block from both and merges
+// project wins per key - so Echo reads the `daidentity` block from both and merges
 // project-over-global:
 //   { "daidentity": { "name": "Echo",
 //                     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
@@ -147,7 +147,7 @@ export function applyPersonaOverride(
 ): PiVoiceConfig {
   if (!override) return base;
   // When a repo sets a persona NAME but no startup lines of its own, announce that
-  // name at startup (the `{name}` default pool) instead of the neutral base pool —
+  // name at startup (the `{name}` default pool) instead of the neutral base pool -
   // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
   const startupCatchphrases = override.startupCatchphrases
     ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);

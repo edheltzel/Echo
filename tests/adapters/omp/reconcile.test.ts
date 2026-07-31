@@ -47,7 +47,7 @@ describe("omp extension registration reconcile (adapters/omp)", () => {
     });
   });
 
-  test("is idempotent — rerun on a correct dir changes nothing", async () => {
+  test("is idempotent - rerun on a correct dir changes nothing", async () => {
     await withExtensionsDir(async (dir) => {
       await runReconcile(dir);
       const second = await runReconcile(dir);
@@ -112,8 +112,8 @@ describe("omp extension registration reconcile (adapters/omp)", () => {
     });
   });
 
-  // A live-foreign link OCCUPYING echo-voice — adapters/omp spelling but not an
-  // Echo checkout — is FATAL, never silently replaced.
+  // A live-foreign link OCCUPYING echo-voice - adapters/omp spelling but not an
+  // Echo checkout - is FATAL, never silently replaced.
   test("refuses a live non-Echo adapters/omp target occupying the canonical name", async () => {
     await withExtensionsDir(async (dir) => {
       mkdirSync(dir, { recursive: true });

@@ -5,8 +5,8 @@ allowed-tools: Bash, Read, Edit, Write
 ---
 
 You are scaffolding a **project-local Echo persona** for the current repository.
-Echo resolves the DA identity with layered precedence — `.claude/settings.local.json`
-→ `.claude/settings.json` → `~/.claude/settings.json` → defaults, per key — so a
+Echo resolves the DA identity with layered precedence - `.claude/settings.local.json`
+→ `.claude/settings.json` → `~/.claude/settings.json` → defaults, per key - so a
 `daidentity` block in *this* project's `.claude/settings.json` overrides the global
 persona **for this repo only** (name + voice at the startup greeting and on every
 per-turn line). Every other repo keeps the global persona.
@@ -28,7 +28,7 @@ Arguments (either may be omitted): `$ARGUMENTS`
    - Audition one: `bun scripts/preview-voices.ts --voices <voice-id>`
    Confirm the chosen voice id (must be a real edge-tts voice, e.g. `en-GB-RyanNeural`).
 
-4. **Merge — never clobber.** Read the existing `<projectDir>/.claude/settings.json`
+4. **Merge - never clobber.** Read the existing `<projectDir>/.claude/settings.json`
    (create `{}` if it does not exist). Deep-merge the block below into it, preserving
    every other key already present. Only set the persona keys:
    ```json
@@ -52,6 +52,6 @@ Arguments (either may be omitted): `$ARGUMENTS`
 6. **Confirm.** Show the final `daidentity` block and tell the user it takes effect
    on the **next** Claude Code session started in this repo (the greeting speaks the
    new name + voice; per-turn lines use the new voice). Note that `~/.claude/settings.json`
-   is untouched — the global persona is unchanged everywhere else.
+   is untouched - the global persona is unchanged everywhere else.
 
 Keep it surgical: touch only the `daidentity` persona keys, leave all other settings intact.

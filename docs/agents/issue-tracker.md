@@ -2,9 +2,9 @@
 
 This repo uses two surfaces:
 
-- **GitHub Issues** — the canonical, shared tracker. Anything ready for an AFK agent or
+- **GitHub Issues** - the canonical, shared tracker. Anything ready for an AFK agent or
   another person lives here. Use the `gh` CLI for all operations.
-- **Local markdown** under `.scratch/<feature-slug>/` — a drafting scratchpad for breaking
+- **Local markdown** under `.scratch/<feature-slug>/` - a drafting scratchpad for breaking
   down work before it's ready to publish.
 
 Default flow: draft locally, promote to GitHub when the issue is specified enough to act on.

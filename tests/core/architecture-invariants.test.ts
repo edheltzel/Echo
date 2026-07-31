@@ -4,10 +4,10 @@ import { dirname, join, relative, resolve } from "node:path";
 
 // Mechanical enforcement of the statically-checkable `core/` invariants that
 // AGENTS.md states as prose ("Invariants / must not do"). Prose gets ignored;
-// a red test does not. Each assertion below carries a remediation message —
+// a red test does not. Each assertion below carries a remediation message -
 // when the test fails, the error output IS the fix instructions.
 //
-// Companion to `no-host-strings.test.ts` (broad string scan) — this file is
+// Companion to `no-host-strings.test.ts` (broad string scan) - this file is
 // import-precise (catches `adapters/**` + host SDK packages a string scan
 // misses) and adds the :31337, /tmp, and route-name invariants.
 
@@ -41,7 +41,7 @@ function coreTsFiles(): string[] {
 
 /**
  * Import/require/dynamic-import module specifiers in a source file. Comments are
- * stripped first — prose like "distinct from 'failed'" is not an import.
+ * stripped first - prose like "distinct from 'failed'" is not an import.
  */
 function importSpecifiers(source: string): string[] {
   const content = stripComments(source);
@@ -63,7 +63,7 @@ function importSpecifiers(source: string): string[] {
  * positive. Line-comment stripping skips `://` so URL strings survive.
  *
  * A block comment collapses to its own newlines rather than to nothing, so line
- * numbers survive the strip — the scans below report `${file}:${i + 1}`, and a
+ * numbers survive the strip - the scans below report `${file}:${i + 1}`, and a
  * 10-line header comment would otherwise shift every diagnostic below it.
  */
 function stripComments(content: string): string {
@@ -94,7 +94,7 @@ function assertNoOffenders(offenders: string[], remediation: string): void {
 }
 
 describe("core architecture invariants", () => {
-  // Invariant 1 — core/ imports no host APIs or adapters.
+  // Invariant 1 - core/ imports no host APIs or adapters.
   test("core/ imports no host (PAI/Pi/Claude Code/OpenCode) or adapter modules", () => {
     // Specifiers that reach a host runtime or an out-of-core adapter.
     const banned: { re: RegExp; what: string }[] = [
@@ -120,7 +120,7 @@ describe("core architecture invariants", () => {
     );
   });
 
-  // Invariant 2 — no :31337 references (voice traffic is :3246).
+  // Invariant 2 - no :31337 references (voice traffic is :3246).
   test("core/ has no :31337 references (voice traffic is :3246)", () => {
     const offenders: string[] = [];
     for (const file of coreFiles()) {
@@ -132,11 +132,11 @@ describe("core architecture invariants", () => {
     assertNoOffenders(
       offenders,
       "core/ must not reference port :31337 (that was the old Pulse port). " +
-        "Voice server traffic is :3246 — use that port.",
+        "Voice server traffic is :3246 - use that port.",
     );
   });
 
-  // Invariant 3 — no /tmp process-state paths in core/ runtime source.
+  // Invariant 3 - no /tmp process-state paths in core/ runtime source.
   test("core/ runtime source uses user-owned dirs, not world-writable /tmp", () => {
     const offenders: string[] = [];
     for (const file of coreTsFiles()) {
@@ -149,11 +149,11 @@ describe("core architecture invariants", () => {
       offenders,
       "core/ must not write process state to /tmp (world-writable). " +
         "Use user-owned cache/log/config dirs (e.g. AUDIO_CACHE_DIR + mkdtempSync, " +
-        "or ~/Library/Logs // $XDG_STATE_HOME). os.tmpdir() in tests/ is fine — this rule is core/ runtime only.",
+        "or ~/Library/Logs // $XDG_STATE_HOME). os.tmpdir() in tests/ is fine - this rule is core/ runtime only.",
     );
   });
 
-  // Invariant 4 — no PAI-named (host-named) HTTP routes in core/server.ts.
+  // Invariant 4 - no PAI-named (host-named) HTTP routes in core/server.ts.
   test("core/server.ts exposes no host-named HTTP routes", () => {
     const content = readFileSync(join(CORE_DIR, "server.ts"), "utf8");
     const offenders: string[] = [];
@@ -167,25 +167,25 @@ describe("core architecture invariants", () => {
     assertNoOffenders(
       offenders,
       "The universal core exposes only host-neutral routes (/notify, /notify/personality, /health). " +
-        "Do not add host-named (PAI/Pi/Claude/OpenCode) endpoints — host specifics belong in an adapter.",
+        "Do not add host-named (PAI/Pi/Claude/OpenCode) endpoints - host specifics belong in an adapter.",
     );
   });
 
-  // Invariant 5 — the legacy PAI stow tree is retired and must not silently return.
+  // Invariant 5 - the legacy PAI stow tree is retired and must not silently return.
   test("legacy PAI stow tree under claudecode/ stays retired", () => {
     expect(existsSync("claudecode/.claude/PAI/USER/Voice")).toBe(false);
 
     const tracked = Bun.spawnSync(["git", "ls-files", "claudecode/"]).stdout.toString().trim();
     if (tracked.length > 0) {
       throw new Error(
-        "The legacy PAI stow tree was retired — no files may be tracked under claudecode/. " +
+        "The legacy PAI stow tree was retired - no files may be tracked under claudecode/. " +
           "Host lifecycle glue lives in adapters/claudecode/.\n\nTracked files found:\n" +
           tracked,
       );
     }
   });
 
-  // Invariant 6 — the old adapter name (adapters/pai) is retired and must not creep back.
+  // Invariant 6 - the old adapter name (adapters/pai) is retired and must not creep back.
   test("the old adapters/pai name stays retired (renamed to adapters/claudecode in #59)", () => {
     const tracked = Bun.spawnSync(["git", "ls-files", "adapters/pai", "tests/adapters/pai"])
       .stdout.toString()
@@ -209,11 +209,11 @@ describe("core architecture invariants", () => {
     );
   });
 
-  // Invariant 10 — core/ never writes to process.env (config resolution is import-pure).
+  // Invariant 10 - core/ never writes to process.env (config resolution is import-pure).
   // Hydrating the operator's env files into process.env at import leaked the
   // configured ECHO_VOICE_* identity into same-process adapter code and its
   // tests (the pi-adapter "Atlas" pollution, a #47 class file-order hazard).
-  // Only the statically decidable write forms are scanned here — `fn(process.env)`
+  // Only the statically decidable write forms are scanned here - `fn(process.env)`
   // is undecidable from source, so the whole-module proof that importing the
   // daemon mutates nothing lives in `tests/core/import-purity.test.ts`.
   test("core/ never writes to process.env (config resolution is import-pure)", () => {
@@ -233,7 +233,7 @@ describe("core architecture invariants", () => {
       const stripped = stripComments(readFileSync(file, "utf8"));
       stripped.split("\n").forEach((line, i) => {
         const hit = writes.find((w) => w.re.test(line));
-        if (hit) offenders.push(`${file}:${i + 1}: ${hit.what} — ${line.trim()}`);
+        if (hit) offenders.push(`${file}:${i + 1}: ${hit.what} - ${line.trim()}`);
       });
     }
     assertNoOffenders(
@@ -254,7 +254,7 @@ describe("core architecture invariants", () => {
 //   - the Pi adapter imported five modules from `../../shared/`, outside its own
 //     package root, which no core-only import scan could see;
 //   - the Claude Code adapter `readFileSync`'d `core/voices.json`, which even an
-//     adapter-side *import* scan would have missed — a filesystem read is not an
+//     adapter-side *import* scan would have missed - a filesystem read is not an
 //     import. That one needs a string scan.
 // Both classes are covered below.
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ describe("adapter package boundary invariants", () => {
     );
   });
 
-  // Invariant 7 — an adapter is self-contained: no relative import escapes its root.
+  // Invariant 7 - an adapter is self-contained: no relative import escapes its root.
   test("no adapter imports a relative path outside its own package root", () => {
     const offenders: string[] = [];
     for (const { root } of adapterPackages()) {
@@ -321,12 +321,12 @@ describe("adapter package boundary invariants", () => {
       offenders,
       "A host adapter must be self-contained: every relative import stays inside its own " +
         "package root. Shared behavior belongs in the @echo/shared workspace package, imported " +
-        'by name ("@echo/shared/<module>.ts") and declared in the adapter\'s package.json — ' +
+        'by name ("@echo/shared/<module>.ts") and declared in the adapter\'s package.json - ' +
         "not reached across the tree with ../../.",
     );
   });
 
-  // Invariant 8 — a bare specifier must be a declared dependency, not an ambient one.
+  // Invariant 8 - a bare specifier must be a declared dependency, not an ambient one.
   test("every non-relative adapter import is a builtin or a declared dependency", () => {
     const offenders: string[] = [];
     for (const { root, manifest } of adapterPackages()) {
@@ -339,7 +339,7 @@ describe("adapter package boundary invariants", () => {
         for (const spec of importSpecifiers(readFileSync(file, "utf8"))) {
           if (spec.startsWith(".") || isBuiltin(spec)) continue;
           const pkg = packageNameOf(spec);
-          if (!declared.has(pkg)) offenders.push(`${file}: imports "${spec}" — ${pkg} is not in ${root}/package.json`);
+          if (!declared.has(pkg)) offenders.push(`${file}: imports "${spec}" - ${pkg} is not in ${root}/package.json`);
         }
       }
     }
@@ -351,7 +351,7 @@ describe("adapter package boundary invariants", () => {
     );
   });
 
-  // Invariant 9 — adapters reach the daemon over HTTP, never through its files.
+  // Invariant 9 - adapters reach the daemon over HTTP, never through its files.
   // This is the string-scan companion to the import scans above: the Claude Code
   // adapter's `core/voices.json` read was a filesystem path in a string literal,
   // invisible to any import-based check.
@@ -371,7 +371,7 @@ describe("adapter package boundary invariants", () => {
     }
     assertNoOffenders(
       offenders,
-      "Adapters talk to the daemon over the HTTP contract only — they must not read core/ " +
+      "Adapters talk to the daemon over the HTTP contract only - they must not read core/ " +
         "files off disk. A co-located checkout is not part of the contract: the daemon may run " +
         "from another clone or another VOICES_PATH. Ask the daemon instead (GET /voices for " +
         "configured persona keys); see docs/http-api.md.",

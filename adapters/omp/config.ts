@@ -16,7 +16,7 @@ export interface OmpVoiceConfig {
   suppressInSubagents: boolean;
 }
 
-// Default greeting pool — short neutral session-ready lines, random pick per
+// Default greeting pool - short neutral session-ready lines, random pick per
 // session_start. No hardcoded persona/DA name (neutral-default-identity rule); a
 // catchphrase env override replaces the pool with that single pinned line.
 export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
@@ -65,7 +65,7 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = pro
 // A project can override the persona name + voice (+ catchphrases) for THIS repo
 // only, via the SAME convention as the Claude Code and Pi adapters: a `daidentity`
 // block in the host's native config. omp's config is YAML, layered project-over-user
-// — so Echo reads the `daidentity` block from `<cwd>/.omp/config.yml` (project) and
+// - so Echo reads the `daidentity` block from `<cwd>/.omp/config.yml` (project) and
 // `~/.omp/agent/config.yml` (global) and merges project-over-global:
 //   daidentity:
 //     name: Echo
@@ -117,7 +117,7 @@ function readDaidentity(
  */
 /**
  * omp's global agent dir. Honors omp's own `PI_CODING_AGENT_DIR` override (it
- * relocates `~/.omp/agent`), so Echo reads the same global config omp does — and
+ * relocates `~/.omp/agent`), so Echo reads the same global config omp does - and
  * so tests can point it at a scratch dir for hermetic isolation.
  */
 function ompAgentDir(home: string): string {
@@ -159,7 +159,7 @@ export function applyPersonaOverride(
 ): OmpVoiceConfig {
   if (!override) return base;
   // When a repo sets a persona NAME but no startup lines of its own, announce that
-  // name at startup (the `{name}` default pool) instead of the neutral base pool —
+  // name at startup (the `{name}` default pool) instead of the neutral base pool -
   // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
   const startupCatchphrases = override.startupCatchphrases
     ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);

@@ -1,17 +1,17 @@
-// Issue #26 — prove the egress-gating guarantee at runtime: a DISABLED provider
+// Issue #26 - prove the egress-gating guarantee at runtime: a DISABLED provider
 // never makes an outbound call (no synthesis, no auth/health probe), across both
 // the speakWithFallback chain and the /health (getProviderStatus) path.
 //
 // Two egress channels are spied, because the providers use two:
-//   • fetch  — ElevenLabs + Kokoro (HTTP)
-//   • spawn  — edge-tts (spawn(python3 -m edge_tts ...)); fetch can't see this.
+//   • fetch  - ElevenLabs + Kokoro (HTTP)
+//   • spawn  - edge-tts (spawn(python3 -m edge_tts ...)); fetch can't see this.
 // Each spy asserts zero traffic for a disabled provider and live traffic once
 // the provider is enabled (positive controls prove the spy works and that
 // `enabled` is the only gate).
 //
 // PORT=0 binds an ephemeral port so importing the daemon never collides with a
 // running :3246 instance. The shared singleton server is intentionally not stopped
-// here — it's cached across test files and stopping it would break siblings that
+// here - it's cached across test files and stopping it would break siblings that
 // fetch it (see resolution-log.test.ts / #47); the process exit reclaims the port.
 process.env.PORT = "0";
 
@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { circuitBreakers } from "../../core/circuit-breaker.ts";
 
-// Pin the runtime-mute state (#83) away from the operator's real mute.json —
+// Pin the runtime-mute state (#83) away from the operator's real mute.json -
 // speakWithFallback reads it on every call, and a live muted state would make
 // the positive-control assertions below fail nondeterministically.
 process.env.ECHO_MUTE_STATE_PATH ??= join(mkdtempSync(join(tmpdir(), "egress-mute-")), "mute.json");
@@ -31,7 +31,7 @@ process.env.ECHO_MUTE_STATE_PATH ??= join(mkdtempSync(join(tmpdir(), "egress-mut
 // --- spawn spy (edge-tts egresses via spawn, not fetch) ---------------------
 // Capture the real spawn before mocking, then route the module's `spawn` through
 // a swappable impl so afterEach can restore the real binding. The recording impl
-// stubs the child entirely — the real python/edge_tts subprocess never runs.
+// stubs the child entirely - the real python/edge_tts subprocess never runs.
 const realSpawn = realChildProcess.spawn;
 let spawnCalls: Array<{ command: string; args: string[] }> = [];
 let spawnImpl: (...args: any[]) => any = realSpawn;
@@ -114,7 +114,7 @@ afterEach(() => {
   for (const name of Object.keys(savedEnabled)) {
     (voicesConfig.providers as any)[name].enabled = savedEnabled[name];
   }
-  // Reset the circuit-breaker singleton — the ElevenLabs 500 control records a
+  // Reset the circuit-breaker singleton - the ElevenLabs 500 control records a
   // failure that would otherwise persist and could (eventually) open a breaker,
   // making a later isHealthy() vacuously false.
   for (const breaker of Object.values(circuitBreakers)) {
@@ -124,7 +124,7 @@ afterEach(() => {
   }
 });
 
-describe("issue #26 — egress gating: no outbound calls when a provider is disabled", () => {
+describe("issue #26 - egress gating: no outbound calls when a provider is disabled", () => {
   test("ElevenLabs disabled → getProviderStatus performs zero fetch (none to elevenlabs.io)", async () => {
     const status = await getProviderStatus();
 
@@ -156,7 +156,7 @@ describe("issue #26 — egress gating: no outbound calls when a provider is disa
 
   test("edge-tts disabled → getProviderStatus + speakWithFallback spawn no python/edge_tts process", async () => {
     // edge-tts egresses via spawn(python3 -m edge_tts ...), invisible to the
-    // fetch spy — this is the spawn-channel equivalent of the fetch tests above.
+    // fetch spy - this is the spawn-channel equivalent of the fetch tests above.
     await getProviderStatus();
     const result = await speakWithFallback("hello world");
 
@@ -175,7 +175,7 @@ describe("issue #26 — egress gating: no outbound calls when a provider is disa
     expect(status.kokoro.enabled).toBe(true);
     expect(status.kokoro.wouldEgress).toBe(true);
     expect(status.kokoro.egressTarget).toBe(KOKORO_ENDPOINT);
-    // The health probe — and only it — hit the configured endpoint, exactly once.
+    // The health probe - and only it - hit the configured endpoint, exactly once.
     expect(fetchCalls.filter((u) => u.startsWith(KOKORO_ENDPOINT)).length).toBe(1);
   });
 
@@ -258,7 +258,7 @@ describe("issue #26 — egress gating: no outbound calls when a provider is disa
   });
 });
 
-describe("issue #26 — /health egress audit (getProviderStatus shape)", () => {
+describe("issue #26 - /health egress audit (getProviderStatus shape)", () => {
   test("every provider reports a boolean wouldEgress; disabled providers report false", async () => {
     const status = await getProviderStatus();
 

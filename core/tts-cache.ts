@@ -1,16 +1,16 @@
 // =============================================================================
-// TTS synthesis cache — host-neutral
+// TTS synthesis cache - host-neutral
 // =============================================================================
 // edge-tts is Microsoft's ONLINE service, so every synthesis is a network
 // round-trip whose fixed overhead (python spawn + `import edge_tts` + WebSocket
-// handshake) dominates startup latency — a ~14-char catchphrase pays the same
+// handshake) dominates startup latency - a ~14-char catchphrase pays the same
 // 2–8 s as a long line. But the startup catchphrase is drawn from a small FIXED
 // pool, and edge-tts output for identical (voice, rate, text) is deterministic.
 // So short, repeated phrases are cached to disk and replayed straight from the
-// file — turning an 8 s network synth into a ~tens-of-ms disk read.
+// file - turning an 8 s network synth into a ~tens-of-ms disk read.
 //
 // Only SHORT phrases are cached: long, unique completion summaries would never
-// hit and would grow the cache without bound. All writes are best-effort — a
+// hit and would grow the cache without bound. All writes are best-effort - a
 // cache failure must never break /notify.
 
 import { createHash } from "node:crypto";
@@ -36,7 +36,7 @@ export const TTS_CACHE_MAX_TEXT_CHARS = parseBoundedInt(
 );
 
 // Total cache-size cap; oldest-by-mtime files are pruned first. ~20 MB default
-// (floor 64 KB) — thousands of short clips.
+// (floor 64 KB) - thousands of short clips.
 export const TTS_CACHE_MAX_BYTES = parseBoundedInt(
   resolveEchoEnv("ECHO_TTS_CACHE_MAX_BYTES"),
   20_000_000,
@@ -60,8 +60,8 @@ export function isCacheableText(text: string): boolean {
   return text.length > 0 && text.length <= TTS_CACHE_MAX_TEXT_CHARS;
 }
 
-// Key on the EXACT synthesis inputs — voice + rate + the already-pronunciation-
-// processed text — so any change (voice swap, rate change) misses and
+// Key on the EXACT synthesis inputs - voice + rate + the already-pronunciation-
+// processed text - so any change (voice swap, rate change) misses and
 // re-synthesizes rather than replaying a stale clip.
 export function ttsCacheKey(voice: string, rate: string, processedText: string): string {
   return createHash("sha256").update(`${voice}\n${rate}\n${processedText}`).digest("hex");
@@ -97,7 +97,7 @@ export function readTtsCache(
 }
 
 // Copy a freshly-synthesized mp3 into the cache (atomic rename via a temp file).
-// No-op for non-cacheable text. Best-effort — swallows all errors.
+// No-op for non-cacheable text. Best-effort - swallows all errors.
 export function writeTtsCache(
   voice: string,
   rate: string,
@@ -113,7 +113,7 @@ export function writeTtsCache(
     copyFileSync(srcFile, tmp);
     renameSync(tmp, dest);
     pruneTtsCache(dir, TTS_CACHE_MAX_BYTES);
-  } catch { /* swallow — cache write must never break a notification */ }
+  } catch { /* swallow - cache write must never break a notification */ }
 }
 
 // Drop oldest-by-mtime files until total size fits the cap. Best-effort.

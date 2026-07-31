@@ -42,7 +42,7 @@ let changed = false;
 const log: string[] = [];
 
 // 0) Prune stale foreign-clone registrations (#77): any adapter hook file registered from a
-// non-canonical adapters/claudecode/hooks directory — e.g. a pre-rename repo path. Matching
+// non-canonical adapters/claudecode/hooks directory - e.g. a pre-rename repo path. Matching
 // the whole hooks dir (not a hook-name list) means future hook files can't escape pruning.
 // Canonical is decided by realpath (dead-path-tolerant, like the Pi reconciler), so a live
 // canonical hook spelled through a symlinked repo path is normalized in place rather than
@@ -127,7 +127,7 @@ for (const entry of settings.hooks.Stop) {
 }
 
 if (completionMatches.length === 0) {
-  // No existing registration — add to a default (matcher-less) Stop entry, creating one if needed.
+  // No existing registration - add to a default (matcher-less) Stop entry, creating one if needed.
   let defaultStop = settings.hooks.Stop.find((entry) => entry.matcher === undefined || entry.matcher === "");
   if (!defaultStop) {
     defaultStop = { hooks: [] };
@@ -155,7 +155,7 @@ if (completionMatches.length === 0) {
 
 if (CHECK_ONLY) {
   // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
-  log.push(changed ? "✓ preflight passed — settings.json would be updated" : "✓ preflight passed — settings.json already current");
+  log.push(changed ? "✓ preflight passed - settings.json would be updated" : "✓ preflight passed - settings.json already current");
   console.log(log.join("\n"));
   process.exit(changed ? 3 : 0);
 }
@@ -172,7 +172,7 @@ if (changed) {
   renameSync(temp, realPath);
   log.push(`✓ settings.json updated (backup: ${backup})`);
 } else {
-  log.push("✓ settings.json already current — no write");
+  log.push("✓ settings.json already current - no write");
 }
 
 // 4) Enforce mode 0600.

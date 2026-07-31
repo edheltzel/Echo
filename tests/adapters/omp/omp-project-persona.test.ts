@@ -12,7 +12,7 @@ import {
 } from "../../../adapters/omp/config";
 import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
 
-// omp project persona override — SAME convention as the Claude Code and Pi adapters:
+// omp project persona override - SAME convention as the Claude Code and Pi adapters:
 // a `daidentity` block in the host's native config. omp's config is YAML, layered
 // `<cwd>/.omp/config.yml` (project) over `~/.omp/agent/config.yml` (global), project
 // wins per key. Inside a repo with a project daidentity, the greeting + per-turn voice
@@ -22,7 +22,7 @@ const GLOBAL_PATH = (home: string) => join(home, ".omp", "agent", "config.yml");
 const PROJECT_PATH = (cwd: string) => join(cwd, ".omp", "config.yml");
 
 // ── config-level unit tests (pure; injected readFile + explicit home) ────────
-describe("loadProjectPersona — daidentity from omp YAML config layering", () => {
+describe("loadProjectPersona - daidentity from omp YAML config layering", () => {
   const HOME = "/home/u";
   const CWD = "/proj";
   const reader = (files: Record<string, string>) => (path: string) => files[path] ?? null;
@@ -98,7 +98,7 @@ describe("loadProjectPersona — daidentity from omp YAML config layering", () =
   });
 });
 
-describe("applyPersonaOverride — per-key override onto the base config", () => {
+describe("applyPersonaOverride - per-key override onto the base config", () => {
   const base: OmpVoiceConfig = {
     endpoint: "http://x/notify",
     title: "omp Notification",
@@ -191,10 +191,10 @@ afterEach(() => {
   rmSync(fakeHome, { recursive: true, force: true });
 });
 
-describe("integration — omp project override flows through greeting + completion", () => {
+describe("integration - omp project override flows through greeting + completion", () => {
   // Hermeticity guard: prove the global read is isolated to the scratch dir. With
   // PI_CODING_AGENT_DIR pointing at an empty agent dir, loadProjectPersona with no
-  // project must resolve to null — so a green bar below reflects the project override,
+  // project must resolve to null - so a green bar below reflects the project override,
   // not Ed's real ~/.omp/agent/config.yml.
   test("global config read is isolated (empty scratch agent dir → no override)", () => {
     expect(loadProjectPersona(undefined)).toBeNull();

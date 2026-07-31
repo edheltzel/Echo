@@ -7,7 +7,7 @@ import { resolvePersonaKey } from "../../../adapters/claudecode/hooks/handlers/V
 
 const FENCE = "```";
 
-describe("extractVoiceCompletion — a persona speaks its OWN 🗣️ words (#31)", () => {
+describe("extractVoiceCompletion - a persona speaks its OWN 🗣️ words (#31)", () => {
   test("persona line → the persona's own words, not a fallback summary", () => {
     expect(
       extractVoiceCompletion("Status update.\n🗣️ Themis: Themis here. Let's coordinate."),
@@ -75,7 +75,7 @@ describe("extractVoiceCompletion — a persona speaks its OWN 🗣️ words (#31
   });
 });
 
-describe("🎯 COMPLETED: fallback — CRLF-safe and fence/indent-aware (#36)", () => {
+describe("🎯 COMPLETED: fallback - CRLF-safe and fence/indent-aware (#36)", () => {
   test("CRLF transcript → COMPLETED words with no carriage return", () => {
     const words = extractVoiceCompletion("Work.\r\n🎯 COMPLETED: shipped.\r\n");
     expect(words).toBe("shipped.");
@@ -106,7 +106,7 @@ describe("🎯 COMPLETED: fallback — CRLF-safe and fence/indent-aware (#36)", 
   });
 });
 
-describe("voice and words never disagree — both consume parseFinalVoiceLine", () => {
+describe("voice and words never disagree - both consume parseFinalVoiceLine", () => {
   test("persona turn: resolved voice key and spoken words come from the same line", () => {
     const text = "Status.\n🗣️ Themis: coordinating the next worker.";
     expect(resolvePersonaKey(text, "Atlas")).toBe("themis");
@@ -126,7 +126,7 @@ describe("voice and words never disagree — both consume parseFinalVoiceLine", 
   });
 });
 
-describe("parseFinalVoiceLine — the shared canonical parse", () => {
+describe("parseFinalVoiceLine - the shared canonical parse", () => {
   test("returns the original-case name and trimmed words", () => {
     expect(parseFinalVoiceLine("🗣️ Themis: go now.")).toEqual({
       name: "Themis",

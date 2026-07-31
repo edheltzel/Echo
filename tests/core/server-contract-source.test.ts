@@ -57,7 +57,7 @@ describe("core server route contract source", () => {
   test("a playback failure does NOT count against the edge-tts breaker", () => {
     // Attribution fix B: synthesis (provider) and playback (local) are
     // separated. The playback catch returns false WITHOUT recording a provider
-    // failure — only synth-side paths touch the breaker.
+    // failure - only synth-side paths touch the breaker.
     const playbackCatch = server.match(/catch \(playError[\s\S]*?\n {6}\}/);
     expect(playbackCatch).not.toBeNull();
     expect(playbackCatch![0]).toContain("return false;");
@@ -70,7 +70,7 @@ describe("core server route contract source", () => {
     expect(server).toContain("circuitBreakers.edgetts.failures");
   });
 
-  test("numeric env overrides are bounded — a bad value cannot mask an outage", () => {
+  test("numeric env overrides are bounded - a bad value cannot mask an outage", () => {
     // timeout/backoff floor 1 (0ms timeout = instant fail), retries floor 0.
     expect(server).toContain('parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_TIMEOUT_MS"), 15000, 1)');
     expect(server).toContain('parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES"), 1, 0)');

@@ -1,4 +1,4 @@
-// Phase 2 / U1 — pure queue semantics against a fake player: global serial
+// Phase 2 / U1 - pure queue semantics against a fake player: global serial
 // playback (R1), FIFO across sessions, newest-per-session coalescing (R4),
 // age-cap drop at dequeue (R5), never interrupting the in-flight job (R3),
 // and advancing past player errors (R6). No afplay, no server.
@@ -13,7 +13,7 @@ function job(id: string, sessionId: string | null, receivedAt = Date.now()): Pla
   return { id, sessionId, receivedAt, payload: id };
 }
 
-describe("PlayQueue — serial playback (R1)", () => {
+describe("PlayQueue - serial playback (R1)", () => {
   test("jobs play one at a time; max observed concurrency is 1", async () => {
     const played: string[] = [];
     let active = 0;
@@ -54,7 +54,7 @@ describe("PlayQueue — serial playback (R1)", () => {
   });
 });
 
-describe("PlayQueue — newest-per-session coalescing (R4)", () => {
+describe("PlayQueue - newest-per-session coalescing (R4)", () => {
   test("a newer same-session line replaces the queued one; the old emits superseded", async () => {
     const played: string[] = [];
     const dispositions: Array<{ id: string; disposition: string }> = [];
@@ -128,7 +128,7 @@ describe("PlayQueue — newest-per-session coalescing (R4)", () => {
   });
 });
 
-describe("PlayQueue — age cap at dequeue (R5)", () => {
+describe("PlayQueue - age cap at dequeue (R5)", () => {
   test("a job older than ageCapMs is dropped stale and never played", async () => {
     let clock = 1_000_000;
     const played: string[] = [];
@@ -164,7 +164,7 @@ describe("PlayQueue — age cap at dequeue (R5)", () => {
   });
 });
 
-describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
+describe("PlayQueue - depth cap (belt-and-suspenders)", () => {
   test("enqueue beyond maxDepth drops the oldest queued job", async () => {
     const played: string[] = [];
     const dispositions: Array<{ id: string; disposition: string }> = [];
@@ -194,7 +194,7 @@ describe("PlayQueue — depth cap (belt-and-suspenders)", () => {
   });
 });
 
-describe("PlayQueue — player watchdog + liveness (enforced, not borrowed)", () => {
+describe("PlayQueue - player watchdog + liveness (enforced, not borrowed)", () => {
   test("a hung player is timed out by the watchdog; the queue reports and advances", async () => {
     const played: string[] = [];
     const errors: Array<{ id: string; message: string }> = [];
@@ -236,7 +236,7 @@ describe("PlayQueue — player watchdog + liveness (enforced, not borrowed)", ()
   });
 });
 
-describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
+describe("PlayQueue - env knobs (U4, ECHO_* bounded parses)", () => {
   const noopPlayer = async () => {};
 
   // Pin the env-file layer to empty so the operator's real ~/.config/echo/.env
@@ -298,7 +298,7 @@ describe("PlayQueue — env knobs (U4, ECHO_* bounded parses)", () => {
   });
 });
 
-describe("PlayQueue — resilience (R6)", () => {
+describe("PlayQueue - resilience (R6)", () => {
   test("a rejecting player does not stall the queue; the next job still plays", async () => {
     const played: string[] = [];
     const errors: string[] = [];
@@ -336,10 +336,10 @@ describe("PlayQueue — resilience (R6)", () => {
   });
 });
 
-describe("PlayQueue — drain (test seam behind drainNotifications)", () => {
+describe("PlayQueue - drain (test seam behind drainNotifications)", () => {
   test("resolves immediately when the queue is idle", async () => {
     const q = new PlayQueue<string>({ player: async () => {} });
-    await q.drain(); // no enqueue ever happened — must not hang
+    await q.drain(); // no enqueue ever happened - must not hang
   });
 
   test("resolves only after every queued job has settled", async () => {

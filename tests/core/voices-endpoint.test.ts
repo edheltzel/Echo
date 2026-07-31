@@ -1,11 +1,11 @@
-// GET /voices — the read-only persona-key contract adapters use instead of
+// GET /voices - the read-only persona-key contract adapters use instead of
 // reading core/voices.json off disk.
 //
 // The rate-limit tests here guard a regression that shipping this endpoint
 // introduced: the Claude Code Stop hook makes ONE /voices read immediately
 // before the /notify for that same turn. On the shared per-IP bucket that
 // halved every host's notification budget (5 turns instead of 10) and let the
-// read starve the write it precedes — a dropped notification. /voices gets its
+// read starve the write it precedes - a dropped notification. /voices gets its
 // own bucket for the same reason /mute does (#83).
 process.env.PORT = "0";
 

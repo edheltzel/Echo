@@ -1,4 +1,4 @@
-// Issue #83 — POST /mute endpoint + /health mute block.
+// Issue #83 - POST /mute endpoint + /health mute block.
 //
 // KTD4 semantics: an explicit JSON body sets state ({"muted": bool,
 // "duration_minutes"?: n}); an EMPTY body toggles (one-keystroke hotkeys need
@@ -44,7 +44,7 @@ const { readMuteState, writeMuteState } = await import("../../core/mute.ts");
 const { server } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
-// Per-test rate-limit bucket — the shared daemon caps requests per client IP
+// Per-test rate-limit bucket - the shared daemon caps requests per client IP
 // (10/min), and this file alone exceeds that on one bucket.
 let bucket = 0;
 let HEADERS: Record<string, string>;
@@ -64,7 +64,7 @@ afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
 });
 
-describe("issue #83 — POST /mute explicit set", () => {
+describe("issue #83 - POST /mute explicit set", () => {
   test('{"muted": true} → indefinite mute, response reflects state', async () => {
     const res = await postMute(JSON.stringify({ muted: true }));
     expect(res.status).toBe(200);
@@ -92,7 +92,7 @@ describe("issue #83 — POST /mute explicit set", () => {
   });
 });
 
-describe("issue #83 — POST /mute empty-body toggle", () => {
+describe("issue #83 - POST /mute empty-body toggle", () => {
   test("empty body twice → toggles on then off", async () => {
     const first = await postMute();
     expect(first.status).toBe(200);
@@ -106,7 +106,7 @@ describe("issue #83 — POST /mute empty-body toggle", () => {
   });
 });
 
-describe("issue #83 — POST /mute invalid bodies → 400, state untouched", () => {
+describe("issue #83 - POST /mute invalid bodies → 400, state untouched", () => {
   const cases: [string, string][] = [
     ["non-boolean muted", JSON.stringify({ muted: "yes" })],
     ["missing muted key", JSON.stringify({ duration_minutes: 30 })],
@@ -128,7 +128,7 @@ describe("issue #83 — POST /mute invalid bodies → 400, state untouched", () 
   }
 });
 
-describe("issue #83 — /mute reliability under load and failure", () => {
+describe("issue #83 - /mute reliability under load and failure", () => {
   test("/mute is NOT starved by a /notify flood (dedicated rate-limit bucket)", async () => {
     // Exhaust one client's shared bucket with 10 notify-path requests, then
     // assert /mute from the same client still succeeds. Uses a dedicated
@@ -158,7 +158,7 @@ describe("issue #83 — /mute reliability under load and failure", () => {
   });
 
   test("state-write failure → 500 with error shape (incl. request_id)", async () => {
-    // Point the state path UNDER a regular file so mkdirSync throws ENOTDIR —
+    // Point the state path UNDER a regular file so mkdirSync throws ENOTDIR -
     // a non-validation failure that must map to 500, not 400.
     const blocker = join(TMP, "not-a-dir");
     const { writeFileSync } = await import("node:fs");
@@ -185,7 +185,7 @@ describe("issue #83 — /mute reliability under load and failure", () => {
   });
 });
 
-describe("issue #83 — /health mute block", () => {
+describe("issue #83 - /health mute block", () => {
   test("shows mute state in both states; existing fields unchanged", async () => {
     const unmuted = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
     expect(unmuted.status).toBe("healthy");
@@ -203,7 +203,7 @@ describe("issue #83 — /health mute block", () => {
   });
 });
 
-describe("issue #83 — persistence across module re-read", () => {
+describe("issue #83 - persistence across module re-read", () => {
   test("state set via endpoint is re-read from disk identically", async () => {
     await postMute(JSON.stringify({ muted: true, duration_minutes: 60 }));
     const onDisk = readMuteState(MUTE_PATH);
