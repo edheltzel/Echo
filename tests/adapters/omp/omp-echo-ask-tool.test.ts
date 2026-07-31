@@ -1,0 +1,56 @@
+import { describe, expect, test } from "bun:test";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import echoVoiceOmpAdapter from "../../../adapters/omp/index.ts";
+import { loadOmpVoiceConfig } from "../../../adapters/omp/config.ts";
+import { ECHO_ASK_PARAMETERS, ECHO_ASK_TOOL_NAME } from "../../../converse/host-tool.ts";
+
+// omp's side of two-way voice. It registers the same shared tool as the Pi
+// adapter rather than its own copy, which is the property asserted here: the
+// registered definition is byte-identical in schema, so the two hosts cannot
+// drift. Tool behavior lives in tests/converse/host-tool.
+//
+// No test here executes the tool: executing it would start a real turn.
+
+function mockHost(options: { withToolApi?: boolean } = {}) {
+  const handlers = new Map<string, unknown>();
+  const commands = new Map<string, unknown>();
+  const tools = new Map<string, Record<string, any>>();
+  const api: Record<string, unknown> = {
+    on: (event: string, handler: unknown) => handlers.set(event, handler),
+    registerCommand: (name: string, opts: unknown) => commands.set(name, opts),
+  };
+  if (options.withToolApi !== false) {
+    api.registerTool = (definition: Record<string, any>) => tools.set(String(definition.name), definition);
+  }
+  return { handlers, commands, tools, api: api as unknown as ExtensionAPI };
+}
+
+describe("omp adapter: echo_ask tool", () => {
+  test("registers the shared ask tool", () => {
+    const host = mockHost();
+
+    echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}));
+
+    const tool = host.tools.get(ECHO_ASK_TOOL_NAME);
+    expect(tool).toBeDefined();
+    expect(tool!.parameters).toEqual(ECHO_ASK_PARAMETERS);
+    expect(tool!.approval).toBe("read");
+  });
+
+  test("a runtime without registerTool still gets the voice adapter", () => {
+    const host = mockHost({ withToolApi: false });
+
+    expect(() => echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}))).not.toThrow();
+
+    expect(host.tools.size).toBe(0);
+    expect(host.handlers.has("turn_end")).toBe(true);
+  });
+
+  test("the existing commands are still registered alongside the tool", () => {
+    const host = mockHost();
+
+    echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}));
+
+    expect([...host.commands.keys()].sort()).toEqual(["echo-voice", "voice-status"]);
+  });
+});

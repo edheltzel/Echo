@@ -1,4 +1,4 @@
-# echo — oh-my-pi (omp) adapter
+# echo - oh-my-pi (omp) adapter
 
 Dedicated omp host adapter (the first slice of [#109](https://github.com/edheltzel/Echo/issues/109),
 splitting omp off the shared Pi adapter). It listens to omp lifecycle events and
@@ -7,8 +7,13 @@ translates them into `/notify` requests against the local voice server, tagged
 
 It uses omp's own SDK (`@oh-my-pi/pi-coding-agent`) and imports host-neutral helpers by
 name from the `@echo/shared` workspace package it declares as a dependency. No relative
-import leaves this package root, and it never imports `core/` or the Pi adapter — the
+import leaves this package root, and it never imports `core/` or the Pi adapter - the
 boundary contract is in [`docs/adapters.md`](../../docs/adapters.md).
+
+It also registers the `echo_ask` tool (speak a question, return the spoken reply as text)
+through the same shared implementation the Pi adapter uses, feature-detected so a runtime
+without a tool API keeps its voice notifications. Contract:
+[docs/converse.md](../../docs/converse.md).
 
 ## Configuration
 
@@ -37,7 +42,7 @@ daidentity:
 ```
 
 Resolved at `session_start` from `ctx.cwd`, per key: project → global → env config.
-`voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — the
+`voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - the
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
 omp session started in that repo. With a persona **name** set, the startup greeting
 **announces that name** (e.g. "Echo online and standing by.") unless the repo provides
@@ -52,7 +57,7 @@ Inside omp, run:
 ```
 
 The cross-host analog of the Claude Code `/echo-voice` command. Both arguments are
-optional — anything missing is prompted for. It validates that the voice is a real
+optional - anything missing is prompted for. It validates that the voice is a real
 edge-tts name, then merges the `daidentity` block into `<project>/.omp/config.yml` via
 `Bun.YAML` (parse → set → stringify), preserving every other key. A present-but-unparseable
 `config.yml` **aborts** rather than clobbering it. The command ships with the adapter (no
@@ -76,5 +81,5 @@ existing Echo `echo-voice` link off the pre-split shared `adapters/pi/` onto `ad
 ## Scope
 
 The lifecycle, native-config persona override, and registration are in place. The remaining
-#109 work is optional consolidation — folding the small config helpers (currently mirrored
+#109 work is optional consolidation - folding the small config helpers (currently mirrored
 between `adapters/pi` and `adapters/omp`) into `shared/`.

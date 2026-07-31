@@ -6,17 +6,27 @@ This guide installs `echo`, a local voice notification server for coding agents 
 
 The installer writes a macOS LaunchAgent for the universal core server and optionally registers one host adapter:
 
-- **Core only** — any process can POST to `/notify`.
-- **Claude Code adapter** — Claude Code lifecycle hooks speak.
-- **Pi adapter** — Pi session start and `🗣️` completion lines speak.
-- **oh-my-pi (omp) adapter** — the omp counterpart of the Pi adapter; same behavior, its own package.
+- **Core only** - any process can POST to `/notify`.
+- **Claude Code adapter** - Claude Code lifecycle hooks speak.
+- **Pi adapter** - Pi session start and `🗣️` completion lines speak.
+- **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
+- **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 
 ## Prerequisites
 
-- macOS — the installer writes a LaunchAgent (Linux is best-effort for manual server runs only; see `docs/dependencies.md`).
+- macOS - the installer writes a LaunchAgent (Linux is best-effort for manual server runs only; see `docs/dependencies.md`).
 - [Bun](https://bun.sh/).
 
-Optional voice providers and host adapters are described in `docs/dependencies.md`.
+Voice notifications need nothing else. The optional one-shot voice ask has a hard recorder
+dependency, `sox`, and needs one local transcriber. For the recommended macOS 26 path:
+
+```bash
+brew install sox  # provides the required `rec` command
+brew install yap  # on-device transcription
+```
+
+A local `whisper-cli` plus a model can replace `yap`, but not `sox`. Optional voice providers,
+host adapters, and the Whisper setup are described in `docs/dependencies.md`.
 
 ## Install core only
 
@@ -34,7 +44,7 @@ OK echo is healthy on :3246
 
 If the installer prints `Voice server did not respond` instead, open the log at `~/Library/Logs/echo.log`.
 
-If it refuses with `Port 3246 is occupied but not answering Echo's /health`, something is holding the port without serving Echo — either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
+If it refuses with `Port 3246 is occupied but not answering Echo's /health`, something is holding the port without serving Echo - either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
 
 ## Add the Claude Code adapter
 
@@ -60,13 +70,35 @@ Inside Pi, `/voice-status` shows adapter configuration.
 bash scripts/install.sh --adapter omp
 ```
 
-This installs the core server and registers `adapters/omp/` with oh-my-pi by maintaining a single `echo-voice` symlink in `~/.omp/agent/extensions/`. It requires the `omp` CLI on your PATH. Per-project persona and voice overrides read omp's own `.omp/config.yml` — see [`../adapters/omp/README.md`](../adapters/omp/README.md).
+This installs the core server and registers `adapters/omp/` with oh-my-pi by maintaining a single `echo-voice` symlink in `~/.omp/agent/extensions/`. It requires the `omp` CLI on your PATH. Per-project persona and voice overrides read omp's own `.omp/config.yml` - see [`../adapters/omp/README.md`](../adapters/omp/README.md).
 
-The installer only ever touches the `echo-voice` entry. If something other than Echo already occupies that name, the install aborts before changing anything — see `docs/adapters.md` for the ownership rules.
+The installer only ever touches the `echo-voice` entry. If something other than Echo already occupies that name, the install aborts before changing anything - see `docs/adapters.md` for the ownership rules.
+
+## Add the voice-ask tool (Claude Code)
+
+```bash
+bash scripts/install.sh --adapter mcp
+```
+
+This registers the `echo-converse` MCP server in `~/.claude.json`, which gives Claude Code the
+`echo_ask` tool: Echo speaks a question and returns what you say back. Pi and omp get the same
+tool from their existing adapters, so they need no extra install step.
+
+Echo owns only the `echo-converse` server name; if something else already holds it, the install
+aborts before changing anything. The adapter install checks `sox` and `rec` before changing host
+state, but a missing recorder produces a warning rather than blocking the notification install.
+Treat voice ask as not installed until `brew install sox` has supplied both commands and the check
+passes; a missing `rec` is refused before capture begins. `cli/echo doctor` repeats the check later.
+
+The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
+your terminal application rather than Echo; Claude Code's stdio MCP ancestry is still unverified.
+[`converse.md`](converse.md#before-you-enable-it) is the single source for the permission and
+attribution conditions, Echo's lack of a per-question prompt, the recording lifecycle and cleanup
+guarantee, and provider egress.
 
 ## Moved or renamed the repo directory?
 
-The daemon is unaffected — it runs from a staged copy under `~/Library/Application Support/echo/payload`, not from the checkout. Only adapter registrations still point at the repo, so rerun the installer once (any `--adapter` value) to re-reconcile them. To see what's stale without changing anything:
+The daemon is unaffected - it runs from a staged copy under `~/Library/Application Support/echo/payload`, not from the checkout. Only adapter registrations still point at the repo, so rerun the installer once (any `--adapter` value) to re-reconcile them. To see what's stale without changing anything:
 
 ```bash
 bash scripts/install.sh --check      # or: cli/echo doctor
@@ -89,7 +121,7 @@ The first command returns JSON containing `"status":"healthy"`. The second retur
 
 - Check the service: `bash scripts/status.sh` shows load state, health, and the last log lines.
 - Tail the server log: `tail -20 ~/Library/Logs/echo.log`.
-- Read the voice-resolution log at `~/Library/Logs/echo/voice-resolution.jsonl` — it records how each notification's requested voice resolved, including fallbacks. An unexpected voice usually means the provider chain fell back (for example to macOS `say`); failed attempts include diagnostic fields such as `phase`, `reason`, `timeout_ms`, and `stderr`. `docs/voices.md` explains voice resolution; `docs/dependencies.md` lists what each provider needs.
+- Read the voice-resolution log at `~/Library/Logs/echo/voice-resolution.jsonl` - it records how each notification's requested voice resolved, including fallbacks. An unexpected voice usually means the provider chain fell back (for example to macOS `say`); failed attempts include diagnostic fields such as `phase`, `reason`, `timeout_ms`, and `stderr`. `docs/voices.md` explains voice resolution; `docs/dependencies.md` lists what each provider needs.
 
 Day-to-day start/stop/restart/status procedures live in `docs/operations.md`.
 
@@ -105,7 +137,7 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 
 This removes the neutral LaunchAgent and the staged daemon payload, preserving logs, your persona config, and repo files.
 
-It does **not** remove adapter registrations — they survive uninstall, and there is no deregistration tool, so remove them by hand before deleting the repo directory. Which entries, and where: `docs/operations.md`.
+It does **not** remove adapter registrations - they survive uninstall, and there is no deregistration tool, so remove them by hand before deleting the repo directory. Which entries, and where: `docs/operations.md`.
 
 ## Operations
 

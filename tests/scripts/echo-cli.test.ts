@@ -142,6 +142,8 @@ describe("echo doctor", () => {
       expect(r.stdout).toContain("echo install");
       // The Bun prerequisite is diagnosed (doctor itself runs without needing it).
       expect(r.stdout).toContain("bun");
+      expect(r.stdout).toContain("converse");
+      expect(r.stdout).toContain("brew install sox");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -257,7 +259,15 @@ describe("echo doctor", () => {
         // Stub launchctl (com.echo loaded) + curl (healthy /health JSON).
         writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
         writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","providers":{"edgetts":{"enabled":true,"healthy":true}}}\'\nexit 0\n');
-        const env = { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin` };
+        const env = {
+          HOME: home,
+          PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+          // This test exercises doctor readiness with a hermetic fixture. The
+          // real install path still requires sox/rec, while overrides make the
+          // dependency row deterministic on CI hosts without Homebrew.
+          ECHO_CONVERSE_SOX_BIN: "/usr/bin/true",
+          ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
+        };
 
         // Stage the payload first (install.sh runs in the same temp HOME).
         const install = await runCli(["install", "--adapter", "none"], env);

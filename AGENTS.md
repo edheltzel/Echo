@@ -2,7 +2,7 @@
 
 Lean entry point for agents working on `echo`. This file is the build/test
 commands, the repo map, the hard invariants, and the DOX rail. Architecture and per-area
-detail live behind the pointers below — load them on demand (progressive disclosure).
+detail live behind the pointers below - load them on demand (progressive disclosure).
 
 ## Architecture in one breath
 
@@ -14,14 +14,22 @@ boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](
 Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs in an adapter
 that calls `POST /notify`.
 
+A second host-neutral capability, `echo-converse` (`converse/`, `localhost:32468`), adds the
+  other direction: speak a question, capture the spoken reply, transcribe it locally, return the
+  text. It uses an additive opt-in completion/reservation protocol in `core/` while preserving
+  ordinary `/notify` callers, and writes the capture-state file `core/capture-guard.ts` already
+  reads. Its coordinator is deliberately microphone-free;
+the calling host opens the microphone. Why, and the TCC measurements behind it:
+**[docs/converse.md](docs/converse.md)**.
+
 ## Quick commands
 
 ```bash
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
-# Stable human surface — cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|pi|omp] [--check]
+# Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
+cli/echo install [--adapter none|claudecode|mcp|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
@@ -35,6 +43,11 @@ bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)
 bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
+
+# echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
+bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)
+curl -fsS http://localhost:32468/health  # capability, booking holder, configured core address
+bash scripts/install.sh --adapter mcp    # register the ask tool for Claude Code
 
 # Health / silent smoke
 curl -fsS http://localhost:3246/health
@@ -65,13 +78,16 @@ bun install                 # links @echo/shared into each adapter package (requ
 bun test
 PORT=8889 tests/smoke-core.sh
 tests/e2e-adapters.sh       # isolated daemon on :8899; --audible to hear it
+tests/e2e-converse.sh       # isolated core :8921 + coordinator :8922; no microphone needed
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
+bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
+bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
 through their own `node_modules`; without the workspace links a registered adapter fails to
 load. `scripts/install.sh` runs it, and `--check` reports a missing link as stale. A test
-that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` — the flag opts that run out
+that drives `install.sh` must set `ECHO_SKIP_WORKSPACE_LINK=1` - the flag opts that run out
 of both creating and verifying the links, so `bun test` never relinks the checkout's
 `node_modules` underneath itself.
 
@@ -86,9 +102,9 @@ is unmistakably a test.
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
-such as the JSON config file. Use **Bun only** — no npm/npx/node. Run
-`bun test` + the smoke + the adapter e2e + the Pi build before shipping; CI machine-runs the
-same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
+such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
+`bun test` + the smoke + both e2e scripts + the Pi, omp, and MCP builds before shipping; CI
+machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
 
@@ -110,14 +126,15 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 ## Documentation map
 
 | Topic | Doc |
-|---|---|
+| --- | --- |
 | Architecture codemap, boundaries, invariants | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
-| HTTP API (`/notify`, `/notify/personality`, `/mute`, `/health`, `/voices`) + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
+| HTTP API: every endpoint, the request/response contract, rate-limit buckets + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
+| One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
@@ -131,7 +148,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Purpose | Path |
-|---|---|
+| --- | --- |
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
@@ -139,11 +156,14 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
+| `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
+| MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
 | Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else the `config.json` port, else 3246; never parses dotenv files) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
+| Isolated voice-ask e2e (own core + own coordinator, stand-in recorder) | `tests/e2e-converse.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
 ## Invariants / must not do
@@ -156,7 +176,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not broad-kill whatever owns port `3246`; it may be another service.
 - Do not commit secrets or `.env` files.
 - Do not write env-file config into `process.env`. Core resolves env-file values through
-  `resolveEchoEnv` (`core/env.ts`) — read-only, live env wins. Hydrating `process.env` at
+  `resolveEchoEnv` (`core/env.ts`) - read-only, live env wins. Hydrating `process.env` at
   import leaked the operator's `ECHO_VOICE_*` identity into same-process adapter tests
   (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
   `tests/core/architecture-invariants.test.ts` (source scan) plus
@@ -164,24 +184,26 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Keep daemon and adapter configuration precedence in `shared/echo-env.ts`; real process values win, then `~/.config/echo/config.json`, then the first legacy dotenv file per key. Two carve-outs live there and nowhere else: `PORT` is never read from a dotenv file (the bash surfaces cannot see it, and `scripts/migrate-config.ts` moves it into `config.json` at install time), and `ELEVENLABS_API_KEY` is never accepted from `config.json` (a dotenv file stays its permanent home).
 - Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
-- Do not read the daemon's files from an adapter — no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
+- Do not read the daemon's files from an adapter - no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
-- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration — set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
-- Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it — the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
+- Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
+- Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
+- Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
+- Do not speak a converse question while capture state is non-idle, and do not open the microphone before this request's playback completes and core grants its reservation. The coordinator generates the reservation id before `/notify`, releases it on every pre-grant exit, and rebases both core and booking leases at the capture grant. Core's guard would otherwise hold back the question, or a lost response could strand playback. The capture owner writes its OWN pid because core honors a non-idle state only while that pid is alive.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills
 
-- **Issue tracker** — draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
-- **Triage labels** — namespaced taxonomy shared with Recall: `type:`, `agent:`, `needs:`/`needs-triage`/`needs-info`, `risk:`, `blocked:`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
-- **Domain docs** — single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See [docs/agents/domain.md](docs/agents/domain.md).
+- **Issue tracker** - draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+- **Triage labels** - namespaced taxonomy shared with Recall: `type:`, `agent:`, `needs:`/`needs-triage`/`needs-info`, `risk:`, `blocked:`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+- **Domain docs** - single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See [docs/agents/domain.md](docs/agents/domain.md).
 
 ## DOX framework
 
 DOX makes AGENTS.md files binding work contracts for their subtrees. The procedural how-to
 (Read Before Editing, Update After Editing, Hierarchy, Child Doc Shape, Style, Closeout)
-lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
+lives in **[docs/dox.md](docs/dox.md)** - read it before editing any docs.
 
 ### Core Contract
 
@@ -194,6 +216,9 @@ lives in **[docs/dox.md](docs/dox.md)** — read it before editing any docs.
 
 - [`docs/AGENTS.md`](docs/AGENTS.md) owns durable documentation, including canonical plans and
   handoffs under `docs/plans/` and `docs/handoffs/`.
+- [`converse/AGENTS.md`](converse/AGENTS.md) owns the `@echo/converse` voice-ask capability: the
+  microphone-free coordinator, the caller-side capture, and the local contracts that keep the
+  two apart.
 
 Add another child contract when a folder becomes a durable boundary that needs local rules
 (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).

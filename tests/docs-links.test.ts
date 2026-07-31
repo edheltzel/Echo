@@ -11,6 +11,7 @@ const docs = [
   "docs/voices.md",
   "docs/providers-observability.md",
   "docs/reliability.md",
+  "docs/converse.md",
   "docs/dependencies.md",
   "docs/development.md",
   "CONTRIBUTING.md",

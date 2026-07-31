@@ -31,6 +31,7 @@ PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 PAYLOAD_ROLLBACK=""
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
+CLAUDE_MCP_CONFIG="${ECHO_MCP_CONFIG_PATH:-$HOME/.claude.json}"
 # adapters/omp/reconcile.ts honors the same override, so detection and reconcile agree.
 OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 ADAPTER="none"
@@ -38,7 +39,7 @@ CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|pi|omp] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|mcp|pi|omp] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -78,7 +79,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|pi|omp) ;;
+  none|claudecode|mcp|pi|omp) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -209,6 +210,12 @@ claudecode_installed() {
   [ -f "$CLAUDE_SETTINGS" ] && grep -qE '"[^"]*/adapters/claudecode/hooks/[^/"]+\.hook\.ts"' "$CLAUDE_SETTINGS"
 }
 
+# Anchored to the server path echo owns: present even when the path is dead
+# (a renamed clone), which is the state refresh-all has to heal.
+mcp_installed() {
+  [ -f "$CLAUDE_MCP_CONFIG" ] && grep -qE '"[^"]*/adapters/mcp/server\.ts"' "$CLAUDE_MCP_CONFIG"
+}
+
 pi_installed() {
   [ -f "$PI_SETTINGS" ] && grep -qE '"([^":]*/)?adapters/pi/?"' "$PI_SETTINGS"
 }
@@ -271,6 +278,13 @@ preflight() {
       # a real failure (unparseable settings, missing Bash matcher) aborts.
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
+    mcp)
+      echo "> Preflighting MCP server registration"
+      # Exit 3 (changes pending) is normal before an install; exit 2 (FATAL, a
+      # foreign server occupying the echo-converse name) must abort BEFORE any
+      # host state is mutated.
+      bun run "$REPO_ROOT/adapters/mcp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
     pi)
       if ! command -v pi >/dev/null 2>&1; then
         echo "Pi CLI is required for --adapter pi" >&2
@@ -287,6 +301,20 @@ preflight() {
       # e.g. a foreign entry occupying echo-voice) must abort BEFORE any host
       # state is mutated.
       bun run "$REPO_ROOT/adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
+  esac
+
+  # echo-converse's capture tools are diagnosed here, never enforced. These
+  # adapters register the echo_ask tool, but voice-ask is optional and the
+  # daemon they are installing alongside does not need sox at all - failing the
+  # base install over it would break an operator who only wants notifications.
+  # The hard, actionable error still fires at call time (converse/capture.ts
+  # refuses before spawning, naming the binary and `brew install sox`).
+  case "$ADAPTER" in
+    mcp|pi|omp)
+      echo "> Checking echo-converse capture dependencies"
+      bash "$SCRIPT_DIR/converse-dependencies.sh" \
+        || echo "WARN: echo-converse voice-ask will fail until its capture tools are installed; the daemon is unaffected" >&2
       ;;
   esac
 
@@ -429,6 +457,10 @@ install_adapter() {
       echo "> Linking Claude Code slash commands"
       link_claudecode_commands
       ;;
+    mcp)
+      echo "> Registering the echo-converse MCP server"
+      bun run "$REPO_ROOT/adapters/mcp/reconcile.ts"
+      ;;
     pi)
       echo "> Installing Pi adapter package"
       pi install "$REPO_ROOT/adapters/pi"
@@ -453,6 +485,11 @@ refresh_installed_adapters() {
     bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
       || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
     link_claudecode_commands
+  fi
+  if [ "$ADAPTER" != "mcp" ] && mcp_installed; then
+    echo "> Refreshing MCP server registration"
+    bun run "$REPO_ROOT/adapters/mcp/reconcile.ts" \
+      || echo "WARN: MCP registration refresh failed - run adapters/mcp/reconcile.ts manually" >&2
   fi
   if [ "$ADAPTER" != "pi" ] && pi_installed; then
     echo "> Refreshing Pi adapter registration"
@@ -507,6 +544,18 @@ check_installation() {
       stale=1
     elif [ "$rc" -ne 0 ]; then
       echo "WARN: Claude Code hook check failed" >&2
+      stale=1
+    fi
+  fi
+
+  if mcp_installed; then
+    echo "> Checking MCP server registration"
+    rc=0
+    bun run "$REPO_ROOT/adapters/mcp/reconcile.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: MCP registration check failed" >&2
       stale=1
     fi
   fi

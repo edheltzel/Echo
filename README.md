@@ -1,4 +1,4 @@
-![Echo — a voice for any agent](assets/echo-banner-riso.jpg)
+![Echo - a voice for any agent](assets/echo-banner-riso.jpg)
 
 # Echo
 
@@ -6,10 +6,17 @@ Standalone, multi-provider TTS notification server for coding agents, terminals,
 
 The server core accepts JSON on `localhost:3246` by default and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
 
-- `adapters/claudecode/` — Claude Code hook integration.
-- `adapters/pi/` — Pi extension package integration.
-- `adapters/omp/` — oh-my-pi (omp) extension package integration.
-- direct HTTP — any process can POST to `/notify`.
+- `adapters/claudecode/` - Claude Code hook integration.
+- `adapters/pi/` - Pi extension package integration.
+- `adapters/omp/` - oh-my-pi (omp) extension package integration.
+- direct HTTP - any process can POST to `/notify`.
+
+Echo can also ask: `converse/` speaks one question, records one spoken reply, transcribes it
+locally and hands the text back to the agent. It is a one-shot exchange, not a continuing
+conversation. Pi and omp expose it as a tool from their existing adapters; Claude Code gets it
+from the MCP server in `adapters/mcp/`. On the measured Pi/omp path the macOS microphone prompt
+names your terminal application rather than Echo; conditions and full detail:
+[docs/converse.md](docs/converse.md#before-you-enable-it).
 
 ## Architecture
 
@@ -63,7 +70,7 @@ You should hear "Hello from Echo" spoken aloud and see:
 { "status": "success", "message": "Notification sent", "request_id": "..." }
 ```
 
-Hear nothing, or an unexpected voice? See [If you hear nothing — or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
+Hear nothing, or an unexpected voice? See [If you hear nothing - or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
 
 ## Install
 
@@ -73,11 +80,34 @@ The quickstart above installs the core only. To also wire a host adapter:
 bash scripts/install.sh --adapter claudecode   # Claude Code hooks
 bash scripts/install.sh --adapter pi           # Pi extension
 bash scripts/install.sh --adapter omp          # oh-my-pi extension
+bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
 ```
+
+Voice ask requires one package that notifications do not: `sox`, which provides the hard-required
+`rec` recorder. Install it before trying an ask. You also need one local transcriber; the default
+on-device path uses `yap` on macOS 26:
+
+```bash
+brew install sox
+brew install yap
+```
+
+A Pi, omp, or MCP adapter install checks `sox` and `rec` but only warns when they are missing,
+because ordinary notifications do not need them; the Claude Code hook adapter runs no such check.
+Treat voice ask as not installed until that check passes; a missing recorder is refused before
+capture begins. A local `whisper-cli` plus a model is the alternative to `yap`; see
+[docs/converse.md](docs/converse.md#the-capture-pipeline).
+
+The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
+your terminal application rather than Echo. Permission and attribution conditions, Echo's lack of a
+per-question prompt, where reply audio lives and when it is deleted, and what still leaves the
+machine: [docs/converse.md](docs/converse.md#before-you-enable-it).
 
 Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
 
-Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/install-agent.md).
+Want a coding agent to do the setup? Ask it to **install Echo by following
+[docs/install-agent.md](docs/install-agent.md) for your host**. Agent-led installation is a
+supported route, not a workaround; that checklist gives the agent an assertion after each step.
 
 ## Operation
 
@@ -86,7 +116,7 @@ Step-by-step checklist for autonomous agents: [docs/install-agent.md](docs/insta
 ```bash
 cli/echo doctor                # is my install healthy? one recovery command per failed check
 cli/echo status
-cli/echo update                # after a git pull — restarting alone keeps the old daemon
+cli/echo update                # after a git pull - restarting alone keeps the old daemon
 cli/echo mute 30m              # or: on | off | toggle | status
 ```
 
@@ -114,11 +144,18 @@ curl -fsS -X POST http://localhost:3246/notify \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
 
+Host adapters also provide native terminal visuals: Herdr first, then a safe terminal TTY
+(Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9), with the macOS notification fallback
+last. The exact native-success marker suppresses the duplicate fallback banner. Limits,
+headless/tmux behavior, and a direct verification command are in
+[Native terminal visual delivery](docs/http-api.md#native-terminal-visual-delivery).
+
 Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md](docs/operations.md).
 
 ## API
 
-Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
+The everyday endpoints are below; the voice ask adds opt-in playback-status and
+capture-reservation routes on top of them. Full contract: [docs/http-api.md](docs/http-api.md).
 
 ### `POST /notify`
 
@@ -131,7 +168,7 @@ Five endpoints. Full contract: [docs/http-api.md](docs/http-api.md).
 }
 ```
 
-All fields are optional — a missing `message` defaults to `"Task completed"`.
+All fields are optional - a missing `message` defaults to `"Task completed"`.
 `voice_enabled: false` keeps the notification path silent for smoke tests.
 
 `voice_id` takes a persona **name key** from `voices.json` (e.g. `kai`, `themis`). Omit it
@@ -168,9 +205,9 @@ daemon's `voices.json` off disk. Contract: [docs/http-api.md](docs/http-api.md).
 
 ### Voice-resolution drop-off log
 
-To make it observable _why_ a `/notify` used the voice it did, the daemon appends one
+To make it observable *why* a `/notify` used the voice it did, the daemon appends one
 structured JSONL event per voice-enabled `/notify` to
-`~/Library/Logs/echo/voice-resolution.jsonl` — separate from the human-readable daemon log
+`~/Library/Logs/echo/voice-resolution.jsonl` - separate from the human-readable daemon log
 (`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
 `elapsed_ms`, `timeout_ms`, `exit_code`, and `stderr`, so Edge failures distinguish health
 status, synthesis, playback, and circuit-breaker paths. Fields, retention, and overrides:
@@ -179,7 +216,7 @@ status, synthesis, playback, and circuit-breaker paths. Fields, retention, and o
 ## Voices
 
 Voices are configured per agent in `core/voices.json`. The `identity` mapping is the
-default ("Atlas") voice — it speaks whenever `voice_id` is omitted. Every entry under
+default ("Atlas") voice - it speaks whenever `voice_id` is omitted. Every entry under
 `agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`,
 `themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
 
@@ -199,12 +236,12 @@ by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
 ### Gotchas: wrong voice or silence
 
 - Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
-  while ElevenLabs is disabled — it speaks in the active provider's **default voice**
+  while ElevenLabs is disabled - it speaks in the active provider's **default voice**
   instead of the persona you meant.
 - Unexpected macOS `say` usually means Edge is disabled, the Edge circuit is open, or real
   Edge synthesis failed. Check `attempts[]` in the resolution log; the diagnostic health
   probe alone no longer forces `say` fallback.
-- Port `31337` causes silence — voice traffic is `:3246`.
+- Port `31337` causes silence - voice traffic is `:3246`.
 
 ### Auditioning edge voices
 
@@ -216,24 +253,25 @@ Persistent settings live in `~/.config/echo/config.json`, including persona iden
 timeouts, cache limits, and log paths. JSON values are typed and validated against
 [`shared/config-schema.json`](shared/config-schema.json). Live process values remain a
 compatibility override; installing migrates an existing `~/.config/echo/.env` into the JSON
-file and leaves the old one in place, since `ELEVENLABS_API_KEY` — the only secret, never
-accepted in JSON — keeps living there. See [docs/configuration.md](docs/configuration.md).
+file and leaves the old one in place, since `ELEVENLABS_API_KEY` - the only secret, never
+accepted in JSON - keeps living there. See [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
-| I want to…                                               | Read                                                               |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| Hear my first notification (guided tutorial)             | [docs/getting-started.md](docs/getting-started.md)                 |
-| Install adapters, move the repo, uninstall               | [docs/install-human.md](docs/install-human.md)                     |
-| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md)                           |
-| Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md)              |
-| Install via an agent-runnable checklist                  | [docs/install-agent.md](docs/install-agent.md)                     |
-| Look up the HTTP API                                     | [docs/http-api.md](docs/http-api.md)                               |
-| Change or add voices; per-turn persona voice             | [docs/voices.md](docs/voices.md)                                   |
-| Understand provider egress + the resolution log          | [docs/providers-observability.md](docs/providers-observability.md) |
-| Tune reliability / the circuit breaker                   | [docs/reliability.md](docs/reliability.md)                         |
-| See required and optional dependencies                   | [docs/dependencies.md](docs/dependencies.md)                       |
-| Write or wire a host adapter                             | [docs/adapters.md](docs/adapters.md)                               |
+| I want to… | Read |
+| --- | --- |
+| Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
+| Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
+| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |
+| Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
+| Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
+| Change or add voices; per-turn persona voice | [docs/voices.md](docs/voices.md) |
+| Understand provider egress + the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
+| Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
+| See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
+| Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
+| Ask the human a question out loud and read their answer; decide whether to enable it | [docs/converse.md](docs/converse.md) |
 
 ## Development
 

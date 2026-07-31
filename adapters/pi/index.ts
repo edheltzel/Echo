@@ -13,6 +13,7 @@ import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
+import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
@@ -25,7 +26,7 @@ function resolveSessionId(ctx: ExtensionContext): string | undefined {
 }
 
 // Pi exposes the project root as ctx.cwd (documented ExtensionContext field). Read
-// defensively — the installed SDK types may predate it — and treat empty as absent.
+// defensively - the installed SDK types may predate it - and treat empty as absent.
 function resolveCwd(ctx: ExtensionContext): string | undefined {
   const cwd = (ctx as { cwd?: unknown }).cwd;
   return typeof cwd === "string" && cwd.length > 0 ? cwd : undefined;
@@ -67,7 +68,7 @@ function buildVoiceLineInstruction(personaName: string): string {
     "## Spoken completion (required)",
     "End EVERY response with a final line, on its own line as the very last line, in exactly this form:",
     `🗣️ ${personaName}: <one sentence, 8-16 words, summarizing what you just did>`,
-    "Write plain spoken English in that line — no markdown, no code.",
+    "Write plain spoken English in that line - no markdown, no code.",
   ].join("\n");
 }
 
@@ -79,10 +80,10 @@ export default function atlasVoicePiAdapter(
   const pending = new Set<string>();
 
   // Per-project config: layer a persona override from Pi's native settings.json
-  // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key —
+  // (<cwd>/.pi/settings.json over ~/.pi/agent/settings.json, project wins per key -
   // same daidentity convention as the Claude Code adapter) over the env-based
   // `config`, resolved from ctx.cwd and memoized per cwd. A repo with no daidentity
-  // — and every omp session, since .pi/ isn't omp's dir — resolves to the base
+  // - and every omp session, since .pi/ isn't omp's dir - resolves to the base
   // config unchanged. omp's own .omp reader lands with the #109 adapter split.
   const configByCwd = new Map<string, PiVoiceConfig>();
   function resolveConfig(cwd: string | undefined): PiVoiceConfig {
@@ -211,7 +212,21 @@ export default function atlasVoicePiAdapter(
     },
   });
 
-  // `/echo-voice [name] [voice]` — set THIS repo's persona (name + edge-tts voice)
+  // `echo_ask` - the model-invokable two-way turn: speak a question, capture the
+  // spoken reply, return the transcript. A tool, not a command: a command is
+  // human-initiated, and this has to be something the model itself can decide to
+  // call mid-turn. The capture child is spawned from THIS process, which is what
+  // makes macOS attribute the microphone grant to the host terminal rather than
+  // to a background service (docs/converse.md).
+  registerEchoAskTool(pi, {
+    source: "pi",
+    resolveVoice: (ctx) => {
+      const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
+      return { voiceId: cfg.voiceId, title: cfg.title };
+    },
+  });
+
+  // `/echo-voice [name] [voice]` - set THIS repo's persona (name + edge-tts voice)
   // in .pi/settings.json, merged so other settings are preserved. Cross-host analog
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
   pi.registerCommand(

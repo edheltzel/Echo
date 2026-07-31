@@ -1,0 +1,10 @@
+{
+  "name": "@echo/mcp-adapter",
+  "version": "0.1.0",
+  "description": "MCP server exposing echo's one-shot voice ask to hosts that consume tools over MCP (Claude Code)",
+  "type": "module",
+  "keywords": ["mcp", "claude-code", "voice", "stt", "adapter"],
+  "dependencies": {
+    "@echo/converse": "workspace:*"
+  }
+}

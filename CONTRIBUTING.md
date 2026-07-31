@@ -26,8 +26,8 @@ Conventional Commits are encouraged: `feat:`, `fix:`, `docs:`, `chore:`, `test:`
 ## Branching & Releases
 
 Work happens on `dev`: open PRs into `dev`, never push directly to `master`, and Ed owns
-all merges. The authoritative release flow — versioning, changelog, `dev`→`master`
-promotion PRs, and tagging — lives in [`AGENTS.md`](AGENTS.md) → *Release & versioning*;
+all merges. The authoritative release flow - versioning, changelog, `dev`→`master`
+promotion PRs, and tagging - lives in [`AGENTS.md`](AGENTS.md) → *Release & versioning*;
 read it before preparing a release.
 
 ## Issue Filing
@@ -42,22 +42,23 @@ Use the repo's issue shape when possible:
 
 ## Scope
 
-In scope: TTS server core, host adapters, TTS providers, packaging, install/development docs, smoke tests.
+In scope: TTS server core, host adapters, TTS providers, the `converse/` voice ask with its
+local speech-to-text, packaging, install/development docs, smoke tests.
 
-Out of scope: speech-to-text, voice cloning UI, and unrelated coding-agent features.
+Out of scope: cloud speech-to-text, voice cloning UI, and unrelated coding-agent features.
 
 ## Adding a Host Adapter
 
 1. Create `adapters/<host>/` as a workspace package: its own `package.json` declaring
    `@echo/shared`, listed in the root `workspaces` array. Relative imports must stay inside
-   the package root, and the daemon's config is read over HTTP, never off disk — the package
+   the package root, and the daemon's config is read over HTTP, never off disk - the package
    boundary contract lives in [`docs/adapters.md`](docs/adapters.md).
 2. Translate host lifecycle events into `/notify` payloads.
 3. Include `source` and `session_id` when available.
 4. Keep host-specific settings and paths inside the adapter.
 5. Add install support in `scripts/install.sh --adapter <host>`. Registration must be an
    idempotent reconcile-and-prune (set the canonical path, remove stale variants, support
-   `--check`) — never append-only. The contract lives in [`docs/adapters.md`](docs/adapters.md)
+   `--check`) - never append-only. The contract lives in [`docs/adapters.md`](docs/adapters.md)
    (#77).
 6. Add tests and a docs section in `docs/dependencies.md`.
 

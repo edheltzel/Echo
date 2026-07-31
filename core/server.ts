@@ -29,6 +29,18 @@ import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
 import { readMuteState, setMuteState, toggleMuteState } from "./mute";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
+import {
+  captureReservationHeld,
+  captureReservationView,
+  grantCaptureReservation,
+  markPlaybackCompleted,
+  markPlaybackFailed,
+  markPlaybackPlaying,
+  readPlaybackStatus,
+  releaseCaptureReservationById,
+  trackPlayback,
+  type CaptureReservationRequest,
+} from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
@@ -625,6 +637,11 @@ const EDGETTS_HEALTH_TIMEOUT_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_H
 const EDGETTS_SYNTH_RETRIES = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_RETRIES"), 1, 0);
 const EDGETTS_SYNTH_BACKOFF_MS = parseBoundedInt(resolveEchoEnv("ECHO_EDGETTS_SYNTH_BACKOFF_MS"), 250, 1);
 const PYTHON3_PATH = '/opt/homebrew/bin/python3';
+// The macOS fallback speaker. Configurable like every other Echo path so an
+// operator can point it at a wrapper (and so an isolated run can prove queue
+// completion without an audio device), resolved through the canonical
+// configuration chain rather than read from process.env.
+const MACOS_SAY_BIN = resolveEchoEnv("ECHO_SAY_BIN") || '/usr/bin/say';
 
 class EdgeProcessError extends Error {
   diagnostic: ProviderDiagnostic;
@@ -911,7 +928,7 @@ class MacOSSayProvider implements TTSProvider {
       const fallbackVoice = getMacOSFallbackVoice();
       console.log(`🍎 Using macOS say (voice: ${fallbackVoice})...`);
 
-      const proc = spawn('/usr/bin/say', [
+      const proc = spawn(MACOS_SAY_BIN, [
         '-v', fallbackVoice,
         '-r', String(voicesConfig.default_rate || 175),
         text
@@ -1322,7 +1339,7 @@ export async function speakWithFallback(
   // would pollute the user's capture — skip the voice line, mute-style. Checked
   // at speak time (queue-dequeue), so a line whose turn arrives after the
   // capture ends plays normally. The banner already fired at accept.
-  if (isCaptureActive()) {
+  if (captureReservationHeld() || isCaptureActive()) {
     console.log('🎙️  Mic capture active — speech held (capture guard)');
     return { success: false, provider: 'capture-held', voice: null, attempts: [], held_for_capture: true };
   }
@@ -1576,6 +1593,7 @@ async function speakNotification(
     disposition: result.held_for_capture ? 'held-for-capture' : 'played',
   };
   writeAudioLifecycleEvent(event);
+  return result;
 }
 
 // =============================================================================
@@ -1631,10 +1649,19 @@ interface NotifyJobPayload {
 const playQueue = new PlayQueue<NotifyJobPayload>({
   player: async (job) => {
     const p = job.payload;
-    await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    markPlaybackPlaying(p.requestId);
+    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    // Name the actual cause: a caller waiting on completion reports this string
+    // verbatim, and telling a muted operator that a provider failed sends them
+    // to the wrong fix.
+    const failureDetail = result.held_for_capture ? "capture guard held playback"
+      : result.muted ? "echo is muted, so the line was not spoken"
+      : "speech provider failed";
+    markPlaybackCompleted(p.requestId, result.success, failureDetail);
     log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
   },
   onDisposition: (job, disposition, reason) => {
+    markPlaybackFailed(job.id, `${disposition}: ${reason}`);
     log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
     // Minimal lifecycle row (R7): the line never reached the player, so there
     // are no playback metrics — just the disposition and its reason.
@@ -1659,6 +1686,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     });
   },
   onPlayerError: (job, error) => {
+    markPlaybackFailed(job.id, error instanceof Error ? error.message : String(error));
     log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
     // Failure row (R7): speakNotification does not swallow — a speak-path
     // throw or a watchdog timeout lands here, and without this row the
@@ -1703,6 +1731,7 @@ function acceptNotification(
     voiceSettings: Partial<VoiceSettings> | null;
     sessionId: string | null;
     nativeVisualShown: boolean;
+    captureReservation?: CaptureReservationRequest;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1713,6 +1742,9 @@ function acceptNotification(
   if (!messageValidation.valid) {
     throw new Error(`Invalid message: ${messageValidation.error}`);
   }
+  if (!opts.voiceEnabled && opts.captureReservation) {
+    throw new Error("capture_reservation requires voice_enabled");
+  }
 
   // Banner for every accepted notification, voice or not — decoupled from
   // the queue so it shows immediately and survives supersede/age-drop. The
@@ -1722,7 +1754,14 @@ function acceptNotification(
     showBanner(titleValidation.sanitized!, messageValidation.sanitized!);
   }
 
-  if (!opts.voiceEnabled) return;
+  if (!opts.voiceEnabled) {
+    return;
+  }
+
+  // Ordinary notifications keep their existing receipt-only behavior and do
+  // not need a retained completion record. Converse opts in with a reservation
+  // so the status map cannot grow with every normal notification.
+  if (opts.captureReservation) trackPlayback(reqId, opts.captureReservation);
 
   playQueue.enqueue({
     id: reqId,
@@ -1742,6 +1781,14 @@ function acceptNotification(
 // =============================================================================
 // HTTP Server
 // =============================================================================
+
+// Declared once: routing and rate-limit bucketing must agree on exactly which
+// paths are converse's opt-in status and control routes, or a path that answers
+// on one list is billed to the wrong bucket on the other.
+const COMPLETION_PATH = /^\/notify\/([^/]+)\/completion$/;
+const CAPTURE_RESERVATION_GRANT_PATH = /^\/notify\/capture-reservations\/([^/]+)\/grant$/;
+const CAPTURE_RESERVATION_RELEASE_PATH = /^\/notify\/capture-reservations\/([^/]+)\/release$/;
+const CAPTURE_RESERVATION_PATH = /^\/notify\/capture-reservations\/[^/]+\/(grant|release)$/;
 
 export const server = serve({
   port: PORT,
@@ -1768,9 +1815,20 @@ export const server = serve({
     // /notify for that same turn. Sharing the notification bucket would halve
     // every host's effective notification budget and make the read starve the
     // write it precedes — a dropped notification, the worst failure here.
+    //
+    // The converse routes are split by call frequency, not by URL prefix. A turn
+    // spends up to five completion polls but only one grant and one release, so
+    // sharing one bucket would let the polls of one turn 429 the control calls of
+    // the next. A lost release is the expensive one: it leaves core's reservation
+    // held and every later notification silently held for capture.
+    //
+    // POST /notify/personality is deliberately NOT in either bucket. It produces
+    // speech, so it shares the notification bucket the flood guard exists for.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
+      : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
+      : CAPTURE_RESERVATION_PATH.test(url.pathname) ? `capture-reservation:${clientIp}`
       : clientIp;
     if (!checkRateLimit(rateKey)) {
       return new Response(
@@ -1794,6 +1852,7 @@ export const server = serve({
         const sessionId = data.session_id || null;
         const source = data.source || null;
         const nativeVisualShown = data.visual_delivery === 'native';
+        const captureReservation = data.capture_reservation;
         const ctx: LogContext = { requestId: reqId, sessionId, source };
 
         if (voiceId && typeof voiceId !== 'string') {
@@ -1806,6 +1865,15 @@ export const server = serve({
         const messageCheck = validateInput(message);
         if (!messageCheck.valid) throw new Error(`Invalid message: ${messageCheck.error}`);
 
+        if (captureReservation !== undefined && (
+          typeof captureReservation !== "object" || captureReservation === null ||
+          typeof captureReservation.reservation_id !== "string" || captureReservation.reservation_id.length === 0 || captureReservation.reservation_id.length > 128 ||
+          typeof captureReservation.owner_pid !== "number" || !Number.isInteger(captureReservation.owner_pid) || captureReservation.owner_pid <= 0 ||
+          typeof captureReservation.lease_ms !== "number" || !Number.isFinite(captureReservation.lease_ms) || captureReservation.lease_ms <= 0
+        )) {
+          throw new Error("Invalid capture_reservation");
+        }
+
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
 
         // 202 on receipt: the banner fires at accept, and synth+play runs
@@ -1814,6 +1882,7 @@ export const server = serve({
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
         acceptNotification(reqId, {
           title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
+          captureReservation,
         });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
@@ -1834,6 +1903,52 @@ export const server = serve({
           }
         );
       }
+    }
+
+    const completion = COMPLETION_PATH.exec(url.pathname);
+    if (completion && req.method === "GET") {
+      const requestId = completion[1];
+      const status = readPlaybackStatus(requestId);
+      if (status === null) {
+        return new Response(JSON.stringify({ error: "unknown_request", request_id: requestId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404,
+        });
+      }
+      return new Response(JSON.stringify(status), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+      });
+    }
+
+    const reservationGrant = CAPTURE_RESERVATION_GRANT_PATH.exec(url.pathname);
+    if (reservationGrant && req.method === "POST") {
+      const reservationId = decodeURIComponent(reservationGrant[1]);
+      const granted = grantCaptureReservation(reservationId);
+      if (granted.granted === false) {
+        return new Response(JSON.stringify({ error: granted.reason, reservation_id: reservationId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
+        });
+      }
+      return new Response(JSON.stringify(granted), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // Release is keyed ONLY on the coordinator-generated reservation id, never on
+    // core's request id: request ids are a predictable counter, so a release
+    // route keyed on one would let any local process (or a blind cross-origin
+    // POST) drop a live microphone interlock by guessing.
+    const reservationReleaseById = CAPTURE_RESERVATION_RELEASE_PATH.exec(url.pathname);
+    if (reservationReleaseById && req.method === "POST") {
+      const reservationId = decodeURIComponent(reservationReleaseById[1]);
+      const released = releaseCaptureReservationById(reservationId);
+      return new Response(JSON.stringify({ reservation_id: reservationId, ...released }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
     // /notify/personality — compatibility shim
@@ -1970,6 +2085,7 @@ export const server = serve({
             path: resolveCaptureStatePath(),
             state: readCaptureState(),
           },
+          capture_reservation: captureReservationView(),
           // Additive (Phase 2): backlog + consumer liveness. `stalled` means
           // the current job has outlived even the queue's own watchdog —
           // the consumer is genuinely wedged, not just playing a long line.
@@ -2002,7 +2118,16 @@ export const server = serve({
       );
     }
 
-    const supported = ["POST /notify", "POST /notify/personality", "POST /mute", "GET /health", "GET /voices"];
+    const supported = [
+      "POST /notify",
+      "GET /notify/:request_id/completion",
+      "POST /notify/capture-reservations/:reservation_id/grant",
+      "POST /notify/capture-reservations/:reservation_id/release",
+      "POST /notify/personality",
+      "POST /mute",
+      "GET /health",
+      "GET /voices",
+    ];
     if (req.method === "POST") {
       return new Response(
         JSON.stringify({
@@ -2043,5 +2168,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, POST /notify/personality, POST /mute, GET /health, GET /voices`);
+log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);
