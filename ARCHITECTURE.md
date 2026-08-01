@@ -11,8 +11,8 @@ Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 (`core/server.ts`) listens on `localhost:3246` by default and exposes the notification API plus
 its opt-in playback-status and capture-reservation routes (`GET /notify/:request_id/completion`
 and `POST /notify/capture-reservations/:reservation_id/{grant,release}`). Any host - a Claude Code
-session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
-observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi, the trailing
+session, a Jcode session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
+observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi/Jcode, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
 macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner - unless
@@ -22,7 +22,7 @@ request `visual_delivery: "native"` and the daemon skips its own banner for that
 
 ```
   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────┐
-  │  Claude Code     │   │  Pi / oh-my-pi   │   │ curl / any   │
+  │ Claude Code/Jcode│   │  Pi / oh-my-pi   │   │ curl / any   │
   │  (host)          │   │  (host)          │   │ HTTP client  │
   └────────┬─────────┘   └────────┬─────────┘   └──────┬───────┘
    lifecycle events        lifecycle events            │
@@ -114,13 +114,13 @@ not a review nit.
 ## Repo layout
 
 | Area | Path | Role |
-|---|---|---|
+| --- | --- | --- |
 | Universal daemon | `core/server.ts` | The entire TTS engine: config load, sanitization, voice resolution, the four providers, the HTTP handler. |
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` - instant replay for repeated lines (#202). |
-| Numeric env parsing | `core/env.ts` | `parseBoundedInt` - every numeric env knob flows through it; `resolveEchoEnv` - non-mutating config reads. |
-| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (process-first configuration loading: `config.json`, then the legacy dotenv fallback), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
+| Numeric config parsing | `core/env.ts` | `parseBoundedInt` validates numeric settings; `resolveEchoEnv` performs non-mutating config reads. |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
@@ -132,7 +132,7 @@ not a review nit.
 | MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
 | `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for that request's exact playback completion, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
-| Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: the port they talk to (`PORT` when exported, else 3246) and the shared occupied-port report, so no two surfaces can disagree. Reads the documented config port when no override is present. |
+| Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: config.json port first, deprecated process PORT second, then 3246; also owns the shared occupied-port report. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/converse/`, `tests/scripts/`, `tests/shared/` | `bun test`, plus `tests/e2e-adapters.sh` and `tests/e2e-converse.sh`; see [`docs/development.md`](docs/development.md). |
@@ -154,7 +154,7 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    through a native terminal route. The validated VOICE
    line joins the global serial play queue (`core/play-queue.ts`) and the request returns
    immediately (`{status: "accepted", request_id}`). The queue's single consumer runs
-   steps 4–6 one line at a time - a new line never plays over an in-flight one; queued
+   steps 4-6 one line at a time - a new line never plays over an in-flight one; queued
    lines coalesce newest-per-session and age out (dispositions recorded in the
    audio-lifecycle log), and a hung player is bounded by the queue's watchdog.
 4. **Resolve the voice** - `getVoiceMapping(voice_id)` resolves the request's `voice_id`
@@ -176,8 +176,9 @@ Voice config and the per-turn persona voice: [`docs/voices.md`](docs/voices.md).
 ## Cross-cutting concerns
 
 ### Circuit breaker (`core/circuit-breaker.ts`)
+
 Tracks **provider** (synthesis/network) failures per TTS provider, opening after a shared
-threshold (default **2**, floor 1; env `ECHO_CIRCUIT_BREAKER_THRESHOLD`) and
+threshold (default **2**, floor 1; config property `ECHO_CIRCUIT_BREAKER_THRESHOLD`) and
 skipping that provider for a 60s cooldown before half-opening to retest. The attribution
 rule is load-bearing: a **local playback** failure (afplay/mpv) is *not* a provider failure
 and never opens the breaker - `EdgeTTSProvider.speak` splits online synthesis (governed,
@@ -185,6 +186,7 @@ retried) from local playback. The breaker map covers `edgetts`/`elevenlabs`/`kok
 is local and untracked. Knobs and latency math: [`docs/reliability.md`](docs/reliability.md).
 
 ### Egress gating (`getProviderStatus`, `speakWithFallback`)
+
 A **disabled** provider makes **zero** outbound network calls - no synthesis and no
 auth/health probe. The guarantee is structural: `speakWithFallback` `continue`s on
 `!isEnabled()` before ever calling `isHealthy()`/`speak()`, and `getProviderStatus` only
@@ -195,6 +197,7 @@ out-of-the-box state *does* egress. Detail + the fully-local recipe:
 [`docs/providers-observability.md`](docs/providers-observability.md).
 
 ### Voice-resolution drop-off log (issue #24)
+
 The daemon appends **one structured JSONL event per voice-enabled `/notify`** recording why
 a request used (or fell back from) its requested voice - `resolution`, `provider`, the
 `attempts[]` trail, and `success`. It lives entirely in `core/server.ts`
@@ -204,6 +207,7 @@ error never breaks a `/notify`). Fields, path, and retention:
 [`docs/providers-observability.md`](docs/providers-observability.md).
 
 ### Per-turn persona voice (Claude Code Stop hook)
+
 Each turn, the Claude Code Stop hook `adapters/claudecode/hooks/VoiceCompletion.hook.ts` speaks the
 response's trailing `🗣️ <Name>:` line. A single canonical parser `parseFinalVoiceLine`
 (`adapters/claudecode/hooks/lib/TranscriptParser.ts`) feeds both voice selection and word
@@ -258,7 +262,7 @@ The authoritative copy of the invariant list and the DOX rail lives in [`AGENTS.
 ## Where to go next
 
 | You want to… | Read |
-|---|---|
+| --- | --- |
 | Build, test, and run | [`AGENTS.md`](AGENTS.md), [`docs/development.md`](docs/development.md) |
 | Operate the installed service (start/stop/update/repo moves) | [`docs/operations.md`](docs/operations.md) |
 | Configure JSON settings, migrate dotenv values, ports, and providers | [`docs/configuration.md`](docs/configuration.md) |

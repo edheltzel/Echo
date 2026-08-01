@@ -61,9 +61,10 @@ curl -fsS http://localhost:3246/health
 ```
 
 Returns JSON containing `"status":"healthy"`. Every command on this page uses the port
-from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT`
-override is available for one isolated command or test. The CLI does not discover arbitrary
-listeners. See [`configuration.md`](configuration.md).
+from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT` is a
+deprecated one-release fallback that warns and cannot override config.json - isolated
+instances point `ECHO_CONFIG_FILE` at a scratch config instead. The CLI does not discover
+arbitrary listeners. See [`configuration.md`](configuration.md).
 
 ## Verify a native terminal notification
 
@@ -106,15 +107,20 @@ log because `202` means accepted, not finished speaking.
 
 For a visual acceptance test, run the adapter smoke from a real WezTerm TTY. If the terminal
 is focused and its notification policy suppresses focused-pane notifications, use a temporary
-isolated process with the runtime-only override below; do not edit the global WezTerm config:
+isolated process with a test-only Echo config selector; do not edit the global WezTerm config:
 
 ```bash
+mkdir -p ~/.config/echo
+cat > ~/.config/echo/wezterm-test.json <<'JSON'
+{"ECHO_VOICE_ENABLED":false,"ECHO_VOICE_GREET_ON_START":true,"ECHO_VOICE_SPEAK_COMPLETIONS":false}
+JSON
 /Applications/WezTerm.app/Contents/MacOS/wezterm \
   --config 'notification_handling="AlwaysShow"' \
   start --always-new-process --no-auto-connect --cwd "$PWD" -- \
-  env HERDR_SOCKET_PATH=/dev/null ECHO_VOICE_ENABLED=false \
-  ECHO_VOICE_GREET_ON_START=true ECHO_VOICE_SPEAK_COMPLETIONS=false PI_OFFLINE=1 \
+  env ECHO_CONFIG_FILE="$HOME/.config/echo/wezterm-test.json" \
+  HERDR_SOCKET_PATH=/dev/null PI_OFFLINE=1 \
   pi --no-session --offline --no-tools -e "$PWD/adapters/pi/index.ts"
+rm ~/.config/echo/wezterm-test.json
 ```
 
 The rollout capture was made from the real terminal path with WezTerm
@@ -145,8 +151,8 @@ were then restored. This counterfactual isolates host output masking from Echo s
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`; exporting
-`PORT` aims it at one specific daemon, e.g. an isolated test instance). While muted,
+`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`). For an
+isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config containing `PORT`. While muted,
 notifications are still accepted,
 processed, and logged - only the audio is suppressed, across every provider:
 
@@ -173,7 +179,7 @@ To pick up daemon-source or config changes, re-stage:
 
 ```bash
 cli/echo update                 # re-stage the payload from this checkout + reload
-# equivalently: bash scripts/install.sh --adapter <none|claudecode|mcp|pi|omp>
+# equivalently: bash scripts/install.sh --adapter <none|claudecode|jcode|mcp|pi|omp>
 ```
 
 - Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.
@@ -206,7 +212,7 @@ once with any `--adapter` value - it re-reconciles every installed adapter regis
 re-stages the payload from the new location):
 
 ```bash
-bash scripts/install.sh --adapter <none|claudecode|mcp|pi|omp>
+bash scripts/install.sh --adapter <none|claudecode|jcode|mcp|pi|omp>
 ```
 
 To audit without changing anything (`cli/echo doctor` wraps this and explains each row):
@@ -236,7 +242,7 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
 and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the `echo-converse` MCP server in
-`~/.claude.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp
+`~/.claude.json`, Jcode's `turn_end` and `session_start` entries in `~/.jcode/config.toml`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp
 `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
 tool; remove those entries by hand before deleting the repo directory, or hosts will keep
 pointing at dead paths.

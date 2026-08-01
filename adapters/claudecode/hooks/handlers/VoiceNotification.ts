@@ -161,10 +161,9 @@ async function sendNotification(
   console.error(`[Voice] fetch_start: "${payload.message.slice(0, 60)}..." (${payload.message.length} chars)`);
 
   try {
-    // The daemon's /notify endpoint, resolved from the shared endpoint contract so
-    // a second instance (e.g. an isolated test daemon) is reachable via env.
+    // The daemon's /notify endpoint, resolved from the shared config contract.
     const response = await sendNotificationPayload(
-      { endpoint: resolveNotifyUrl(process.env), title: payload.title },
+      { endpoint: resolveNotifyUrl(loadEchoConfiguration()), title: payload.title },
       payload as NotifyPayload,
       controller.signal,
       createHookNativeVisualContext(sessionId),
@@ -252,7 +251,7 @@ const AGENT_KEYS_TIMEOUT_MS = 2000;
 export async function fetchKnownAgentKeys(): Promise<Set<string>> {
   if (cachedAgentKeys) return cachedAgentKeys;
   try {
-    const response = await fetch(resolveVoicesUrl(process.env), {
+    const response = await fetch(resolveVoicesUrl(loadEchoConfiguration()), {
       signal: AbortSignal.timeout(AGENT_KEYS_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

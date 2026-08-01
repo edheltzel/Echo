@@ -8,6 +8,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 
 - **Core only** - any process can POST to `/notify`.
 - **Claude Code adapter** - Claude Code lifecycle hooks speak.
+- **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
@@ -17,7 +18,16 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - macOS - the installer writes a LaunchAgent (Linux is best-effort for manual server runs only; see `docs/dependencies.md`).
 - [Bun](https://bun.sh/).
 
-Optional voice providers and host adapters are described in `docs/dependencies.md`.
+Voice notifications need nothing else. The optional one-shot voice ask has a hard recorder
+dependency, `sox`, and needs one local transcriber. For the recommended macOS 26 path:
+
+```bash
+brew install sox  # provides the required `rec` command
+brew install yap  # on-device transcription
+```
+
+A local `whisper-cli` plus a model can replace `yap`, but not `sox`. Optional voice providers,
+host adapters, and the Whisper setup are described in `docs/dependencies.md`.
 
 ## Install core only
 
@@ -76,11 +86,16 @@ This registers the `echo-converse` MCP server in `~/.claude.json`, which gives C
 tool from their existing adapters, so they need no extra install step.
 
 Echo owns only the `echo-converse` server name; if something else already holds it, the install
-aborts before changing anything. The first ask needs microphone permission. Direct Pi/omp
-capture uses the measured terminal-attributed topology; Claude Code's stdio MCP ancestry is still
-unverified, so each turn records what it actually observed instead of promising terminal
-attribution. Full picture: [`converse.md`](converse.md). This install preflights `sox`
-and `rec` before changing host state; `cli/echo doctor` repeats the same check later.
+aborts before changing anything. The adapter install checks `sox` and `rec` before changing host
+state, but a missing recorder produces a warning rather than blocking the notification install.
+Treat voice ask as not installed until `brew install sox` has supplied both commands and the check
+passes; a missing `rec` is refused before capture begins. `cli/echo doctor` repeats the check later.
+
+The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
+your terminal application rather than Echo; Claude Code's stdio MCP ancestry is still unverified.
+[`converse.md`](converse.md#before-you-enable-it) is the single source for the permission and
+attribution conditions, Echo's lack of a per-question prompt, the recording lifecycle and cleanup
+guarantee, and provider egress.
 
 ## Moved or renamed the repo directory?
 

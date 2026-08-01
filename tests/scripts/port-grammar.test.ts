@@ -99,4 +99,75 @@ describe("config.json PORT grammar - the daemon and the shell readers agree", ()
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  test("ECHO_CONFIG_FILE redirects the shell reader for isolated tests", async () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-port-selector-home-"));
+    const scratch = mkdtempSync(join(tmpdir(), "echo-port-selector-config-"));
+    const configFile = join(scratch, "config.json");
+    try {
+      writeFileSync(configFile, '{"PORT": 3458}');
+      const proc = Bun.spawn(["/bin/bash", "-c", '. scripts/echo-port.sh; echo "$ECHO_PORT"'], {
+        env: { HOME: home, PATH: process.env.PATH ?? "", ECHO_CONFIG_FILE: configFile },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exit, stdout] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+      ]);
+
+      expect(exit).toBe(0);
+      expect(stdout.trim()).toBe("3458");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json wins over deprecated PORT and the shell warns", async () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-port-precedence-"));
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(join(home, ".config", "echo", "config.json"), '{"PORT": 3457}');
+      const proc = Bun.spawn(["/bin/bash", "-c", '. scripts/echo-port.sh; echo "$ECHO_PORT"'], {
+        env: { HOME: home, PATH: process.env.PATH ?? "", PORT: "4567" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exit, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+
+      expect(exit).toBe(0);
+      expect(stdout.trim()).toBe("3457");
+      expect(stderr).toContain("PORT environment configuration is deprecated");
+      expect(stderr).toContain("config.json takes precedence");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("deprecated PORT remains a warning fallback when config.json has no port", async () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-port-fallback-"));
+    try {
+      const proc = Bun.spawn(["/bin/bash", "-c", '. scripts/echo-port.sh; echo "$ECHO_PORT"'], {
+        env: { HOME: home, PATH: process.env.PATH ?? "", PORT: "4567" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exit, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+
+      expect(exit).toBe(0);
+      expect(stdout.trim()).toBe("4567");
+      expect(stderr).toContain("PORT environment configuration is deprecated");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

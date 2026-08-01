@@ -15,10 +15,10 @@ import { join } from "node:path";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { loadEchoConfiguration } from "../shared/echo-env.ts";
 
-const PYTHON3_PATH = process.env.PYTHON3_PATH || "/opt/homebrew/bin/python3";
+const ECHO_CONFIG = loadEchoConfiguration();
+const PYTHON3_PATH = ECHO_CONFIG.ECHO_PYTHON3_PATH || ECHO_CONFIG.PYTHON3_PATH || "/opt/homebrew/bin/python3";
 const DEFAULT_LOCALES = ["en-US", "en-GB", "en-AU", "en-IE"];
 const DEFAULT_TEXT = "Hi, I'm {voice}. This is how I sound for Atlas.";
-const ECHO_CONFIG = loadEchoConfiguration();
 const CACHE_DIR =
   ECHO_CONFIG.ECHO_AUDIO_CACHE_DIR ??
   (process.platform === "darwin"
@@ -94,21 +94,32 @@ export function parseArgs(argv: string[]): Options {
   return opts;
 }
 
+type SpawnEvents = {
+  on(event: "error", listener: (error: Error) => void): void;
+  on(event: "exit", listener: (code: number | null) => void): void;
+};
+
+function spawnEvents(proc: ReturnType<typeof spawn>): SpawnEvents {
+  return proc as unknown as SpawnEvents;
+}
+
 function listVoicesRaw(): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn(PYTHON3_PATH, ["-m", "edge_tts", "--list-voices"]);
     let out = "";
     proc.stdout.on("data", (d) => (out += d.toString()));
-    proc.on("error", reject);
-    proc.on("exit", (code) => (code === 0 ? resolve(out) : reject(new Error(`edge-tts --list-voices exited ${code}`))));
+    const events = spawnEvents(proc);
+    events.on("error", reject);
+    events.on("exit", (code) => (code === 0 ? resolve(out) : reject(new Error(`edge-tts --list-voices exited ${code}`))));
   });
 }
 
 function run(cmd: string, args: string[]): Promise<number> {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args);
-    proc.on("error", reject);
-    proc.on("exit", (code) => resolve(code ?? 1));
+    const events = spawnEvents(proc);
+    events.on("error", reject);
+    events.on("exit", (code) => resolve(code ?? 1));
   });
 }
 

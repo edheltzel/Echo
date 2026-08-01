@@ -2,9 +2,9 @@
 
 Echo's issue labels follow the namespaced taxonomy shared with [Recall](https://github.com/edheltzel/Recall), so the two repos speak the same vocabulary. Namespaces group by axis: what the work *is* (`type:`), who or what should pick it up (`agent:`, `needs:`), how much judgement it demands (`risk:`), and why it is parked (`blocked:`).
 
-An issue normally carries **one** `type:`, and - once triaged - one `agent:` and one `risk:`.
+An issue normally carries **one** `type:`, and — once triaged — one `agent:` and one `risk:`.
 
-## `type:` - what the work is
+## `type:` — what the work is
 
 | Label | Meaning |
 | --- | --- |
@@ -15,7 +15,7 @@ An issue normally carries **one** `type:`, and - once triaged - one `agent:` and
 | `type:refactor` | Restructuring without behavior change |
 | `type:chore` | misc things, like cleanup |
 
-## `agent:` - autonomous-agent readiness
+## `agent:` — autonomous-agent readiness
 
 | Label | Meaning |
 | --- | --- |
@@ -33,11 +33,11 @@ An issue normally carries **one** `type:`, and - once triaged - one `agent:` and
 | `needs-info` | Waiting on reporter for more information |
 | `needs:human` | Requires human implementation |
 
-`needs:human` and `agent:ready` are mutually exclusive - an issue is one or the other.
+`needs:human` and `agent:ready` are mutually exclusive — an issue is one or the other.
 
 > Naming wart, inherited from Recall and kept deliberately so both repos match: `needs-triage` and `needs-info` use a hyphen while `needs:human` uses a colon. Fix it in Recall first if you want it fixed, then mirror the change here.
 
-## `risk:` - judgement and blast radius
+## `risk:` — judgement and blast radius
 
 | Label | Meaning |
 | --- | --- |

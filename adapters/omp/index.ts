@@ -14,10 +14,16 @@ import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voic
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
+import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
 
-function resolveSessionId(ctx: ExtensionContext): string | undefined {
+type OmpExtensionContext = ExtensionContext & {
+  mode?: "tui" | "rpc" | "json" | "print";
+  signal?: AbortSignal;
+};
+
+function resolveSessionId(ctx: OmpExtensionContext): string | undefined {
   try {
     return ctx.sessionManager.getSessionFile() ?? ctx.sessionManager.getSessionId() ?? undefined;
   } catch {
@@ -28,7 +34,7 @@ function resolveSessionId(ctx: ExtensionContext): string | undefined {
 // omp exposes the project root as ctx.cwd (documented ExtensionContext field, pi
 // lineage). Read defensively - the installed SDK types may predate it - and treat
 // empty as absent.
-function resolveCwd(ctx: ExtensionContext): string | undefined {
+function resolveCwd(ctx: OmpExtensionContext): string | undefined {
   const cwd = (ctx as { cwd?: unknown }).cwd;
   return typeof cwd === "string" && cwd.length > 0 ? cwd : undefined;
 }
@@ -63,7 +69,30 @@ function readSystemPrompt(event: unknown): string | string[] | undefined {
   return undefined;
 }
 
-/** Instruction that makes omp's model emit the PAI-style trailing voice line. */
+/**
+ * One informed microphone-consent prompt for this omp session's echo_ask calls.
+ *
+ * No UI means no consent surface: the human never saw a prompt, so the call is
+ * "unavailable" (retryable) rather than a sticky denial. The same holds for a
+ * cancellation that lands before the prompt is presented. An explicit decline
+ * or an abort while the prompt is up is a human signal and stays sticky.
+ */
+async function promptForAskConsent(ctx: OmpExtensionContext, signal?: AbortSignal): Promise<SessionConsentDecision> {
+  if (ctx.hasUI !== true) return "unavailable";
+  if (signal?.aborted) return "unavailable";
+  try {
+    const allowed = await ctx.ui.confirm(
+      "Allow Echo voice replies for this omp session?",
+      "Echo will record and transcribe microphone audio whenever echo_ask runs in this session. " +
+        "You will not be prompted again until this session ends.",
+      signal ? { signal } : undefined,
+    );
+    return allowed ? "granted" : "denied";
+  } catch {
+    return signal?.aborted ? "denied" : "unavailable";
+  }
+}
+
 function buildVoiceLineInstruction(personaName: string): string {
   return [
     "## Spoken completion (required)",
@@ -79,6 +108,7 @@ export default function echoVoiceOmpAdapter(
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
+  const askConsent = new SessionConsent();
 
   // Per-project config: layer a persona override from omp's native config
   // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key -
@@ -101,7 +131,7 @@ export default function echoVoiceOmpAdapter(
     }
   }
 
-  async function speak(message: string, ctx: ExtensionContext): Promise<boolean> {
+  async function speak(message: string, ctx: OmpExtensionContext): Promise<boolean> {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
     try {
@@ -124,7 +154,7 @@ export default function echoVoiceOmpAdapter(
     }
   }
 
-  async function speakAssistantCompletion(event: unknown, ctx: ExtensionContext): Promise<void> {
+  async function speakAssistantCompletion(event: unknown, ctx: OmpExtensionContext): Promise<void> {
     if (!resolveConfig(resolveCwd(ctx)).speakCompletions) return;
     const message = eventMessage(event);
     const line = extractVoiceLineFromMessage(message);
@@ -150,7 +180,11 @@ export default function echoVoiceOmpAdapter(
   // Inject the 🗣️ convention into omp's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
-  omp.on("before_agent_start", (event, ctx) => {
+  const onBeforeAgentStart = omp.on as unknown as (
+    event: "before_agent_start",
+    handler: (event: unknown, ctx: OmpExtensionContext) => unknown,
+  ) => void;
+  onBeforeAgentStart("before_agent_start", (event, ctx) => {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.speakCompletions) return undefined;
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
@@ -174,6 +208,7 @@ export default function echoVoiceOmpAdapter(
   });
 
   omp.on("session_start", async (event, ctx) => {
+    askConsent.begin(resolveSessionId(ctx));
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
@@ -189,6 +224,7 @@ export default function echoVoiceOmpAdapter(
   });
 
   omp.on("session_shutdown", () => {
+    askConsent.end();
     spoken.clear();
     pending.clear();
   });
@@ -210,14 +246,18 @@ export default function echoVoiceOmpAdapter(
     },
   });
 
-  // `echo_ask` - the model-invokable two-way turn, identical to the Pi adapter's
+  // `echo_ask` - the model-invocable two-way turn, identical to the Pi adapter's
   // (both share @echo/converse/host-tool.ts, so the two hosts cannot drift into
   // different tools). The capture child is spawned from THIS process so macOS
   // attributes the microphone grant to the host terminal (docs/converse.md).
   registerEchoAskTool(omp, {
     source: "omp",
+    ensureConsent: (ctx, signal) => {
+      const extensionContext = ctx as OmpExtensionContext;
+      return askConsent.ensure(resolveSessionId(extensionContext), () => promptForAskConsent(extensionContext, signal));
+    },
     resolveVoice: (ctx) => {
-      const cfg = resolveConfig(resolveCwd(ctx as ExtensionContext));
+      const cfg = resolveConfig(resolveCwd(ctx as OmpExtensionContext));
       return { voiceId: cfg.voiceId, title: cfg.title };
     },
   });

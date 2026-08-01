@@ -143,6 +143,31 @@ describe("/notify acks on receipt (R2)", () => {
     expect(readRows().filter((r) => r.session_id === "sess-bad")).toEqual([]);
   });
 
+  test("a capture_reservation lease above the core cap fails 4xx before enqueue", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "oversized lease line",
+        voice_enabled: true,
+        session_id: "sess-lease-cap",
+        capture_reservation: {
+          reservation_id: `t-${crypto.randomUUID()}`,
+          owner_pid: 1,
+          lease_ms: 24 * 60 * 60 * 1_000,
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.status).toBe("error");
+    expect(body.message).toContain("lease_ms exceeds");
+
+    // Nothing was enqueued: no lifecycle row ever appears for this request.
+    await Bun.sleep(200);
+    expect(readRows().filter((r) => r.session_id === "sess-lease-cap")).toEqual([]);
+  });
+
   test("muted /notify still suppresses inside the player path (no regression)", async () => {
     writeFileSync(MUTE_PATH, JSON.stringify({ muted: true, muted_until: null }));
 

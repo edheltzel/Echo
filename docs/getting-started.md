@@ -2,7 +2,7 @@
 
 In this tutorial, we'll install the Echo voice server on your Mac and hear it speak its
 first notification. By the end, you'll have a background service that speaks any message
-sent to it - from a script, a coding agent, or a plain `curl`.
+sent to it — from a script, a coding agent, or a plain `curl`.
 
 This takes about 5 minutes.
 
@@ -19,7 +19,7 @@ A voice daemon running as a macOS LaunchAgent that:
 Before starting, make sure you have:
 
 - A Mac (Echo installs as a macOS LaunchAgent)
-- [Bun](https://bun.sh/) - install it with `curl -fsSL https://bun.sh/install | bash`
+- [Bun](https://bun.sh/) — install it with `curl -fsSL https://bun.sh/install | bash`
 - `git`
 
 Verify Bun is available:
@@ -57,7 +57,7 @@ OK echo is healthy on :3246
 ```
 
 If you instead see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`,
-open that log - the last few lines say what failed. Fix and rerun the installer; it is
+open that log — the last few lines say what failed. Fix and rerun the installer; it is
 safe to run repeatedly.
 
 ## Step 3: Verify it's healthy
@@ -91,7 +91,7 @@ If edge-tts is installed for `/opt/homebrew/bin/python3`, you should hear the de
 {"status":"success","message":"Notification sent","request_id":"..."}
 ```
 
-That's it - Echo is working. Anything on your machine can now speak by POSTing to
+That's it — Echo is working. Anything on your machine can now speak by POSTing to
 `localhost:3246/notify`.
 
 ## Step 5: Try a persona voice
@@ -107,7 +107,7 @@ curl -X POST http://localhost:3246/notify \
 You should hear a different female voice (Michelle) speak the line. When you omit
 `voice_id`, Echo uses the default Atlas identity voice you heard in Step 4.
 
-## If you hear nothing - or the wrong voice
+## If you hear nothing — or the wrong voice
 
 Work through these checks in order:
 
@@ -119,7 +119,7 @@ Work through these checks in order:
 
    You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
    `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`. Should the
-   installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` -
+   installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` —
    it names each degraded check and the command that fixes it.
 
 2. **Check the daemon log for errors:**
@@ -139,7 +139,7 @@ Work through these checks in order:
    providers were tried and why they were skipped or failed). Failed attempts may include
    diagnostic fields such as `phase`, `reason`, `timeout_ms`, `exit_code`, and `stderr`.
 
-**Wrong voice - a British male voice ("Daniel") instead of Ava?** Echo fell back to the
+**Wrong voice — a British male voice ("Daniel") instead of Ava?** Echo fell back to the
 built-in macOS `say` voice. First read the latest `attempts[]`: Edge is skipped only when
 it is disabled or its circuit breaker is open; otherwise a `failed` Edge attempt means real
 synthesis failed and the diagnostic fields explain why. A common cause is that edge-tts is
@@ -154,7 +154,7 @@ bash scripts/restart.sh
 If `/opt/homebrew/bin/python3` doesn't exist, install Python first with
 `brew install python`, then rerun the two commands above.
 
-Repeat Step 4 - you should now hear Ava.
+Repeat Step 4 — you should now hear Ava.
 
 **No sound at all, but the curl returned `"status":"success"`?** Check your output
 device and volume, then check the resolution log (check 3 above): if the last line has
@@ -166,15 +166,15 @@ In this tutorial, you:
 
 - Installed Echo as a self-starting macOS service
 - Verified its health over HTTP
-- Made it speak with a plain `curl` - no fields required beyond your message
+- Made it speak with a plain `curl` — no fields required beyond your message
 - Selected a persona voice with `voice_id`
 - Learned where the logs are when something sounds wrong
 
 ## Next steps
 
-- **Wire up a host adapter** - have Claude Code, Pi, or oh-my-pi speak automatically:
+- **Wire up a host adapter** — have Claude Code, Jcode, Pi, or oh-my-pi speak automatically:
   [install-human.md](install-human.md)
-- **Change or add voices** - pick different persona voices by ear:
+- **Change or add voices** — pick different persona voices by ear:
   [voices.md](voices.md)
-- **Look up the full HTTP API** - every `/notify` field:
+- **Look up the full HTTP API** — every `/notify` field:
   [http-api.md](http-api.md)

@@ -75,7 +75,7 @@ contract.
 
 ## Native terminal visuals
 
-Pi, omp, and Claude Code adapters use the shared notify client for visual delivery. Before the
+Pi, omp, Claude Code, and Jcode adapters use the shared notify client for visual delivery. Before the
 HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
 then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
 adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
@@ -87,25 +87,43 @@ The terminal protocol matrix, the tmux passthrough contract, and the exact
 [Native terminal visual delivery](http-api.md#native-terminal-visual-delivery). Adapter
 diagnostics expose the selected route in `NotifyResult.visual`.
 
+The MCP adapter is intentionally not in this path: it exposes an `echo_ask` tool for Claude
+Code rather than a lifecycle notification hook.
+
+## Jcode adapter - lifecycle hooks
+
+Jcode exposes detached `session_start` and `turn_end` observer commands through its `[hooks]`
+TOML section. `adapters/jcode/hook.ts` translates those events into `/notify` calls with
+`source: "jcode"` and the Jcode session id. Successful turns speak only an explicit final
+`🗣️ Name: summary` line from the tail-safe `JCODE_HOOK_LAST_ASSISTANT_TEXT` field.
+
+Jcode's lifecycle stream covers TUI, desktop, headless, and swarm workers. The adapter uses
+`JCODE_HOOK_SESSION_KIND` and `JCODE_HOOK_PARENT_SESSION_ID` to suppress child sessions.
+Startup greetings are disabled by default; when enabled they run only for root
+`session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
+is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
+overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
+fails closed on TOML table shapes it cannot preserve safely.
+
 ## Pi adapter - per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
 convention. On `before_agent_start` (`adapters/pi/index.ts`) it appends an instruction to the
 chained `event.systemPrompt` (feature-detected; falls back to `systemPromptAppend`; no-ops on
-older runtimes) telling the model to end each response with `🗣️ <Name>: <8–16 word
+older runtimes) telling the model to end each response with `🗣️ <Name>: <8-16 word
 summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line - so
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
 - **Persona name** comes from config: `personaName` ← `ECHO_VOICE_PERSONA_NAME` (default
   `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
-  `~/.config/echo/config.json` is the durable local configuration surface; real process
-  variables win, and an existing host process must be relaunched after edits.
+  `~/.config/echo/config.json` is the durable local configuration surface and wins over
+  the one-release environment fallback; an existing host process must be relaunched after edits.
 - **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from a
   pool of neutral catchphrases (`adapters/pi/config.ts`, mirroring the Claude Code adapter's
-  `startupCatchphrases`). Setting `ECHO_VOICE_CATCHPHRASE` replaces the pool with that single
-  line, pinning the greeting; `ECHO_VOICE_GREET_ON_START=false` disables it.
-- **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"` (env
-  `ECHO_VOICE_ID` overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
+  `startupCatchphrases`). Configuring `ECHO_VOICE_CATCHPHRASE` in config.json replaces the
+  pool with that single line; setting `ECHO_VOICE_GREET_ON_START` there to `false` disables it.
+- **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
+  (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
   the injection feature above, #76 also touched `core/voices.json` data - a running daemon
   loads voices.json once at startup, from its staged payload, so run `cli/echo update` to

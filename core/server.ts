@@ -36,6 +36,7 @@ import {
   markPlaybackCompleted,
   markPlaybackFailed,
   markPlaybackPlaying,
+  MAX_CAPTURE_LEASE_MS,
   readPlaybackStatus,
   releaseCaptureReservationById,
   trackPlayback,
@@ -187,14 +188,14 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 
 // Env-file config (first found wins per key; a real process value always
 // beats every file) is resolved through resolveEchoEnv (core/env.ts), which
-// NEVER writes to process.env - importing this module must not leak the
+// NEVER writes to process.env — importing this module must not leak the
 // operator's env-file identity (ECHO_VOICE_*) into same-process adapter code
 // or its tests (the pi-adapter "Atlas" pollution; AGENTS.md #47 class hazard).
 
 // Floor 0, not 1, because this also parses the LIVE process value, where `PORT=0`
 // is the tests' ephemeral-bind mode; rejecting it would silently point every
 // importing test at the operator's real :3246 daemon. A configured port cannot
-// reach 0 - config.json validation bounds it to 1-65535 (shared/echo-env.ts), the
+// reach 0 — config.json validation bounds it to 1-65535 (shared/echo-env.ts), the
 // range the pure-bash surfaces can follow. The ceiling here is the last guard
 // against a live value throwing inside Bun.serve and crash-looping the daemon.
 const PORT = parseBoundedInt(resolveEchoEnv("PORT"), 3246, 0, 65535);
@@ -316,7 +317,7 @@ function loadPronunciations(): void {
   const pronPath = resolveEchoEnv("PRONUNCIATIONS_PATH") || join(import.meta.dir, 'pronunciations.json');
   try {
     if (!existsSync(pronPath)) {
-      console.warn('⚠️  No pronunciations.json found - TTS will use default pronunciations');
+      console.warn('⚠️  No pronunciations.json found — TTS will use default pronunciations');
       return;
     }
     const content = readFileSync(pronPath, 'utf-8');
@@ -348,7 +349,7 @@ function applyPronunciations(text: string): string {
 loadPronunciations();
 
 // =============================================================================
-// Emotional Presets (from v3.0) - overlays stability + similarity_boost
+// Emotional Presets (from v3.0) — overlays stability + similarity_boost
 // =============================================================================
 
 interface EmotionalOverlay {
@@ -449,7 +450,7 @@ export function getVoiceMapping(identifier: string | null): VoiceMapping | null 
   return null;
 }
 
-// The edge-tts voice-name grammar is owned by `shared/edge-voice.ts` - the daemon and
+// The edge-tts voice-name grammar is owned by `shared/edge-voice.ts` — the daemon and
 // the adapters' `/echo-voice` scaffold both enforce it, so it is defined once there and
 // re-exported here for existing callers.
 export { looksLikeEdgeVoice };
@@ -772,7 +773,7 @@ class EdgeTTSProvider implements TTSProvider {
       this.lastDiagnostic = { phase: 'circuit-breaker', reason: 'circuit-open', message: 'edge-tts circuit breaker is open' };
       return false;
     }
-    // Check module importability only - no network call. This is diagnostic for
+    // Check module importability only — no network call. This is diagnostic for
     // /health/startup output; /notify tries synthesis directly unless the breaker
     // is open so a slow import probe cannot force a false fallback to `say`.
     try {
@@ -786,7 +787,7 @@ class EdgeTTSProvider implements TTSProvider {
   }
 
   // Synthesize one attempt to outFile. Resolves on success, rejects on a
-  // non-zero exit, spawn error, or timeout - i.e. a genuine PROVIDER failure.
+  // non-zero exit, spawn error, or timeout — i.e. a genuine PROVIDER failure.
   private synthesizeOnce(processedText: string, voice: string, rate: string, outFile: string, timeoutMs: number): Promise<ProviderDiagnostic> {
     return runEdgeProcess([
       '-m', 'edge_tts',
@@ -815,7 +816,7 @@ class EdgeTTSProvider implements TTSProvider {
       const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
       const playStart = Date.now();
       try {
-        console.log(`⚡ Edge TTS cache hit (voice: ${edgettsVoice}, rate: ${rate}) - playing from disk`);
+        console.log(`⚡ Edge TTS cache hit (voice: ${edgettsVoice}, rate: ${rate}) — playing from disk`);
         const play = spawn(player, [cachedFile]);
         await waitForProcess(play, player, AUDIO_PROCESS_TIMEOUT_MS);
         recordPlayback(cachedFile, playStart, Date.now(), { exitCode: 0 });
@@ -876,7 +877,7 @@ class EdgeTTSProvider implements TTSProvider {
         return false;
       }
 
-      // The online provider did its job - mark it healthy regardless of what
+      // The online provider did its job — mark it healthy regardless of what
       // happens during local playback below.
       recordProviderSuccess('edgetts');
       const edgeSlot = audioCapture.getStore();
@@ -888,7 +889,7 @@ class EdgeTTSProvider implements TTSProvider {
       writeTtsCache(edgettsVoice, rate, processedText, tmp!.file);
 
       // --- Playback (a LOCAL concern: afplay/mpv). A playback failure must NOT
-      //     open the edge-tts breaker - the provider already succeeded. ---
+      //     open the edge-tts breaker — the provider already succeeded. ---
       const player = process.platform === 'darwin' ? '/usr/bin/afplay' : 'mpv';
       const playStart = Date.now();
       try {
@@ -1130,7 +1131,7 @@ export const providers: Record<string, TTSProvider> = {
 // Per-provider egress destination for the /health audit (issue #26). A provider
 // makes an outbound network request only when ENABLED: edge-tts and ElevenLabs
 // always leave the host; Kokoro contacts its configured endpoint (local by
-// default - the returned value makes locality visible); macOS `say` is fully
+// default — the returned value makes locality visible); macOS `say` is fully
 // local and never returns a target. The disabled-provider no-egress guarantee
 // is therefore auditable: wouldEgress is false whenever a provider is disabled.
 function egressTargetFor(name: string): string | undefined {
@@ -1193,15 +1194,15 @@ export async function getProviderStatus(): Promise<Record<string, ProviderStatus
 // Retention: a single size-capped JSONL file. On each write the file is pruned
 // back under the cap by dropping the oldest whole lines (newest always kept).
 // No external deps, no logrotate, no time-based rotation. Writes are
-// best-effort - a logging failure must NEVER break a /notify.
+// best-effort — a logging failure must NEVER break a /notify.
 //
 // Path: user-owned (macOS ~/Library/Logs, else $XDG_STATE_HOME / ~/.local/state),
 // never /tmp, never the repo. Override with ECHO_RESOLUTION_LOG. Host-neutral: no
 // host-adapter knowledge here.
 //
 // Resolved at write time (not frozen at module load) so a process that sets the
-// override after import - e.g. a test setting ECHO_RESOLUTION_LOG before
-// its first /notify - writes to the intended path regardless of import order.
+// override after import — e.g. a test setting ECHO_RESOLUTION_LOG before
+// its first /notify — writes to the intended path regardless of import order.
 // Production behavior is identical: env doesn't change at runtime, so every write
 // resolves the same path the daemon would have captured at startup.
 // =============================================================================
@@ -1254,7 +1255,7 @@ export function classifyResolution(
   if (!requestedVoiceId) return { resolution: 'identity-default' };
   if (!mapping) {
     // A literal edge-tts voice name is honored by the edge provider (spoken
-    // as-is), so it is NOT a fallback - classify it honestly.
+    // as-is), so it is NOT a fallback — classify it honestly.
     if (looksLikeEdgeVoice(requestedVoiceId)) return { resolution: 'edgetts-explicit' };
     return { resolution: 'fallback', reason: `voice_id "${requestedVoiceId}" did not match any agent or identity` };
   }
@@ -1276,7 +1277,7 @@ export function writeResolutionEvent(
     appendFileSync(path, JSON.stringify(event) + '\n');
     pruneResolutionLog(path, maxBytes);
   } catch {
-    // swallow - diagnostics logging must never break a notification
+    // swallow — diagnostics logging must never break a notification
   }
 }
 
@@ -1299,7 +1300,7 @@ function pruneResolutionLog(path: string, maxBytes: number): void {
 }
 
 // =============================================================================
-// Core: speakWithFallback - provider chain with pronunciation + emotion support
+// Core: speakWithFallback — provider chain with pronunciation + emotion support
 //
 // Voice settings resolution (3-tier):
 //   1. callerVoiceSettings provided → use directly (pass-through)
@@ -1325,22 +1326,22 @@ export async function speakWithFallback(
   emotion?: string,
 ): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
   // Runtime mute gate (#83): sits before the provider loop so ONE check covers
-  // every provider including the macOS `say` fallback. Lazy expiry - a timed
+  // every provider including the macOS `say` fallback. Lazy expiry — a timed
   // mute past its deadline reads as unmuted. Logging and voice resolution
   // already happened upstream; the caller records the drop-off event tagged muted.
   const muteState = readMuteState();
   if (muteState.muted) {
-    console.log(`🔇 Muted - speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
+    console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
     return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
   }
 
   // Capture guard: while an external tool has the mic open (its published
   // recording-state file says recording/transcribing from a live pid), speaking
-  // would pollute the user's capture - skip the voice line, mute-style. Checked
+  // would pollute the user's capture — skip the voice line, mute-style. Checked
   // at speak time (queue-dequeue), so a line whose turn arrives after the
   // capture ends plays normally. The banner already fired at accept.
   if (captureReservationHeld() || isCaptureActive()) {
-    console.log('🎙️  Mic capture active - speech held (capture guard)');
+    console.log('🎙️  Mic capture active — speech held (capture guard)');
     return { success: false, provider: 'capture-held', voice: null, attempts: [], held_for_capture: true };
   }
 
@@ -1448,14 +1449,14 @@ export async function speakWithFallback(
     }
 
     // An explicit edge-tts voice name passed as voice_id (no voices.json agent
-    // entry) is spoken literally by the edge provider - otherwise it would fall
+    // entry) is spoken literally by the edge provider — otherwise it would fall
     // to the default voice. This is how a project persona's configured voice
     // (e.g. "en-US-AndrewNeural") reaches the wire without a core/voices.json edit.
     if (!providerVoice && providerName === 'edgetts' && !voiceMapping && looksLikeEdgeVoice(voiceId)) {
       providerVoice = voiceId;
     }
 
-    // Emotional overlay - modifies stability + similarity_boost on top of resolved settings
+    // Emotional overlay — modifies stability + similarity_boost on top of resolved settings
     if (emotion && EMOTIONAL_PRESETS[emotion]) {
       providerSettings = {
         ...providerSettings,
@@ -1475,7 +1476,7 @@ export async function speakWithFallback(
     if (success) {
       attempts.push({ provider: providerName, outcome: 'success' });
       // `say` ignores its voice arg and resolves the macOS fallback voice
-      // internally (getMacOSFallbackVoice), so providerVoice is unset for it -
+      // internally (getMacOSFallbackVoice), so providerVoice is unset for it —
       // log that real voice rather than null on the most common drop-off path.
       const actualVoice = providerName === 'say' ? getMacOSFallbackVoice() : (providerVoice ?? null);
       return { success: true, provider: providerName, voice: actualVoice, attempts };
@@ -1487,7 +1488,7 @@ export async function speakWithFallback(
 }
 
 // =============================================================================
-// Notification handlers - banner at accept time, speech via the play queue
+// Notification handlers — banner at accept time, speech via the play queue
 // =============================================================================
 
 // Fire the legacy macOS banner immediately, OUTSIDE the play queue: a banner
@@ -1508,7 +1509,7 @@ function showBanner(sanitizedTitle: string, sanitizedMessage: string): void {
 
 // The play queue's injected player: speak one line and record its resolution
 // + lifecycle rows. Errors propagate to the queue's onPlayerError (which logs
-// and writes the failure row) - no internal swallow.
+// and writes the failure row) — no internal swallow.
 async function speakNotification(
   message: string,
   voiceId: string | null = null,
@@ -1572,7 +1573,7 @@ async function speakNotification(
 
   // Audio lifecycle event (Phase 1 / R1): pairs the request context with the
   // playback metrics deposited by the playback sites, so truncation becomes
-  // visible - a short play shows play_time_ms < clip_duration_s. Correlates
+  // visible — a short play shows play_time_ms < clip_duration_s. Correlates
   // with the hook's voice-events.jsonl by session_id. Best-effort.
   const event: AudioLifecycleEvent = {
     ts: logTimestamp(),
@@ -1588,7 +1589,7 @@ async function speakNotification(
     exit_reason: audioSlot.exit_reason ?? null,
     muted: result.muted ?? false,
     success: result.success,
-    // Reached the player (Phase 2 / R7) - unless the capture guard held it
+    // Reached the player (Phase 2 / R7) — unless the capture guard held it
     // there: 'held-for-capture' keeps every 202-acked line's fate greppable.
     disposition: result.held_for_capture ? 'held-for-capture' : 'played',
   };
@@ -1622,7 +1623,7 @@ function checkRateLimit(ip: string): boolean {
 }
 
 // =============================================================================
-// Play Queue - global playback serialization (#202 receipt + plan R7 no-overlap)
+// Play Queue — global playback serialization (#202 receipt + plan R7 no-overlap)
 // =============================================================================
 //
 // One queue per daemon: /notify (and the /notify/personality shim) validate,
@@ -1634,7 +1635,7 @@ function checkRateLimit(ip: string): boolean {
 // visible in /health. Knobs: ECHO_PLAY_QUEUE_AGE_CAP_MS /
 // ECHO_PLAY_QUEUE_MAX_DEPTH / ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS.
 
-// Voice lines ONLY - banner-only notifications never enter the queue (the
+// Voice lines ONLY — banner-only notifications never enter the queue (the
 // banner fires at accept time in acceptNotification), so they can never
 // supersede, delay, or evict a queued voice line.
 interface NotifyJobPayload {
@@ -1664,7 +1665,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     markPlaybackFailed(job.id, `${disposition}: ${reason}`);
     log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
     // Minimal lifecycle row (R7): the line never reached the player, so there
-    // are no playback metrics - just the disposition and its reason.
+    // are no playback metrics — just the disposition and its reason.
     // message_chars here is the validation-sanitized length (pre marker-strip),
     // slightly larger than a played row's post-strip count.
     writeAudioLifecycleEvent({
@@ -1688,7 +1689,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
   onPlayerError: (job, error) => {
     markPlaybackFailed(job.id, error instanceof Error ? error.message : String(error));
     log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
-    // Failure row (R7): speakNotification does not swallow - a speak-path
+    // Failure row (R7): speakNotification does not swallow — a speak-path
     // throw or a watchdog timeout lands here, and without this row the
     // 202-acked line would vanish from the log entirely.
     writeAudioLifecycleEvent({
@@ -1712,7 +1713,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
 
 // Test/introspection seam: resolves once every accepted voice line has
 // settled (queue empty, nothing in flight). Banner-only notifications never
-// enqueue, so they need no draining - their osascript spawn fires at accept.
+// enqueue, so they need no draining — their osascript spawn fires at accept.
 export async function drainNotifications(): Promise<void> {
   await playQueue.drain();
 }
@@ -1746,7 +1747,7 @@ function acceptNotification(
     throw new Error("capture_reservation requires voice_enabled");
   }
 
-  // Banner for every accepted notification, voice or not - decoupled from
+  // Banner for every accepted notification, voice or not — decoupled from
   // the queue so it shows immediately and survives supersede/age-drop. The
   // exact native marker is the only opt-out; absent/unknown values preserve
   // raw HTTP compatibility and the macOS fallback.
@@ -1807,14 +1808,14 @@ export const server = serve({
     }
 
     // /mute gets its own rate-limit bucket (#83): a burst of /notify traffic
-    // must never starve the mute control - the exact moment the user wants
+    // must never starve the mute control — the exact moment the user wants
     // silence is when notification traffic is heaviest.
     //
     // /voices gets its own bucket for the mirror-image reason: it is a cheap
     // in-memory read that adapters make once per turn, immediately before the
     // /notify for that same turn. Sharing the notification bucket would halve
     // every host's effective notification budget and make the read starve the
-    // write it precedes - a dropped notification, the worst failure here.
+    // write it precedes — a dropped notification, the worst failure here.
     //
     // The converse routes are split by call frequency, not by URL prefix. A turn
     // spends up to five completion polls but only one grant and one release, so
@@ -1872,6 +1873,9 @@ export const server = serve({
           typeof captureReservation.lease_ms !== "number" || !Number.isFinite(captureReservation.lease_ms) || captureReservation.lease_ms <= 0
         )) {
           throw new Error("Invalid capture_reservation");
+        }
+        if (captureReservation !== undefined && captureReservation.lease_ms > MAX_CAPTURE_LEASE_MS) {
+          throw new Error(`Invalid capture_reservation: lease_ms exceeds the ${MAX_CAPTURE_LEASE_MS}ms maximum`);
         }
 
         log('info', `📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, provider: ${voicesConfig.defaultProvider})`, ctx);
@@ -1951,7 +1955,7 @@ export const server = serve({
       });
     }
 
-    // /notify/personality - compatibility shim
+    // /notify/personality — compatibility shim
     if (url.pathname === "/notify/personality" && req.method === "POST") {
       const reqId = generateRequestId();
       try {
@@ -1991,7 +1995,7 @@ export const server = serve({
       }
     }
 
-    // /mute - global runtime mute (#83). An explicit JSON body sets state;
+    // /mute — global runtime mute (#83). An explicit JSON body sets state;
     // an EMPTY body toggles, so a one-keystroke hotkey needs no state
     // knowledge. Response is always the resulting state {muted, muted_until}.
     if (url.pathname === "/mute" && req.method === "POST") {
@@ -2040,7 +2044,7 @@ export const server = serve({
 
     // Read-only projection of the voice config a caller needs to decide whether a
     // `voice_id` will resolve. Adapters must not read the daemon's config files off
-    // disk - a co-located checkout is not part of the contract, and the daemon may
+    // disk — a co-located checkout is not part of the contract, and the daemon may
     // be running from a different clone or a different VOICES_PATH than the adapter
     // sees. This is the supported way to ask "which persona keys exist?".
     if (url.pathname === "/voices" && req.method === "GET") {
@@ -2063,7 +2067,7 @@ export const server = serve({
           voice_system: `Multi-provider TTS (${voicesConfig.fallbackOrder.join(" → ")})`,
           config_source: "voices.json",
           // Additive: config.json's contribution. `ignored_keys` non-empty means
-          // the file loaded but those keys failed validation and were dropped -
+          // the file loaded but those keys failed validation and were dropped —
           // every other setting still applied. Visible without reading the log.
           config: {
             path: CONFIG_STATUS.path,
@@ -2087,7 +2091,7 @@ export const server = serve({
           },
           capture_reservation: captureReservationView(),
           // Additive (Phase 2): backlog + consumer liveness. `stalled` means
-          // the current job has outlived even the queue's own watchdog -
+          // the current job has outlived even the queue's own watchdog —
           // the consumer is genuinely wedged, not just playing a long line.
           play_queue: {
             depth: playQueue.depth,

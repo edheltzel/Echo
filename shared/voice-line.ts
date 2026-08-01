@@ -46,14 +46,24 @@ export function getAssistantText(message: unknown): string | null {
 
 export function extractVoiceLineFromText(text: string): string | null {
   const lines = text.split(/\r?\n/);
-  const candidates = lines
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("🗣️") || line.startsWith("🗣"));
+  let inFence = false;
+  let finalNonblank: string | null = null;
 
-  const last = candidates.at(-1);
-  if (!last) return null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(```|~~~)/.test(trimmed)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!trimmed) continue;
+    if (inFence) continue;
+    if (/^(?: {4,}|\t)/.test(line)) continue;
+    finalNonblank = trimmed;
+  }
 
-  const cleaned = last
+  if (!finalNonblank?.startsWith("🗣")) return null;
+
+  const cleaned = finalNonblank
     .replace(/^🗣️?\s*/, "")
     // Optional persona prefix ("Atlas:" / "Themis:") so the name isn't spoken aloud.
     // Single name token, mirroring PAI's parseFinalVoiceLine; lines without a

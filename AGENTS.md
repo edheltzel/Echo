@@ -29,7 +29,7 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 bun install
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|mcp|pi|omp] [--check]
+cli/echo install [--adapter none|claudecode|jcode|mcp|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
@@ -82,6 +82,7 @@ tests/e2e-converse.sh       # isolated core :8921 + coordinator :8922; no microp
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
 bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
 bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
+bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -97,13 +98,17 @@ restarting it, retargeting it, or speaking through it is a live-system incident.
 (mute, capture, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
 refuses to attach to a port it does not own, and prints an isolation proof before sending
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
-is unmistakably a test.
+is unmistakably a test. `bun test` preloads `tests/preload.ts` (via `bunfig.toml`), which
+pins `ECHO_CONFIG_FILE` to a scratch path: config.json is authoritative over live process
+values, so without the pin the operator's real config.json would override the isolation env
+in-process tests set before importing the singleton server. A test that models config.json
+writes its own file and points `ECHO_CONFIG_FILE` at it.
 
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
-`bun test` + the smoke + both e2e scripts + the Pi, omp, and MCP builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, and Jcode builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
@@ -131,7 +136,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
 | HTTP API: every endpoint, the request/response contract, rate-limit buckets + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
-| Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
+| Circuit breaker + reliability settings | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |
@@ -151,16 +156,16 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | --- | --- |
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
-| Circuit breaker · numeric env parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| `@echo/shared` workspace package (env loading, notify client, native terminal visual routing, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
+| Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
+| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
-| Port every lifecycle script + `cli/echo` talks to (`PORT` when exported, else the `config.json` port, else 3246; never parses dotenv files) | `scripts/echo-port.sh` |
+| Port every lifecycle script + `cli/echo` talks to (config.json, deprecated process PORT, then 3246; never parses dotenv files) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Isolated voice-ask e2e (own core + own coordinator, stand-in recorder) | `tests/e2e-converse.sh` |
@@ -175,13 +180,13 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not add new `localhost:31337` references; voice server traffic is `:3246`.
 - Do not broad-kill whatever owns port `3246`; it may be another service.
 - Do not commit secrets or `.env` files.
-- Do not write env-file config into `process.env`. Core resolves env-file values through
-  `resolveEchoEnv` (`core/env.ts`) - read-only, live env wins. Hydrating `process.env` at
+- Do not write file config into `process.env`. Core resolves config through
+  `resolveEchoEnv` (`core/env.ts`) - read-only, with config.json authoritative. Hydrating `process.env` at
   import leaked the operator's `ECHO_VOICE_*` identity into same-process adapter tests
   (the pi-adapter "Atlas" pollution, a #47-class file-order hazard); guarded by
   `tests/core/architecture-invariants.test.ts` (source scan) plus
   `tests/core/import-purity.test.ts` (isolated import of the daemon proves nothing leaks).
-- Keep daemon and adapter configuration precedence in `shared/echo-env.ts`; real process values win, then `~/.config/echo/config.json`, then the first legacy dotenv file per key. Two carve-outs live there and nowhere else: `PORT` is never read from a dotenv file (the bash surfaces cannot see it, and `scripts/migrate-config.ts` moves it into `config.json` at install time), and `ELEVENLABS_API_KEY` is never accepted from `config.json` (a dotenv file stays its permanent home).
+- Keep daemon and adapter configuration precedence in `shared/echo-env.ts`: `~/.config/echo/config.json` wins, followed for one release by deprecated process and legacy dotenv fallbacks. `PORT` is never read from dotenv, and `ELEVENLABS_API_KEY` is never accepted from config.json. Test-only environment injection remains plumbing, not user configuration; the complete classification is recorded in the configuration audit commit and summarized in `docs/configuration.md`.
 - Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
 - Do not read the daemon's files from an adapter - no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
@@ -190,6 +195,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
+- Do not let `echo_ask` reach capture without a live host-session consent grant. Pi and omp keep the grant only in their active extension instance; MCP keeps it only for its stdio process because the protocol publishes no narrower conversation lifecycle. Denials are sticky for that session, missing UI fails closed, and no consent state is persisted. Exact surfaces and expiry: `docs/converse.md`.
 - Do not speak a converse question while capture state is non-idle, and do not open the microphone before this request's playback completes and core grants its reservation. The coordinator generates the reservation id before `/notify`, releases it on every pre-grant exit, and rebases both core and booking leases at the capture grant. Core's guard would otherwise hold back the question, or a lost response could strand playback. The capture owner writes its OWN pid because core honors a non-idle state only while that pid is alive.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 

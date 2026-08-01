@@ -196,7 +196,9 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
   }
 
   function newTurnId(): string {
-    return `t-${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    // Doubles as the capture reservation id, whose grant/release routes depend
+    // on it being unguessable - so it must be cryptographically random.
+    return `t-${crypto.randomUUID()}`;
   }
 
   async function handleTurn(req: Request): Promise<Response> {

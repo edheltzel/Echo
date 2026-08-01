@@ -85,8 +85,9 @@ describe("VoiceGreeting hook resolves the daemon address, never hardcodes it", (
 
   test("both POST targets come from the shared resolver", () => {
     expect(source).toContain("@echo/shared/daemon-endpoints.ts");
-    expect(source).toContain("resolveNotifyUrl(process.env)");
-    expect(source).toContain("resolvePersonalityUrl(process.env)");
+    expect(source).toContain("loadEchoConfiguration()");
+    expect(source).toContain("resolveNotifyUrl(ECHO_CONFIG)");
+    expect(source).toContain("resolvePersonalityUrl(ECHO_CONFIG)");
   });
 
   test("no hardcoded daemon URL survives, so ECHO_DAEMON_URL retargets the greeting", () => {

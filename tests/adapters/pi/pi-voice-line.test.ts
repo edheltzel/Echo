@@ -11,6 +11,17 @@ describe("Pi voice line extraction", () => {
     expect(extractVoiceLineFromText(text)).toBe("Final line.");
   });
 
+  test("requires the final nonblank assistant line to be the voice marker", () => {
+    expect(extractVoiceLineFromText("🗣️ Earlier line.\nThen more prose.")).toBeNull();
+    expect(extractVoiceLineFromText("🗣️ Earlier line.\n\n  \nThen more prose.")).toBeNull();
+  });
+
+  test("ignores markers inside fenced or indented code", () => {
+    expect(extractVoiceLineFromText("```\n🗣️ code should not speak\n```")).toBeNull();
+    expect(extractVoiceLineFromText("    🗣️ indented code should not speak")).toBeNull();
+    expect(extractVoiceLineFromText("```ts\n🗣️ code should not speak\n```\n🗣️ Real final line.")).toBe("Real final line.");
+  });
+
   test("returns null when no voice line is present", () => {
     expect(extractVoiceLineFromText("No spoken line here.")).toBeNull();
   });

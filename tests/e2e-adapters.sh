@@ -41,6 +41,7 @@ fi
 
 SCRATCH="$(mktemp -d)"
 LOG="${SCRATCH}/daemon.log"
+export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 
 # Every piece of daemon state redirected into scratch, so the test instance can
 # neither read nor rewrite the operator's real mute state, capture state, audio
@@ -55,10 +56,25 @@ cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
 
 # Adapters address the daemon through this base, so both hosts under test point
-# at the isolated instance rather than the default :3246.
+# at the isolated instance rather than the default :3246. Exported canonical
+# values are inline test-script plumbing; runtime configuration comes from this
+# scratch file and cannot be overridden by the operator's config.
 export ECHO_DAEMON_URL="http://localhost:${PORT}"
+cat >"$ECHO_CONFIG_FILE" <<JSON
+{
+  "PORT": $PORT,
+  "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
+  "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
+  "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
+  "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",
+  "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",
+  "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
+  "VOICES_PATH": "$VOICES_PATH",
+  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL"
+}
+JSON
 
-PORT="$PORT" bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
+bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
   kill "$PID" >/dev/null 2>&1 || true
@@ -136,7 +152,17 @@ bun -e '
 ' || fail "Pi adapter could not notify the isolated daemon"
 
 # ---------------------------------------------------------------------------
-# 4. Optional audible pass - only after isolation is proven above.
+# 4. Jcode lifecycle hook: explicit voice line reaches the isolated daemon.
+# ---------------------------------------------------------------------------
+JCODE_HOOK_EVENT=turn_end \
+JCODE_HOOK_STATUS=ok \
+JCODE_HOOK_TRANSCRIPT=$'assistant: 🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+ECHO_DAEMON_URL="http://localhost:${PORT}" \
+  bun run adapters/jcode/hook.ts
+echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the voice line"
+
+# ---------------------------------------------------------------------------
+# 5. Optional audible pass - only after isolation is proven above.
 # ---------------------------------------------------------------------------
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""
