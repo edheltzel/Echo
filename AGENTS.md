@@ -135,7 +135,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Security model (trust boundary, egress, secrets) | [SECURITY.md](SECURITY.md) |
 | HTTP API: every endpoint, the request/response contract, rate-limit buckets + mute hotkey bindings | [docs/http-api.md](docs/http-api.md) |
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
-| Circuit breaker + reliability env knobs | [docs/reliability.md](docs/reliability.md) |
+| Circuit breaker + reliability settings | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
 | Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |

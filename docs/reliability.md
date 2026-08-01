@@ -14,12 +14,14 @@ retried) from playback (local, never opens the breaker). edge-tts is Microsoft's
 WebSocket service, so transient blips are retried before a failure is recorded. (A local
 audio problem must not disable a healthy online provider.)
 
-## Tunable env knobs
+## Tunable settings
 
-All parsed through `core/env.ts` `parseBoundedInt`, which falls back to the default for
+Configured in `~/.config/echo/config.json` (a process/dotenv value remains a one-release
+deprecated fallback; see [configuration.md](configuration.md)). All parsed through
+`core/env.ts` `parseBoundedInt`, which falls back to the default for
 missing/non-numeric/below-floor values:
 
-| Env var | Default | Floor |
+| Setting | Default | Floor |
 |---|---|---|
 | `ECHO_CIRCUIT_BREAKER_THRESHOLD` | 2 | 1 |
 | `ECHO_EDGETTS_TIMEOUT_MS` | 15000 | 1 |
