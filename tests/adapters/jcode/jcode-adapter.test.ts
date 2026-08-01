@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { handleJcodeHook } from "../../../adapters/jcode/hook.ts";
-import type { JcodeVoiceConfig } from "../../../adapters/jcode/config.ts";
+import { handleJcodeHook, handleJcodeHookResult } from "../../../adapters/jcode/hook.ts";
+import { loadJcodeVoiceConfig, type JcodeVoiceConfig } from "../../../adapters/jcode/config.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -41,6 +41,7 @@ describe("Jcode lifecycle hook adapter", () => {
       voice_enabled: true,
       voice_id: "jcode",
       session_id: "ses-1",
+      visual_delivery: "native",
       source: "jcode",
     }]);
   });
@@ -72,12 +73,117 @@ describe("Jcode lifecycle hook adapter", () => {
       return new Response("{}", { status: 202 });
     };
 
-    expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start" }, config)).toBe(false);
+    expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SOURCE: "create" }, config)).toBe(false);
     expect(await handleJcodeHook(
-      { JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SESSION_ID: "ses-2" },
+      { JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SOURCE: "create", JCODE_HOOK_SESSION_ID: "ses-2" },
       { ...config, greetOnSessionStart: true },
     )).toBe(true);
     expect(payloads).toHaveLength(1);
     expect(payloads[0]).toMatchObject({ message: "Jcode online.", source: "jcode", session_id: "ses-2" });
+  });
+
+  test("greets only newly created sessions", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("{}", { status: 202 });
+    };
+
+    const greetingConfig = { ...config, greetOnSessionStart: true };
+    expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SOURCE: "resume" }, greetingConfig)).toBe(false);
+    expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start" }, greetingConfig)).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  test("suppresses child sessions by session kind or parent id", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("{}", { status: 202 });
+    };
+
+    expect(await handleJcodeHook({
+      JCODE_HOOK_EVENT: "turn_end",
+      JCODE_HOOK_STATUS: "ok",
+      JCODE_HOOK_SESSION_KIND: "child",
+      JCODE_HOOK_LAST_ASSISTANT_TEXT: "🗣️ Child should stay silent.",
+    }, config)).toBe(false);
+    expect(await handleJcodeHook({
+      JCODE_HOOK_EVENT: "session_start",
+      JCODE_HOOK_SOURCE: "create",
+      JCODE_HOOK_PARENT_SESSION_ID: "parent-1",
+    }, { ...config, greetOnSessionStart: true })).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  test("suppresses long-tail child session env values with whitespace and case drift", async () => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("{}", { status: 202 });
+    };
+
+    expect(await handleJcodeHook({
+      JCODE_HOOK_EVENT: "turn_end",
+      JCODE_HOOK_STATUS: "ok",
+      JCODE_HOOK_SESSION_KIND: " SubAgent ",
+      JCODE_HOOK_LAST_ASSISTANT_TEXT: "🗣️ Long-tail env child should stay silent.",
+    }, config)).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  test("distinguishes skipped hooks from actual notification failures", async () => {
+    globalThis.fetch = async () => new Response("nope", { status: 503, statusText: "Unavailable" });
+
+    expect(await handleJcodeHookResult({
+      JCODE_HOOK_EVENT: "turn_end",
+      JCODE_HOOK_STATUS: "ok",
+      JCODE_HOOK_LAST_ASSISTANT_TEXT: "No marker.",
+    }, config)).toBe("skipped");
+    expect(await handleJcodeHookResult({
+      JCODE_HOOK_EVENT: "turn_end",
+      JCODE_HOOK_STATUS: "ok",
+      JCODE_HOOK_LAST_ASSISTANT_TEXT: "🗣️ This failure should be reported.",
+    }, config)).toBe("failed");
+  });
+
+  test("preserves supported long-tail notify URL aliases for Jcode config", () => {
+    expect(loadJcodeVoiceConfig({ ATLAS_VOICE_NOTIFY_URL: "http://127.0.0.1:8899/notify" }).endpoint)
+      .toBe("http://127.0.0.1:8899/notify");
+  });
+
+  test("executable exits zero for skipped hooks and nonzero for notify failures", async () => {
+    const hookPath = new URL("../../../adapters/jcode/hook.ts", import.meta.url).pathname;
+    const baseEnv = {
+      ...process.env,
+      ECHO_NOTIFY_URL: "http://127.0.0.1:9/notify",
+      ECHO_VOICE_SPEAK_COMPLETIONS: "true",
+    };
+
+    const skipped = Bun.spawnSync({
+      cmd: ["bun", hookPath],
+      env: {
+        ...baseEnv,
+        JCODE_HOOK_EVENT: "turn_end",
+        JCODE_HOOK_STATUS: "ok",
+        JCODE_HOOK_LAST_ASSISTANT_TEXT: "No explicit marker.",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(skipped.exitCode).toBe(0);
+
+    const failed = Bun.spawnSync({
+      cmd: ["bun", hookPath],
+      env: {
+        ...baseEnv,
+        JCODE_HOOK_EVENT: "turn_end",
+        JCODE_HOOK_STATUS: "ok",
+        JCODE_HOOK_LAST_ASSISTANT_TEXT: "🗣️ This should attempt notify and fail.",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(failed.exitCode).not.toBe(0);
   });
 });

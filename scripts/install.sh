@@ -225,7 +225,10 @@ omp_installed() {
 }
 
 jcode_installed() {
-  [ -f "$JCODE_CONFIG" ] && grep -qE '^[[:space:]]*(turn_end|session_start)[[:space:]]*=[[:space:]]*"[^"]*/adapters/jcode/hook\.ts"' "$JCODE_CONFIG"
+  if [ -L "$JCODE_CONFIG" ] && [ ! -e "$JCODE_CONFIG" ]; then
+    return 0
+  fi
+  [ -f "$JCODE_CONFIG" ] && grep -qE '^[[:space:]]*((turn_end|session_start)|hooks\.(turn_end|session_start)|hooks[[:space:]]*=).*adapters/jcode/hook\.ts' "$JCODE_CONFIG"
 }
 
 # Materialize the workspace links every adapter depends on. Each adapter package

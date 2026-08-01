@@ -406,6 +406,7 @@ exit 0
       const bin = join(root, "bin");
       mkdirSync(join(home, ".claude"), { recursive: true });
       mkdirSync(join(home, ".pi/agent"), { recursive: true });
+      mkdirSync(join(home, ".jcode"), { recursive: true });
       mkdirSync(bin, { recursive: true });
 
       // Substring lookalikes that the reconcilers would NOT match: detection must not
@@ -413,6 +414,7 @@ exit 0
       // never had one.
       const claudeSettings = join(home, ".claude/settings.json");
       const piSettings = join(home, ".pi/agent/settings.json");
+      const jcodeConfig = join(home, ".jcode/config.toml");
       const claudeOriginal =
         JSON.stringify(
           { permissions: { allow: ["Bash(ls /y/adapters/claudecode/hooks/)"] }, hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } },
@@ -427,6 +429,8 @@ exit 0
         ) + "\n";
       writeFileSync(claudeSettings, claudeOriginal);
       writeFileSync(piSettings, piOriginal);
+      const jcodeOriginal = 'note = "/x/adapters/jcode/hook.ts"\n';
+      writeFileSync(jcodeConfig, jcodeOriginal);
 
       writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
       writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
@@ -440,10 +444,39 @@ exit 0
       expect(result.stdout).not.toContain("Refreshing");
       expect(readFileSync(claudeSettings, "utf8")).toBe(claudeOriginal);
       expect(readFileSync(piSettings, "utf8")).toBe(piOriginal);
+      expect(readFileSync(jcodeConfig, "utf8")).toBe(jcodeOriginal);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("refresh-all detects the canonical shell-quoted Jcode hook command", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-jcode-refresh-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".jcode"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      const hook = realpathSync(resolve("adapters/jcode/hook.ts"));
+      const command = `'${hook.replaceAll("'", `'\\''`)}'`;
+      const config = join(home, ".jcode/config.toml");
+      writeFileSync(config, `[hooks]\nturn_end = ${JSON.stringify(command)}\nsession_start = ${JSON.stringify(command)}\n`);
+
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--adapter", "none"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Refreshing Jcode lifecycle-hook registration");
+      expect((Bun.TOML.parse(readFileSync(config, "utf8")) as any).hooks.turn_end).toBe(command);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
 
   test("a broken secondary adapter config warns but does not abort the requested install", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-warn-"));

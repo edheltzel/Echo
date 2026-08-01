@@ -7,10 +7,13 @@ This adapter uses Jcode's native lifecycle hooks. It registers one executable fo
 bash scripts/install.sh --adapter jcode
 ```
 
-Jcode's `turn_end` hook covers TUI, desktop, headless, and swarm sessions. Echo therefore
-speaks only an explicit final `🗣️ Name: summary` line and keeps startup greetings disabled
-by default, avoiding audio floods from background workers. Set
-`ECHO_VOICE_GREET_ON_START=true` to opt into greetings.
+Jcode's `turn_end` hook covers TUI, desktop, headless, and swarm sessions. Echo speaks only
+an explicit final `🗣️ Name: summary` line from Jcode's bounded response tail, and suppresses
+events whose lifecycle metadata identifies a child session. Startup greetings are disabled
+by default; when enabled with `ECHO_VOICE_GREET_ON_START=true`, only newly created root
+sessions greet (attach/resume and child sessions stay silent).
 
 Jcode currently supports one command per hook. Installation refuses to replace a non-Echo
-`session_start` or `turn_end` command. Remove or combine that hook manually before retrying.
+`session_start` or `turn_end` command. Hook commands are shell-quoted for checkout paths with
+spaces. Unsupported TOML shapes fail closed rather than risking config corruption; convert an
+inline or array-form `hooks` value to the documented `[hooks]` table before retrying.

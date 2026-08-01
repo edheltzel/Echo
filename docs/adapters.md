@@ -87,6 +87,24 @@ The terminal protocol matrix, the tmux passthrough contract, and the exact
 [Native terminal visual delivery](http-api.md#native-terminal-visual-delivery). Adapter
 diagnostics expose the selected route in `NotifyResult.visual`.
 
+The MCP adapter is intentionally not in this path: it exposes an `echo_ask` tool for Claude
+Code rather than a lifecycle notification hook.
+
+## Jcode adapter - lifecycle hooks
+
+Jcode exposes detached `session_start` and `turn_end` observer commands through its `[hooks]`
+TOML section. `adapters/jcode/hook.ts` translates those events into `/notify` calls with
+`source: "jcode"` and the Jcode session id. Successful turns speak only an explicit final
+`🗣️ Name: summary` line from the tail-safe `JCODE_HOOK_LAST_ASSISTANT_TEXT` field.
+
+Jcode's lifecycle stream covers TUI, desktop, headless, and swarm workers. The adapter uses
+`JCODE_HOOK_SESSION_KIND` and `JCODE_HOOK_PARENT_SESSION_ID` to suppress child sessions.
+Startup greetings are disabled by default; when enabled they run only for root
+`session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
+is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
+overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
+fails closed on TOML table shapes it cannot preserve safely.
+
 ## Pi adapter - per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
