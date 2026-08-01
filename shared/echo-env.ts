@@ -316,7 +316,7 @@ export interface EchoConfigurationLoadOptions {
    * Extra live environment inspected only for deprecation reporting, never
    * resolved into the result. Core passes process.env here: its live fallbacks
    * deliberately stay out of the cached file layer, but the one deprecation
-   * warning and GET /health must still name them.
+   * warning must still name them.
    */
   reportEnvironment?: EchoEnvironment;
 }
