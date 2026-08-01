@@ -35,17 +35,16 @@ bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedica
 - Registers the `echo_ask` tool (speak a question, return the spoken reply as text) when the
   runtime exposes a tool API; a runtime without one keeps its voice notifications. Contract:
   [docs/converse.md](../../docs/converse.md).
-- Headless run modes are suppressed: Pi spawns subagents as `pi --mode json -p`, which report `ctx.hasUI === false`. Voice fires only when a real UI is present (`tui`/`rpc`). Set `ECHO_VOICE_SUPPRESS=true` to force-mute any context.
+- Headless run modes are suppressed: Pi spawns subagents as `pi --mode json -p`, which report `ctx.hasUI === false`. Voice fires only when a real UI is present (`tui`/`rpc`). Set `ECHO_VOICE_SUPPRESS` to `true` in `~/.config/echo/config.json` to force-mute any context.
 
 ## Configuration
 
-Environment variables (the legacy `ATLAS_VOICE_*` names still work as deprecated
-silent fallbacks - see
-[`docs/configuration.md`](../../docs/configuration.md#deprecated-environment-variables)):
+Config properties (legacy `ATLAS_VOICE_*` process values remain one-release warning
+fallbacks; see
+[`docs/configuration.md`](../../docs/configuration.md#deprecated-environment-configuration)):
 
-Pi and omp resolve these values exactly as the daemon does: the real process environment
-first, then Echo's JSON configuration file. For durable local settings, use
-`~/.config/echo/config.json`; process variables take precedence. Relaunch the host after
+Pi and omp resolve these values exactly as the daemon does: `~/.config/echo/config.json`
+wins over the one-release process and legacy dotenv fallbacks. Relaunch the host after
 editing the file:
 
 ```json

@@ -175,9 +175,9 @@ nothing, and an empty transcript is reported as `no_speech` rather than as an em
 
 ## Configuration
 
-Resolved through `shared/echo-env.ts` like everything else: live process values win, then
-`~/.config/echo/config.json`, then a legacy dotenv file. See
-[configuration.md](configuration.md) for the full key list.
+Set these properties in `~/.config/echo/config.json`. That file wins; process and legacy
+dotenv values remain one-release warning fallbacks. See [configuration.md](configuration.md)
+for the complete precedence and migration contract.
 
 | Key | Default | Read by |
 | --- | --- | --- |

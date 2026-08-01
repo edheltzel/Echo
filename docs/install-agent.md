@@ -12,6 +12,22 @@ Expected: prints a path and exits 0.
 
 If FAIL: install Bun from <https://bun.sh/>.
 
+When the requested setup includes one-shot voice ask, install and assert the capture path too:
+
+```bash
+brew install sox
+brew install yap
+bash scripts/converse-dependencies.sh
+command -v yap
+```
+
+Expected: the dependency script prints resolved paths for both `sox` and `rec`. Then
+`command -v yap` prints the recommended on-device transcriber. A configured `whisper-cli` plus a
+readable `ECHO_CONVERSE_WHISPER_MODEL` property in config.json may replace `yap`, but `sox` remains required. Do not report voice
+ask ready merely because the adapter installer succeeded: it warns and continues when capture
+tools are absent so notification-only installs still work.
+
+
 ## 2. Install core only
 
 ```bash

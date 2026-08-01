@@ -85,13 +85,11 @@ boundary notes. Mechanism and process topology: [`docs/converse.md`](docs/conver
   runtime (`resolveEnvVar`, falling back to a bare `ELEVENLABS_API_KEY`). The key is
   read once in the provider constructor - `/health` reports only `apiKeyConfigured: true|false`,
   never the key itself.
-- **Config resolves from user-owned paths** - `~/.config/echo/config.json` first,
-  then the legacy dotenv locations (`ECHO_ENV_PATHS`, `~/.config/echo/.env`, …)
-  first-found-wins - never overriding a live environment value. Resolution is
-  read-only: the daemon layers file values under the live environment at read time
-  and never writes them into `process.env`, so a secret in either file is not
-  hydrated into the environment that same-process modules and spawned helpers
-  inherit. `config.json` **rejects** `ELEVENLABS_API_KEY`, which keeps the one
+- **Config resolves from user-owned paths** - `~/.config/echo/config.json` wins,
+  followed for one release by deprecated process and legacy dotenv fallbacks.
+  Resolution is read-only and never writes values into `process.env`, so a secret
+  in either file is not hydrated into the environment that same-process modules
+  and spawned helpers inherit. `config.json` **rejects** `ELEVENLABS_API_KEY`, which keeps the one
   secret in a dotenv file that is never staged into the daemon payload. Precedence
   detail: [`docs/configuration.md`](docs/configuration.md).
 

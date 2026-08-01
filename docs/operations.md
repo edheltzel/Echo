@@ -106,15 +106,20 @@ log because `202` means accepted, not finished speaking.
 
 For a visual acceptance test, run the adapter smoke from a real WezTerm TTY. If the terminal
 is focused and its notification policy suppresses focused-pane notifications, use a temporary
-isolated process with the runtime-only override below; do not edit the global WezTerm config:
+isolated process with a test-only Echo config selector; do not edit the global WezTerm config:
 
 ```bash
+mkdir -p ~/.config/echo
+cat > ~/.config/echo/wezterm-test.json <<'JSON'
+{"ECHO_VOICE_ENABLED":false,"ECHO_VOICE_GREET_ON_START":true,"ECHO_VOICE_SPEAK_COMPLETIONS":false}
+JSON
 /Applications/WezTerm.app/Contents/MacOS/wezterm \
   --config 'notification_handling="AlwaysShow"' \
   start --always-new-process --no-auto-connect --cwd "$PWD" -- \
-  env HERDR_SOCKET_PATH=/dev/null ECHO_VOICE_ENABLED=false \
-  ECHO_VOICE_GREET_ON_START=true ECHO_VOICE_SPEAK_COMPLETIONS=false PI_OFFLINE=1 \
+  env ECHO_CONFIG_FILE="$HOME/.config/echo/wezterm-test.json" \
+  HERDR_SOCKET_PATH=/dev/null PI_OFFLINE=1 \
   pi --no-session --offline --no-tools -e "$PWD/adapters/pi/index.ts"
+rm ~/.config/echo/wezterm-test.json
 ```
 
 The rollout capture was made from the real terminal path with WezTerm
@@ -145,8 +150,8 @@ were then restored. This counterfactual isolates host output masking from Echo s
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`; exporting
-`PORT` aims it at one specific daemon, e.g. an isolated test instance). While muted,
+`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`). For an
+isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config containing `PORT`. While muted,
 notifications are still accepted,
 processed, and logged - only the audio is suppressed, across every provider:
 

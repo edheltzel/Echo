@@ -60,8 +60,8 @@ SSH/headless fallback are documented in
 ## Voice ask (echo-converse)
 
 The one-shot voice ask needs a recorder and a local transcriber that the notification path
-does not, resolved on `PATH` in the **calling host's** process (overrides:
-`ECHO_CONVERSE_*_BIN`):
+does not, resolved on `PATH` in the **calling host's** process (binary path settings are
+`ECHO_CONVERSE_*_BIN` properties in config.json):
 
 | Dependency | Why | Behavior when absent |
 |---|---|---|
@@ -71,8 +71,8 @@ does not, resolved on `PATH` in the **calling host's** process (overrides:
 
 The voice-ask install paths (`--adapter mcp|pi|omp`) preflight `sox` and `rec` before
 changing host state. `cli/echo doctor` runs the same check and reports the exact missing
-binary plus `brew install sox`; set `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
-when the binaries live outside `PATH`.
+binary plus `brew install sox`; configure `ECHO_CONVERSE_SOX_BIN` or `ECHO_CONVERSE_REC_BIN`
+in config.json when the binaries live outside `PATH`.
 
 Transcription is local by design: no cloud rung, no API key, no egress. Why `sox` is Tier 1
 rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).

@@ -44,11 +44,11 @@ and a single `writeResolutionEvent` call in `speakNotification` (the play queue'
 - **Path (user-owned, never `/tmp`/repo):** macOS
   `~/Library/Logs/echo/voice-resolution.jsonl`, else `$XDG_STATE_HOME`/
   `~/.local/state` under `echo/`. Override with `ECHO_RESOLUTION_LOG` in
-  `~/.config/echo/config.json` (a legacy dotenv value is still read, but only as
-  the migration fallback). **Separate** from the human log
+  `~/.config/echo/config.json` (a legacy dotenv value is read for one release with
+  a deprecation warning). **Separate** from the human log
   `~/Library/Logs/echo.log`.
-- **Retention:** single size-capped file, `~1MB` default (override
-  `ECHO_RESOLUTION_LOG_MAX_BYTES`, floor 1KB via `parseBoundedInt`). On each write,
+- **Retention:** single size-capped file, `~1MB` default (configure
+  `ECHO_RESOLUTION_LOG_MAX_BYTES` in config.json; floor 1KB via `parseBoundedInt`). On each write,
   oldest whole lines are pruned to stay under the cap; the newest line is always kept. No
   external deps, no time-based rotation.
 - **Best-effort:** all write/prune errors are swallowed - logging must never break a

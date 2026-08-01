@@ -1,6 +1,6 @@
 # HTTP API
 
-The universal core (`core/server.ts`) listens on `localhost:3246` by default (override: `PORT`) and
+The universal core (`core/server.ts`) listens on `localhost:3246` by default (`PORT` in config.json) and
 exposes the notification API plus the voice ask's opt-in playback-status and capture-reservation
 routes. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
@@ -52,7 +52,7 @@ Primary host-neutral endpoint. Body (every field optional):
 ```
 
 | Field | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `title` | `Voice Notification` (`ECHO_DEFAULT_TITLE`) | macOS notification title |
 | `message` | `"Task completed"` | The spoken/displayed text |
 | `voice_enabled` | `true` | `false` = silent (notification only, no TTS, **no resolution-log event**) |
@@ -81,7 +81,7 @@ unproven route never receives the marker and preserves the legacy fallback.
 Supported terminal protocols and limits:
 
 | Terminal | Route | Limit |
-|---|---|---|
+| --- | --- | --- |
 | Ghostty | OSC 777 | Requires Ghostty terminal identity. |
 | WezTerm | OSC 777 | Requires `TERM_PROGRAM_VERSION` as well as WezTerm identity. |
 | Kitty | OSC 99 | Recognized route; delivery counts as `shown` on a successful write, with no capability-query negotiation (verified live against Kitty 0.48.1). |
@@ -282,7 +282,7 @@ or a different `VOICES_PATH` than the caller can see.
 ```
 
 | Field | Notes |
-|---|---|
+| --- | --- |
 | `agents` | Sorted persona **name keys** from `voices.json` - exactly the values `/notify` resolves as `voice_id`. Never a raw provider voice id |
 | `default_provider` | Same value `/health` reports as `activeProvider` |
 
@@ -298,7 +298,7 @@ default (see [`voices.md`](voices.md)). Callers must fail closed: an unreachable
 an unexpected body means "no known personas", never "assume it resolves".
 
 Adapters resolve this URL through `shared/daemon-endpoints.ts` rather than hard-coding a
-port, so pointing a host at a second instance is one variable (`ECHO_DAEMON_URL`) -
+port, so pointing a host at a second instance is one config.json property (`ECHO_DAEMON_URL`) -
 see [`configuration.md`](configuration.md).
 
 ## Unsupported paths
