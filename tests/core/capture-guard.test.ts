@@ -114,7 +114,7 @@ describe("resolveCaptureStatePath — env contract", () => {
     const saved = process.env.ECHO_CAPTURE_STATE_PATH;
     try {
       delete process.env.ECHO_CAPTURE_STATE_PATH;
-      primeEchoFileEnv({ ECHO_CAPTURE_STATE_PATH: "/from/file.json" });
+      primeEchoFileEnv({ ECHO_CAPTURE_STATE_PATH: "/from/file.json" }, false);
       expect(resolveCaptureStatePath()).toBe("/from/file.json");
       process.env.ECHO_CAPTURE_STATE_PATH = "";
       expect(resolveCaptureStatePath()).toBeNull();
