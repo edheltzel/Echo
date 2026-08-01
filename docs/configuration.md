@@ -38,21 +38,20 @@ from the daemon payload, so a plain reload picks up an edit, with no re-staging:
 
 For a canonical setting, resolution is:
 
-1. A value already present in the live process environment (compatibility override).
-2. The matching property in config.json.
-3. A matching value in a legacy dotenv file - the migration fallback, plus the permanent
-   home of the one secret below.
+1. The matching property in config.json.
+2. A live process value, honored for one release with a deprecation warning.
+3. A matching value in a legacy dotenv file, also a one-release migration fallback.
 
-Resolution is read-only: Echo never copies file values into process.env. This preserves
-the import-purity boundary that prevents a daemon import from leaking one user's persona
-into same-process adapter code.
+Persistent configuration always wins. Move every non-secret Echo setting into config.json;
+third-party secrets are the only supported environment configuration. Resolution remains
+read-only: Echo never copies file values into process.env, preserving the import-purity
+boundary between daemon and same-process adapter code.
 
-**PORT is the one exception to layer 3.** It is read from the live environment and
-config.json only, never from a dotenv file. `cli/echo`, the lifecycle scripts, and the
-health probes resolve the port in pure bash and read only config.json (`scripts/echo-port.sh`),
-so honoring a dotenv PORT would move the daemon somewhere every one of those surfaces
-reports as down. `scripts/install.sh` migrates an existing dotenv PORT into config.json
-before it probes anything, so an upgrading user keeps the port they configured.
+**PORT is the one exception to layer 3.** It is read from config.json first and a deprecated
+live PORT second, never from a dotenv file. `cli/echo`, the lifecycle scripts, and health
+probes use the same order in pure bash (`scripts/echo-port.sh`). `scripts/install.sh` migrates
+an existing dotenv PORT into config.json before it probes anything, so an upgrading user
+keeps the configured port.
 
 ### ELEVENLABS_API_KEY: the one secret, and where it lives
 
@@ -94,13 +93,16 @@ A file that is not valid JSON, or not a JSON object, cannot be partially applied
 file is skipped, `valid` reads false, and the built-in defaults are used.
 
 PAI_DIR, PAI_SETTINGS_PATH, PI_SETTINGS_PATH, PI_CODING_AGENT_DIR, OMP_EXTENSIONS_DIR,
-and CLAUDE_PROJECT_DIR remain host-owned runtime context. They describe where a host keeps
-its own settings or project, so they are not Echo settings and are not copied into this file.
-ECHO_ENV_PATHS and ECHO_CONFIG_FILE are likewise not settings but path selectors, read only
-from the live process environment: the first prepends extra dotenv locations to the layer-3
-read fallback (those files are read as configuration but never drained by the migration
-below), the second retargets config.json itself and is honored identically by the daemon and by
-`echo voice`, so a test or development instance can never write where the reader will not look.
+ECHO_MCP_CONFIG_PATH, and CLAUDE_PROJECT_DIR remain host-owned runtime context or registration
+path selectors. They describe a host, not Echo behavior, so they are not copied into this file.
+ECHO_ENV_PATHS and ECHO_CONFIG_FILE are internal migration/test path selectors rather than
+supported settings: the first prepends extra legacy dotenv locations, and the second retargets
+config.json so an isolated test or development instance can redirect both reader and writer.
+ECHO_CONVERSE_MAIN is likewise test/development subprocess injection. Test-only ECHO_E2E_PORT,
+ECHO_E2E_CONVERSE_PORT, ECHO_SKIP_WORKSPACE_LINK, TEST_QUESTION, and TRANSCRIPT remain harness
+plumbing. HOME, PATH, XDG_CACHE_HOME, XDG_STATE_HOME, terminal identity variables, and host
+session variables remain standard process context. None of these exceptions configures Echo's
+user-facing behavior.
 
 ## Schema reference
 
@@ -110,13 +112,15 @@ at runtime; invalid values use the defaults below.
 | Group | Properties | Defaults / notes |
 | --- | --- | --- |
 | Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
+| Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
 | Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE | Adapter defaults apply when unset |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Booleans default to enabled/unsuppressed; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
 | State and logs | ECHO_MUTE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths; log caps default to 1 MB |
-| Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL, ECHO_VOICE_SURFACES | Adapter-side endpoint overrides; otherwise adapters use <http://localhost:3246> |
+| Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL | Adapter-side endpoint settings; otherwise adapters use <http://localhost:3246> |
+| Reserved | ECHO_VOICE_SURFACES | Schema-reserved; current runtime code does not read it |
 | Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS, ECHO_CONVERSE_LOG_PATH | 32468 (keypad ECHOV; core keeps 3246), <http://localhost:32468>, ~/.local/state/echo/converse/booking.lock, capture + transcription budget plus slack (120000 at the shipped defaults), ~/Library/Logs/echo-converse.log |
 | Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, 1500, 60000, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
 
@@ -144,8 +148,8 @@ Settings whose behavior is not obvious from the name:
   numeric spellings (`"0x0C9E"`, `"1e4"`, `"03246"`) and padded ones (`" 3246 "`), because
   the daemon and the pure-bash CLI resolve those to different ports, which would leave the
   daemon listening somewhere every CLI surface reports as down. `0` means an ephemeral bind,
-  which no CLI can address, so it is accepted only as a live process value and only for
-  tests. Installing normalizes a padded dotenv PORT; any other spelling the grammar rejects
+  which no CLI can address, so only the test harness injects it as a live process value.
+  Installing normalizes a padded dotenv PORT; any other spelling the grammar rejects
   is reported by name and left unmigrated rather than written and then dropped at startup.
 - **ECHO_CAPTURE_STATE_PATH** points at the capture tool's published cross-process state file
   (default `~/.local/state/voicelayer/recording-state.json`; that tool hardcodes
@@ -170,8 +174,8 @@ fallback) lives in [`voices.md`](voices.md#reference-corevoicesjson).
 
 ## Migrating from ~/.config/echo/.env
 
-An upgrade does not silently discard existing settings. Echo still reads the old dotenv
-locations as the lowest-priority layer:
+An upgrade does not silently discard existing settings. For one release Echo still reads the
+old dotenv locations as the lowest-priority layer and warns for every non-secret key it finds:
 
     paths in ECHO_ENV_PATHS (read, but never migrated; see below)
     ~/.config/echo/.env
@@ -189,25 +193,23 @@ config.json and prints exactly which keys it moved. It is:
 - **Narrow.** Only canonical schema keys move. `ELEVENLABS_API_KEY` stays put (and the report
   says so), the retired aliases below are ignored, and host-owned variables are left alone.
 - **Limited to Echo's own dotenv locations.** `~/.env` and `ECHO_ENV_PATHS` are never drained:
-  `~/.env` is a shared user dotfile, not Echo's to rewrite. Move those keys by hand. Every
-  other key there is still read as before, so only PORT needs action - and a PORT in one of
-  those files is named on every install run until you move it into config.json.
+  `~/.env` is a shared user dotfile, not Echo's to rewrite. Move every non-secret Echo key there
+  into config.json before the one-release fallback is removed. PORT is not read from those files.
 
-Nothing is required of you afterwards. If you want to tidy up, delete the migrated lines from
-`~/.config/echo/.env` - but keep the file itself whenever it holds `ELEVENLABS_API_KEY`.
+After migration, delete migrated non-secret lines from `~/.config/echo/.env`, but keep the file
+whenever it holds `ELEVENLABS_API_KEY`.
 
-### Deprecated environment variables
+### Deprecated environment configuration
 
-Echo reads its configuration from canonical `ECHO_*` names. Two generations of older names
-exist, and they are **not** in the same state:
+Every canonical Echo key in the schema is now a config.json property, not a supported
+environment setting. A process or dotenv value remains a one-release compatibility fallback,
+logs a warning naming the keys, and never overrides config.json. `ATLAS_VOICE_*` process values
+share that warning path and fall back only when the canonical config property is unset.
+`VOICESYSTEM_*` is already retired and ignored rather than migrated. The preview tool's
+legacy `PYTHON3_PATH` follows the same one-release warning fallback and maps to
+`ECHO_PYTHON3_PATH` in config.json.
 
-| Family | Status | Behavior |
-| --- | --- | --- |
-| `VOICESYSTEM_*` (core) | **Retired** in this release | Ignored everywhere. A `VOICESYSTEM_*` line in a dotenv file is skipped, not migrated. Rename it to the canonical `ECHO_*` name. |
-| `ATLAS_VOICE_*` (Pi/omp adapters) | **Deprecated**, still honored | Read as a silent fallback when the canonical name is unset (`adapters/pi/config.ts`, `adapters/omp/config.ts`). Slated for removal in a future major release. |
-
-`ATLAS_VOICE_*` → canonical, in the priority order the adapters read them
-(`ECHO_*` → `ATLAS_VOICE_*`):
+`ATLAS_VOICE_*` to canonical:
 
 | Old name | New canonical |
 | --- | --- |
@@ -243,14 +245,13 @@ Rewrite each match to its canonical name, put it in config.json, and restart the
 ## Port and CLI
 
 The default daemon port is 3246 (E=3, C=2, H=4, O=6 on a phone keypad). The daemon,
-cli/echo, lifecycle scripts, adapters, smoke checks, and docs all use that default. An
-explicit live PORT override remains useful for an isolated development daemon; the normal
-installed LaunchAgent reads config.json.
+cli/echo, lifecycle scripts, adapters, smoke checks, and docs all use that default. Put a
+persistent override in config.json. Test harnesses may inject PORT for isolated instances;
+that compatibility path warns and cannot override config.json.
 
-Both sides read the port from the same two places, in the same order, with the same bounds -
-that is what keeps `cli/echo doctor`, `status`, `mute` and the installer's health probe
-talking to the port the daemon actually bound. A value either side would reject falls back to
-3246 on both.
+The daemon and shell surfaces read config.json first, then the deprecated test/process fallback,
+with the same bounds. That keeps `cli/echo doctor`, `status`, `mute`, and the installer's health
+probe talking to the port the daemon actually bound. A rejected value falls back to 3246.
 
     curl -fsS http://localhost:3246/health
     curl -fsS -X POST http://localhost:3246/notify \

@@ -30,7 +30,7 @@ brew install sox
 brew install yap
 ```
 
-A local `whisper-cli` with `ECHO_CONVERSE_WHISPER_MODEL` can replace `yap`; it does not replace
+A local `whisper-cli` with `ECHO_CONVERSE_WHISPER_MODEL` set in config.json can replace `yap`; it does not replace
 `sox`. Installing a Pi, omp, or MCP adapter checks for `sox` and `rec` but only warns if they are
 missing, because the same adapter can still deliver ordinary notifications. At call time Echo
 checks `rec` and the selected transcriber before recording. `sox` itself is invoked later only by
@@ -259,9 +259,9 @@ nothing, and an empty transcript is reported as `no_speech` rather than as an em
 
 ## Configuration
 
-Resolved through `shared/echo-env.ts` like everything else: live process values win, then
-`~/.config/echo/config.json`, then a legacy dotenv file. See
-[configuration.md](configuration.md) for the full key list.
+Set these properties in `~/.config/echo/config.json`. That file wins; process and legacy
+dotenv values remain one-release warning fallbacks. See [configuration.md](configuration.md)
+for the complete precedence and migration contract.
 
 | Key | Default | Read by |
 | --- | --- | --- |

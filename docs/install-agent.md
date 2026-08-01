@@ -23,7 +23,7 @@ command -v yap
 
 Expected: the dependency script prints resolved paths for both `sox` and `rec`. Then
 `command -v yap` prints the recommended on-device transcriber. A configured `whisper-cli` plus a
-readable `ECHO_CONVERSE_WHISPER_MODEL` may replace `yap`, but `sox` remains required. Do not report voice
+readable `ECHO_CONVERSE_WHISPER_MODEL` property in config.json may replace `yap`, but `sox` remains required. Do not report voice
 ask ready merely because the adapter installer succeeded: it warns and continues when capture
 tools are absent so notification-only installs still work.
 
