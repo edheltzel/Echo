@@ -5,6 +5,9 @@ unset PORT
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRATCH="$(mktemp -d)"
 LOG="${SCRATCH}/core.log"
+# CI uploads this repo-root copy on failure (.github/workflows/verify.yml).
+ARTIFACT_LOG="${ROOT}/.smoke-core.log"
+rm -f "$ARTIFACT_LOG"
 export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 
 # The smoke daemon reads every Echo setting from its own scratch config, never
@@ -20,8 +23,12 @@ JSON
 bun run "$ROOT/core/server.ts" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
+  status=$?
   kill "$PID" >/dev/null 2>&1 || true
   wait "$PID" >/dev/null 2>&1 || true
+  if [ "$status" -ne 0 ] && [ -f "$LOG" ]; then
+    cp "$LOG" "$ARTIFACT_LOG"
+  fi
   rm -rf "$SCRATCH"
 }
 trap cleanup EXIT
