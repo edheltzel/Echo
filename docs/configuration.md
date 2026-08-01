@@ -203,7 +203,10 @@ whenever it holds `ELEVENLABS_API_KEY`.
 
 Every canonical Echo key in the schema is now a config.json property, not a supported
 environment setting. A process or dotenv value remains a one-release compatibility fallback,
-logs a warning naming the keys, and never overrides config.json. `ATLAS_VOICE_*` process values
+logs a warning naming the keys, and never overrides config.json. The warning fires once per
+process (the daemon and long-lived hosts resolve configuration once and cache it; restart
+them to pick up config.json edits) and names the canonical config.json key for each legacy
+alias. `ATLAS_VOICE_*` process values
 share that warning path and fall back only when the canonical config property is unset.
 `VOICESYSTEM_*` is already retired and ignored rather than migrated. The preview tool's
 legacy `PYTHON3_PATH` follows the same one-release warning fallback and maps to

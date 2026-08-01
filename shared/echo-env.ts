@@ -39,14 +39,25 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_CONVERSE_WHISPER_BIN", "ECHO_CONVERSE_WHISPER_MODEL",
 ]);
 
-export const DEPRECATED_ENV_ALIASES = new Set([
-  "ATLAS_VOICE_NOTIFY_URL", "ATLAS_VOICE_ID", "ATLAS_VOICE_TITLE",
-  "ATLAS_VOICE_CATCHPHRASE", "ATLAS_VOICE_PERSONA_NAME", "ATLAS_VOICE_ENABLED",
-  "ATLAS_VOICE_GREET_ON_START", "ATLAS_VOICE_SPEAK_COMPLETIONS",
-  "ATLAS_VOICE_SUPPRESS", "ATLAS_VOICE_SUPPRESS_SUBAGENTS",
+// Alias names are rejected by config.json validation, so the deprecation
+// warning must point each one at the canonical key the user has to write
+// instead. Keep this table in step with docs/configuration.md.
+export const DEPRECATED_ENV_ALIAS_CANONICAL: Readonly<Record<string, string>> = {
+  ATLAS_VOICE_NOTIFY_URL: "ECHO_NOTIFY_URL",
+  ATLAS_VOICE_ID: "ECHO_VOICE_ID",
+  ATLAS_VOICE_TITLE: "ECHO_VOICE_TITLE",
+  ATLAS_VOICE_CATCHPHRASE: "ECHO_VOICE_CATCHPHRASE",
+  ATLAS_VOICE_PERSONA_NAME: "ECHO_VOICE_PERSONA_NAME",
+  ATLAS_VOICE_ENABLED: "ECHO_VOICE_ENABLED",
+  ATLAS_VOICE_GREET_ON_START: "ECHO_VOICE_GREET_ON_START",
+  ATLAS_VOICE_SPEAK_COMPLETIONS: "ECHO_VOICE_SPEAK_COMPLETIONS",
+  ATLAS_VOICE_SUPPRESS: "ECHO_VOICE_SUPPRESS",
+  ATLAS_VOICE_SUPPRESS_SUBAGENTS: "ECHO_VOICE_SUPPRESS_SUBAGENTS",
   // Developer-tool compatibility alias; config.json uses ECHO_PYTHON3_PATH.
-  "PYTHON3_PATH",
-]);
+  PYTHON3_PATH: "ECHO_PYTHON3_PATH",
+};
+
+export const DEPRECATED_ENV_ALIASES = new Set(Object.keys(DEPRECATED_ENV_ALIAS_CANONICAL));
 
 function isDeprecatedEnvironmentKey(key: string): boolean {
   return ECHO_CONFIG_KEYS.has(key) || DEPRECATED_ENV_ALIASES.has(key);
@@ -60,10 +71,17 @@ export function deprecatedEchoEnvironmentKeys(env: EchoEnvironment): string[] {
 
 export function warnDeprecatedEchoEnvironment(keys: string[], configPath: string): void {
   if (keys.length === 0) return;
+  const renames = keys
+    .filter((key) => DEPRECATED_ENV_ALIAS_CANONICAL[key] !== undefined)
+    .map((key) => `${key} → ${DEPRECATED_ENV_ALIAS_CANONICAL[key]}`);
+  const aliasGuidance = renames.length > 0
+    ? ` Legacy alias names are not config.json keys; use the canonical key: ${renames.join(", ")}.`
+    : "";
   console.warn(
     `⚠️  Echo environment configuration is deprecated: ${keys.join(", ")}. ` +
-      `Move these settings to ${configPath}; config.json values take precedence. ` +
-      "Third-party secrets remain environment-only.",
+      `Move these settings to ${configPath}; config.json values take precedence.` +
+      aliasGuidance +
+      " Third-party secrets remain environment-only.",
   );
 }
 
@@ -293,17 +311,45 @@ function loadLegacyEnvFiles(
   return env;
 }
 
-/**
- * Resolve Echo configuration and report what the config file contributed.
- * Precedence: config.json, deprecated live process/explicit env object, then
- * legacy .env. The compatibility layers keep one upgrade from silently
- * breaking existing setups; third-party secrets remain environment-only.
- */
-export function loadEchoConfigurationWithStatus(
-  env: EchoEnvironment = { ...process.env },
-  homeDir: string = homedir(),
+export interface EchoConfigurationLoadOptions {
+  /**
+   * Extra live environment inspected only for deprecation reporting, never
+   * resolved into the result. Core passes process.env here: its live fallbacks
+   * deliberately stay out of the cached file layer, but the one deprecation
+   * warning and GET /health must still name them.
+   */
+  reportEnvironment?: EchoEnvironment;
+}
+
+let cachedDefaultResolution:
+  | { signature: string; env: EchoEnvironment; config: EchoConfigStatus }
+  | undefined;
+
+// Every ambient input the default (no-argument) resolution depends on. Any
+// change to an Echo-relevant live value - a test pointing ECHO_CONFIG_FILE at
+// its own scratch file, a deprecated fallback set or cleared - produces a new
+// signature and a fresh read, so caching never makes injection nondeterministic.
+function defaultResolutionSignature(): string {
+  const parts = [
+    `ECHO_CONFIG_FILE=${process.env.ECHO_CONFIG_FILE ?? ""}`,
+    `ECHO_ENV_PATHS=${process.env.ECHO_ENV_PATHS ?? ""}`,
+    `ELEVENLABS_API_KEY=${process.env.ELEVENLABS_API_KEY ?? ""}`,
+  ];
+  for (const key of deprecatedEchoEnvironmentKeys(process.env)) {
+    parts.push(`${key}=${process.env[key]}`);
+  }
+  return parts.join(" ");
+}
+
+function resolveEchoConfiguration(
+  env: EchoEnvironment,
+  homeDir: string,
+  options: EchoConfigurationLoadOptions,
 ): { env: EchoEnvironment; config: EchoConfigStatus } {
   const deprecatedEnvironment = new Set(deprecatedEchoEnvironmentKeys(env));
+  for (const key of deprecatedEchoEnvironmentKeys(options.reportEnvironment ?? {})) {
+    deprecatedEnvironment.add(key);
+  }
   const { values, status } = readJsonConfig(echoConfigPath(homeDir, env));
   status.configured = Object.keys(values).sort((left, right) => left.localeCompare(right));
   const resolved = loadLegacyEnvFiles({ ...env }, homeDir, deprecatedEnvironment);
@@ -315,6 +361,37 @@ export function loadEchoConfigurationWithStatus(
   status.deprecatedEnvironment = [...deprecatedEnvironment].sort((left, right) => left.localeCompare(right));
   warnDeprecatedEchoEnvironment(status.deprecatedEnvironment, status.path);
   return { env: resolved, config: status };
+}
+
+/**
+ * Resolve Echo configuration and report what the config file contributed.
+ * Precedence: config.json, deprecated live process/explicit env object, then
+ * legacy .env. The compatibility layers keep one upgrade from silently
+ * breaking existing setups; third-party secrets remain environment-only.
+ *
+ * A default (no-argument) call is cached per process: long-lived hosts resolve
+ * configuration on every agent event, and re-reading the files plus re-warning
+ * each time turned one deprecated setting into a warning per event. Explicit
+ * arguments always resolve fresh.
+ */
+export function loadEchoConfigurationWithStatus(
+  env?: EchoEnvironment,
+  homeDir?: string,
+  options?: EchoConfigurationLoadOptions,
+): { env: EchoEnvironment; config: EchoConfigStatus } {
+  const cacheable = env === undefined && homeDir === undefined && options === undefined;
+  if (!cacheable) {
+    return resolveEchoConfiguration(env ?? { ...process.env }, homeDir ?? homedir(), options ?? {});
+  }
+  const signature = defaultResolutionSignature();
+  if (cachedDefaultResolution?.signature !== signature) {
+    cachedDefaultResolution = {
+      signature,
+      ...resolveEchoConfiguration({ ...process.env }, homedir(), {}),
+    };
+  }
+  // Copy the env so one caller's mutation cannot leak into the next.
+  return { env: { ...cachedDefaultResolution.env }, config: cachedDefaultResolution.config };
 }
 
 /** Resolve Echo configuration without mutating process.env. */
