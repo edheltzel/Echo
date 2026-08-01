@@ -180,7 +180,7 @@ export default function echoVoiceOmpAdapter(
   // Inject the 🗣️ convention into omp's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
-  const onBeforeAgentStart = omp.on as unknown as (
+  const onBeforeAgentStart = omp.on.bind(omp) as unknown as (
     event: "before_agent_start",
     handler: (event: unknown, ctx: OmpExtensionContext) => unknown,
   ) => void;

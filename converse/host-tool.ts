@@ -87,7 +87,7 @@ export interface AskToolHostOptions {
  */
 export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolHostOptions): boolean {
   if (typeof host.registerTool !== "function") return false;
-  const registerTool = host.registerTool as (definition: Record<string, unknown>) => void;
+  const registerTool = host.registerTool.bind(host) as (definition: Record<string, unknown>) => void;
 
   registerTool({
     name: ECHO_ASK_TOOL_NAME,

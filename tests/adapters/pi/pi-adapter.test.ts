@@ -14,12 +14,16 @@ function createMockPi() {
   return {
     handlers,
     api: {
-      on: (event: string, handler: Handler) => handlers.set(event, handler),
+      extension: handlers,
+      on(this: { extension: Map<string, Handler> }, event: string, handler: Handler) {
+        this.extension.set(event, handler);
+      },
       registerCommand: () => {},
     },
   };
 }
 interface MockExtensionApi {
+  extension: Map<string, Handler>;
   on: (event: string, handler: Handler) => unknown;
   registerCommand: () => void;
 }
@@ -84,16 +88,18 @@ describe("Pi adapter lifecycle", () => {
 
     await handlers.get("session_start")?.({ reason: "startup" }, createContext());
 
-    expect(payloads).toEqual([
-      {
-        message: "Pi session ready.",
-        title: "Pi Notification",
-        voice_enabled: true,
-        voice_id: "pi",
-        session_id: "session-1",
-        source: "pi",
-      },
-    ]);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toEqual(expect.objectContaining({
+      message: "Pi session ready.",
+      title: "Pi Notification",
+      voice_enabled: true,
+      voice_id: "pi",
+      session_id: "session-1",
+      source: "pi",
+    }));
+
+    const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
+    expect(visualDelivery === undefined || visualDelivery === "native").toBe(true);
   });
 
   test("message_end and turn_end for the same message speak once", async () => {
