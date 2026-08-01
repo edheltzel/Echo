@@ -15,11 +15,17 @@ function mockHost(options: { withToolApi?: boolean } = {}) {
   const commands = new Map<string, unknown>();
   const tools = new Map<string, Record<string, any>>();
   const api: Record<string, unknown> = {
-    on: (event: string, handler: unknown) => handlers.set(event, handler),
+    extension: handlers,
+    on(this: { extension: Map<string, unknown> }, event: string, handler: unknown) {
+      this.extension.set(event, handler);
+    },
     registerCommand: (name: string, opts: unknown) => commands.set(name, opts),
   };
   if (options.withToolApi !== false) {
-    api.registerTool = (definition: Record<string, any>) => tools.set(String(definition.name), definition);
+    api.registerTool = function (this: { extension: Map<string, unknown> }, definition: Record<string, any>) {
+      expect(this.extension).toBe(handlers);
+      tools.set(String(definition.name), definition);
+    };
   }
   return { handlers, commands, tools, api: api as unknown as Parameters<typeof echoVoiceOmpAdapter>[0] };
 }
