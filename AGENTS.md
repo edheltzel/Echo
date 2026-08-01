@@ -97,7 +97,11 @@ restarting it, retargeting it, or speaking through it is a live-system incident.
 (mute, capture, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
 refuses to attach to a port it does not own, and prints an isolation proof before sending
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
-is unmistakably a test.
+is unmistakably a test. `bun test` preloads `tests/preload.ts` (via `bunfig.toml`), which
+pins `ECHO_CONFIG_FILE` to a scratch path: config.json is authoritative over live process
+values, so without the pin the operator's real config.json would override the isolation env
+in-process tests set before importing the singleton server. A test that models config.json
+writes its own file and points `ECHO_CONFIG_FILE` at it.
 
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
