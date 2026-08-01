@@ -84,6 +84,7 @@ tests/e2e-converse.sh        # one voice-ask turn against an isolated core + coo
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
 bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
 bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
+bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 ```
 
 CI runs exactly that set headlessly on every PR into `dev`/`master` and every push to those

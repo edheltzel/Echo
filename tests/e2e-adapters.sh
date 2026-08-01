@@ -152,7 +152,17 @@ bun -e '
 ' || fail "Pi adapter could not notify the isolated daemon"
 
 # ---------------------------------------------------------------------------
-# 4. Optional audible pass - only after isolation is proven above.
+# 4. Jcode lifecycle hook: explicit voice line reaches the isolated daemon.
+# ---------------------------------------------------------------------------
+JCODE_HOOK_EVENT=turn_end \
+JCODE_HOOK_STATUS=ok \
+JCODE_HOOK_TRANSCRIPT=$'assistant: 🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+ECHO_DAEMON_URL="http://localhost:${PORT}" \
+  bun run adapters/jcode/hook.ts
+echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the voice line"
+
+# ---------------------------------------------------------------------------
+# 5. Optional audible pass - only after isolation is proven above.
 # ---------------------------------------------------------------------------
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""

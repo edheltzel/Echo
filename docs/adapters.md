@@ -75,7 +75,7 @@ contract.
 
 ## Native terminal visuals
 
-Pi, omp, and Claude Code adapters use the shared notify client for visual delivery. Before the
+Pi, omp, Claude Code, and Jcode adapters use the shared notify client for visual delivery. Before the
 HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
 then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
 adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux

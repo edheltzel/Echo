@@ -32,6 +32,7 @@ PAYLOAD_ROLLBACK=""
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 CLAUDE_MCP_CONFIG="${ECHO_MCP_CONFIG_PATH:-$HOME/.claude.json}"
+JCODE_CONFIG="${JCODE_CONFIG_PATH:-${JCODE_HOME:-$HOME/.jcode}/config.toml}"
 # adapters/omp/reconcile.ts honors the same override, so detection and reconcile agree.
 OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 ADAPTER="none"
@@ -39,7 +40,7 @@ CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|mcp|pi|omp] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|jcode|mcp|pi|omp] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -79,7 +80,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|mcp|pi|omp) ;;
+  none|claudecode|jcode|mcp|pi|omp) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -223,6 +224,10 @@ omp_installed() {
   [ -L "$OMP_EXTENSIONS/echo-voice" ]
 }
 
+jcode_installed() {
+  [ -f "$JCODE_CONFIG" ] && grep -qE '^[[:space:]]*(turn_end|session_start)[[:space:]]*=[[:space:]]*"[^"]*/adapters/jcode/hook\.ts"' "$JCODE_CONFIG"
+}
+
 # Materialize the workspace links every adapter depends on. Each adapter package
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
 # `bun install` must have run before a host can load one. Idempotent and offline —
@@ -297,6 +302,14 @@ preflight() {
       # e.g. a foreign entry occupying echo-voice) must abort BEFORE any host
       # state is mutated.
       bun run "$REPO_ROOT/adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
+    jcode)
+      if ! command -v jcode >/dev/null 2>&1; then
+        echo "Jcode CLI is required for --adapter jcode" >&2
+        exit 1
+      fi
+      echo "> Preflighting Jcode lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 
@@ -465,6 +478,10 @@ install_adapter() {
       echo "> Reconciling oh-my-pi adapter registration"
       bun run "$REPO_ROOT/adapters/omp/reconcile.ts"
       ;;
+    jcode)
+      echo "> Reconciling Jcode lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/jcode/reconcile.ts"
+      ;;
   esac
 }
 
@@ -493,6 +510,11 @@ refresh_installed_adapters() {
     bun run "$REPO_ROOT/adapters/omp/reconcile.ts" \
       || echo "WARN: omp registration refresh failed — run adapters/omp/reconcile.ts manually" >&2
   fi
+  if [ "$ADAPTER" != "jcode" ] && jcode_installed; then
+    echo "> Refreshing Jcode lifecycle-hook registration"
+    bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" \
+      || echo "WARN: Jcode registration refresh failed — run adapters/jcode/reconcile.ts manually" >&2
+  fi
 }
 
 check_installation() {
@@ -502,7 +524,7 @@ check_installation() {
   # workspace links a registered adapter fails to load. Report, never mutate.
   local adapter
   if ! skip_workspace_link; then
-    for adapter in claudecode omp pi; do
+    for adapter in claudecode jcode omp pi; do
       if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
         echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
         stale=1
@@ -572,6 +594,18 @@ check_installation() {
       stale=1
     elif [ "$rc" -ne 0 ]; then
       echo "WARN: omp registration check failed" >&2
+      stale=1
+    fi
+  fi
+
+  if jcode_installed; then
+    echo "> Checking Jcode lifecycle-hook registration"
+    rc=0
+    bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: Jcode registration check failed" >&2
       stale=1
     fi
   fi

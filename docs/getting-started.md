@@ -172,7 +172,7 @@ In this tutorial, you:
 
 ## Next steps
 
-- **Wire up a host adapter** — have Claude Code, Pi, or oh-my-pi speak automatically:
+- **Wire up a host adapter** — have Claude Code, Jcode, Pi, or oh-my-pi speak automatically:
   [install-human.md](install-human.md)
 - **Change or add voices** — pick different persona voices by ear:
   [voices.md](voices.md)

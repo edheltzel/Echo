@@ -8,6 +8,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 
 - **Core only** - any process can POST to `/notify`.
 - **Claude Code adapter** - Claude Code lifecycle hooks speak.
+- **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).

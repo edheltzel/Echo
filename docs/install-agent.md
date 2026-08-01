@@ -91,7 +91,15 @@ Expected: the reconcile reports the `echo-voice` symlink in `~/.omp/agent/extens
 
 If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means something other than Echo occupies the `echo-voice` name; the installer refuses to replace it and aborts before mutating any host state. Inspect the entry manually - ownership rules in `docs/adapters.md`.
 
-## 8. Install the voice-ask MCP server when needed
+## 8. Install the Jcode lifecycle hook adapter when needed
+
+```bash
+bash scripts/install.sh --adapter jcode
+```
+
+Expected: the reconcile reports Jcode `session_start` and `turn_end` hooks in `~/.jcode/config.toml` and the health check passes. If FAIL: confirm `command -v jcode` works and inspect the existing hook owner; the installer refuses to replace a non-Echo hook.
+
+## 9. Install the voice-ask MCP server when needed
 
 ```bash
 bash scripts/install.sh --adapter mcp
@@ -110,7 +118,7 @@ overwrite it, and aborts before mutating any host state. Pi and omp expose the s
 from their existing adapters, so they need no extra registration step. See
 [`converse.md`](converse.md).
 
-## 9. Heal after a repo move/rename
+## 10. Heal after a repo move/rename
 
 Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
 
