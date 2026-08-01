@@ -61,9 +61,10 @@ curl -fsS http://localhost:3246/health
 ```
 
 Returns JSON containing `"status":"healthy"`. Every command on this page uses the port
-from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT`
-override is available for one isolated command or test. The CLI does not discover arbitrary
-listeners. See [`configuration.md`](configuration.md).
+from `config.json` through `scripts/echo-port.sh`, defaulting to `3246`; a live `PORT` is a
+deprecated one-release fallback that warns and cannot override config.json - isolated
+instances point `ECHO_CONFIG_FILE` at a scratch config instead. The CLI does not discover
+arbitrary listeners. See [`configuration.md`](configuration.md).
 
 ## Verify a native terminal notification
 
