@@ -54,9 +54,9 @@ const NO_CONFIG_STATUS: EchoConfigStatus = {
 // Cache only file-backed values. config.json keys are authoritative; deprecated
 // process fallbacks remain live so test harnesses and one-release compatibility
 // callers can set them after core was imported without leaking them into files.
-// process.env is passed for REPORTING only: the one deprecation warning and the
-// GET /health status must cover the whole compatibility layer (dotenv-sourced
-// keys plus the live fallbacks the daemon honors) without caching live values.
+// process.env is passed for REPORTING only: the one deprecation warning must
+// cover the whole compatibility layer (dotenv-sourced keys plus the live
+// fallbacks the daemon honors) without caching live values.
 function loadEchoFileEnv(): Record<string, string | undefined> {
   const seed: Record<string, string | undefined> = {};
   if (process.env.ECHO_ENV_PATHS) seed.ECHO_ENV_PATHS = process.env.ECHO_ENV_PATHS;
