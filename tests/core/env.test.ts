@@ -398,3 +398,85 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
     expect(helper).toContain(`[ "$port" -le ${MAX_CONFIG_PORT} ]`);
   });
 });
+
+// The default (no-argument) resolution is cached per process behind a signature
+// of every ambient input. A missing input or an ambiguous encoding serves one
+// environment state another state's files; a shared status object lets one
+// caller corrupt what every later caller sees.
+describe("default-resolution cache", () => {
+  function withSavedEnv(keys: string[], run: () => void): void {
+    const saved = keys.map((key) => [key, process.env[key]] as const);
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      run();
+    } finally {
+      warn.mockRestore();
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  // HOME positions config.json and the legacy dotenv paths, so a process that
+  // repoints it must get a fresh read, never the previous home's cached files.
+  test("changing HOME invalidates the cached default resolution", () => {
+    const dir = mkdtempSync(join(tmpdir(), "echo-cache-home-"));
+    withSavedEnv(["HOME", "ECHO_CONFIG_FILE"], () => {
+      try {
+        const configFile = join(dir, "config.json");
+        writeFileSync(configFile, JSON.stringify({ ECHO_DEFAULT_TITLE: "First" }));
+        process.env.ECHO_CONFIG_FILE = configFile;
+        expect(loadEchoConfiguration().ECHO_DEFAULT_TITLE).toBe("First");
+
+        writeFileSync(configFile, JSON.stringify({ ECHO_DEFAULT_TITLE: "Second" }));
+        process.env.HOME = join(dir, "elsewhere");
+        expect(loadEchoConfiguration().ECHO_DEFAULT_TITLE).toBe("Second");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // A value that embeds another KEY= pair must not collide two different
+  // environment states into one signature (the separator is NUL, which an
+  // environment value can never contain - a space or "=" can).
+  test("a value embedding another KEY= pair cannot collide two environment states", () => {
+    withSavedEnv(["ECHO_DEFAULT_TITLE", "ECHO_VOICE_TITLE"], () => {
+      process.env.ECHO_DEFAULT_TITLE = "One ECHO_VOICE_TITLE=Two";
+      delete process.env.ECHO_VOICE_TITLE;
+      const first = loadEchoConfigurationWithStatus();
+      expect(first.env.ECHO_VOICE_TITLE).toBeUndefined();
+      expect(first.config.deprecatedEnvironment).not.toContain("ECHO_VOICE_TITLE");
+
+      process.env.ECHO_DEFAULT_TITLE = "One";
+      process.env.ECHO_VOICE_TITLE = "Two";
+      const second = loadEchoConfigurationWithStatus();
+      expect(second.env.ECHO_VOICE_TITLE).toBe("Two");
+      expect(second.config.deprecatedEnvironment).toContain("ECHO_VOICE_TITLE");
+    });
+  });
+
+  // The env is copied on a cache hit for exactly this reason; the status and
+  // its arrays get the same treatment or GET /health serves the corruption.
+  test("mutating a returned status cannot poison the cached resolution", () => {
+    withSavedEnv(["ECHO_DEFAULT_TITLE"], () => {
+      process.env.ECHO_DEFAULT_TITLE = "Cached";
+      const first = loadEchoConfigurationWithStatus();
+      first.config.present = !first.config.present;
+      first.config.path = "poisoned";
+      first.config.ignored.push("POISON");
+      first.config.errors.push("poison");
+      first.config.configured.push("POISON");
+      first.config.deprecatedEnvironment.push("POISON");
+
+      const second = loadEchoConfigurationWithStatus();
+      expect(second.config).not.toBe(first.config);
+      expect(second.config.path).not.toBe("poisoned");
+      expect(second.config.ignored).not.toContain("POISON");
+      expect(second.config.errors).not.toContain("poison");
+      expect(second.config.configured).not.toContain("POISON");
+      expect(second.config.deprecatedEnvironment).not.toContain("POISON");
+    });
+  });
+});

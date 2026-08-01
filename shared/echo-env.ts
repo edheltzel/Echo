@@ -327,10 +327,14 @@ let cachedDefaultResolution:
 
 // Every ambient input the default (no-argument) resolution depends on. Any
 // change to an Echo-relevant live value - a test pointing ECHO_CONFIG_FILE at
-// its own scratch file, a deprecated fallback set or cleared - produces a new
-// signature and a fresh read, so caching never makes injection nondeterministic.
+// its own scratch file or repointing HOME at a scratch home, a deprecated
+// fallback set or cleared - produces a new signature and a fresh read, so
+// caching never makes injection nondeterministic. HOME positions both the
+// config.json path and the legacy dotenv paths (homedir() reads it on POSIX),
+// and NUL is the one separator an environment value can never contain.
 function defaultResolutionSignature(): string {
   const parts = [
+    `HOME=${process.env.HOME ?? ""}`,
     `ECHO_CONFIG_FILE=${process.env.ECHO_CONFIG_FILE ?? ""}`,
     `ECHO_ENV_PATHS=${process.env.ECHO_ENV_PATHS ?? ""}`,
     `ELEVENLABS_API_KEY=${process.env.ELEVENLABS_API_KEY ?? ""}`,
@@ -338,7 +342,7 @@ function defaultResolutionSignature(): string {
   for (const key of deprecatedEchoEnvironmentKeys(process.env)) {
     parts.push(`${key}=${process.env[key]}`);
   }
-  return parts.join(" ");
+  return parts.join("\0");
 }
 
 function resolveEchoConfiguration(
@@ -390,8 +394,21 @@ export function loadEchoConfigurationWithStatus(
       ...resolveEchoConfiguration({ ...process.env }, homedir(), {}),
     };
   }
-  // Copy the env so one caller's mutation cannot leak into the next.
-  return { env: { ...cachedDefaultResolution.env }, config: cachedDefaultResolution.config };
+  // Copy the env and status so one caller's mutation cannot leak into the next.
+  return {
+    env: { ...cachedDefaultResolution.env },
+    config: copyConfigStatus(cachedDefaultResolution.config),
+  };
+}
+
+function copyConfigStatus(status: EchoConfigStatus): EchoConfigStatus {
+  return {
+    ...status,
+    ignored: [...status.ignored],
+    errors: [...status.errors],
+    configured: [...status.configured],
+    deprecatedEnvironment: [...status.deprecatedEnvironment],
+  };
 }
 
 /** Resolve Echo configuration without mutating process.env. */
