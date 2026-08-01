@@ -1,6 +1,6 @@
 // Single place that knows the daemon's address.
 //
-// Adapters talk to the daemon over HTTP and nothing else — they must not read its
+// Adapters talk to the daemon over HTTP and nothing else - they must not read its
 // config files, and they must not each hard-code `localhost:3246`. Both the URL a
 // host adapter POSTs to and the URLs it reads from derive from one base here, so a
 // second daemon instance (a test instance on another port) is reachable by setting
@@ -32,7 +32,7 @@ export function resolveDaemonBase(env: EndpointEnv): string {
 }
 
 /**
- * `POST /notify` — where a host adapter sends a line to be spoken. `ECHO_DAEMON_URL`
+ * `POST /notify` - where a host adapter sends a line to be spoken. `ECHO_DAEMON_URL`
  * wins here exactly as it does for every other endpoint, so one variable can never
  * point notify at one instance and the read endpoints at another. Without it, a
  * configured `ECHO_NOTIFY_URL` (or a legacy alias) is used verbatim, then the default.
@@ -42,12 +42,12 @@ export function resolveNotifyUrl(env: EndpointEnv): string {
   return configuredNotifyUrl(env) ?? `${DEFAULT_DAEMON_BASE}/notify`;
 }
 
-/** `POST /notify/personality` — the prosody-shaped variant of `POST /notify`. */
+/** `POST /notify/personality` - the prosody-shaped variant of `POST /notify`. */
 export function resolvePersonalityUrl(env: EndpointEnv): string {
   return `${resolveDaemonBase(env)}/notify/personality`;
 }
 
-/** `GET /voices` — the daemon's read-only projection of its configured personas. */
+/** `GET /voices` - the daemon's read-only projection of its configured personas. */
 export function resolveVoicesUrl(env: EndpointEnv): string {
   return `${resolveDaemonBase(env)}/voices`;
 }

@@ -1,4 +1,4 @@
-// Issue #38 — behavioral proof of the #25 synth/playback failure-attribution
+// Issue #38 - behavioral proof of the #25 synth/playback failure-attribution
 // rule for edge-tts. The existing guard (tests/core/server-contract-source.test.ts)
 // is a STRUCTURAL source assertion: it can't catch a future edit that reintroduces
 // a breaker call from the playback path under a different name. This test exercises
@@ -12,7 +12,7 @@
 //
 // No production change is needed to test this: EdgeTTSProvider is reachable via
 // the exported `providers.edgetts` singleton, and both edge-tts channels are
-// subprocesses — so routing `node:child_process`.spawn through a swappable impl
+// subprocesses - so routing `node:child_process`.spawn through a swappable impl
 // (the pattern from tests/core/egress-gating.test.ts) lets us drive synth and
 // playback outcomes independently. speak() calls synthesizeOnce (python -m
 // edge_tts) for synthesis and spawn(afplay|mpv) for playback; we classify the
@@ -44,7 +44,7 @@ process.env.ECHO_AUDIO_CACHE_DIR = AUDIO_SCRATCH;
 
 // --- spawn seam (edge-tts synth + playback are both subprocesses) -----------
 // Capture the real spawn, then route the module's `spawn` through a swappable
-// impl so afterEach can restore it. Each child is fully stubbed — no python and
+// impl so afterEach can restore it. Each child is fully stubbed - no python and
 // no afplay/mpv ever runs. Outcomes are scripted per call by two behavior fns.
 type SpawnOutcome = "success" | "fail-exit" | "error";
 const realSpawn = realChildProcess.spawn;
@@ -132,7 +132,7 @@ function resetEdgeBreaker(): void {
   edgeBreaker.isOpen = false;
 }
 
-describe("issue #38 — edge-tts synth/playback failure attribution (circuit breaker state)", () => {
+describe("issue #38 - edge-tts synth/playback failure attribution (circuit breaker state)", () => {
   test("config is pinned as the tests assume", () => {
     // Guards the rest of the file: if an env override changed the threshold, the
     // 'opens past threshold' test below would silently mean something else.
@@ -159,7 +159,7 @@ describe("issue #38 — edge-tts synth/playback failure attribution (circuit bre
     // Pre-load the breaker to one-below-threshold to make the assertion strict:
     // if a playback failure ever recorded a provider failure, that single call
     // would tip the breaker OPEN. The synth success resets failures to 0 first,
-    // then the playback failure must leave it at 0 — proving playback is not
+    // then the playback failure must leave it at 0 - proving playback is not
     // attributed to the provider.
     edgeBreaker.failures = CIRCUIT_BREAKER_THRESHOLD - 1;
     synthBehavior = () => "success";
@@ -203,7 +203,7 @@ describe("issue #38 — edge-tts synth/playback failure attribution (circuit bre
 
     expect(edgeBreaker.failures).toBe(CIRCUIT_BREAKER_THRESHOLD);
     expect(edgeBreaker.isOpen).toBe(true);
-    // Playback never runs when synthesis fails — nothing to attribute there.
+    // Playback never runs when synthesis fails - nothing to attribute there.
     expect(playbackSpawnCount).toBe(0);
   });
 });

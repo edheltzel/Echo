@@ -1,5 +1,5 @@
 /**
- * hook-logger.ts — Structured Hook Debug Logger
+ * hook-logger.ts - Structured Hook Debug Logger
  *
  * PURPOSE:
  * Provides a centralized, structured logging utility for all adapter hooks.
@@ -16,7 +16,7 @@
  *
  * PERFORMANCE:
  *   - Uses appendFileSync (non-blocking at OS level, synchronous in process)
- *   - ~0.1ms per call — negligible vs hook timeout budgets (5-90s)
+ *   - ~0.1ms per call - negligible vs hook timeout budgets (5-90s)
  *   - Silently swallows errors to never crash the calling hook
  */
 
@@ -63,6 +63,6 @@ export function hookLog(hook: string, event: string, msg: string, meta?: Record<
 
     appendFileSync(HOOKS_LOG_FILE, JSON.stringify(entry) + '\n');
   } catch {
-    // Silent — never crash the calling hook
+    // Silent - never crash the calling hook
   }
 }

@@ -1,11 +1,11 @@
 // =============================================================================
-// Audio Lifecycle Log — host-neutral playback observability
+// Audio Lifecycle Log - host-neutral playback observability
 // =============================================================================
 //
 // One structured JSONL event per spoken /notify, recording the full audio
 // lifecycle: synthesis timing, the clip's real duration, actual playback
 // wall-time, and how playback ended. This is the instrument that makes
-// truncation measurable — a clip that plays short shows play_time < clip
+// truncation measurable - a clip that plays short shows play_time < clip
 // duration, where before nothing recorded either number.
 //
 // Mirrors the resolution-log design in core/server.ts (writeResolutionEvent):
@@ -15,7 +15,7 @@
 // Path: ~/.agents/Echo/audio-lifecycle.jsonl (created 0700), overridable via
 // ECHO_AUDIO_LIFECYCLE_LOG. User-owned, never /tmp, never the repo. Resolved at
 // write time (not frozen at module load) so a process setting the override
-// after import — e.g. a test — writes to the intended path regardless of import
+// after import - e.g. a test - writes to the intended path regardless of import
 // order. Host-neutral: no host-adapter knowledge here.
 // =============================================================================
 
@@ -29,7 +29,7 @@ import { parseBoundedInt, resolveEchoEnv } from './env';
 export type PlaybackExitReason = 'completed' | 'timed-out' | 'killed' | 'error';
 
 // How the play-queue disposed of the line (Phase 2 / R7): reached the player
-// (`played`), dropped without playing (`dropped-stale` — either it waited
+// (`played`), dropped without playing (`dropped-stale` - either it waited
 // past the age cap at dequeue, or the depth cap evicted it at enqueue;
 // `disposition_reason` discriminates), replaced by a newer same-session
 // line while queued (`superseded`), or skipped at speak time because an
@@ -83,7 +83,7 @@ export function writeAudioLifecycleEvent(
     appendFileSync(path, JSON.stringify(event) + '\n');
     pruneAudioLifecycleLog(path, maxBytes);
   } catch {
-    // swallow — diagnostics logging must never break a notification
+    // swallow - diagnostics logging must never break a notification
   }
 }
 

@@ -8,7 +8,7 @@ import { loadProjectPersona } from "../../../adapters/pi/config";
 
 // The `/echo-voice` command registered by the Pi adapter writes a `daidentity`
 // persona into <cwd>/.pi/settings.json, and the SAME reader used at session_start
-// (loadProjectPersona) must resolve it — a writer↔reader round-trip.
+// (loadProjectPersona) must resolve it - a writer↔reader round-trip.
 
 type CmdHandler = (args: string, ctx: unknown) => Promise<void>;
 
@@ -34,7 +34,7 @@ let cwd: string;
 beforeEach(() => { cwd = mkdtempSync(join(tmpdir(), "echo-pi-cmd-")); });
 afterEach(() => { rmSync(cwd, { recursive: true, force: true }); });
 
-describe("pi /echo-voice — writer↔reader round-trip", () => {
+describe("pi /echo-voice - writer↔reader round-trip", () => {
   test("writes .pi/settings.json that loadProjectPersona resolves", async () => {
     const { handler, notes } = registerAndGetEchoVoice();
     await handler("Echo en-US-AndrewNeural", ctx(cwd, notes));

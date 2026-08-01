@@ -9,10 +9,10 @@
  *   - Completion titles (✓): past tense, NO gerund ("Fixed auth bug.")
  *   - Question titles: noun phrase, no period ("Auth method")
  *
- * Renamed from response-format.ts (v0.2.32) — old name was misleading.
+ * Renamed from response-format.ts (v0.2.32) - old name was misleading.
  */
 
-// Conversational filler — always invalid for voice output
+// Conversational filler - always invalid for voice output
 const GARBAGE_PATTERNS = [
   /appreciate/i,
   /thank/i,
@@ -25,7 +25,7 @@ const GARBAGE_PATTERNS = [
   /feel free/i,
 ];
 
-// Conversational starters — not factual summaries
+// Conversational starters - not factual summaries
 const CONVERSATIONAL_STARTERS = [
   /^I'm /i, /^I am /i, /^Sure[,.]?/i, /^OK[,.]?/i,
   /^Got it[,.]?/i, /^Done\.?$/i, /^Yes[,.]?/i, /^No[,.]?/i,
@@ -62,7 +62,7 @@ export function getVoiceFallback(): string {
 
 // ─── Tab Title Validation ───────────────────────────────────────
 
-// Incomplete endings — dangling articles, prepositions, conjunctions
+// Incomplete endings - dangling articles, prepositions, conjunctions
 const INCOMPLETE_ENDINGS = new Set([
   'the', 'a', 'an', 'to', 'for', 'with', 'of',
   'in', 'on', 'at', 'by', 'from', 'into', 'about',
@@ -121,7 +121,7 @@ export const isValidTabSummary = isValidWorkingTitle;
 export function isValidCompletionTitle(text: string): boolean {
   const { valid, firstWord } = isValidTitleBase(text);
   if (!valid) return false;
-  // Completion titles must NOT be gerunds — that's a working title
+  // Completion titles must NOT be gerunds - that's a working title
   if (firstWord.endsWith('ing')) return false;
   return true;
 }

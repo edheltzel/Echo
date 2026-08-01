@@ -1,10 +1,10 @@
 // =============================================================================
-// Runtime mute state — host-neutral (issue #83)
+// Runtime mute state - host-neutral (issue #83)
 // =============================================================================
 //
 // One global mute switch, persisted as a tiny JSON file so a daemon restart
 // cannot un-mute the user mid-meeting. Timed mutes store an ISO deadline and
-// expire LAZILY at read time — no timers, no scheduler; a request arriving
+// expire LAZILY at read time - no timers, no scheduler; a request arriving
 // after the deadline behaves unmuted and the stale file is cleaned up
 // opportunistically. Reads are tolerant: a missing, corrupt, or wrong-shaped
 // file means unmuted, never a crash. Writes are atomic (temp + rename).
@@ -47,21 +47,21 @@ export function readMuteState(path: string = resolveMuteStatePath()): MuteState 
   try {
     parsed = JSON.parse(raw);
   } catch {
-    console.warn(`🔇 Mute state file unreadable (${path}) — treating as unmuted`);
+    console.warn(`🔇 Mute state file unreadable (${path}) - treating as unmuted`);
     return { ...UNMUTED };
   }
 
   if (typeof parsed?.muted !== 'boolean') {
-    console.warn(`🔇 Mute state file malformed (${path}) — treating as unmuted`);
+    console.warn(`🔇 Mute state file malformed (${path}) - treating as unmuted`);
     return { ...UNMUTED };
   }
   if (!parsed.muted) return { ...UNMUTED };
 
   // A non-string, non-null deadline (e.g. a hand-edited numeric epoch) is a
-  // malformed shape — falling back to "indefinite mute" would turn corruption
+  // malformed shape - falling back to "indefinite mute" would turn corruption
   // into the strongest possible mute, inverting the tolerant-read contract.
   if (parsed.muted_until != null && typeof parsed.muted_until !== 'string') {
-    console.warn(`🔇 Mute state file malformed (${path}) — treating as unmuted`);
+    console.warn(`🔇 Mute state file malformed (${path}) - treating as unmuted`);
     return { ...UNMUTED };
   }
 
@@ -69,7 +69,7 @@ export function readMuteState(path: string = resolveMuteStatePath()): MuteState 
   if (until !== null) {
     const deadline = Date.parse(until);
     if (Number.isNaN(deadline)) {
-      console.warn(`🔇 Mute deadline unparseable (${path}) — treating as unmuted`);
+      console.warn(`🔇 Mute deadline unparseable (${path}) - treating as unmuted`);
       return { ...UNMUTED };
     }
     if (deadline <= Date.now()) {
@@ -87,7 +87,7 @@ export function writeMuteState(state: MuteState, path: string = resolveMuteState
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(state));
-  renameSync(tmp, path); // atomic on the same filesystem — no partial-file window
+  renameSync(tmp, path); // atomic on the same filesystem - no partial-file window
 }
 
 export function setMuteState(muted: boolean, durationMinutes?: number, path?: string): MuteState {

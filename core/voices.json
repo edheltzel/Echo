@@ -181,7 +181,7 @@
       }
     },
     "clauderesearcher": {
-      "description": "Academic researcher — rigorous, scholarly, multi-query",
+      "description": "Academic researcher - rigorous, scholarly, multi-query",
       "catchphrase": "Researcher online. Let me investigate.",
       "kokoro": {
         "voice": "bf_lily",
@@ -193,7 +193,7 @@
       }
     },
     "perplexityresearcher": {
-      "description": "Investigative analyst — evidence-based, source-checking",
+      "description": "Investigative analyst - evidence-based, source-checking",
       "catchphrase": "On the case. Verifying sources.",
       "kokoro": {
         "voice": "af_sarah",
@@ -205,7 +205,7 @@
       }
     },
     "geminiresearcher": {
-      "description": "Multi-perspective researcher — parallel, comprehensive",
+      "description": "Multi-perspective researcher - parallel, comprehensive",
       "catchphrase": "Exploring every angle.",
       "kokoro": {
         "voice": "af_bella",
@@ -217,7 +217,7 @@
       }
     },
     "grokresearcher": {
-      "description": "Contrarian, fact-based researcher — unbiased, long-term truth",
+      "description": "Contrarian, fact-based researcher - unbiased, long-term truth",
       "catchphrase": "Johannes here. Let's find the truth.",
       "kokoro": {
         "voice": "am_echo",
@@ -229,7 +229,7 @@
       }
     },
     "codexresearcher": {
-      "description": "Eccentric technical archaeologist — curiosity-driven",
+      "description": "Eccentric technical archaeologist - curiosity-driven",
       "catchphrase": "Remy here. Let's dig.",
       "kokoro": {
         "voice": "bm_lewis",
@@ -241,7 +241,7 @@
       }
     },
     "artist": {
-      "description": "Visual content creator — editorial, expressive",
+      "description": "Visual content creator - editorial, expressive",
       "catchphrase": "Artist here. Let's make something.",
       "kokoro": {
         "voice": "af_sky",
@@ -253,7 +253,7 @@
       }
     },
     "silas": {
-      "description": "Offensive security specialist — methodical, quiet operator",
+      "description": "Offensive security specialist - methodical, quiet operator",
       "catchphrase": "Silas. Watching the perimeter.",
       "kokoro": {
         "voice": "am_onyx",
@@ -265,7 +265,7 @@
       }
     },
     "algorithm": {
-      "description": "ISC specialist — precise, systematic, verification-driven",
+      "description": "ISC specialist - precise, systematic, verification-driven",
       "catchphrase": "Algorithm engaged.",
       "kokoro": {
         "voice": "am_liam",

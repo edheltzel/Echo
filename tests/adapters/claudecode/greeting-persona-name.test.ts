@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
 import { resolveStartupCatchphrase } from "../../../adapters/claudecode/hooks/lib/greeting";
 
-// A project persona name must drive the STARTUP greeting — not just the voice.
+// A project persona name must drive the STARTUP greeting - not just the voice.
 // The regression the neutral test global (identity-layered's GLOBAL_ATLAS) missed:
 // Ed's real ~/.claude sets an explicit `displayName` AND a pool of "Atlas ..." literal
 // catchphrases, so a repo that set only name+voice (via /echo-voice) inherited the

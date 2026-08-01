@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadOmpVoiceConfig } from "../../../adapters/omp/config";
 
-describe("omp voice config — notify endpoint resolution", () => {
+describe("omp voice config - notify endpoint resolution", () => {
   test("defaults to the local daemon", () => {
     expect(loadOmpVoiceConfig({}).endpoint).toBe("http://localhost:3246/notify");
   });

@@ -12,7 +12,7 @@ import {
 } from "../../../adapters/pi/config";
 import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
 
-// Pi project persona override — SAME convention as the Claude Code adapter: a
+// Pi project persona override - SAME convention as the Claude Code adapter: a
 // `daidentity` block in the host's native settings.json, layered project over
 // global. Pi's own layering is `<cwd>/.pi/settings.json` (project) over
 // `~/.pi/agent/settings.json` (global), project wins per key. Inside a repo with
@@ -22,7 +22,7 @@ const GLOBAL_PATH = (home: string) => join(home, ".pi", "agent", "settings.json"
 const PROJECT_PATH = (cwd: string) => join(cwd, ".pi", "settings.json");
 
 // ── config-level unit tests (pure; injected readFile + explicit home) ────────
-describe("loadProjectPersona — daidentity from .pi/settings.json layering", () => {
+describe("loadProjectPersona - daidentity from .pi/settings.json layering", () => {
   const HOME = "/home/u";
   const CWD = "/proj";
   const reader = (files: Record<string, string>) => (path: string) => files[path] ?? null;
@@ -97,7 +97,7 @@ describe("loadProjectPersona — daidentity from .pi/settings.json layering", ()
   });
 });
 
-describe("applyPersonaOverride — per-key override onto the base config", () => {
+describe("applyPersonaOverride - per-key override onto the base config", () => {
   const base: PiVoiceConfig = {
     endpoint: "http://x/notify",
     title: "Pi Notification",
@@ -183,7 +183,7 @@ afterEach(() => {
   rmSync(fakeHome, { recursive: true, force: true });
 });
 
-describe("integration — project override flows through greeting + completion", () => {
+describe("integration - project override flows through greeting + completion", () => {
   test("session_start greeting uses the project catchphrase AND voice", async () => {
     const payloads: any[] = [];
     globalThis.fetch = async (_i, init) => {

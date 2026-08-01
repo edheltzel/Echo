@@ -1,20 +1,20 @@
 # Voices & per-turn persona voice
 
-How to customize Echo's voices — the default (Atlas) voice, named personas, and
-ElevenLabs — plus how a `voice_id` actually resolves, how to debug the wrong voice, and how
+How to customize Echo's voices - the default (Atlas) voice, named personas, and
+ElevenLabs - plus how a `voice_id` actually resolves, how to debug the wrong voice, and how
 the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`configuration.md`](configuration.md) for the full config reference,
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page needs the daemon reloaded** — `voices.json` and the configuration
+**Every change on this page needs the daemon reloaded** - `voices.json` and the configuration
 file are read once at startup. Editing the checkout's `core/voices.json` is not enough on its
 own: the daemon runs from a staged copy, so that edit has to be re-staged before it can take
 effect. `~/.config/echo/config.json` is read from your home directory, so a plain reload
 applies it.
 
 ```bash
-cli/echo update                              # after editing core/voices.json — re-stage + reload
+cli/echo update                              # after editing core/voices.json - re-stage + reload
 launchctl kickstart -k "gui/$UID/com.echo"   # enough for config.json, which is read in place
 ```
 
@@ -29,33 +29,33 @@ exact order:
 
 1. `voice_id` omitted (or empty) → `identity`. **This is the only name-free path to the
    Atlas voice.**
-2. `agents.<voice_id>` — the name-key match.
+2. `agents.<voice_id>` - the name-key match.
 3. Any agent whose `elevenlabs.voice_id` equals the value.
 4. `identity` when the value equals `identity.elevenlabs.voice_id`.
-5. Otherwise **no mapping**: each provider uses its own default voice — except ElevenLabs,
+5. Otherwise **no mapping**: each provider uses its own default voice - except ElevenLabs,
    where the unresolved value is passed through **raw** as an ElevenLabs voice id.
 
 Two traps:
 
-- `"voice_id": "atlas"` (or `"identity"`) is **not** the Atlas path — neither is a
+- `"voice_id": "atlas"` (or `"identity"`) is **not** the Atlas path - neither is a
   configured key, so both resolve as `fallback` (step 5). It happens to sound like Atlas
   today only because the edge-tts provider default and `identity.edgetts.voice` are both
   `en-US-AvaNeural`; change either, or make ElevenLabs the active provider (the raw
   pass-through then sends `atlas` as an invalid ElevenLabs id, that attempt fails, and the
   chain falls through), and they diverge. To get the identity voice, **omit `voice_id`**.
-- Send the **name key**, not a raw provider voice id — the raw pass-through in step 5 is an
+- Send the **name key**, not a raw provider voice id - the raw pass-through in step 5 is an
   ElevenLabs-only escape hatch, not the contract.
 
 The resolved mapping supplies the per-provider voice and settings; a caller-supplied
 `voice_settings` object or an emotional marker can override them (see
 [`http-api.md`](http-api.md)). Every voice-enabled `/notify` logs how it resolved
-(`identity-default` | `identity` | `agent-key` | `elevenlabs-id` | `fallback`) — see
+(`identity-default` | `identity` | `agent-key` | `elevenlabs-id` | `fallback`) - see
 "Debug" below.
 
 ## Audition edge voices
 
 `scripts/preview-voices.ts` plays short samples so you can choose voices by ear before
-editing `core/voices.json`. It calls `edge-tts` directly and is dev tooling — not part of
+editing `core/voices.json`. It calls `edge-tts` directly and is dev tooling - not part of
 the runtime request path. `--list` and `--dry-run` are silent (CI-safe); the others play
 audio.
 
@@ -70,7 +70,7 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 | Flag | Purpose | Default |
 |---|---|---|
 | `--locale` | Comma-separated locale prefixes to audition | `en-US,en-GB,en-AU,en-IE` |
-| `--voices` | Explicit voice ids (overrides `--locale`) | — |
+| `--voices` | Explicit voice ids (overrides `--locale`) | - |
 | `--text` | Sample line spoken (`{voice}` is substituted) | `Hi, I'm {voice}. This is how I sound for Atlas.` |
 | `--rate` | edge-tts rate applied to every sample | `+0%` |
 | `--list` / `--dry-run` | Print matched voices (and synth command) without playing audio | off |
@@ -94,7 +94,7 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 ## Per-project persona & voice (local override)
 
 Each host adapter reads its own **native** project config, so a repo can give itself
-its own spoken identity — **name + voice** — in that repo only:
+its own spoken identity - **name + voice** - in that repo only:
 
 | Host | Project file | Global |
 |---|---|---|
@@ -103,7 +103,7 @@ its own spoken identity — **name + voice** — in that repo only:
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 
 Every host reads a **`daidentity` block from its native config**, project layered over
-global (project wins per key) — one convention, one shape to learn. Claude Code and Pi
+global (project wins per key) - one convention, one shape to learn. Claude Code and Pi
 use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
 Setting a persona **name** also changes the **startup greeting** for that repo: the
@@ -114,7 +114,7 @@ untouched. (`{name}` in any catchphrase is substituted with the persona name.)
 
 ### Claude Code
 
-The Claude Code adapter resolves the DA identity — **name and voice** — with layered
+The Claude Code adapter resolves the DA identity - **name and voice** - with layered
 precedence, tightest scope wins **per key**:
 
 1. `<project>/.claude/settings.local.json` (gitignored, per-machine)
@@ -123,7 +123,7 @@ precedence, tightest scope wins **per key**:
 4. neutral defaults
 
 So a repo can give itself its own spoken identity, overriding the global persona **in
-that repo only** — at the startup greeting *and* on every per-turn line. Every other
+that repo only** - at the startup greeting *and* on every per-turn line. Every other
 repo keeps the global persona. Unset keys fall through to global (set just a name +
 voice and inherit everything else).
 
@@ -140,7 +140,7 @@ Drop a `daidentity` block into the project's `.claude/settings.json`:
 }
 ```
 
-`voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) — no
+`voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - no
 `core/voices.json` edit is needed; it flows straight through as the DA voice. The block
 takes effect on the **next** Claude Code session started in that repo. `~/.claude/settings.json`
 is never touched, so the global persona is unchanged everywhere else.
@@ -154,7 +154,7 @@ into `~/.claude/commands/` by the Claude Code adapter installer.
 ### Pi & omp
 
 Both `.pi/settings.json` (JSON) and `.omp/config.yml` (YAML) take the same `daidentity`
-shape as Claude Code — drop it in by hand, or scaffold it with the **same `/echo-voice`
+shape as Claude Code - drop it in by hand, or scaffold it with the **same `/echo-voice`
 command** inside a Pi/omp session:
 
 ```text
@@ -163,7 +163,7 @@ command** inside a Pi/omp session:
 
 Anything omitted is prompted for. The command validates the edge-tts voice, then
 merge-writes the `daidentity` block into the host's native config (Pi: JSON;
-omp: YAML via `Bun.YAML`) **preserving every other key** — a present-but-unparseable
+omp: YAML via `Bun.YAML`) **preserving every other key** - a present-but-unparseable
 config aborts rather than being clobbered. Unlike Claude Code's symlinked markdown
 command, this one ships with the adapter itself, so there is no installer step. Takes
 effect on the next session in that repo.
@@ -180,22 +180,22 @@ writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config
 1. Audition and confirm the target voice name exists (`--list`, as above).
 2. Edit that agent's `edgetts.voice` (and optional `speed`) in `core/voices.json`.
 3. Re-stage and reload: `cli/echo update`.
-4. Verify with `-d '{"message":"voice check","voice_id":"<key>"}'` — the resolution event
+4. Verify with `-d '{"message":"voice check","voice_id":"<key>"}'` - the resolution event
    should read `"resolution":"agent-key"` with the new voice.
 
 ## Add a persona
 
-1. Add a keyed entry to `agents` in `core/voices.json` — mirror an existing one:
+1. Add a keyed entry to `agents` in `core/voices.json` - mirror an existing one:
    `description`, optional `catchphrase`, at least an `edgetts` block (validate the voice
    name with `--list`; add `kokoro`/`elevenlabs` blocks for parity). Then `cli/echo update`.
 2. Bind the persona to that key in its `atlas-config` brief (`~/.claude/agents/<Name>.md`):
    set frontmatter `voiceId: <key>` and make every self-voice `curl` POST
    `http://localhost:3246/notify` with `"voice_id":"<key>"`. The self-voice instruction must
-   be in the brief **body** — frontmatter isn't visible to the agent.
+   be in the brief **body** - frontmatter isn't visible to the agent.
 
 Gotchas that cause silence: the frontmatter-visibility rule above; sending a raw ElevenLabs
 id instead of the name key won't resolve while ElevenLabs is disabled; and port `31337` is
-wrong — voice traffic is `:3246`.
+wrong - voice traffic is `:3246`.
 
 `tests/core/voices-config.test.ts` iterates every `agents` entry, so new voices are validated
 by `bun test`.
@@ -206,7 +206,7 @@ Prerequisites: Echo installed and running (`curl -fsS http://localhost:3246/heal
 JSON); an ElevenLabs API key.
 
 1. Put the key where the daemon reads it. `config.json` rejects secrets, so this one setting
-   stays in a dotenv file — see
+   stays in a dotenv file - see
    [`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives):
 
    ```bash
@@ -215,7 +215,7 @@ JSON); an ElevenLabs API key.
    ```
 
 2. In `core/voices.json`, set `providers.elevenlabs.enabled` to `true`. Leave
-   `apiKey: "${ELEVENLABS_API_KEY}"` as shipped — it expands from the env at startup.
+   `apiKey: "${ELEVENLABS_API_KEY}"` as shipped - it expands from the env at startup.
 3. Run `cli/echo update`, which re-stages the edited `voices.json` and reloads, so the daemon
    re-reads both files.
 4. Verify configuration:
@@ -226,7 +226,7 @@ JSON); an ElevenLabs API key.
 
    You should see `"enabled": true`, `"healthy": true`, `"apiKeyConfigured": true`,
    `"wouldEgress": true`, `"egressTarget": "api.elevenlabs.io"`.
-5. Verify synthesis — `/health` does not test the key against the API; a real request does:
+5. Verify synthesis - `/health` does not test the key against the API; a real request does:
 
    ```bash
    curl -fsS -X POST http://localhost:3246/notify -H 'Content-Type: application/json' \
@@ -236,19 +236,19 @@ JSON); an ElevenLabs API key.
    With ElevenLabs as the active provider you should hear Kai's ElevenLabs voice and the
    newest resolution event shows `"provider":"elevenlabs","success":true`. If it shows
    `outcome":"failed"`, check `~/Library/Logs/echo.log` for the API error (`401` = bad key).
-   With the shipped order, edge-tts still speaks first — ElevenLabs is a fallback until you
+   With the shipped order, edge-tts still speaks first - ElevenLabs is a fallback until you
    prefer it (next section).
 
 **Prefer ElevenLabs as the primary voice:** set `"defaultProvider": "elevenlabs"` in
 `voices.json`, run `cli/echo update`, and confirm `curl -fsS http://localhost:3246/health | jq -r
-.activeProvider` prints `elevenlabs`. Note ElevenLabs egresses to `api.elevenlabs.io` —
+.activeProvider` prints `elevenlabs`. Note ElevenLabs egresses to `api.elevenlabs.io` -
 see [`providers-observability.md`](providers-observability.md).
 
 ## Debug: wrong voice or silence
 
 Three signals, in order:
 
-1. **Resolution log** — `tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq` (fields:
+1. **Resolution log** - `tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq` (fields:
    [`providers-observability.md`](providers-observability.md)). Branch on `resolution`:
    - `fallback` + `resolution_reason` → the `voice_id` isn't a configured name key. List
      valid keys with `jq -r '.agents | keys[]' core/voices.json`, fix the key or add the
@@ -261,11 +261,11 @@ Three signals, in order:
      `health-import` appears in `/health` diagnostics only; kokoro usually means
      `127.0.0.1:8880` is down; ElevenLabs usually means the key or API response failed.
    - No new event at all → the request was `voice_enabled:false` (which skips both voice and
-     the log write), rate-limited (`429`), or rejected (`400`) — check the HTTP response and
+     the log write), rate-limited (`429`), or rejected (`400`) - check the HTTP response and
      the daemon log.
-2. **`/health`** — `curl -fsS http://localhost:3246/health | jq` for the config/state
+2. **`/health`** - `curl -fsS http://localhost:3246/health | jq` for the config/state
    snapshot: `activeProvider`, per-provider `enabled`/`healthy`, breaker state.
-3. **Daemon log** — `~/Library/Logs/echo.log` for the human-readable per-request narrative
+3. **Daemon log** - `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).
 
 After any config change: reload the daemon as described at the top of this page, then re-send
@@ -280,16 +280,16 @@ Location: `core/voices.json`, or wherever `VOICES_PATH` points. Top-level keys:
 | `providers` | Per-provider config blocks (below) |
 | `defaultProvider` | Provider tried first (shipped: `edgetts`) |
 | `fallbackOrder` | Full chain (shipped: `edgetts → elevenlabs → kokoro → say`) |
-| `default_volume` | `0.8` — playback volume, applied unevenly (caveat below) |
-| `default_rate` | `175` — words/min for the `say` provider only |
+| `default_volume` | `0.8` - playback volume, applied unevenly (caveat below) |
+| `default_rate` | `175` - words/min for the `say` provider only |
 | `identity` | The default ("Atlas") voice mapping, used when `voice_id` is omitted |
 | `agents` | Named persona mappings keyed by short lowercase name (`kai`, `themis`, …) |
 
 ### Provider order
 
 Per notification, `speakWithFallback` walks `defaultProvider` first, then `fallbackOrder`
-minus the duplicate — a single pass. A **disabled** provider is skipped before any network or
-health path (the structural egress gate —
+minus the duplicate - a single pass. A **disabled** provider is skipped before any network or
+health path (the structural egress gate -
 [`providers-observability.md`](providers-observability.md)). For edge-tts specifically, the
 `/notify` hot path does not run the diagnostic Python-import health probe; it tries synthesis
 unless edge-tts is disabled or its circuit breaker is open ([`reliability.md`](reliability.md)).
@@ -309,7 +309,7 @@ next.
 from the resolved configuration at startup (`resolveEnvVar`); a bare `ELEVENLABS_API_KEY` is
 also accepted as a constructor fallback. The provider is enabled only when `enabled: true`
 **and** a key resolved. Caveat: `/health`'s `apiKeyConfigured` field reflects only the
-config-file indirection, not the bare fallback — the provider can work while
+config-file indirection, not the bare fallback - the provider can work while
 `apiKeyConfigured` reads `false`. Where the key itself belongs:
 [`configuration.md`](configuration.md#elevenlabs_api_key-the-one-secret-and-where-it-lives).
 
@@ -331,10 +331,10 @@ back to `1.0`.
 
 A missing or malformed `voices.json` does not stop the daemon: it logs one
 `⚠️ Failed to load voices.json` warning at startup and uses **built-in defaults that differ
-from the shipped file** — kokoro `enabled: true` and an empty `agents` map, so every persona
+from the shipped file** - kokoro `enabled: true` and an empty `agents` map, so every persona
 `voice_id` then resolves as `fallback`. If all persona voices break at once, check the top of
 `~/Library/Logs/echo.log` for that warning. When the file does parse, it is merged over the
-defaults: top-level keys shallowly, `providers` one level deep — `identity`, `agents`, and
+defaults: top-level keys shallowly, `providers` one level deep - `identity`, `agents`, and
 `fallbackOrder` are taken wholesale from your file.
 
 ## Reference: `core/pronunciations.json`
@@ -370,4 +370,4 @@ persona-words behavior by `tests/adapters/claudecode/voice-completion-words.test
 The Stop hook is repo-owned and registered into `settings.json` by `restore-hooks.ts`
 (replacing any unmanaged `~/.claude/hooks/VoiceCompletion.hook.ts`), alongside VoiceGate and
 VoiceGreeting. Its transcript parsing lives in
-`adapters/claudecode/hooks/lib/{hook-io,TranscriptParser}.ts` (host-specific — never in `core/`).
+`adapters/claudecode/hooks/lib/{hook-io,TranscriptParser}.ts` (host-specific - never in `core/`).

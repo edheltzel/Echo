@@ -11,7 +11,7 @@
  *   3. ~/.claude/settings.json                   (global)
  *   4. neutral defaults
  * A project's `daidentity` overrides the global one PER KEY (deep merge, local
- * leaf wins) — the same "tightest source wins per key" precedence shared/echo-env.ts
+ * leaf wins) - the same "tightest source wins per key" precedence shared/echo-env.ts
  * commits to. So a repo can set just its name + voice and inherit everything else
  * from global. Arrays (startupCatchphrases) are atomic: a local array replaces the
  * global one only when present. projectDir defaults to CLAUDE_PROJECT_DIR (set for
@@ -24,7 +24,7 @@ import { join } from 'path';
 const HOME = process.env.HOME!;
 
 // Default identity (fallback if settings.json doesn't have identity section).
-// Neutral on purpose: never assume the user's DA name — they configure it in settings.json.
+// Neutral on purpose: never assume the user's DA name - they configure it in settings.json.
 const DEFAULT_IDENTITY = {
   name: 'Assistant',
   fullName: 'Assistant',
@@ -94,7 +94,7 @@ export interface Settings {
   [key: string]: unknown;
 }
 
-// Merged-settings cache, keyed by `${home}\0${projectDir}` — each hook is a fresh
+// Merged-settings cache, keyed by `${home}\0${projectDir}` - each hook is a fresh
 // short-lived process with a stable project dir, so per-key caching is safe.
 const settingsCache = new Map<string, Settings>();
 
@@ -114,7 +114,7 @@ function isPlainObject(v: unknown): v is Record<string, any> {
 
 /**
  * Deep-merge `override` onto `base`, per leaf. Scalars and arrays from `override`
- * replace `base` wholesale (arrays are atomic — so a local catchphrase array
+ * replace `base` wholesale (arrays are atomic - so a local catchphrase array
  * replaces the global one only when present). Nested plain objects merge
  * recursively. `undefined` values in `override` never clobber `base`.
  */
@@ -191,7 +191,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
   const daidentity = settings.daidentity || {};
   const envDA = settings.env?.DA;
 
-  // What THIS repo set for itself (no global) — for persona-name precedence + greeting policy.
+  // What THIS repo set for itself (no global) - for persona-name precedence + greeting policy.
   const projectDai = loadProjectDaidentity(projectDir, home);
   const personaFromProject = typeof projectDai.name === 'string' || typeof projectDai.displayName === 'string';
   const catchphrasesFromProject = Array.isArray(projectDai.startupCatchphrases);
@@ -206,7 +206,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
     name: daidentity.name || envDA || DEFAULT_IDENTITY.name,
     fullName: daidentity.fullName || daidentity.name || envDA || DEFAULT_IDENTITY.fullName,
     // A repo that sets its own persona name (but not displayName) must drive the spoken
-    // name — so the project's name/displayName wins over an inherited global displayName.
+    // name - so the project's name/displayName wins over an inherited global displayName.
     displayName: projectDai.displayName || projectDai.name
       || daidentity.displayName || daidentity.name || envDA || DEFAULT_IDENTITY.displayName,
     mainDAVoiceID: voiceConfig?.voiceId || (daidentity as any).voiceId || daidentity.mainDAVoiceID || DEFAULT_IDENTITY.mainDAVoiceID,

@@ -43,7 +43,7 @@ afterEach(() => {
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("getIdentity — layered precedence (project → global → default)", () => {
+describe("getIdentity - layered precedence (project → global → default)", () => {
   test("no project dir → global identity", () => {
     const home = fakeHome(GLOBAL_ATLAS);
     const id = getIdentity("", home);
@@ -98,7 +98,7 @@ describe("getIdentity — layered precedence (project → global → default)", 
   });
 });
 
-describe("getIdentity — catchphrases (secondary, rides the same resolver)", () => {
+describe("getIdentity - catchphrases (secondary, rides the same resolver)", () => {
   test("project catchphrases replace the global pool wholesale when present", () => {
     const home = fakeHome(GLOBAL_ATLAS);
     const proj = tmp("echo-proj-");
@@ -107,7 +107,7 @@ describe("getIdentity — catchphrases (secondary, rides the same resolver)", ()
     });
 
     const id = getIdentity(proj, home);
-    // Array is atomic — the global two-phrase pool is replaced, not merged.
+    // Array is atomic - the global two-phrase pool is replaced, not merged.
     expect(id.startupCatchphrases).toEqual(["Echo online.", "Echo here."]);
   });
 
@@ -123,7 +123,7 @@ describe("getIdentity — catchphrases (secondary, rides the same resolver)", ()
   });
 });
 
-describe("getIdentity — settings.local.json overlay", () => {
+describe("getIdentity - settings.local.json overlay", () => {
   test("local overlay wins over project settings.json for the same key", () => {
     const home = fakeHome(GLOBAL_ATLAS);
     const proj = tmp("echo-proj-");
@@ -151,7 +151,7 @@ describe("getIdentity — settings.local.json overlay", () => {
   });
 });
 
-describe("getIdentity — cache is keyed by (home, projectDir)", () => {
+describe("getIdentity - cache is keyed by (home, projectDir)", () => {
   test("different project dirs resolve independently within one process", () => {
     const home = fakeHome(GLOBAL_ATLAS);
     const echo = tmp("echo-proj-");

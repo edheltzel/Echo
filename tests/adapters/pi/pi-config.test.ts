@@ -116,12 +116,12 @@ describe("Pi voice config", () => {
 
   test("default voice_id resolves against core/voices.json agents (cross-boundary contract, #76)", async () => {
     // Renaming/removing the agents.pi entry would silently revert Pi to the identity
-    // voice at runtime while literal-string tests stay green — bind the two halves.
+    // voice at runtime while literal-string tests stay green - bind the two halves.
     const voices = await Bun.file(new URL("../../../core/voices.json", import.meta.url)).json();
     const defaultVoiceId = loadPiVoiceConfig({}).voiceId!;
     expect(Object.keys(voices.agents)).toContain(defaultVoiceId);
     expect(voices.agents[defaultVoiceId].edgetts.voice).toBe("en-GB-RyanNeural");
-    // Speed 0.92 must convert to edge-tts rate -8% exactly (#81) — bind the data
+    // Speed 0.92 must convert to edge-tts rate -8% exactly (#81) - bind the data
     // to the daemon's conversion so a speed edit can't silently change the rate.
     expect(voices.agents[defaultVoiceId].edgetts.speed).toBe(0.92);
     expect(edgeRateFromSpeed(voices.agents[defaultVoiceId].edgetts.speed)).toBe("-8%");

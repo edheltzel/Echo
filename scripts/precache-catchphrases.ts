@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * precache-catchphrases.ts — pre-warm the TTS cache for short, repeated phrases.
+ * precache-catchphrases.ts - pre-warm the TTS cache for short, repeated phrases.
  *
  * edge-tts is Microsoft's ONLINE service, so a cold startup catchphrase pays a
  * 2–8 s network synth. The daemon caches short phrases after first use, but that
  * still leaves the FIRST session after a voice/phrase change slow. This script
  * warms the cache up front by POSTing each phrase to the RUNNING daemon exactly
  * as the greeting hook does (no voice_id → identity voice), so the daemon
- * computes the SAME cache key it will read at startup — no key-matching logic
+ * computes the SAME cache key it will read at startup - no key-matching logic
  * here, and pronunciations/voice/rate stay authoritative in one place (the
  * daemon). Each phrase is spoken once while warming (a one-time setup cost).
  *
@@ -53,9 +53,9 @@ for (const message of phrases) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, title: "Pre-cache", source: "precache" }),
     });
-    console.log(`  ${res.status} — "${message}"`);
+    console.log(`  ${res.status} - "${message}"`);
   } catch (err) {
-    console.error(`  FAILED — "${message}": ${err instanceof Error ? err.message : err}`);
+    console.error(`  FAILED - "${message}": ${err instanceof Error ? err.message : err}`);
   }
 }
 console.log("Queued. The daemon synthesizes + caches each phrase as it plays (serial queue).");

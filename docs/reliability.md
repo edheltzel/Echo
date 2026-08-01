@@ -1,4 +1,4 @@
-# Reliability — provider circuit breaker
+# Reliability - provider circuit breaker
 
 `core/circuit-breaker.ts` tracks **provider** (synthesis/network) failures per TTS provider
 and opens after a shared threshold, skipping the provider for a cooldown then half-opening to
@@ -9,7 +9,7 @@ retest. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits, and
 ## Attribution rule
 
 A **local playback** failure (afplay/mpv) is NOT a provider failure and must never call
-`recordProviderFailure` — `EdgeTTSProvider.speak` splits synthesis (governed by the breaker,
+`recordProviderFailure` - `EdgeTTSProvider.speak` splits synthesis (governed by the breaker,
 retried) from playback (local, never opens the breaker). edge-tts is Microsoft's **online**
 WebSocket service, so transient blips are retried before a failure is recorded. (A local
 audio problem must not disable a healthy online provider.)

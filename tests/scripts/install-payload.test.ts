@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 // Stage 1: the daemon runs from a versioned payload under
 // ~/Library/Application Support/echo/payload, NOT the git clone, so moving/deleting
 // the checkout never breaks the running service. These tests run install.sh in a
-// temp HOME with stubbed launchctl/curl — they never touch the real daemon.
+// temp HOME with stubbed launchctl/curl - they never touch the real daemon.
 
 const REPO_ROOT = resolve(".");
 const PAYLOAD_REL = "Library/Application Support/echo/payload";
@@ -24,7 +24,7 @@ function makeHome(root: string): { home: string; env: Record<string, string> } {
   writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
   writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
   // Stub lsof as "nothing is listening". Without it the installer's port guard
-  // consults the real machine's :3246 — the operator's live daemon — and any
+  // consults the real machine's :3246 - the operator's live daemon - and any
   // test that makes curl report unhealthy would then depend on that state.
   writeExecutable(join(bin, "lsof"), "#!/bin/bash\nexit 1\n");
   const bunDir = join(Bun.which("bun")!, "..");
@@ -73,7 +73,7 @@ describe("install stages a clone-independent payload", () => {
       expect(statSync(join(verDir, "core")).isDirectory()).toBe(true);
       expect(existsSync(join(verDir, "core", "server.ts"))).toBe(true);
       expect(existsSync(join(verDir, "core", "voices.json"))).toBe(true);
-      // core/server.ts imports ../shared/echo-env — the sibling layout must be preserved.
+      // core/server.ts imports ../shared/echo-env - the sibling layout must be preserved.
       expect(existsSync(join(verDir, "shared", "echo-env.ts"))).toBe(true);
 
       // `current` is a symlink resolving to the active version.
@@ -85,7 +85,7 @@ describe("install stages a clone-independent payload", () => {
       expect(manifest.version).toBe(version);
       expect(manifest.service).toBe("com.echo");
 
-      // The LaunchAgent runs the payload, NOT the checkout — the survives-repo-removal guarantee.
+      // The LaunchAgent runs the payload, NOT the checkout - the survives-repo-removal guarantee.
       const plist = readFileSync(join(home, "Library/LaunchAgents/com.echo.plist"), "utf8");
       expect(plist).toContain(join(current, "core/server.ts"));
       expect(plist).not.toContain(join(REPO_ROOT, "core/server.ts"));

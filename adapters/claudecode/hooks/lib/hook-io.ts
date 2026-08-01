@@ -1,5 +1,5 @@
 /**
- * hook-io.ts — Shared stdin reader for Stop hooks
+ * hook-io.ts - Shared stdin reader for Stop hooks
  *
  * Eliminates duplicated stdin-reading boilerplate across individual hooks.
  * Each hook calls readHookInput() to get the parsed JSON payload, and
