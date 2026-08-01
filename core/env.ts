@@ -2,7 +2,12 @@
 // Environment parsing helpers - host-neutral
 // =============================================================================
 
-import { loadEchoConfigurationWithStatus, type EchoConfigStatus } from "../shared/echo-env";
+import {
+  deprecatedEchoEnvironmentKeys,
+  loadEchoConfigurationWithStatus,
+  warnDeprecatedEchoEnvironment,
+  type EchoConfigStatus,
+} from "../shared/echo-env";
 
 // Parse a numeric environment variable, falling back to `fallback` when the
 // value is missing, non-numeric, below `min`, or above `max`. Guards against
@@ -39,6 +44,7 @@ export function parseBoundedInt(
 // without mutating process.env.
 
 let fileEnv: Record<string, string | undefined> | undefined;
+let configuredKeys = new Set<string>();
 let fileConfigStatus: EchoConfigStatus | undefined;
 
 const NO_CONFIG_STATUS: EchoConfigStatus = {
@@ -46,14 +52,21 @@ const NO_CONFIG_STATUS: EchoConfigStatus = {
   present: false,
   ignored: [],
   errors: [],
+  configured: [],
   deprecatedEnvironment: [],
 };
 
-// Delegate the whole precedence contract to the shared loader so core, converse,
-// and adapters agree. The returned object is detached from process.env.
+// Cache only file-backed values. config.json keys are authoritative; deprecated
+// process fallbacks remain live so test harnesses and one-release compatibility
+// callers can set them after core was imported without leaking them into files.
 function loadEchoFileEnv(): Record<string, string | undefined> {
-  const { env, config } = loadEchoConfigurationWithStatus({ ...process.env });
+  const seed: Record<string, string | undefined> = {};
+  if (process.env.ECHO_ENV_PATHS) seed.ECHO_ENV_PATHS = process.env.ECHO_ENV_PATHS;
+  if (process.env.ECHO_CONFIG_FILE) seed.ECHO_CONFIG_FILE = process.env.ECHO_CONFIG_FILE;
+  const { env, config } = loadEchoConfigurationWithStatus(seed);
+  configuredKeys = new Set(config.configured);
   fileConfigStatus = config;
+  warnDeprecatedEchoEnvironment(deprecatedEchoEnvironmentKeys(process.env), config.path);
   return env;
 }
 
@@ -64,17 +77,22 @@ function loadEchoFileEnv(): Record<string, string | undefined> {
  */
 export function resolveEchoEnv(key: string): string | undefined {
   fileEnv ??= loadEchoFileEnv();
-  if (Object.hasOwn(fileEnv, key)) return fileEnv[key];
-  return process.env[key];
+  if (configuredKeys.has(key)) return fileEnv[key];
+  const live = process.env[key];
+  return live !== undefined ? live : fileEnv[key];
 }
 
 /**
- * Pin (or clear) the cached file layer. Tests that assert built-in DEFAULTS
- * pass `{}` so the operator's real env files cannot leak into expectations;
- * `undefined` restores lazy loading from the real files.
+ * Pin (or clear) the cached file layer. Tests that model config.json use the
+ * default authoritative mode; tests modeling legacy dotenv pass false so a
+ * live compatibility value still wins. `undefined` restores lazy loading.
  */
-export function primeEchoFileEnv(env: Record<string, string | undefined> | undefined): void {
+export function primeEchoFileEnv(
+  env: Record<string, string | undefined> | undefined,
+  authoritative: boolean = true,
+): void {
   fileEnv = env;
+  configuredKeys = new Set(env === undefined || !authoritative ? [] : Object.keys(env));
   fileConfigStatus = env === undefined ? undefined : NO_CONFIG_STATUS;
 }
 

@@ -187,6 +187,7 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
       expect(env.PORT).toBe("3246");
       expect(env.ECHO_VOICE_PERSONA_NAME).toBe("File");
       expect(env.ELEVENLABS_API_KEY).toBe("secret");
+      expect(config.configured).toEqual(["ECHO_VOICE_PERSONA_NAME", "PORT"]);
       expect(config.deprecatedEnvironment).toEqual(["ECHO_VOICE_PERSONA_NAME", "PORT"]);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("ECHO_VOICE_PERSONA_NAME, PORT"));
       expect(process.env.PORT).not.toBe("9999");
