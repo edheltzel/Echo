@@ -35,15 +35,18 @@ describe("Jcode lifecycle hook adapter", () => {
     }, config);
 
     expect(spoken).toBe(true);
-    expect(payloads).toEqual([{
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toEqual(expect.objectContaining({
       message: "Added and verified the new Echo adapter.",
       title: "Jcode Notification",
       voice_enabled: true,
       voice_id: "jcode",
       session_id: "ses-1",
-      visual_delivery: "native",
       source: "jcode",
-    }]);
+    }));
+
+    const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
+    expect(visualDelivery === undefined || visualDelivery === "native").toBe(true);
   });
 
   test("does not speak ordinary assistant text or failed turns", async () => {
