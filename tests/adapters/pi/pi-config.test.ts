@@ -21,7 +21,27 @@ describe("Pi voice config", () => {
     expect(config.personaName).toBe("Pi");
   });
 
-  test("loads persistent adapter identity from Echo config with process env precedence", () => {
+  test("default adapter reads config.json instead of process configuration", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-pi-json-config-"));
+    const configFile = join(home, "config.json");
+    const previous = process.env.ECHO_CONFIG_FILE;
+    try {
+      writeFileSync(configFile, JSON.stringify({
+        ECHO_VOICE_PERSONA_NAME: "Configured",
+        ECHO_VOICE_SUPPRESS: true,
+      }));
+      process.env.ECHO_CONFIG_FILE = configFile;
+
+      expect(loadPiVoiceConfig().personaName).toBe("Configured");
+      expect(shouldSuppressVoice({ mode: "tui", hasUI: true })).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.ECHO_CONFIG_FILE;
+      else process.env.ECHO_CONFIG_FILE = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("loads persistent adapter identity through the shared compatibility resolver", () => {
     const home = mkdtempSync(join(tmpdir(), "echo-pi-config-"));
     try {
       const configDir = join(home, ".config", "echo");
@@ -56,10 +76,10 @@ describe("Pi voice config", () => {
     }
   });
 
-  test("catchphrase env override pins the greeting to a single line (#81)", () => {
+  test("injected catchphrase values pin the greeting to a single line (#81)", () => {
     expect(loadPiVoiceConfig({ ECHO_VOICE_CATCHPHRASE: "Pinned line." }).startupCatchphrases)
       .toEqual(["Pinned line."]);
-    // Legacy name still works as a silent fallback; canonical wins when both are set.
+    // Legacy name still works as a deprecated fallback; canonical wins when both are set.
     expect(loadPiVoiceConfig({ ATLAS_VOICE_CATCHPHRASE: "Legacy line." }).startupCatchphrases)
       .toEqual(["Legacy line."]);
     expect(
@@ -73,7 +93,7 @@ describe("Pi voice config", () => {
     expect(pickStartupCatchphrase(pool, () => 0)).toBe("a");
     expect(pickStartupCatchphrase(pool, () => 0.5)).toBe("b");
     expect(pickStartupCatchphrase(pool, () => 0.999)).toBe("c");
-    // A pinned pool (env override) always yields its single line.
+    // A pinned pool always yields its single line.
     expect(pickStartupCatchphrase(["only"], Math.random)).toBe("only");
   });
 
@@ -90,7 +110,7 @@ describe("Pi voice config", () => {
   test("defaults voice_id to the pi persona (distinct Pi voice, #76)", () => {
     // Resolves to agents.pi in core/voices.json (en-GB-RyanNeural), not the identity default.
     expect(loadPiVoiceConfig({}).voiceId).toBe("pi");
-    // Still overridable via the canonical env name.
+    // Explicitly injected values remain supported by the unit seam.
     expect(loadPiVoiceConfig({ ECHO_VOICE_ID: "custom" }).voiceId).toBe("custom");
   });
 
@@ -149,7 +169,7 @@ describe("Pi voice config", () => {
     ).toBe("http://localhost:8899/notify");
   });
 
-  test("still honors deprecated legacy env names as silent fallbacks", () => {
+  test("still honors deprecated legacy names through the injection seam", () => {
     // Old ATLAS_VOICE_* names keep working when the canonical ECHO_* name is unset.
     const config = loadPiVoiceConfig({
       ATLAS_VOICE_NOTIFY_URL: "http://legacy.example/notify",

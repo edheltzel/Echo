@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 
 export interface OmpVoiceConfig {
   endpoint: string;
@@ -16,7 +17,7 @@ export interface OmpVoiceConfig {
   suppressInSubagents: boolean;
 }
 
-// Default greeting pool — short neutral session-ready lines, random pick per
+// Default greeting pool - short neutral session-ready lines, random pick per
 // session_start. No hardcoded persona/DA name (neutral-default-identity rule); a
 // catchphrase env override replaces the pool with that single pinned line.
 export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
@@ -43,10 +44,10 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-export function loadOmpVoiceConfig(env: Record<string, string | undefined> = process.env): OmpVoiceConfig {
-  // Same canonical ECHO_* env names as the Pi adapter (legacy ATLAS_VOICE_* names
-  // kept as silent deprecated fallbacks). omp defaults to persona "omp" and shares Pi's
-  // "pi" voice mapping by default; a project daidentity override (below) or env pins otherwise.
+export function loadOmpVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): OmpVoiceConfig {
+  // Same canonical config.json values as the Pi adapter. Legacy ATLAS_VOICE_*
+  // process values remain deprecated fallbacks. omp defaults to persona "omp"
+  // and shares Pi's "pi" voice mapping unless a project identity overrides it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
     endpoint: resolveNotifyUrl(env),
@@ -65,7 +66,7 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = pro
 // A project can override the persona name + voice (+ catchphrases) for THIS repo
 // only, via the SAME convention as the Claude Code and Pi adapters: a `daidentity`
 // block in the host's native config. omp's config is YAML, layered project-over-user
-// — so Echo reads the `daidentity` block from `<cwd>/.omp/config.yml` (project) and
+// - so Echo reads the `daidentity` block from `<cwd>/.omp/config.yml` (project) and
 // `~/.omp/agent/config.yml` (global) and merges project-over-global:
 //   daidentity:
 //     name: Echo
@@ -117,7 +118,7 @@ function readDaidentity(
  */
 /**
  * omp's global agent dir. Honors omp's own `PI_CODING_AGENT_DIR` override (it
- * relocates `~/.omp/agent`), so Echo reads the same global config omp does — and
+ * relocates `~/.omp/agent`), so Echo reads the same global config omp does - and
  * so tests can point it at a scratch dir for hermetic isolation.
  */
 function ompAgentDir(home: string): string {
@@ -159,7 +160,7 @@ export function applyPersonaOverride(
 ): OmpVoiceConfig {
   if (!override) return base;
   // When a repo sets a persona NAME but no startup lines of its own, announce that
-  // name at startup (the `{name}` default pool) instead of the neutral base pool —
+  // name at startup (the `{name}` default pool) instead of the neutral base pool -
   // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
   const startupCatchphrases = override.startupCatchphrases
     ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
@@ -179,7 +180,7 @@ export interface RunContext {
 
 export function shouldSuppressVoice(
   ctx: RunContext = {},
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = loadEchoConfiguration(),
 ): boolean {
   if (booleanEnv(env.ECHO_VOICE_SUPPRESS ?? env.ATLAS_VOICE_SUPPRESS, false)) return true;
   // omp spawns headless subagents (no user-facing UI, ctx.hasUI === false); speak only

@@ -251,8 +251,9 @@ Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/v
 
 Persistent settings live in `~/.config/echo/config.json`, including persona identity, port,
 timeouts, cache limits, and log paths. JSON values are typed and validated against
-[`shared/config-schema.json`](shared/config-schema.json). Live process values remain a
-compatibility override; installing migrates an existing `~/.config/echo/.env` into the JSON
+[`shared/config-schema.json`](shared/config-schema.json). JSON wins; non-secret process and
+dotenv values remain one-release warning fallbacks. Installing migrates an existing
+`~/.config/echo/.env` into the JSON
 file and leaves the old one in place, since `ELEVENLABS_API_KEY` - the only secret, never
 accepted in JSON - keeps living there. See [docs/configuration.md](docs/configuration.md).
 
@@ -279,7 +280,7 @@ See `docs/development.md`.
 
 ```bash
 bun test
-PORT=8889 tests/smoke-core.sh
+PORT=8889 tests/smoke-core.sh  # isolated test-harness injection, not user configuration
 ```
 
 ## Contributing

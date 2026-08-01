@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 
 export interface PiVoiceConfig {
   endpoint: string;
@@ -18,7 +19,7 @@ export interface PiVoiceConfig {
 
 // Default greeting pool, mirroring the Claude Code adapter's startupCatchphrases
 // mechanism (VoiceGreeting.hook.ts): short neutral session-ready lines, random
-// pick per session_start. No hardcoded persona/DA name — Pi and omp share this
+// pick per session_start. No hardcoded persona/DA name - Pi and omp share this
 // adapter (neutral-default-identity rule). A catchphrase env override replaces
 // the pool with that single line, pinning the greeting.
 export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
@@ -45,10 +46,10 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-export function loadPiVoiceConfig(env: Record<string, string | undefined> = process.env): PiVoiceConfig {
-  // Canonical ECHO_* names are read first; the legacy ATLAS_VOICE_* names remain
-  // as silent, deprecated fallbacks (see docs/configuration.md "Deprecated
-  // environment variables"). The notify endpoint is resolved by @echo/shared, so
+export function loadPiVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): PiVoiceConfig {
+  // Canonical config.json values are read first; legacy ATLAS_VOICE_* process
+  // values remain deprecated fallbacks (see docs/configuration.md). The notify
+  // endpoint is resolved by @echo/shared, so
   // ECHO_DAEMON_URL retargets it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
   return {
@@ -67,9 +68,9 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = proc
 // ── Project persona override (Pi-native settings.json) ───────────────────────
 // A project can override the persona name + voice (+ catchphrases) for THIS repo
 // only, via the SAME convention as the Claude Code adapter: a `daidentity` block
-// in the host's native settings.json. Pi layers config exactly like Claude Code —
+// in the host's native settings.json. Pi layers config exactly like Claude Code -
 // `<cwd>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
-// project wins per key — so Echo reads the `daidentity` block from both and merges
+// project wins per key - so Echo reads the `daidentity` block from both and merges
 // project-over-global:
 //   { "daidentity": { "name": "Echo",
 //                     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
@@ -147,7 +148,7 @@ export function applyPersonaOverride(
 ): PiVoiceConfig {
   if (!override) return base;
   // When a repo sets a persona NAME but no startup lines of its own, announce that
-  // name at startup (the `{name}` default pool) instead of the neutral base pool —
+  // name at startup (the `{name}` default pool) instead of the neutral base pool -
   // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
   const startupCatchphrases = override.startupCatchphrases
     ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
@@ -167,7 +168,7 @@ export interface RunContext {
 
 export function shouldSuppressVoice(
   ctx: RunContext = {},
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = loadEchoConfiguration(),
 ): boolean {
   if (booleanEnv(env.ECHO_VOICE_SUPPRESS ?? env.ATLAS_VOICE_SUPPRESS, false)) return true;
   // Pi spawns subagents as a child `pi --mode json -p --no-session`. Those headless

@@ -23,10 +23,13 @@ and a registered adapter fails to load.** `scripts/install.sh` runs it for you, 
 
 ## Run Dev Server
 
-Use a non-production port so the installed LaunchAgent on `:3246` is not disturbed:
+Use a non-production port so the installed LaunchAgent on `:3246` is not disturbed. Redirect
+the config reader with the test/development-only `ECHO_CONFIG_FILE` path selector:
 
 ```bash
-PORT=8889 bun run core/server.ts
+mkdir -p .scratch
+printf '%s\n' '{"PORT":8889,"ECHO_DAEMON_URL":"http://localhost:8889"}' > .scratch/echo-dev-config.json
+ECHO_CONFIG_FILE="$PWD/.scratch/echo-dev-config.json" bun run core/server.ts
 ```
 
 ## Pointing Clients at Dev
@@ -39,16 +42,16 @@ curl -fsS -X POST http://localhost:8889/notify \
   -d '{"message":"dev smoke","voice_enabled":false}'
 ```
 
-Adapters should expose endpoint configuration. For Pi (same for oh-my-pi, with `omp`), set:
+Point Pi (or omp) at the same isolated config:
 
 ```bash
-ECHO_NOTIFY_URL=http://localhost:8889/notify pi
+ECHO_CONFIG_FILE="$PWD/.scratch/echo-dev-config.json" pi
 ```
 
 ## Hot Reload
 
 ```bash
-PORT=8889 bun --watch run core/server.ts
+ECHO_CONFIG_FILE="$PWD/.scratch/echo-dev-config.json" bun --watch run core/server.ts
 ```
 
 If a provider subprocess hangs, stop the watch process and clear the dev port.
@@ -75,7 +78,7 @@ git worktree add -b fix/example .worktrees/fix-example origin/dev
 ```bash
 bun install                  # required before bun test - adapters import @echo/shared
 bun test
-PORT=8889 tests/smoke-core.sh
+PORT=8889 tests/smoke-core.sh  # isolated test-harness injection, not user configuration
 tests/e2e-adapters.sh        # adapter boundary e2e against an isolated daemon
 tests/e2e-converse.sh        # one voice-ask turn against an isolated core + coordinator
 bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
@@ -94,8 +97,8 @@ a test.
 
 `tests/e2e-adapters.sh` is the safe path. It starts its own `core/server.ts` on its own port
 (`ECHO_E2E_PORT`, default `8899`) with every state path - mute, capture guard, audio cache,
-TTS cache, lifecycle log, `VOICES_PATH` - redirected into a scratch directory, points the
-adapters at it via `ECHO_DAEMON_URL`, and kills only the pid it started. It **refuses to run**
+TTS cache, lifecycle log, and `VOICES_PATH` - redirected through a scratch config file,
+while exported copies exist only for inline test assertions. It kills only the pid it started. It **refuses to run**
 if the chosen port is `3246` or if anything is already listening there: it never attaches to a
 daemon it does not own. Before sending anything it prints an isolation proof (pid, port,
 adapter target, scratch dir).
