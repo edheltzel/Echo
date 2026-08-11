@@ -5,6 +5,8 @@ Adapters are out-of-process host integrations that translate host lifecycle even
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the boundary and [`http-api.md`](http-api.md)
 for the wire shape.
 
+> Grok Build host adapter support is in progress (`adapters/grok`).
+
 ## Adapter rules
 
 Adapters should:
