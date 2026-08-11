@@ -32,8 +32,6 @@ const CHECK_ONLY = process.argv.includes("--check");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
 const HOOK_ENTRY = join(ADAPTER_DIR, "hook.ts");
 const OWNED_FILENAME = "echo-voice.json";
-/** Any registration whose command path ends in this adapter's hook. */
-const ECHO_GROK_HOOK_RE = /\/adapters\/grok\/hook\.ts(?:\s|$|'|")/;
 
 function fatal(message: string): never {
   console.error(`FATAL: ${message}`);
@@ -60,10 +58,7 @@ function shellQuote(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
 }
 
-function desiredDocument(hookPath: string): {
-  text: string;
-  command: string;
-} {
+function desiredDocument(hookPath: string): { text: string } {
   const command = `bun ${shellQuote(hookPath)}`;
   const doc = {
     hooks: {
@@ -91,60 +86,11 @@ function desiredDocument(hookPath: string): {
       ],
     },
   };
-  return { text: `${JSON.stringify(doc, null, 2)}\n`, command };
+  return { text: `${JSON.stringify(doc, null, 2)}\n` };
 }
 
 function looksLikeEchoGrokHook(text: string): boolean {
-  return ECHO_GROK_HOOK_RE.test(text) || text.includes("adapters/grok/hook.ts");
-}
-
-function commandsFromDocument(text: string): string[] {
-  try {
-    const parsed = JSON.parse(text) as {
-      hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>;
-    };
-    const commands: string[] = [];
-    for (const groups of Object.values(parsed.hooks ?? {})) {
-      if (!Array.isArray(groups)) continue;
-      for (const group of groups) {
-        for (const hook of group.hooks ?? []) {
-          if (typeof hook.command === "string") commands.push(hook.command);
-        }
-      }
-    }
-    return commands;
-  } catch {
-    return [];
-  }
-}
-
-function commandTargetsEchoHook(command: string, canonical: string): boolean {
-  // Direct path or bun-wrapped path.
-  const candidates = command
-    .split(/\s+/)
-    .map((part) => part.replace(/^['"]|['"]$/g, ""))
-    .filter(Boolean);
-  for (const part of candidates) {
-    try {
-      if (realpathSync(part) === canonical) return true;
-    } catch {
-      if (part === canonical || /\/adapters\/grok\/hook\.ts$/.test(part)) {
-        // Dead path still spelled as our adapter - treat as ours so we can heal.
-        if (/\/adapters\/grok\/hook\.ts$/.test(part)) return true;
-      }
-    }
-  }
-  return ECHO_GROK_HOOK_RE.test(command);
-}
-
-function isCurrentRegistration(text: string, desiredCommand: string, canonical: string): boolean {
-  const commands = commandsFromDocument(text);
-  if (commands.length === 0) return false;
-  // Every command must be our hook; desired text is the stable pretty form.
-  if (!commands.every((command) => commandTargetsEchoHook(command, canonical))) return false;
-  // Prefer byte-stable compare against the document we would write.
-  const desired = desiredDocument(canonical).text;
-  return text === desired || commands.every((command) => command === desiredCommand);
+  return text.includes("adapters/grok/hook.ts");
 }
 
 const hooksDir = resolveHooksDir();
@@ -181,7 +127,7 @@ if (existingText !== null) {
         "Echo will not overwrite a hook file it does not own; rename or remove it first.",
     );
   }
-  if (isCurrentRegistration(existingText, desired.command, canonical)) {
+  if (existingText === desired.text) {
     log.push(`= ${OWNED_FILENAME} already current → ${canonical}`);
   } else {
     changed = true;

@@ -89,7 +89,6 @@ describe("Grok hook registration reconcile", () => {
       mkdirSync(hooksDir, { recursive: true });
       const result = await run(hooksDir, ["--check"]);
       expect(result.exitCode).toBe(3);
-      expect(readFileSync).toBeDefined();
       // No owned file created in check mode.
       try {
         readFileSync(join(hooksDir, "echo-voice.json"));
@@ -102,31 +101,55 @@ describe("Grok hook registration reconcile", () => {
     }
   });
 
+  test("heals a canonical-command document that is missing SessionStart", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-grok-partial-"));
+    try {
+      const hooksDir = join(root, "hooks");
+      mkdirSync(hooksDir, { recursive: true });
+      const owned = join(hooksDir, "echo-voice.json");
+      writeFileSync(
+        owned,
+        JSON.stringify(
+          {
+            hooks: {
+              Stop: [{ hooks: [{ type: "command", command: `bun '${HOOK}'`, timeout: 30 }] }],
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+
+      expect((await run(hooksDir, ["--check"])).exitCode).toBe(3);
+      expect((await run(hooksDir)).exitCode).toBe(0);
+      expect(readFileSync(owned, "utf8")).toContain("SessionStart");
+      expect((await run(hooksDir, ["--check"])).exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("heals timeout drift in an otherwise canonical document", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-grok-timeout-"));
+    try {
+      const hooksDir = join(root, "hooks");
+      mkdirSync(hooksDir, { recursive: true });
+      const owned = join(hooksDir, "echo-voice.json");
+      expect((await run(hooksDir)).exitCode).toBe(0);
+      writeFileSync(owned, readFileSync(owned, "utf8").replace('"timeout": 30', '"timeout": 5'));
+
+      expect((await run(hooksDir, ["--check"])).exitCode).toBe(3);
+      expect((await run(hooksDir)).exitCode).toBe(0);
+      expect(readFileSync(owned, "utf8")).toContain('"timeout": 30');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("honors GROK_HOME when ECHO_GROK_HOOKS_DIR is unset", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-grok-home-"));
     try {
       const grokHome = join(root, "grokhome");
-      const hooksDir = join(grokHome, "hooks");
-      const proc = Bun.spawn(["bun", "run", SCRIPT], {
-        env: {
-          ...process.env,
-          GROK_HOME: grokHome,
-          // Ensure the explicit override is absent.
-          ECHO_GROK_HOOKS_DIR: "",
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      // Delete empty override so resolve uses GROK_HOME
-      // (empty string is still set - spawn with filtered env instead)
-      await proc.exited;
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-
-    const root2 = mkdtempSync(join(tmpdir(), "echo-grok-home2-"));
-    try {
-      const grokHome = join(root2, "grokhome");
       const env = { ...process.env, GROK_HOME: grokHome };
       delete env.ECHO_GROK_HOOKS_DIR;
       const proc = Bun.spawn(["bun", "run", SCRIPT], {
@@ -139,7 +162,7 @@ describe("Grok hook registration reconcile", () => {
       const owned = readFileSync(join(grokHome, "hooks", "echo-voice.json"), "utf8");
       expect(owned).toContain("adapters/grok/hook.ts");
     } finally {
-      rmSync(root2, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
