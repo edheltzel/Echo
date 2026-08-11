@@ -112,7 +112,6 @@ occupies the Echo-owned `echo-voice.json` name; the installer refuses to replace
 
 ## 10. Install the voice-ask MCP server when needed
 
-
 ```bash
 bash scripts/install.sh --adapter mcp
 ```

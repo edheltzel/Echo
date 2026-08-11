@@ -11,8 +11,8 @@ Echo is a Bun/TypeScript text-to-speech notification daemon built as a
 (`core/server.ts`) listens on `localhost:3246` by default and exposes the notification API plus
 its opt-in playback-status and capture-reservation routes (`GET /notify/:request_id/completion`
 and `POST /notify/capture-reservations/:reservation_id/{grant,release}`). Any host - a Claude Code
-session, a Jcode session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
-observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi/Jcode, the trailing
+session, a Jcode session, a Grok Build session, a Pi (`@earendil-works/pi-coding-agent`) or oh-my-pi (omp) session, or a raw `curl` -
+observes its own lifecycle, extracts a short user-facing line (for Claude Code/Pi/Jcode/Grok, the trailing
 `🗣️` line), and POSTs it as JSON. The core sanitizes the text, resolves a voice, and
 speaks it through a multi-provider TTS fallback chain (edge-tts → ElevenLabs → Kokoro →
 macOS `say`) guarded by per-provider circuit breakers, then shows a macOS banner - unless
