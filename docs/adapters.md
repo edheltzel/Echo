@@ -5,7 +5,6 @@ Adapters are out-of-process host integrations that translate host lifecycle even
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the boundary and [`http-api.md`](http-api.md)
 for the wire shape.
 
-> Grok Build host adapter support is in progress (`adapters/grok`).
 
 ## Adapter rules
 
@@ -77,7 +76,7 @@ contract.
 
 ## Native terminal visuals
 
-Pi, omp, Claude Code, and Jcode adapters use the shared notify client for visual delivery. Before the
+Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery. Before the
 HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
 then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
 adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
@@ -106,6 +105,29 @@ Startup greetings are disabled by default; when enabled they run only for root
 is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
 overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
 fails closed on TOML table shapes it cannot preserve safely.
+
+## Grok Build adapter - lifecycle hooks
+
+Grok Build exposes global hooks under `~/.grok/hooks/*.json` (always trusted; project-local
+hooks need a per-repo trust grant). `adapters/grok/hook.ts` reads Grok's camelCase hook JSON
+from stdin and translates events into `/notify` with `source: "grok"` and the Grok session id.
+
+- **Stop** fires for genuine turn ends (`reason == "end_turn"`) and also as a session-end
+  observe fire (`shutdown` / `channel_closed`). Echo speaks only `end_turn`, using an explicit
+  final `🗣️ Name: summary` line when present and a short fallback summary of
+  `lastAssistantMessage` otherwise.
+- **SubagentStop** is ignored so a fan-out does not produce a storm of spoken lines.
+- **SessionStart** greetings are opt-in (`ECHO_VOICE_GREET_ON_START`); only new sessions
+  (`source` of `new` / `startup` / `create`) greet. Captured against grok 1.0.0 where
+  `source` is `"new"`.
+- **Registration:** one Echo-owned file `~/.grok/hooks/echo-voice.json` via
+  `adapters/grok/reconcile.ts`. Sibling files (for example firstmate's `fm-turn-end.json`) are
+  never rewritten or pruned. `GROK_HOME` / `ECHO_GROK_HOOKS_DIR` redirect the target for tests.
+  Wired into `install.sh` as `--adapter grok`.
+
+Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
+`grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
+surface wins.
 
 ## Pi adapter - per-turn completions (issue #15)
 
