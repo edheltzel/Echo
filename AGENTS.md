@@ -29,7 +29,7 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 bun install
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|jcode|grok|mcp|pi|omp] [--check]
+cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
@@ -84,6 +84,7 @@ bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agen
 bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
+bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`

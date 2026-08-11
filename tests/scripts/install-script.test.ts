@@ -31,11 +31,12 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Jcode, Grok, MCP, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|jcode|grok|mcp|pi|omp");
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("adapters/jcode/reconcile.ts");
     expect(script).toContain("adapters/grok/reconcile.ts");
+    expect(script).toContain("adapters/codex/reconcile.ts");
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL

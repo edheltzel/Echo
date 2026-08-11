@@ -18,6 +18,14 @@ import {
   type GrokVoiceConfig,
 } from "./config.ts";
 
+/** Resolve config with project daidentity (cwd) layered over env defaults. */
+export function resolveGrokConfig(
+  env: Record<string, string | undefined> = process.env,
+  cwd: string | undefined = process.cwd(),
+): GrokVoiceConfig {
+  return loadGrokVoiceConfig(loadEchoEnvironment(env), cwd);
+}
+
 /** Shape of the stdin envelope captured from grok 1.0.0 (3cd0d0cbcebe). */
 export interface GrokHookPayload {
   hookEventName?: string;
@@ -101,7 +109,7 @@ function isNewSessionSource(source: string | undefined): boolean {
 
 export async function handleGrokHookResult(
   payload: GrokHookPayload,
-  config: GrokVoiceConfig = loadGrokVoiceConfig(loadEchoEnvironment()),
+  config: GrokVoiceConfig = resolveGrokConfig(),
   env: Record<string, string | undefined> = process.env,
 ): Promise<GrokHookResult> {
   const event = normalizeHookEvent(payload, env);
@@ -144,7 +152,7 @@ export async function handleGrokHookResult(
 
 export async function handleGrokHook(
   payload: GrokHookPayload,
-  config: GrokVoiceConfig = loadGrokVoiceConfig(loadEchoEnvironment()),
+  config: GrokVoiceConfig = resolveGrokConfig(),
   env: Record<string, string | undefined> = process.env,
 ): Promise<boolean> {
   return (await handleGrokHookResult(payload, config, env)) === "sent";

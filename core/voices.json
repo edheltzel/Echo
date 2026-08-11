@@ -302,6 +302,17 @@
         "voice": "en-US-GuyNeural",
         "speed": 1.0
       }
+    },
+    "codex": {
+      "description": "Codex host voice",
+      "kokoro": {
+        "voice": "am_michael",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-GB-ThomasNeural",
+        "speed": 0.98
+      }
     }
   }
 }
