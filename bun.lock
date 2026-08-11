@@ -15,6 +15,12 @@
         "@echo/shared": "workspace:*",
       },
     },
+    "adapters/codex": {
+      "name": "@echo/codex-adapter",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+    },
     "adapters/grok": {
       "name": "@echo/grok-adapter",
       "version": "0.1.0",
@@ -78,6 +84,8 @@
   },
   "packages": {
     "@echo/claudecode-adapter": ["@echo/claudecode-adapter@workspace:adapters/claudecode"],
+
+    "@echo/codex-adapter": ["@echo/codex-adapter@workspace:adapters/codex"],
 
     "@echo/converse": ["@echo/converse@workspace:converse"],
 

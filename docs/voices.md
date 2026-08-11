@@ -101,6 +101,8 @@ its own spoken identity - **name + voice** - in that repo only:
 | Claude Code | `<project>/.claude/settings.json` (+ `.local.json`) | `~/.claude/settings.json` |
 | Pi | `<project>/.pi/settings.json` | `~/.pi/agent/settings.json` (see [`adapters/pi/README.md`](../adapters/pi/README.md)) |
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
+| Grok Build | `<project>/.grok/settings.json` | `~/.grok/settings.json` (see [`adapters/grok/README.md`](../adapters/grok/README.md)) |
+| Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
 
 Every host reads a **`daidentity` block from its native config**, project layered over
 global (project wins per key) - one convention, one shape to learn. Claude Code and Pi
