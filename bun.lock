@@ -15,6 +15,13 @@
         "@echo/shared": "workspace:*",
       },
     },
+    "adapters/grok": {
+      "name": "@echo/grok-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+    },
     "adapters/jcode": {
       "name": "@echo/jcode-adapter",
       "version": "0.1.0",
@@ -73,6 +80,8 @@
     "@echo/claudecode-adapter": ["@echo/claudecode-adapter@workspace:adapters/claudecode"],
 
     "@echo/converse": ["@echo/converse@workspace:converse"],
+
+    "@echo/grok-adapter": ["@echo/grok-adapter@workspace:adapters/grok"],
 
     "@echo/jcode-adapter": ["@echo/jcode-adapter@workspace:adapters/jcode"],
 

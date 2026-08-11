@@ -8,7 +8,7 @@ detail live behind the pointers below - load them on demand (progressive disclos
 
 A host-neutral daemon (`core/server.ts`, listening on `localhost:3246` by default) speaks text POSTed to
 `POST /notify`; hosts integrate **out-of-process** via adapters (`adapters/claudecode/`,
-`adapters/pi/`) that never import `core/`. Full codemap,
+`adapters/pi/`, `adapters/grok/`) that never import `core/`. Full codemap,
 boundaries, request/voice flow, and cross-cutting concerns: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 Do **not** add host-specific logic to `core/`. Host lifecycle behavior belongs in an adapter
@@ -29,7 +29,7 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 bun install
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|jcode|mcp|pi|omp] [--check]
+cli/echo install [--adapter none|claudecode|jcode|grok|mcp|pi|omp] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
@@ -38,7 +38,7 @@ cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
 
 # Underlying scripts (cli/echo delegates to these)
-bash scripts/install.sh --adapter none        # or claudecode|pi|omp
+bash scripts/install.sh --adapter none        # or claudecode|jcode|grok|pi|omp|mcp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (audio off; notifications still processed + logged)
@@ -83,6 +83,7 @@ bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding
 bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
 bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
+bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -108,7 +109,7 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
-`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, and Jcode builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, and Grok builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
@@ -161,7 +162,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
