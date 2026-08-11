@@ -1,0 +1,8 @@
+{
+  "name": "@echo/codex-adapter",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}

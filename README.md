@@ -8,6 +8,7 @@ The server core accepts JSON on `localhost:3246` by default and speaks through a
 
 - `adapters/claudecode/` - Claude Code hook integration.
 - `adapters/jcode/` - Jcode lifecycle-hook integration.
+- `adapters/grok/` - Grok Build lifecycle-hook integration.
 - `adapters/pi/` - Pi extension package integration.
 - `adapters/omp/` - oh-my-pi (omp) extension package integration.
 - `adapters/mcp/` - Claude Code MCP voice-ask tool integration.
@@ -83,6 +84,7 @@ bash scripts/install.sh --adapter claudecode   # Claude Code hooks
 bash scripts/install.sh --adapter pi           # Pi extension
 bash scripts/install.sh --adapter omp          # oh-my-pi extension
 bash scripts/install.sh --adapter jcode        # Jcode lifecycle hooks
+bash scripts/install.sh --adapter grok         # Grok Build lifecycle hooks
 bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
 ```
 

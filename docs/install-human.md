@@ -11,6 +11,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
+- **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 
 ## Prerequisites
@@ -74,6 +75,16 @@ bash scripts/install.sh --adapter omp
 This installs the core server and registers `adapters/omp/` with oh-my-pi by maintaining a single `echo-voice` symlink in `~/.omp/agent/extensions/`. It requires the `omp` CLI on your PATH. Per-project persona and voice overrides read omp's own `.omp/config.yml` - see [`../adapters/omp/README.md`](../adapters/omp/README.md).
 
 The installer only ever touches the `echo-voice` entry. If something other than Echo already occupies that name, the install aborts before changing anything - see `docs/adapters.md` for the ownership rules.
+
+## Add the Grok Build adapter
+
+```bash
+bash scripts/install.sh --adapter grok
+```
+
+This installs the core server and registers one Echo-owned file at
+`~/.grok/hooks/echo-voice.json` (global hooks are always trusted). It requires the `grok`
+CLI on your PATH. Sibling hook files in that directory are never modified.
 
 ## Add the voice-ask tool (Claude Code)
 

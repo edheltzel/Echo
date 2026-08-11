@@ -31,10 +31,12 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Jcode, MCP, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|jcode|mcp|pi|omp");
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain("adapters/jcode/reconcile.ts");
+    expect(script).toContain("adapters/grok/reconcile.ts");
+    expect(script).toContain("adapters/codex/reconcile.ts");
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
@@ -228,6 +230,57 @@ exit 0
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("--adapter grok registers echo-voice.json and preserves foreign hooks", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-grok-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      const grokHome = join(root, "grokhome");
+      const hooksDir = join(grokHome, "hooks");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+      mkdirSync(hooksDir, { recursive: true });
+      // Firstmate-owned sibling must survive reconcile.
+      const foreign = join(hooksDir, "fm-turn-end.json");
+      const foreignBody = '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}}\n';
+      writeFileSync(foreign, foreignBody);
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "grok"), "#!/bin/bash\necho 'grok 1.0.0'\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+
+      const env = {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+        GROK_HOME: grokHome,
+      };
+
+      const before = await runInstall(["--adapter", "grok", "--check"], env);
+      expect(before.exitCode).toBe(3);
+
+      const result = await runInstall(["--adapter", "grok"], env);
+      expect(result.exitCode).toBe(0);
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
+      const owned = readFileSync(join(hooksDir, "echo-voice.json"), "utf8");
+      expect(owned).toContain("adapters/grok/hook.ts");
+      expect(readFileSync(foreign, "utf8")).toBe(foreignBody);
+
+      const after = await runInstall(["--adapter", "grok", "--check"], env);
+      expect(after.exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
 
   // The MCP server is Claude Code's only route to a model-invokable ask, so its
   // registration has to survive the same install path every other adapter does.

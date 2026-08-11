@@ -99,7 +99,18 @@ bash scripts/install.sh --adapter jcode
 
 Expected: the reconcile reports Jcode `session_start` and `turn_end` hooks in `~/.jcode/config.toml` and the health check passes. If FAIL: confirm `command -v jcode` works and inspect the existing hook owner; the installer refuses to replace a non-Echo hook.
 
-## 9. Install the voice-ask MCP server when needed
+## 9. Install the Grok Build lifecycle hook adapter when needed
+
+```bash
+bash scripts/install.sh --adapter grok
+```
+
+Expected: the reconcile reports `~/.grok/hooks/echo-voice.json` (created or already current)
+and the health check passes. Sibling hooks in that directory are left untouched. If FAIL:
+confirm `command -v grok` works. A `FATAL` message (exit 2) means a foreign file already
+occupies the Echo-owned `echo-voice.json` name; the installer refuses to replace it.
+
+## 10. Install the voice-ask MCP server when needed
 
 ```bash
 bash scripts/install.sh --adapter mcp
@@ -118,7 +129,7 @@ overwrite it, and aborts before mutating any host state. Pi and omp expose the s
 from their existing adapters, so they need no extra registration step. See
 [`converse.md`](converse.md).
 
-## 10. Heal after a repo move/rename
+## 11. Heal after a repo move/rename
 
 Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
 
@@ -128,7 +139,7 @@ bash scripts/install.sh --check
 
 Expected: nothing modified. Exit 0 when everything is current; exit 3 (with a "Stale paths found" summary on stderr) when any stale path was detected - machine-checkable for automation.
 
-## 10. Status
+## 12. Status
 
 ```bash
 bash scripts/status.sh
@@ -136,7 +147,7 @@ bash scripts/status.sh
 
 Expected: neutral service `com.echo` is listed or health returns OK.
 
-## 11. Uninstall
+## 13. Uninstall
 
 ```bash
 bash scripts/uninstall.sh --check  # preview: prints what would be removed, mutates nothing

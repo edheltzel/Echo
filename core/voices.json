@@ -26,7 +26,12 @@
     }
   },
   "defaultProvider": "edgetts",
-  "fallbackOrder": ["edgetts", "elevenlabs", "kokoro", "say"],
+  "fallbackOrder": [
+    "edgetts",
+    "elevenlabs",
+    "kokoro",
+    "say"
+  ],
   "default_rate": 175,
   "default_volume": 0.8,
   "identity": {
@@ -285,6 +290,28 @@
       "edgetts": {
         "voice": "en-GB-RyanNeural",
         "speed": 0.92
+      }
+    },
+    "grok": {
+      "description": "Grok Build host voice",
+      "kokoro": {
+        "voice": "am_onyx",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-GuyNeural",
+        "speed": 1.0
+      }
+    },
+    "codex": {
+      "description": "Codex host voice",
+      "kokoro": {
+        "voice": "am_michael",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-GB-ThomasNeural",
+        "speed": 0.98
       }
     }
   }

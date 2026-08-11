@@ -35,12 +35,14 @@ CLAUDE_MCP_CONFIG="${ECHO_MCP_CONFIG_PATH:-$HOME/.claude.json}"
 JCODE_CONFIG="${JCODE_CONFIG_PATH:-${JCODE_HOME:-$HOME/.jcode}/config.toml}"
 # adapters/omp/reconcile.ts honors the same override, so detection and reconcile agree.
 OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
+# adapters/grok/reconcile.ts honors GROK_HOME / ECHO_GROK_HOOKS_DIR the same way.
+GROK_HOOKS="${ECHO_GROK_HOOKS_DIR:-${GROK_HOME:-$HOME/.grok}/hooks}"
 ADAPTER="none"
 CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|jcode|mcp|pi|omp] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -80,7 +82,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|jcode|mcp|pi|omp) ;;
+  none|claudecode|jcode|grok|codex|mcp|pi|omp) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -231,6 +233,35 @@ jcode_installed() {
   [ -f "$JCODE_CONFIG" ] && grep -qE '^[[:space:]]*((turn_end|session_start)|hooks\.(turn_end|session_start)|hooks[[:space:]]*=).*adapters/jcode/hook\.ts' "$JCODE_CONFIG"
 }
 
+# Anchored to the one Echo-owned file under global Grok hooks: present even when
+# its target path is dead (a renamed clone), which is the state refresh-all heals.
+# Sibling files (fm-turn-end.json, etc.) never trigger detection.
+grok_installed() {
+  if [ -L "$GROK_HOOKS/echo-voice.json" ] && [ ! -e "$GROK_HOOKS/echo-voice.json" ]; then
+    return 0
+  fi
+  [ -f "$GROK_HOOKS/echo-voice.json" ] && grep -qE 'adapters/grok/hook\.ts' "$GROK_HOOKS/echo-voice.json"
+}
+
+# Codex hooks live in a single hooks.json (project .codex/hooks.json or ~/.codex/hooks.json).
+codex_hooks_file() {
+  if [ -n "${ECHO_CODEX_HOOKS_FILE:-}" ]; then
+    printf '%s\n' "$ECHO_CODEX_HOOKS_FILE"
+    return 0
+  fi
+  if [ -f "$REPO_ROOT/.codex/hooks.json" ]; then
+    printf '%s\n' "$REPO_ROOT/.codex/hooks.json"
+    return 0
+  fi
+  printf '%s\n' "${CODEX_HOME:-$HOME/.codex}/hooks.json"
+}
+
+codex_installed() {
+  local f
+  f="$(codex_hooks_file)"
+  [ -f "$f" ] && grep -qE 'adapters/codex/hook\.ts' "$f"
+}
+
 # Materialize the workspace links every adapter depends on. Each adapter package
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
 # `bun install` must have run before a host can load one. Idempotent and offline —
@@ -313,6 +344,22 @@ preflight() {
       fi
       echo "> Preflighting Jcode lifecycle-hook registration"
       bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
+    grok)
+      if ! command -v grok >/dev/null 2>&1; then
+        echo "Grok Build CLI is required for --adapter grok" >&2
+        exit 1
+      fi
+      echo "> Preflighting Grok Build lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/grok/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
+    codex)
+      if ! command -v codex >/dev/null 2>&1; then
+        echo "Codex CLI is required for --adapter codex" >&2
+        exit 1
+      fi
+      echo "> Preflighting Codex lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 
@@ -485,6 +532,14 @@ install_adapter() {
       echo "> Reconciling Jcode lifecycle-hook registration"
       bun run "$REPO_ROOT/adapters/jcode/reconcile.ts"
       ;;
+    grok)
+      echo "> Reconciling Grok Build lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/grok/reconcile.ts"
+      ;;
+    codex)
+      echo "> Reconciling Codex lifecycle-hook registration"
+      bun run "$REPO_ROOT/adapters/codex/reconcile.ts"
+      ;;
   esac
 }
 
@@ -518,6 +573,16 @@ refresh_installed_adapters() {
     bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" \
       || echo "WARN: Jcode registration refresh failed — run adapters/jcode/reconcile.ts manually" >&2
   fi
+  if [ "$ADAPTER" != "grok" ] && grok_installed; then
+    echo "> Refreshing Grok Build lifecycle-hook registration"
+    bun run "$REPO_ROOT/adapters/grok/reconcile.ts" \
+      || echo "WARN: Grok registration refresh failed - run adapters/grok/reconcile.ts manually" >&2
+  fi
+  if [ "$ADAPTER" != "codex" ] && codex_installed; then
+    echo "> Refreshing Codex lifecycle-hook registration"
+    bun run "$REPO_ROOT/adapters/codex/reconcile.ts" \
+      || echo "WARN: Codex registration refresh failed - run adapters/codex/reconcile.ts manually" >&2
+  fi
 }
 
 check_installation() {
@@ -527,7 +592,7 @@ check_installation() {
   # workspace links a registered adapter fails to load. Report, never mutate.
   local adapter
   if ! skip_workspace_link; then
-    for adapter in claudecode jcode omp pi; do
+    for adapter in claudecode jcode grok codex omp pi; do
       if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
         echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
         stale=1
@@ -609,6 +674,32 @@ check_installation() {
       stale=1
     elif [ "$rc" -ne 0 ]; then
       echo "WARN: Jcode registration check failed" >&2
+      stale=1
+    fi
+  fi
+
+  # Check the requested adapter even before first install so
+  # `install.sh --adapter grok --check` reports pending registration as exit 3.
+  if [ "$ADAPTER" = "grok" ] || grok_installed; then
+    echo "> Checking Grok Build lifecycle-hook registration"
+    rc=0
+    bun run "$REPO_ROOT/adapters/grok/reconcile.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: Grok registration check failed" >&2
+      stale=1
+    fi
+  fi
+
+  if [ "$ADAPTER" = "codex" ] || codex_installed; then
+    echo "> Checking Codex lifecycle-hook registration"
+    rc=0
+    bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check || rc=$?
+    if [ "$rc" -eq 3 ]; then
+      stale=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "WARN: Codex registration check failed" >&2
       stale=1
     fi
   fi

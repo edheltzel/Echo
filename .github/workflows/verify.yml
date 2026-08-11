@@ -34,6 +34,10 @@ jobs:
         run: bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
       - name: Jcode adapter build
         run: bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
+      - name: Grok adapter build
+        run: bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
+      - name: Build Codex adapter
+        run: bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
       - name: Upload smoke log
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

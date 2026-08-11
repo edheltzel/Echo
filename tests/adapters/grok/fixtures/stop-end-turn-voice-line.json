@@ -1,0 +1,15 @@
+{
+  "hookEventName": "stop",
+  "sessionId": "019ff20e-1f27-7ef3-9eac-8150f8a4c21c",
+  "cwd": "/tmp/echo-grok-capture",
+  "workspaceRoot": "/tmp/echo-grok-capture",
+  "timestamp": "2026-08-11T18:20:41.871910+00:00",
+  "transcriptPath": "/tmp/echo-grok-capture/grokhome/sessions/session/updates.jsonl",
+  "promptId": "1e539939-ec79-487d-85a0-0b0841e16d94",
+  "permissionMode": "default",
+  "reason": "end_turn",
+  "stopHookActive": false,
+  "lastAssistantMessage": "Finished the integration.\n\ud83d\udde3\ufe0f Grok: Added and verified the new Echo adapter.",
+  "backgroundTasks": [],
+  "sessionCrons": []
+}

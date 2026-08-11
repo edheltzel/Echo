@@ -32,7 +32,7 @@ echo - control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${EC
 Usage: echo <command> [args]
 
 Commands:
-  install [--adapter none|claudecode|jcode|mcp|pi|omp] [--check]
+  install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
   doctor               Diagnose every degraded state with a concrete recovery command.
