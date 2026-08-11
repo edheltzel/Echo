@@ -44,6 +44,7 @@
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
 | Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
 | Jcode | `adapters/jcode/` | Native lifecycle-hook adapter | `bash scripts/install.sh --adapter jcode` |
+| Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) | `bash scripts/install.sh --adapter grok` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
 | oh-my-pi (omp) | `adapters/omp/` | Supported - sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | MCP (Claude Code voice ask) | `adapters/mcp/` | Supported - serves the `echo_ask` tool over stdio | `bash scripts/install.sh --adapter mcp` |
@@ -95,6 +96,7 @@ rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 | Minimum local server | Bun + `bash scripts/install.sh --adapter none` |
 | Existing Claude Code workflow | Bun + Claude Code + `bash scripts/install.sh --adapter claudecode` |
 | Jcode voice lifecycle | Bun + Jcode + `bash scripts/install.sh --adapter jcode` |
+| Grok Build voice lifecycle | Bun + Grok Build + `bash scripts/install.sh --adapter grok` |
 | Pi voice lifecycle | Bun + Pi + `bash scripts/install.sh --adapter pi` |
 | oh-my-pi voice lifecycle | Bun + omp + `bash scripts/install.sh --adapter omp` |
 | Spoken questions with spoken answers | Bun + `sox` + `yap` (or `whisper-cli`) + `--adapter mcp` for Claude Code |

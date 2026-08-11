@@ -1,0 +1,9 @@
+{
+  "name": "@echo/grok-adapter",
+  "version": "0.1.0",
+  "description": "Grok Build lifecycle-hook adapter for Echo",
+  "type": "module",
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}

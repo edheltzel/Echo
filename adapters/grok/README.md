@@ -1,0 +1,34 @@
+# Echo adapter for Grok Build
+
+This adapter uses Grok Build's native lifecycle hooks. It registers one Echo-owned
+file at `~/.grok/hooks/echo-voice.json` (always trusted; no per-repo `/hooks-trust`
+required) that points `SessionStart` and `Stop` at `hook.ts`.
+
+```bash
+bash scripts/install.sh --adapter grok
+```
+
+## Behavior
+
+- **Stop** (`reason == "end_turn"`): speaks an explicit final `🗣️ Name: summary` line
+  when present, otherwise a short fallback summary of `lastAssistantMessage`.
+- **Session-end Stop** (`reason` is `shutdown` / `channel_closed`): silent.
+- **SubagentStop**: silent, so a fan-out does not produce a storm of spoken lines.
+- **SessionStart** greetings: opt-in via `ECHO_VOICE_GREET_ON_START=true`; only
+  new sessions (`source` of `new` / `startup` / `create`).
+
+## Ownership
+
+Reconcile owns **only** `echo-voice.json`. Sibling hooks such as firstmate's
+`fm-turn-end.json` / `fm-turn-end.sh` are never rewritten or pruned. A foreign
+file already named `echo-voice.json` is a fatal ownership conflict (exit 2).
+
+## Environment overrides (tests)
+
+| Variable | Purpose |
+| --- | --- |
+| `GROK_HOME` | Grok config directory (default `~/.grok`) |
+| `ECHO_GROK_HOOKS_DIR` | Direct hooks directory override (wins over `GROK_HOME`) |
+| `HOME` | Affects the default `~/.grok` resolution via `os.homedir()` |
+
+Never point tests at the operator's real `~/.grok`.
