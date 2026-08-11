@@ -5,7 +5,6 @@ Adapters are out-of-process host integrations that translate host lifecycle even
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the boundary and [`http-api.md`](http-api.md)
 for the wire shape.
 
-
 ## Adapter rules
 
 Adapters should:
@@ -120,6 +119,10 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
 - **SessionStart** greetings are opt-in (`ECHO_VOICE_GREET_ON_START`); only new sessions
   (`source` of `new` / `startup` / `create`) greet. Captured against grok 1.0.0 where
   `source` is `"new"`.
+- **Voice:** `voice_id` defaults to `"grok"` (`ECHO_VOICE_ID` overrides), resolved by the daemon
+  through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
+  payload, so a fresh `agents` entry needs a re-stage before it resolves - see
+  [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** one Echo-owned file `~/.grok/hooks/echo-voice.json` via
   `adapters/grok/reconcile.ts`. Sibling files (for example firstmate's `fm-turn-end.json`) are
   never rewritten or pruned. `GROK_HOME` / `ECHO_GROK_HOOKS_DIR` redirect the target for tests.
