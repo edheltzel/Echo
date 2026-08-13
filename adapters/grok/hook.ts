@@ -94,8 +94,8 @@ export function extractFallbackSummary(text: string): string | null {
   return null;
 }
 
-export function messageFromStop(text: string): string | null {
-  const voiceLine = extractVoiceLineFromText(text);
+export function messageFromStop(text: string, personaName?: string): string | null {
+  const voiceLine = extractVoiceLineFromText(text, personaName ? [personaName] : undefined);
   if (voiceLine) return voiceLine;
   return extractFallbackSummary(text);
 }
@@ -124,7 +124,7 @@ export async function handleGrokHookResult(
     if (!config.speakCompletions) return "skipped";
     // Gate only genuine turn ends; session-end observe uses reason shutdown/channel_closed.
     if (payload.reason !== "end_turn") return "skipped";
-    message = messageFromStop(payload.lastAssistantMessage ?? "");
+    message = messageFromStop(payload.lastAssistantMessage ?? "", config.personaName);
   } else if (event === "session_start") {
     if (!config.greetOnSessionStart) return "skipped";
     if (!isNewSessionSource(payload.source)) return "skipped";

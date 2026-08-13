@@ -141,4 +141,9 @@ describe("parseFinalVoiceLine - the shared canonical parse", () => {
   test("non-voice final line → null", () => {
     expect(parseFinalVoiceLine("just prose")).toBeNull();
   });
+
+  test("ordinary colon-led prose is not mistaken for a persona", () => {
+    expect(parseFinalVoiceLine("🗣️ Fixed: the parser bug")).toBeNull();
+    expect(extractVoiceCompletion("🗣️ Fixed: the parser bug")).toBe("");
+  });
 });

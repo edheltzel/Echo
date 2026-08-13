@@ -1,5 +1,24 @@
 type TextBlock = { type?: unknown; text?: unknown };
 
+// Keep the prefix grammar conservative: an arbitrary `Word:` can be normal
+// spoken content (for example, "Fixed: the parser bug"). Custom personas are
+// added by callers from their resolved adapter config.
+const DEFAULT_PERSONA_NAMES = new Set([
+  "atlas", "themis", "pi", "omp", "grok", "codex", "jcode", "echo",
+  "kai", "researcher", "engineer", "architect", "designer", "writer",
+  "qa-tester", "clauderesearcher", "perplexityresearcher", "geminiresearcher",
+  "grokresearcher", "codexresearcher", "artist", "silas", "algorithm",
+]);
+
+function knownPersonaNames(extra?: Iterable<string>): Set<string> {
+  const names = new Set(DEFAULT_PERSONA_NAMES);
+  for (const name of extra ?? []) {
+    const normalized = name.trim().toLowerCase();
+    if (normalized) names.add(normalized);
+  }
+  return names;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -44,7 +63,10 @@ export function getAssistantText(message: unknown): string | null {
   return text || null;
 }
 
-export function extractVoiceLineFromText(text: string): string | null {
+export function extractVoiceLineFromText(
+  text: string,
+  personaNames?: Iterable<string>,
+): string | null {
   const lines = text.split(/\r?\n/);
   let inFence = false;
   let finalNonblank: string | null = null;
@@ -63,23 +85,29 @@ export function extractVoiceLineFromText(text: string): string | null {
 
   if (!finalNonblank?.startsWith("🗣")) return null;
 
-  const cleaned = finalNonblank
+  let cleaned = finalNonblank
     .replace(/^🗣️?\s*/, "")
-    // Optional persona prefix ("Atlas:" / "Themis:") so the name isn't spoken aloud.
-    // Single name token, mirroring PAI's parseFinalVoiceLine; lines without a
-    // "<Name>:" prefix pass through unchanged.
-    .replace(/^\*{0,2}[A-Za-z][A-Za-z0-9_-]*\*{0,2}[ \t]*:\*{0,2}[ \t]*/, "")
     // \u2013/\u2014 are the en/em dash, kept as escapes: models still emit them
     // as separators, but the house style bans the literal characters in source.
     .replace(/^[:\-\u2013\u2014]\s*/, "")
     .trim();
 
+  const personaPrefix = cleaned.match(
+    /^\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*/,
+  );
+  if (personaPrefix && knownPersonaNames(personaNames).has(personaPrefix[1].toLowerCase())) {
+    cleaned = cleaned.slice(personaPrefix[0].length).trim();
+  }
+
   return isValidVoiceLine(cleaned) ? cleaned : null;
 }
 
-export function extractVoiceLineFromMessage(message: unknown): string | null {
+export function extractVoiceLineFromMessage(
+  message: unknown,
+  personaNames?: Iterable<string>,
+): string | null {
   const text = getAssistantText(message);
-  return text ? extractVoiceLineFromText(text) : null;
+  return text ? extractVoiceLineFromText(text, personaNames) : null;
 }
 
 function normalizedGenericText(text: string): string {
