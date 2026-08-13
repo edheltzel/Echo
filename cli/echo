@@ -39,8 +39,8 @@ Commands:
   status               Service + health snapshot with recent logs.
   mute on|off|toggle|status | <duration, e.g. 30m or 1h>
                        Runtime mute (audio off; notifications still processed + logged).
-  voice <name> <voice-id>
-                       Set the default Echo persona (name + edge-tts voice) for pi/omp.
+  voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
+                       Set the default persona and ask whether subagents may speak.
   update [--check]     Re-stage the payload from this checkout and reload the service.
                        --check is read-only and verifies that the plist and host
                        adapter paths still resolve - it does NOT detect a payload

@@ -5,6 +5,16 @@ import { join } from "node:path";
 export type EchoEnvironment = Record<string, string | undefined>;
 export type EchoConfigValue = string | number | boolean;
 
+/** Parse the boolean spellings accepted by adapter and CLI configuration. */
+export function parseEchoBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (value === undefined || value === null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on", "y"].includes(normalized)) return true;
+  if (["0", "false", "no", "off", "n", ""].includes(normalized)) return false;
+  return fallback;
+}
+
 export const ECHO_CONFIG_PATH_PARTS = [".config", "echo", "config.json"] as const;
 
 // Keep this list in lockstep with shared/config-schema.json. The schema is the
@@ -417,6 +427,17 @@ export function loadEchoConfiguration(
   homeDir?: string,
 ): EchoEnvironment {
   return loadEchoConfigurationWithStatus(env, homeDir).env;
+}
+
+/**
+ * Resolve the Claude Code VoiceGate policy. Missing or malformed values keep
+ * subagent voice silent so an upgrade can never turn an anti-flood guard on by
+ * accident; `false` is the explicit opt-in.
+ */
+export function shouldSuppressSubagentVoice(
+  env: EchoEnvironment = loadEchoConfiguration(),
+): boolean {
+  return parseEchoBoolean(env.ECHO_VOICE_SUPPRESS_SUBAGENTS, true);
 }
 
 // Compatibility name for adapters and extensions written against the Stage 1
