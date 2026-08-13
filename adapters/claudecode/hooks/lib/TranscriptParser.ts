@@ -304,6 +304,11 @@ export function extractVoiceCompletion(text: string): string {
 export function extractCompletionPlain(text: string): string {
   text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '');
 
+  // Keep the plain/tab-title path on the same fence- and indentation-aware
+  // contract as voice completion. A COMPLETED marker in a code example is not
+  // the response's completion and must not leak into the title.
+  text = contentLines(text).join('\n');
+
   // Use global flag and find LAST match (voice line is at end of response)
   const completedPatterns = [
     new RegExp(`🗣️\\s*\\*{0,2}${DA_IDENTITY.name}:?\\*{0,2}\\s*(.+?)(?:\\r?\\n|$)`, 'gi'),

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extractCompletionPlain,
   extractVoiceCompletion,
   parseFinalVoiceLine,
 } from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
@@ -103,6 +104,22 @@ describe("🎯 COMPLETED: fallback - CRLF-safe and fence/indent-aware (#36)", ()
   test("a real 🗣️ voice line still wins over an earlier fenced COMPLETED", () => {
     const text = `${FENCE}\n🎯 COMPLETED: example\n${FENCE}\n🗣️ Atlas: shipped for real.`;
     expect(extractVoiceCompletion(text)).toBe("shipped for real.");
+  });
+});
+
+describe("extractCompletionPlain - fence/indent-aware parity (#45)", () => {
+  test("a fenced COMPLETED marker does not become the plain completion", () => {
+    const text = `${FENCE}\n🎯 COMPLETED: example only\n${FENCE}\nDocumentation continues.`;
+    expect(extractCompletionPlain(text)).toBe("");
+  });
+
+  test("an indented COMPLETED marker does not become the plain completion", () => {
+    expect(extractCompletionPlain("Format:\n\n    🎯 COMPLETED: example only")).toBe("");
+  });
+
+  test("a real marker after a fenced example remains available", () => {
+    const text = `${FENCE}\n🎯 COMPLETED: example only\n${FENCE}\n🎯 COMPLETED: shipped for real.`;
+    expect(extractCompletionPlain(text)).toBe("shipped for real.");
   });
 });
 
