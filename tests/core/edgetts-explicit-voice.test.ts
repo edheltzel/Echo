@@ -12,7 +12,7 @@ process.env.PORT = "0";
 
 import { describe, expect, test } from "bun:test";
 
-const { classifyResolution, getVoiceMapping, looksLikeEdgeVoice } = await import("../../core/server.ts");
+const { classifyResolution, getVoiceMapping, looksLikeEdgeVoice, voicesConfig } = await import("../../core/server.ts");
 
 describe("looksLikeEdgeVoice", () => {
   test("matches common edge-tts voice names", () => {
@@ -55,5 +55,25 @@ describe("classifyResolution - explicit edge voice is honest, not a fallback", (
 
   test("no voice_id → identity-default (unchanged)", () => {
     expect(classifyResolution(null, null).resolution).toBe("identity-default");
+  });
+
+  test("agent key → agent-key", () => {
+    const [agentKey, mapping] = Object.entries(voicesConfig.agents)[0];
+    expect(classifyResolution(agentKey, mapping)).toEqual({ resolution: "agent-key" });
+  });
+
+  test("the identity's ElevenLabs id → identity", () => {
+    const identityId = voicesConfig.identity.elevenlabs?.voice_id;
+    expect(identityId).toBeTruthy();
+    expect(classifyResolution(identityId!, voicesConfig.identity)).toEqual({ resolution: "identity" });
+  });
+
+  test("an agent's ElevenLabs id → elevenlabs-id", () => {
+    const entry = Object.entries(voicesConfig.agents).find(([, mapping]) => mapping.elevenlabs?.voice_id);
+    expect(entry).toBeTruthy();
+    const [, mapping] = entry!;
+    expect(classifyResolution(mapping.elevenlabs!.voice_id, mapping)).toEqual({
+      resolution: "elevenlabs-id",
+    });
   });
 });

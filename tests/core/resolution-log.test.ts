@@ -144,7 +144,9 @@ describe("issue #24 - one resolution event per /notify", () => {
     // edge-tts/elevenlabs/kokoro stay disabled (beforeEach); enable only `say`,
     // which always reports healthy and (with spawn stubbed) speaks successfully.
     (voicesConfig.providers as any).say.enabled = true;
-    const expectedVoice = (voicesConfig.providers as any).say.voice || "Daniel (Enhanced)";
+    // Keep this expectation independent of the production fallback expression:
+    // the checked-in fixture intentionally names the macOS voice explicitly.
+    const expectedVoice = "Daniel (Enhanced)";
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
