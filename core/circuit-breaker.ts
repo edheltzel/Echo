@@ -77,11 +77,26 @@ export function recordProviderFailure(provider: string): void {
   }
 }
 
+/**
+ * Return whether the breaker is currently suppressing provider attempts.
+ *
+ * This deliberately has no logging or state transitions.  A breaker remains
+ * marked open during the half-open probe window, but it is not suppressing a
+ * provider there, so callers that classify an outcome must use this read
+ * rather than inspecting `isOpen` directly.
+ */
+export function isBreakerSuppressing(provider: string): boolean {
+  const breaker = circuitBreakers[provider];
+  if (!breaker || !breaker.isOpen) return false;
+
+  return Date.now() - breaker.lastFailure <= CIRCUIT_BREAKER_RESET_MS;
+}
+
 export function shouldSkipProvider(provider: string): boolean {
   const breaker = circuitBreakers[provider];
   if (!breaker || !breaker.isOpen) return false;
 
-  if (Date.now() - breaker.lastFailure > CIRCUIT_BREAKER_RESET_MS) {
+  if (!isBreakerSuppressing(provider)) {
     logger("info", `🟡 Circuit HALF-OPEN - testing ${provider}`);
     return false;
   }
