@@ -56,6 +56,7 @@ import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
   circuitBreakers,
+  isBreakerSuppressing,
   recordProviderFailure,
   recordProviderSuccess,
   setCircuitBreakerLogger,
@@ -1387,10 +1388,10 @@ export async function speakWithFallback(
     } else {
       const healthy = await provider.isHealthy();
       if (!healthy) {
-        // An unhealthy skip is attributed to the circuit breaker when its breaker
-        // is open (the health probe consults shouldSkipProvider); otherwise it's a
-        // genuine health-probe failure.
-        const outcome: AttemptOutcome = circuitBreakers[providerName]?.isOpen ? 'circuit-open' : 'unhealthy';
+        // An unhealthy skip is attributed to the circuit breaker only while the
+        // breaker is actively suppressing attempts. During half-open probing the
+        // state remains open, but this is a genuine health-probe failure.
+        const outcome: AttemptOutcome = isBreakerSuppressing(providerName) ? 'circuit-open' : 'unhealthy';
         const diagnostic = provider.getLastDiagnostic?.();
         console.log(`⏭️  Skipping ${providerName} (${outcome}${diagnostic ? `: ${formatProviderDiagnostic(diagnostic)}` : ''})`);
         attempts.push({ provider: providerName, outcome, ...(diagnostic ?? {}) });
