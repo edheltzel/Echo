@@ -33,7 +33,10 @@ export async function handleJcodeHookResult(
 
   if (env.JCODE_HOOK_EVENT === "turn_end") {
     if (!config.speakCompletions || env.JCODE_HOOK_STATUS !== "ok") return "skipped";
-    message = extractVoiceLineFromText(env.JCODE_HOOK_LAST_ASSISTANT_TEXT ?? "");
+    message = extractVoiceLineFromText(
+      env.JCODE_HOOK_LAST_ASSISTANT_TEXT ?? "",
+      [config.personaName],
+    );
   } else if (env.JCODE_HOOK_EVENT === "session_start") {
     if (!config.greetOnSessionStart || env.JCODE_HOOK_SOURCE !== "create") return "skipped";
     message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName);

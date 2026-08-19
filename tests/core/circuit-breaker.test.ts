@@ -3,6 +3,7 @@ import {
   CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
   circuitBreakers,
+  isBreakerSuppressing,
   recordProviderFailure,
   recordProviderSuccess,
   shouldSkipProvider,
@@ -54,8 +55,24 @@ describe("circuit breaker - issue #25 fallback tuning", () => {
 
     // Simulate the cooldown elapsing.
     circuitBreakers.edgetts.lastFailure = Date.now() - (CIRCUIT_BREAKER_RESET_MS + 1_000);
+    expect(isBreakerSuppressing("edgetts")).toBe(false); // open state is retained during half-open
     expect(shouldSkipProvider("edgetts")).toBe(false); // half-open: allow a retest
     expect(circuitBreakers.edgetts.isOpen).toBe(true); // stays open until success/failure
+  });
+
+  test("the pure suppression read reflects the cooldown without logging or mutation", () => {
+    for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
+      recordProviderFailure("edgetts");
+    }
+
+    expect(isBreakerSuppressing("edgetts")).toBe(true);
+    const before = { ...circuitBreakers.edgetts };
+    expect(isBreakerSuppressing("edgetts")).toBe(true);
+    expect(circuitBreakers.edgetts).toEqual(before);
+
+    circuitBreakers.edgetts.lastFailure = Date.now() - (CIRCUIT_BREAKER_RESET_MS + 1_000);
+    expect(isBreakerSuppressing("edgetts")).toBe(false);
+    expect(circuitBreakers.edgetts.isOpen).toBe(true);
   });
 
   test("a success during half-open closes the breaker", () => {

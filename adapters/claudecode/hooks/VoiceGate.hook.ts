@@ -3,8 +3,8 @@
  * VoiceGate.hook.ts - Block Voice Curls from Subagents (PreToolUse)
  *
  * PURPOSE:
- * Prevents background agents / subagents from sending voice notifications.
- * Only the main terminal session is allowed to curl the voice server at localhost:3246.
+ * Prevents background agents / subagents from sending voice notifications by default.
+ * The operator can opt in through ECHO_VOICE_SUPPRESS_SUBAGENTS=false.
  *
  * ROOT CAUSE THIS FIXES:
  * Subagents inherit full host context (CLAUDE.md → SKILL.md → Algorithm),
@@ -22,23 +22,19 @@
  * DECISION LOGIC:
  * 1. Command doesn't contain "localhost:3246" → PASS (not a voice curl)
  * 2. Command contains "localhost:3246" AND no agent_id in stdin → PASS (main session)
- * 3. Command contains "localhost:3246" AND agent_id present → BLOCK (subagent)
+ * 3. Command contains "localhost:3246" AND agent_id present AND suppression enabled
+ *    → BLOCK (subagent)
+ * 4. Command contains "localhost:3246" AND agent_id present AND suppression disabled
+ *    → PASS (explicit opt-in)
  *
  * PERFORMANCE: <5ms. Fast-path exit for non-voice commands.
  */
 
-interface HookInput {
-  tool_name: string;
-  tool_input: {
-    command?: string;
-  };
-  session_id: string;
-  agent_id?: string;
-  agent_type?: string;
-}
+import { shouldSuppressSubagentVoice } from "@echo/shared/echo-env.ts";
+import { decideVoiceGate, isVoiceCurl, type VoiceGateHookInput } from "./lib/voice-gate.ts";
 
 async function main() {
-  let input: HookInput;
+  let input: VoiceGateHookInput;
   try {
     const raw = await Bun.stdin.text();
     if (!raw.trim()) {
@@ -51,33 +47,26 @@ async function main() {
     return;
   }
 
-  const command = input.tool_input?.command || '';
+  const command = input.tool_input?.command || "";
 
   // Fast path: not a voice curl → allow immediately
-  const isVoiceCurl = command.includes('localhost:3246') || command.includes('127.0.0.1:3246');
-  if (!isVoiceCurl) {
+  if (!isVoiceCurl(command)) {
     console.log(JSON.stringify({ continue: true }));
     return;
   }
 
-  // It's a voice curl - check if we're in a subagent context
-  // agent_id is present in stdin JSON when the hook fires inside a subagent
-  const agentId = input.agent_id;
-  const agentType = input.agent_type;
-
-  if (!agentId) {
-    // No agent_id → this is the main session, allow the curl
-    console.error('[VoiceGate] pass: main-session voice curl');
-    console.log(JSON.stringify({ continue: true }));
-    return;
+  const decision = decideVoiceGate(input, shouldSuppressSubagentVoice());
+  if ("decision" in decision) {
+    console.error(
+      `[VoiceGate] block: subagent voice curl (agent_id: ${input.agent_id}, type: ${input.agent_type || "unknown"})`,
+    );
+  } else if (input.agent_id) {
+    console.error("[VoiceGate] pass: subagent voice curl (explicit opt-in)");
+  } else {
+    // No agent_id → this is the main session, allow the curl.
+    console.error("[VoiceGate] pass: main-session voice curl");
   }
-
-  // Subagent trying to send voice → block
-  console.error(`[VoiceGate] block: subagent voice curl (agent_id: ${agentId}, type: ${agentType || 'unknown'})`);
-  console.log(JSON.stringify({
-    decision: "block",
-    reason: "Voice notifications are only sent from the main session. Subagent voice curls are suppressed."
-  }));
+  console.log(JSON.stringify(decision));
 }
 
 main().catch(() => {

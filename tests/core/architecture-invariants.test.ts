@@ -76,11 +76,34 @@ function countNewlines(text: string): number {
   return text.length - text.replaceAll("\n", "").length;
 }
 
-/** Route path literals declared via `url.pathname === "..."`. */
-function routePaths(content: string): string[] {
-  return [...content.matchAll(/url\.pathname\s*===\s*["']([^"']+)["']/g)].map(
-    (m) => m[1],
+/**
+ * Find host-named route literals regardless of how the router compares them.
+ *
+ * A route can be checked with `===`, a prefix/substring helper, a switch case,
+ * or a lookup-table key. Scanning path-shaped literals keeps the invariant
+ * independent of that implementation choice while avoiding unrelated prose.
+ */
+function hostNamedRoutePaths(content: string): string[] {
+  const stripped = stripComments(content);
+  const paths = [...stripped.matchAll(/["'`](\/[^"'`\s]*)["'`]/g)].map((m) => m[1]);
+  return paths.filter((path) =>
+    /(?:^|\/)(?:pai|claude|opencode)(?:\/|$)/i.test(path) ||
+    /(?:^|\/)pi(?:-|\/|$)/i.test(path),
   );
+}
+
+function hostImportViolation(spec: string): string | undefined {
+  const banned: { re: RegExp; what: string }[] = [
+    // Include common alias prefixes (`#adapters/...`, `~/adapters/...`) as
+    // well as relative and package-root forms.
+    { re: /(^|[/#~])adapters\//, what: "adapters/** (host integration)" },
+    { re: /@earendil-works\//, what: "Pi coding agent SDK" },
+    { re: /@anthropic-ai\//, what: "Anthropic/Claude SDK" },
+    { re: /\bclaude-code\b/i, what: "Claude Code" },
+    { re: /\bopencode\b/i, what: "OpenCode" },
+    { re: /(^|\/)pai(\/|$)/i, what: "PAI package" },
+  ];
+  return banned.find((b) => b.re.test(spec))?.what;
 }
 
 /** Fail with a remediation message when any offender is found. */
@@ -96,20 +119,11 @@ function assertNoOffenders(offenders: string[], remediation: string): void {
 describe("core architecture invariants", () => {
   // Invariant 1 - core/ imports no host APIs or adapters.
   test("core/ imports no host (PAI/Pi/Claude Code/OpenCode) or adapter modules", () => {
-    // Specifiers that reach a host runtime or an out-of-core adapter.
-    const banned: { re: RegExp; what: string }[] = [
-      { re: /(^|\/)adapters\//, what: "adapters/** (host integration)" },
-      { re: /@earendil-works\//, what: "Pi coding agent SDK" },
-      { re: /@anthropic-ai\//, what: "Anthropic/Claude SDK" },
-      { re: /\bclaude-code\b/i, what: "Claude Code" },
-      { re: /\bopencode\b/i, what: "OpenCode" },
-      { re: /(^|\/)pai(\/|$)/i, what: "PAI package" },
-    ];
     const offenders: string[] = [];
     for (const file of coreTsFiles()) {
       for (const spec of importSpecifiers(readFileSync(file, "utf8"))) {
-        const hit = banned.find((b) => b.re.test(spec));
-        if (hit) offenders.push(`${file}: imports "${spec}" → ${hit.what}`);
+        const violation = hostImportViolation(spec);
+        if (violation) offenders.push(`${file}: imports "${spec}" → ${violation}`);
       }
     }
     assertNoOffenders(
@@ -157,18 +171,32 @@ describe("core architecture invariants", () => {
   test("core/server.ts exposes no host-named HTTP routes", () => {
     const content = readFileSync(join(CORE_DIR, "server.ts"), "utf8");
     const offenders: string[] = [];
-    for (const route of routePaths(content)) {
-      const segments = route.split("/").filter(Boolean);
-      const hostNamed =
-        /(pai|claude|opencode)/i.test(route) ||
-        segments.some((seg) => /^pi(-|$)/i.test(seg));
-      if (hostNamed) offenders.push(`route "${route}"`);
-    }
+    for (const route of hostNamedRoutePaths(content)) offenders.push(`route "${route}"`);
     assertNoOffenders(
       offenders,
       "The universal core exposes only host-neutral routes (/notify, /notify/personality, /health). " +
-        "Do not add host-named (PAI/Pi/Claude/OpenCode) endpoints - host specifics belong in an adapter.",
+      "Do not add host-named (PAI/Pi/Claude/OpenCode) endpoints - host specifics belong in an adapter.",
     );
+  });
+
+  test("route scan covers prefix, substring, switch, and lookup-table styles", () => {
+    const samples = [
+      'if (url.pathname.startsWith("/pi/events")) return;',
+      'if (url.pathname.includes("/claude")) return;',
+      'switch (url.pathname) { case "/opencode": return; }',
+      'const routes = { "/pi/status": handler };',
+    ];
+
+    for (const sample of samples) {
+      expect(hostNamedRoutePaths(sample)).toHaveLength(1);
+    }
+  });
+
+  test("adapter import scan recognizes aliased adapter paths", () => {
+    const samples = ["#adapters/pi", "~/adapters/claudecode", "@/adapters/mcp"];
+    for (const sample of samples) {
+      expect(hostImportViolation(sample)).toContain("adapters/");
+    }
   });
 
   // Invariant 5 - the legacy PAI stow tree is retired and must not silently return.

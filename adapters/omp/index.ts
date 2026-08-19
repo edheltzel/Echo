@@ -155,9 +155,10 @@ export default function echoVoiceOmpAdapter(
   }
 
   async function speakAssistantCompletion(event: unknown, ctx: OmpExtensionContext): Promise<void> {
-    if (!resolveConfig(resolveCwd(ctx)).speakCompletions) return;
+    const cfg = resolveConfig(resolveCwd(ctx));
+    if (!cfg.speakCompletions) return;
     const message = eventMessage(event);
-    const line = extractVoiceLineFromMessage(message);
+    const line = extractVoiceLineFromMessage(message, [cfg.personaName]);
     if (!line) return;
 
     const sessionId = resolveSessionId(ctx) ?? "ephemeral";

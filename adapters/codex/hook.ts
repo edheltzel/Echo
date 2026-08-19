@@ -70,8 +70,8 @@ export function extractFallbackSummary(text: string): string | null {
   return cleaned.length >= 10 ? cleaned : null;
 }
 
-export function messageFromStop(text: string): string | null {
-  const voice = extractVoiceLineFromText(text);
+export function messageFromStop(text: string, personaName?: string): string | null {
+  const voice = extractVoiceLineFromText(text, personaName ? [personaName] : undefined);
   if (voice) return voice;
   return extractFallbackSummary(text);
 }
@@ -104,7 +104,7 @@ export async function handleCodexHookResult(
     if (payload.reason && payload.reason !== "end_turn" && payload.reason !== "completed") {
       return "skipped";
     }
-    message = messageFromStop(lastAssistantMessage(payload));
+    message = messageFromStop(lastAssistantMessage(payload), config.personaName);
   } else if (event === "session_start" || event === "sessionstart") {
     if (!config.greetOnSessionStart) return "skipped";
     message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName);

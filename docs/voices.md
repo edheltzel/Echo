@@ -177,6 +177,13 @@ writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config
 [`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
 
+When `cli/echo voice` runs in a terminal it also asks **“Enable voice for subagents?”**;
+an empty answer is **No**. The answer is stored as
+`ECHO_VOICE_SUPPRESS_SUBAGENTS` (`true` keeps subagents silent, `false` opts them in),
+and the Claude Code `VoiceGate` reads the same setting. For automation, use
+`--allow-subagents` or `--suppress-subagents`; a first non-interactive configuration
+uses the safe silent default.
+
 ## Change a persona's voice
 
 1. Audition and confirm the target voice name exists (`--list`, as above).

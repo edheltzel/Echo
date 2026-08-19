@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extractCompletionPlain,
   extractVoiceCompletion,
   parseFinalVoiceLine,
 } from "../../../adapters/claudecode/hooks/lib/TranscriptParser";
@@ -106,6 +107,22 @@ describe("🎯 COMPLETED: fallback - CRLF-safe and fence/indent-aware (#36)", ()
   });
 });
 
+describe("extractCompletionPlain - fence/indent-aware parity (#45)", () => {
+  test("a fenced COMPLETED marker does not become the plain completion", () => {
+    const text = `${FENCE}\n🎯 COMPLETED: example only\n${FENCE}\nDocumentation continues.`;
+    expect(extractCompletionPlain(text)).toBe("");
+  });
+
+  test("an indented COMPLETED marker does not become the plain completion", () => {
+    expect(extractCompletionPlain("Format:\n\n    🎯 COMPLETED: example only")).toBe("");
+  });
+
+  test("a real marker after a fenced example remains available", () => {
+    const text = `${FENCE}\n🎯 COMPLETED: example only\n${FENCE}\n🎯 COMPLETED: shipped for real.`;
+    expect(extractCompletionPlain(text)).toBe("shipped for real.");
+  });
+});
+
 describe("voice and words never disagree - both consume parseFinalVoiceLine", () => {
   test("persona turn: resolved voice key and spoken words come from the same line", () => {
     const text = "Status.\n🗣️ Themis: coordinating the next worker.";
@@ -140,5 +157,10 @@ describe("parseFinalVoiceLine - the shared canonical parse", () => {
 
   test("non-voice final line → null", () => {
     expect(parseFinalVoiceLine("just prose")).toBeNull();
+  });
+
+  test("ordinary colon-led prose is not mistaken for a persona", () => {
+    expect(parseFinalVoiceLine("🗣️ Fixed: the parser bug")).toBeNull();
+    expect(extractVoiceCompletion("🗣️ Fixed: the parser bug")).toBe("");
   });
 });

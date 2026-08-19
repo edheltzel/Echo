@@ -401,7 +401,30 @@ describe("echo voice", () => {
       const written = JSON.parse(readFileSync(configFile, "utf8"));
       expect(written.ECHO_VOICE_PERSONA_NAME).toBe("Echo");
       expect(written.ECHO_VOICE_ID).toBe("en-US-AndrewNeural");
+      expect(written.ECHO_VOICE_SUPPRESS_SUBAGENTS).toBe(true);
       expect(written.unrelated).toBe("keepme");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("supports an explicit subagent voice opt-in for automation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-voice-subagents-"));
+    try {
+      const configFile = join(root, "config.json");
+      const env = {
+        HOME: join(root, "home"),
+        PATH: `${bunDir}:/bin:/usr/bin`,
+        ECHO_CONFIG_FILE: configFile,
+      };
+
+      const r = await runCli(["voice", "Echo", "en-US-AndrewNeural", "--allow-subagents"], env);
+      expect(r.exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(configFile, "utf8")).ECHO_VOICE_SUPPRESS_SUBAGENTS).toBe(false);
+
+      const suppress = await runCli(["voice", "Echo", "en-US-AndrewNeural", "--suppress-subagents"], env);
+      expect(suppress.exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(configFile, "utf8")).ECHO_VOICE_SUPPRESS_SUBAGENTS).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

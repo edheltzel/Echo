@@ -197,6 +197,17 @@ export interface VoiceLine {
   words: string;
 }
 
+const DEFAULT_PERSONA_NAMES = new Set([
+  'atlas', 'themis', 'pi', 'omp', 'grok', 'codex', 'jcode', 'echo',
+  'kai', 'researcher', 'engineer', 'architect', 'designer', 'writer',
+  'qa-tester', 'clauderesearcher', 'perplexityresearcher', 'geminiresearcher',
+  'grokresearcher', 'codexresearcher', 'artist', 'silas', 'algorithm',
+]);
+
+function isKnownPersonaName(name: string): boolean {
+  return DEFAULT_PERSONA_NAMES.has(name.toLowerCase());
+}
+
 /**
  * Return a markdown text's non-code content lines in order: every non-blank
  * line that is NOT a fence delimiter, NOT inside a fenced code block (``` /
@@ -258,7 +269,7 @@ export function parseFinalVoiceLine(text: string): VoiceLine | null {
   const match = lastContentLine.match(
     /^🗣️[ \t]*\*{0,2}([A-Za-z][A-Za-z0-9_-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)/,
   );
-  if (!match) return null;
+  if (!match || !isKnownPersonaName(match[1])) return null;
   return { name: match[1], words: match[2].trim() };
 }
 
@@ -303,6 +314,11 @@ export function extractVoiceCompletion(text: string): string {
  */
 export function extractCompletionPlain(text: string): string {
   text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '');
+
+  // Keep the plain/tab-title path on the same fence- and indentation-aware
+  // contract as voice completion. A COMPLETED marker in a code example is not
+  // the response's completion and must not leak into the title.
+  text = contentLines(text).join('\n');
 
   // Use global flag and find LAST match (voice line is at end of response)
   const completedPatterns = [
