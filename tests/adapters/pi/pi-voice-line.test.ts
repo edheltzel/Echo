@@ -36,6 +36,14 @@ describe("Pi voice line extraction", () => {
     expect(extractVoiceLineFromText("🗣️ Refactor complete.")).toBe("Refactor complete.");
   });
 
+  test("does not strip an ordinary colon-led sentence", () => {
+    expect(extractVoiceLineFromText("🗣️ Fixed: the parser bug")).toBe("Fixed: the parser bug");
+  });
+
+  test("strips a configured custom persona name", () => {
+    expect(extractVoiceLineFromText("🗣️ Custom: shipped it", ["Custom"])).toBe("shipped it");
+  });
+
   test("extracts text blocks from assistant messages", () => {
     const message = {
       role: "assistant",
