@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
+## [v0.10.0](https://github.com/edheltzel/Echo/tree/v0.10.0) - 2026-08-22
+
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.9.0...v0.10.0)
+
+### Added
+
+- Per-harness `install.sh --check` / `cli/echo doctor` report: one `Checking <name>` section with `[x]` / `[\]` / `[ ]` for LaunchAgent, workspace link, and adapter registration
+- Contribution guide: working assumptions, required `verify` pre-merge gate, and doctor bootstrap
+- Grok and Codex per-project persona docs: `.grok/settings.json` / `.codex/settings.json` over global, then env
+
+### Changed
+
+- `verify` workflow now uses least-privilege permissions and fails closed if any check is skipped
+- Local development verification list includes the Codex adapter build
+- `package.json` version aligned with tagged releases (was stuck at 0.7.1 through v0.8.0 and v0.9.0)
+
+## [v0.9.0](https://github.com/edheltzel/Echo/tree/v0.9.0) - 2026-08-19
+
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.8.0...v0.9.0)
+
+### Other
+
+- chore(release): promote dev to master (reliability fixes and subagent voice opt-in) [#159](https://github.com/edheltzel/Echo/pull/159) ([Atlas-Key](https://github.com/Atlas-Key))
+- chore: restore master as ancestor of dev after #150 squash [#157](https://github.com/edheltzel/Echo/pull/157) ([Atlas-Key](https://github.com/Atlas-Key))
+- feat(voice): opt in to subagent voice [#156](https://github.com/edheltzel/Echo/pull/156) ([Liona-orph](https://github.com/Liona-orph))
+- fix: avoid stripping ordinary colon-led voice text [#155](https://github.com/edheltzel/Echo/pull/155) ([Liona-orph](https://github.com/Liona-orph))
+- fix(claudecode): ignore fenced plain completion markers [#154](https://github.com/edheltzel/Echo/pull/154) ([Liona-orph](https://github.com/Liona-orph))
+- test(core): cover voice resolution branches [#153](https://github.com/edheltzel/Echo/pull/153) ([Liona-orph](https://github.com/Liona-orph))
+- test(core): harden architecture route and import scans [#152](https://github.com/edheltzel/Echo/pull/152) ([Liona-orph](https://github.com/Liona-orph))
+- fix(core): label half-open provider failures honestly [#151](https://github.com/edheltzel/Echo/pull/151) ([Liona-orph](https://github.com/Liona-orph))
+
+## [v0.8.0](https://github.com/edheltzel/Echo/tree/v0.8.0) - 2026-08-11
+
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.7.1...v0.8.0)
+
+### Other
+
+- chore(release): promote dev to master (Grok + Codex adapters) [#150](https://github.com/edheltzel/Echo/pull/150) ([Atlas-Key](https://github.com/Atlas-Key))
+- feat(adapters): add Codex host adapter + Grok/Codex daidentity [#149](https://github.com/edheltzel/Echo/pull/149) ([Atlas-Key](https://github.com/Atlas-Key))
+- feat(adapters): add first-class Grok Build host adapter [#148](https://github.com/edheltzel/Echo/pull/148) ([Atlas-Key](https://github.com/Atlas-Key))
+- fix(adapters): preserve host method bindings [#146](https://github.com/edheltzel/Echo/pull/146) ([edheltzel](https://github.com/edheltzel))
+- Promote dev: converse, config, and Jcode integration [#145](https://github.com/edheltzel/Echo/pull/145) ([edheltzel](https://github.com/edheltzel))
+- feat: make ~/.config/echo/config.json authoritative for all Echo settings [#144](https://github.com/edheltzel/Echo/pull/144) ([edheltzel](https://github.com/edheltzel))
+- style: replace em dashes with plain dashes across the repo [#142](https://github.com/edheltzel/Echo/pull/142) ([edheltzel](https://github.com/edheltzel))
+- feat(converse): add voice-ask with per-session mic consent and playback-capture interlock [#141](https://github.com/edheltzel/Echo/pull/141) ([edheltzel](https://github.com/edheltzel))
+- docs: archive completed plans and retired handoff under archive directories [#140](https://github.com/edheltzel/Echo/pull/140) ([edheltzel](https://github.com/edheltzel))
+- docs(converse): document voice-ask setup and reconcile diverged dev/master histories [#139](https://github.com/edheltzel/Echo/pull/139) ([edheltzel](https://github.com/edheltzel))
+- feat(converse): add echo-converse one-shot voice ask on :32468 [#138](https://github.com/edheltzel/Echo/pull/138) ([edheltzel](https://github.com/edheltzel))
+- docs: document and verify native terminal notification behavior [#135](https://github.com/edheltzel/Echo/pull/135) ([edheltzel](https://github.com/edheltzel))
+- docs(docs): sync triage-labels taxonomy across AGENTS.md and its doc [#134](https://github.com/edheltzel/Echo/pull/134) ([edheltzel](https://github.com/edheltzel))
+- feat(shared): route Echo visual notifications through native terminal escape sequences [#133](https://github.com/edheltzel/Echo/pull/133) ([edheltzel](https://github.com/edheltzel))
+- feat: move configuration to ~/.config/echo/config.json and default to port 3246 [#132](https://github.com/edheltzel/Echo/pull/132) ([edheltzel](https://github.com/edheltzel))
+- feat(cli): run the daemon from a clone-independent payload and add the echo CLI [#131](https://github.com/edheltzel/Echo/pull/131) ([edheltzel](https://github.com/edheltzel))
+- fix(core): resolve daemon env config without hydrating process.env [#124](https://github.com/edheltzel/Echo/pull/124) ([edheltzel](https://github.com/edheltzel))
+- fix(adapters): make host adapters self-contained and HTTP-only [#123](https://github.com/edheltzel/Echo/pull/123) ([edheltzel](https://github.com/edheltzel))
+
 ## [v0.7.1](https://github.com/edheltzel/Echo/tree/v0.7.1) - 2026-07-21
 
 [Full Changelog](https://github.com/edheltzel/Echo/compare/v0.7.0...v0.7.1)

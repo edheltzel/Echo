@@ -105,8 +105,8 @@ its own spoken identity - **name + voice** - in that repo only:
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
 
 Every host reads a **`daidentity` block from its native config**, project layered over
-global (project wins per key) - one convention, one shape to learn. Claude Code and Pi
-use JSON `settings.json`; omp uses its native YAML `config.yml`.
+global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
+Grok, and Codex use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
 Setting a persona **name** also changes the **startup greeting** for that repo: the
 greeting announces the persona name (e.g. "Echo online and standing by.") in the set
@@ -176,6 +176,20 @@ writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config
 `~/.claude/settings.json`, above. See
 [`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
+
+### Grok Build
+
+Same `daidentity` shape. Project `<cwd>/.grok/settings.json` wins per key over
+`~/.grok/settings.json`, then env defaults (`ECHO_VOICE_PERSONA_NAME`,
+`ECHO_VOICE_ID`, ...). There is no `config.toml` path. Greetings stay opt-in
+(`ECHO_VOICE_GREET_ON_START=true`). See [`adapters/grok/README.md`](../adapters/grok/README.md).
+
+### Codex
+
+Same `daidentity` shape. Project `<cwd>/.codex/settings.json` wins per key over
+`~/.codex/settings.json`, then env defaults. The override file is
+`.codex/settings.json`, not Codex `config.toml`. Greetings stay opt-in
+(`ECHO_VOICE_GREET_ON_START=true`). See [`adapters/codex/README.md`](../adapters/codex/README.md).
 
 When `cli/echo voice` runs in a terminal it also asks **“Enable voice for subagents?”**;
 an empty answer is **No**. The answer is stored as
