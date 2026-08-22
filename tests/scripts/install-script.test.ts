@@ -45,7 +45,7 @@ describe("install script adapter support", () => {
     // The MCP server (Claude Code's only route to a model-invokable ask) plugs
     // into the same three places every adapter must: preflight, install, check.
     expect(script).toContain('adapters/mcp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
-    expect(script).toContain('adapters/mcp/reconcile.ts" --check || rc=$?');
+    expect(script).toContain('adapters/mcp/reconcile.ts" --check)" || rc=$?');
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
@@ -433,7 +433,8 @@ exit 0
       // Aggregated --check sees the stale omp state: exit 3.
       const staleCheck = await runInstall(["--check"], env);
       expect(staleCheck.exitCode).toBe(3);
-      expect(staleCheck.stdout).toContain("Checking oh-my-pi adapter registration");
+      expect(staleCheck.stdout).toContain("Checking oh-my-pi");
+      expect(staleCheck.stdout).toContain("[\\] Adapter registration");
       expect(staleCheck.stderr).toContain("Stale paths found");
 
       // One install run (omp not even requested) heals via refresh-all.
@@ -629,8 +630,11 @@ exit 0
       expect(result.stdout).toContain("/dead/repo/core/server.ts");
       expect(result.stdout).toContain("/dead/repo");
       // BOTH host settings checks ran (a stale first check must not truncate the scan).
-      expect(result.stdout).toContain("Checking Claude Code adapter hook registrations");
-      expect(result.stdout).toContain("Checking Pi adapter registration");
+      expect(result.stdout).toContain("Checking Claude Code");
+      expect(result.stdout).toContain("Checking Pi");
+      expect(result.stdout).toContain("[\\] Adapter registration");
+      expect(result.stdout).toContain("[\\] LaunchAgent");
+      expect(result.stdout).not.toContain("\x1b");
       expect(result.stdout).toContain("would be updated");
       // Nothing was mutated and no service was touched.
       expect(readFileSync(plistPath, "utf8")).toBe(plist);

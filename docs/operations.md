@@ -222,7 +222,11 @@ bash scripts/install.sh --check      # or: cli/echo doctor
 ```
 
 Exit 0 when everything is current; exit 3 with `Stale paths found` on stderr when
-anything is stale (a deleted payload shows as a dead plist path). `cli/echo doctor` agrees
+anything is stale (a deleted payload shows as a dead plist path). `--check` prints
+one section per harness (`Checking <name>`), with `[x]` / `[\]` / `[ ]` for
+complete, partial, and missing LaunchAgent, workspace link, and adapter
+registration. The harness name is bold palette cyan on a color TTY.
+`cli/echo doctor` agrees
 on the verdict but not the number: it folds this check into its `registrations` row and
 exits **1** (`Result: DEGRADED`) for the same state, so scripts should test for non-zero
 rather than a specific code. Three caveats: `--check` verifies the plist's server path and

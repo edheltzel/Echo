@@ -17,6 +17,23 @@ bash scripts/install.sh --adapter grok
 - **SessionStart** greetings: opt-in via `ECHO_VOICE_GREET_ON_START=true`; only
   new sessions (`source` of `new` / `startup` / `create`).
 
+## Per-project persona and voice
+
+Same `daidentity` shape as Claude Code / Pi / Codex. Drop into
+`<project>/.grok/settings.json`:
+
+```json
+{
+  "daidentity": {
+    "name": "Themis",
+    "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } }
+  }
+}
+```
+
+Project wins over `~/.grok/settings.json`, then env defaults
+(`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`, ...).
+
 ## Ownership
 
 Reconcile owns **only** `echo-voice.json`. Sibling hooks such as firstmate's
