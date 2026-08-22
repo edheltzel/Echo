@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 
 - Per-harness `install.sh --check` / `cli/echo doctor` report: one `Checking <name>` section with `[x]` / `[\]` / `[ ]` for LaunchAgent, workspace link, and adapter registration
 - Contribution guide: working assumptions, required `verify` pre-merge gate, and doctor bootstrap
+- Grok and Codex per-project persona docs: `.grok/settings.json` / `.codex/settings.json` over global, then env
 
 ### Changed
 

@@ -71,6 +71,10 @@ subject. One concern per commit when the history will be reviewed as-is.
 Local equivalent: [`docs/development.md`](docs/development.md). Spoken test lines begin
 `Echo Test engaged. Beep, boop, bop.` so anything audible is unmistakably a test.
 
+GitHub requires the `verify` check on PRs into `dev` and `master`. The branch must
+be up to date with the base, and admins cannot bypass a red, pending, or stale
+check. Direct pushes are still possible; do not use them.
+
 ## Branching and releases
 
 Work on `dev`. Open PRs into `dev`. Never push directly to `master`. Ed owns merges.
