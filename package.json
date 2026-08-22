@@ -1,6 +1,6 @@
 {
   "name": "echo",
-  "version": "0.7.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/jcode", "adapters/grok", "adapters/codex", "adapters/mcp", "adapters/omp", "adapters/pi"],

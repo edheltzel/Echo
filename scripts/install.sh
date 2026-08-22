@@ -585,122 +585,221 @@ refresh_installed_adapters() {
   fi
 }
 
+# --check report: one harness heading, then checkboxes for each item under it.
+# Harness names use bold palette cyan (SGR 36) so they follow the terminal
+# color scheme instead of a hardcoded RGB. NO_COLOR or a non-TTY stdout
+# prints the same tree without escapes.
+check_use_color() {
+  [ -t 1 ] && [ -z "${NO_COLOR:-}" ]
+}
+
+print_harness() {
+  if check_use_color; then
+    printf 'Checking \033[1;36m%s\033[0m\n' "$1"
+  else
+    printf 'Checking %s\n' "$1"
+  fi
+}
+
+print_checkbox() {
+  local mark
+  case "$1" in
+    1|x) mark="x" ;;
+    partial) mark="\\" ;;
+    *) mark=" " ;;
+  esac
+  printf '  [%s] %s\n' "$mark" "$2"
+}
+
+indent_check_details() {
+  sed '/./s/^/      /'
+}
+
+workspace_link_ok() {
+  skip_workspace_link && return 0
+  [ -e "$REPO_ROOT/adapters/$1/node_modules/@echo/shared" ]
+}
+
+report_workspace() {
+  if skip_workspace_link; then
+    return 0
+  fi
+  if workspace_link_ok "$1"; then
+    print_checkbox 1 "Workspace link"
+    return 0
+  fi
+  print_checkbox 0 "Workspace link"
+  printf '      STALE %s: missing @echo/shared workspace link\n' "$REPO_ROOT/adapters/$1"
+  stale=1
+}
+
+begin_harness() {
+  if [ "${CHECK_SECTION:-0}" -eq 1 ]; then
+    printf '\n'
+  fi
+  CHECK_SECTION=1
+  print_harness "$1"
+}
+
+# $1 checkbox label  $2 adapter --check exit  $3 captured stdout  $4 warn text
+# Registration is [x] when current, [\] when some Echo-owned items exist but
+# still need reconcile, [ ] when nothing of ours is installed yet (or the
+# check itself failed).
+apply_adapter_check() {
+  local label="$1" rc="$2" out="$3" warn="$4"
+  if [ "$rc" -eq 0 ]; then
+    print_checkbox x "$label"
+  elif [ "$rc" -eq 3 ] && adapter_check_partial "$out"; then
+    print_checkbox partial "$label"
+    stale=1
+  else
+    print_checkbox empty "$label"
+    stale=1
+    if [ "$rc" -ne 3 ]; then
+      echo "WARN: $warn" >&2
+    fi
+  fi
+  if [ -n "$out" ]; then
+    printf '%s\n' "$out" | indent_check_details
+  fi
+}
+
+# True when --check output shows an existing Echo-owned item plus pending work.
+# Foreign-file notes (Grok's "leaving N non-Echo … untouched") are not ours.
+adapter_check_partial() {
+  printf '%s\n' "$1" | grep -qE '^~|^- |^pending: repoint|already has|[[:space:]]already current'
+}
+
 check_installation() {
   local stale=0
+  local rc out
+  CHECK_SECTION=0
 
-  # Adapters resolve `@echo/shared` through their own node_modules; without the
-  # workspace links a registered adapter fails to load. Report, never mutate.
-  local adapter
-  if ! skip_workspace_link; then
-    for adapter in claudecode jcode grok codex omp pi; do
-      if [ ! -e "$REPO_ROOT/adapters/$adapter/node_modules/@echo/shared" ]; then
-        echo "STALE $REPO_ROOT/adapters/$adapter: missing @echo/shared workspace link"
-        stale=1
-      fi
-    done
-  fi
-
+  begin_harness "Echo"
   if [ -f "$PLIST_PATH" ]; then
-    echo "> Checking $PLIST_PATH"
-    local server_path workdir path
+    local server_path workdir path plist_ok=1 stale_paths=""
     server_path="$(sed -n 's|.*<string>\(.*core/server\.ts\)</string>.*|\1|p' "$PLIST_PATH")"
     workdir="$(grep -A1 '<key>WorkingDirectory</key>' "$PLIST_PATH" | sed -n 's|.*<string>\(.*\)</string>.*|\1|p' || true)"
     for path in "$server_path" "$workdir"; do
       if [ -n "$path" ] && [ ! -e "$path" ]; then
-        echo "STALE ${PLIST_PATH}: $path"
+        stale_paths="${stale_paths}      STALE ${PLIST_PATH}: $path"$'\n'
+        plist_ok=0
         stale=1
       fi
     done
+    if [ "$plist_ok" -eq 1 ]; then
+      print_checkbox x "LaunchAgent"
+    else
+      print_checkbox partial "LaunchAgent"
+    fi
+    printf '      %s\n' "$PLIST_PATH"
+    if [ -n "$stale_paths" ]; then
+      printf '%s' "$stale_paths"
+    fi
   else
-    echo "= no $PLIST_PATH — core not installed"
+    print_checkbox 0 "LaunchAgent"
+    printf '      = no %s — core not installed\n' "$PLIST_PATH"
   fi
 
   # --check is read-only and always reports: a failing adapter check must not
   # abort the remaining checks. Adapter --check exits 3 when changes are pending.
-  local rc
-  if claudecode_installed; then
-    echo "> Checking Claude Code adapter hook registrations"
-    rc=0
-    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: Claude Code hook check failed" >&2
-      stale=1
+  local show_claude=0
+  claudecode_installed && show_claude=1
+  mcp_installed && show_claude=1
+  if ! skip_workspace_link && ! workspace_link_ok claudecode; then
+    show_claude=1
+  fi
+  if [ "$show_claude" -eq 1 ]; then
+    begin_harness "Claude Code"
+    report_workspace claudecode
+    if claudecode_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "Claude Code hook check failed"
+    fi
+    if mcp_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/mcp/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "MCP server" "$rc" "$out" "MCP registration check failed"
     fi
   fi
 
-  if mcp_installed; then
-    echo "> Checking MCP server registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/mcp/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: MCP registration check failed" >&2
-      stale=1
+  local show_pi=0
+  pi_installed && show_pi=1
+  if ! skip_workspace_link && ! workspace_link_ok pi; then
+    show_pi=1
+  fi
+  if [ "$show_pi" -eq 1 ]; then
+    begin_harness "Pi"
+    report_workspace pi
+    if pi_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "Pi registration check failed"
     fi
   fi
 
-  if pi_installed; then
-    echo "> Checking Pi adapter registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/pi/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: Pi registration check failed" >&2
-      stale=1
+  local show_omp=0
+  omp_installed && show_omp=1
+  if ! skip_workspace_link && ! workspace_link_ok omp; then
+    show_omp=1
+  fi
+  if [ "$show_omp" -eq 1 ]; then
+    begin_harness "oh-my-pi"
+    report_workspace omp
+    if omp_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/omp/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "omp registration check failed"
     fi
   fi
 
-  if omp_installed; then
-    echo "> Checking oh-my-pi adapter registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/omp/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: omp registration check failed" >&2
-      stale=1
-    fi
+  local show_jcode=0
+  jcode_installed && show_jcode=1
+  if ! skip_workspace_link && ! workspace_link_ok jcode; then
+    show_jcode=1
   fi
-
-  if jcode_installed; then
-    echo "> Checking Jcode lifecycle-hook registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: Jcode registration check failed" >&2
-      stale=1
+  if [ "$show_jcode" -eq 1 ]; then
+    begin_harness "Jcode"
+    report_workspace jcode
+    if jcode_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/jcode/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "Jcode registration check failed"
     fi
   fi
 
   # Check the requested adapter even before first install so
   # `install.sh --adapter grok --check` reports pending registration as exit 3.
-  if [ "$ADAPTER" = "grok" ] || grok_installed; then
-    echo "> Checking Grok Build lifecycle-hook registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/grok/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: Grok registration check failed" >&2
-      stale=1
+  local show_grok=0
+  [ "$ADAPTER" = "grok" ] && show_grok=1
+  grok_installed && show_grok=1
+  if ! skip_workspace_link && ! workspace_link_ok grok; then
+    show_grok=1
+  fi
+  if [ "$show_grok" -eq 1 ]; then
+    begin_harness "Grok Build"
+    report_workspace grok
+    if [ "$ADAPTER" = "grok" ] || grok_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/grok/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "Grok registration check failed"
     fi
   fi
 
-  if [ "$ADAPTER" = "codex" ] || codex_installed; then
-    echo "> Checking Codex lifecycle-hook registration"
-    rc=0
-    bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check || rc=$?
-    if [ "$rc" -eq 3 ]; then
-      stale=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "WARN: Codex registration check failed" >&2
-      stale=1
+  local show_codex=0
+  [ "$ADAPTER" = "codex" ] && show_codex=1
+  codex_installed && show_codex=1
+  if ! skip_workspace_link && ! workspace_link_ok codex; then
+    show_codex=1
+  fi
+  if [ "$show_codex" -eq 1 ]; then
+    begin_harness "Codex"
+    report_workspace codex
+    if [ "$ADAPTER" = "codex" ] || codex_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Adapter registration" "$rc" "$out" "Codex registration check failed"
     fi
   fi
 
