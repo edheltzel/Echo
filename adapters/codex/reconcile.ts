@@ -109,12 +109,10 @@ function pruneStaleEcho(hooksRoot: Record<string, any>, command: string): boolea
       const before = group.hooks.length;
       group.hooks = group.hooks.filter((h: any) => {
         if (!isEchoCommand(h?.command)) return true;
-        // keep only the canonical command
         return h.command === command;
       });
       if (group.hooks.length !== before) changed = true;
     }
-    // drop empty groups
     const filtered = groups.filter((g: any) => Array.isArray(g?.hooks) && g.hooks.length > 0);
     if (filtered.length !== groups.length) {
       hooksRoot[event] = filtered;

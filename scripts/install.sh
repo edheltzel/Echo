@@ -585,10 +585,7 @@ refresh_installed_adapters() {
   fi
 }
 
-# --check report: one harness heading, then checkboxes for each item under it.
-# Harness names use bold palette cyan (SGR 36) so they follow the terminal
-# color scheme instead of a hardcoded RGB. NO_COLOR or a non-TTY stdout
-# prints the same tree without escapes.
+# Harness names use SGR 36 when stdout is a color TTY; NO_COLOR disables that.
 check_use_color() {
   [ -t 1 ] && [ -z "${NO_COLOR:-}" ]
 }
@@ -641,10 +638,6 @@ begin_harness() {
   print_harness "$1"
 }
 
-# $1 checkbox label  $2 adapter --check exit  $3 captured stdout  $4 warn text
-# Registration is [x] when current, [\] when some Echo-owned items exist but
-# still need reconcile, [ ] when nothing of ours is installed yet (or the
-# check itself failed).
 apply_adapter_check() {
   local label="$1" rc="$2" out="$3" warn="$4"
   if [ "$rc" -eq 0 ]; then
@@ -769,8 +762,8 @@ check_installation() {
     fi
   fi
 
-  # Check the requested adapter even before first install so
-  # `install.sh --adapter grok --check` reports pending registration as exit 3.
+  # Report a requested adapter before first install so `--adapter X --check`
+  # can exit 3 for pending registration.
   local show_grok=0
   [ "$ADAPTER" = "grok" ] && show_grok=1
   grok_installed && show_grok=1
