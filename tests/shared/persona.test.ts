@@ -66,9 +66,9 @@ describe("applyPersonaOverride", () => {
 
 describe("shouldSuppressVoice", () => {
   test("suppresses headless and json/print runs", () => {
-    expect(shouldSuppressVoice({ hasUI: false })).toBe(true);
-    expect(shouldSuppressVoice({ mode: "json" })).toBe(true);
-    expect(shouldSuppressVoice({ mode: "tui", hasUI: true })).toBe(false);
+    expect(shouldSuppressVoice({ hasUI: false }, {})).toBe(true);
+    expect(shouldSuppressVoice({ mode: "json" }, {})).toBe(true);
+    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, {})).toBe(false);
     expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, { ECHO_VOICE_SUPPRESS: "true" })).toBe(true);
   });
 });

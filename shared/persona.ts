@@ -70,7 +70,7 @@ function voiceOf(d: Record<string, unknown> | null): unknown {
     const main = (voices as Record<string, unknown>).main;
     if (main && typeof main === "object" && !Array.isArray(main)) {
       const nested = (main as Record<string, unknown>).voiceId;
-      if (nested !== undefined) return nested;
+      if (nested != null) return nested;
     }
   }
   return d.voiceId;

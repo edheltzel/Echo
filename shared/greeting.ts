@@ -26,5 +26,5 @@ export function pickStartupCatchphrase(
   pool: string[],
   random: () => number = Math.random,
 ): string {
-  return pool[Math.floor(random() * pool.length)] ?? "";
+  return pool[Math.floor(random() * pool.length)];
 }
