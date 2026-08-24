@@ -4,13 +4,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import atlasVoicePiAdapter from "../../../adapters/pi/index";
-import {
-  applyPersonaOverride,
-  loadPiVoiceConfig,
-  loadProjectPersona,
-  type PiVoiceConfig,
-} from "../../../adapters/pi/config";
+import { loadPiVoiceConfig, loadProjectPersona, type PiVoiceConfig } from "../../../adapters/pi/config";
 import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
+import { applyPersonaOverride } from "../../../shared/persona";
 
 // Pi project persona override - SAME convention as the Claude Code adapter: a
 // `daidentity` block in the host's native settings.json, layered project over

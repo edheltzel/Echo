@@ -5,9 +5,9 @@ import { join } from "node:path";
 import {
   DEFAULT_STARTUP_CATCHPHRASES,
   loadPiVoiceConfig,
-  pickStartupCatchphrase,
-  shouldSuppressVoice,
 } from "../../../adapters/pi/config";
+import { pickStartupCatchphrase } from "../../../shared/greeting";
+import { shouldSuppressVoice } from "../../../shared/persona";
 import { edgeRateFromSpeed } from "../../../core/edge-rate";
 import { loadEchoEnvironment } from "../../../shared/echo-env";
 

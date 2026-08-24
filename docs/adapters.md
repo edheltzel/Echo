@@ -40,7 +40,9 @@ of a path string, not an import - so the guard pairs an import check with a stri
 
 `@echo/shared` is also the single owner of invariants both sides enforce: the edge-tts voice
 grammar lives in `shared/edge-voice.ts` and `core/server.ts` imports it, rather than each
-keeping a copy in sync. `shared/` may never import `core/` - core imports shared, so the
+keeping a copy in sync. Persona overlay helpers (`applyPersonaOverride`, `mergeDaidentity`,
+`booleanEnv`, `shouldSuppressVoice`) live in `shared/persona.ts`; greeting pick lives in
+`shared/greeting.ts`. `shared/` may never import `core/` - core imports shared, so the
 dependency runs one way only.
 
 ## Registration contract - reconcile and prune (issue #77)

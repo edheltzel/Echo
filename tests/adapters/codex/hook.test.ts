@@ -6,8 +6,8 @@ import {
   normalizeHookEvent,
   type CodexHookPayload,
 } from "../../../adapters/codex/hook.ts";
+import { applyPersonaOverride } from "../../../shared/persona.ts";
 import {
-  applyPersonaOverride,
   loadCodexVoiceConfig,
   loadProjectPersona,
   type CodexVoiceConfig,
@@ -96,6 +96,12 @@ describe("Codex lifecycle hook adapter", () => {
     expect(extractFallbackSummary("Short enough line here.")).toBe("Short enough line here.");
   });
 
+  test("defaults to the Codex persona when no daidentity is present", () => {
+    const resolved = loadCodexVoiceConfig({}, undefined);
+    expect(resolved.personaName).toBe("Codex");
+    expect(resolved.voiceId).toBe("codex");
+  });
+
   test("project daidentity overrides env defaults", () => {
     const files: Record<string, string> = {
       "/proj/.codex/settings.json": JSON.stringify({
@@ -115,5 +121,34 @@ describe("Codex lifecycle hook adapter", () => {
     const resolved = applyPersonaOverride(base, override);
     expect(resolved.personaName).toBe("Themis");
     expect(resolved.voiceId).toBe("en-GB-LibbyNeural");
+  });
+
+  test("global-only daidentity applies when no project file", () => {
+    const override = loadProjectPersona("/proj", (path) => (
+      path === "/home/.codex/settings.json"
+        ? JSON.stringify({ daidentity: { name: "GlobalCodex", voiceId: "en-US-AvaNeural" } })
+        : null
+    ), "/home");
+    expect(override).toEqual({ personaName: "GlobalCodex", voiceId: "en-US-AvaNeural" });
+  });
+
+  test("project wins per key; unset project keys fall through to global", () => {
+    const files: Record<string, string> = {
+      "/home/.codex/settings.json": JSON.stringify({
+        daidentity: {
+          name: "GlobalCodex",
+          voices: { main: { voiceId: "global-voice" } },
+          startupCatchphrases: ["Global line."],
+        },
+      }),
+      "/proj/.codex/settings.json": JSON.stringify({
+        daidentity: { voices: { main: { voiceId: "en-GB-ThomasNeural" } } },
+      }),
+    };
+    expect(loadProjectPersona("/proj", (path) => files[path] ?? null, "/home")).toEqual({
+      personaName: "GlobalCodex",
+      voiceId: "en-GB-ThomasNeural",
+      startupCatchphrases: ["Global line."],
+    });
   });
 });
