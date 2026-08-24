@@ -109,6 +109,12 @@ identity or no usable consent surface produced no human signal: it fails closed 
 `session_consent_required` without consuming the session's prompt, and becomes promptable again
 once a surface exists. Nothing is persisted to disk.
 
+A host may also decline a call outright, before consent is consulted. `runAskTool` takes an
+optional `unavailableReason` from its adapter and returns it as `ask_unavailable` without
+prompting, so a host that is already using the microphone never asks the human for a grant it
+could not honor. omp supplies it while the session is in live mode
+([adapters.md](adapters.md#live-session-voice-suppression---omp-and-codex)).
+
 | Host | Consent surface | Where state lives | Expiry |
 | --- | --- | --- | --- |
 | Pi | `ctx.ui.confirm` on the first valid call | One `SessionConsent` object in the active `adapters/pi` extension instance, keyed by `sessionManager.getSessionFile()` then `getSessionId()` | `session_shutdown`; `session_start` creates a fresh scope, including after `/reload`, `/new`, `/resume` or `/fork` |
