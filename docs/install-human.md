@@ -12,6 +12,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions.
+- **Codex adapter** - Codex lifecycle hooks speak session starts and turn completions.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 
 ## Prerequisites
@@ -56,12 +57,16 @@ If it refuses with `Port 3246 is occupied but not answering Echo's /health`, som
 cli/echo install --adapter claudecode    # or: bash scripts/install.sh --adapter claudecode
 ```
 
-Only the core-only and Claude Code sections lead with `cli/echo install`; the remaining adapter
-sections show the equivalent `scripts/install.sh` command underneath. This installs the same core
-server and re-applies Claude Code hook registrations through
+This installs the same core server and re-applies Claude Code hook registrations through
 `adapters/claudecode/restore-hooks.ts`.
 
 ## Add the Pi adapter
+
+```bash
+cli/echo install --adapter pi
+```
+
+The equivalent underlying command is:
 
 ```bash
 bash scripts/install.sh --adapter pi
@@ -74,6 +79,12 @@ Inside Pi, `/voice-status` shows adapter configuration.
 ## Add the oh-my-pi (omp) adapter
 
 ```bash
+cli/echo install --adapter omp
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter omp
 ```
 
@@ -84,6 +95,12 @@ The installer only ever touches the `echo-voice` entry. If something other than 
 ## Add the Grok Build adapter
 
 ```bash
+cli/echo install --adapter grok
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter grok
 ```
 
@@ -91,7 +108,29 @@ This installs the core server and registers one Echo-owned file at
 `~/.grok/hooks/echo-voice.json` (global hooks are always trusted). It requires the `grok`
 CLI on your PATH. Sibling hook files in that directory are never modified.
 
+## Add the Codex adapter
+
+```bash
+cli/echo install --adapter codex
+```
+
+The equivalent underlying command is:
+
+```bash
+bash scripts/install.sh --adapter codex
+```
+
+This installs the core server and reconciles Echo-owned `SessionStart` and `Stop` hooks in the
+project's `.codex/hooks.json` when it exists, or in `~/.codex/hooks.json` otherwise. It requires
+the `codex` CLI on your PATH.
+
 ## Add the voice-ask tool (Claude Code)
+
+```bash
+cli/echo install --adapter mcp
+```
+
+The equivalent underlying command is:
 
 ```bash
 bash scripts/install.sh --adapter mcp

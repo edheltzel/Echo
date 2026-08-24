@@ -47,6 +47,12 @@ and `adapters/` directories.
 Run the installer. It registers Echo as the LaunchAgent `com.echo` and starts it:
 
 ```bash
+cli/echo install --adapter none
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter none
 ```
 
@@ -58,7 +64,7 @@ OK echo is healthy on :3246
 
 If you instead see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`,
 open that log — the last few lines say what failed. Fix and rerun the installer; it is
-safe to run repeatedly.
+safe to run `cli/echo install --adapter none` repeatedly.
 
 ## Step 3: Verify it's healthy
 
@@ -118,7 +124,7 @@ Work through these checks in order:
    ```
 
    You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
-   `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`. Should the
+   `not loaded` or `Health: FAIL`, rerun `cli/echo install --adapter none`. Should the
    installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` —
    it names each degraded check and the command that fixes it.
 

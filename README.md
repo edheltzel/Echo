@@ -50,6 +50,12 @@ Requires macOS and [Bun](https://bun.sh/). New to Echo? Follow the guided tutori
 instead: **[docs/getting-started.md](docs/getting-started.md)**.
 
 ```bash
+cli/echo install --adapter none
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter none
 ```
 
@@ -80,12 +86,25 @@ Hear nothing, or an unexpected voice? See [If you hear nothing - or the wrong vo
 The quickstart above installs the core only. To also wire a host adapter:
 
 ```bash
-bash scripts/install.sh --adapter claudecode   # Claude Code hooks
-bash scripts/install.sh --adapter pi           # Pi extension
-bash scripts/install.sh --adapter omp          # oh-my-pi extension
-bash scripts/install.sh --adapter jcode        # Jcode lifecycle hooks
-bash scripts/install.sh --adapter grok         # Grok Build lifecycle hooks
-bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
+cli/echo install --adapter claudecode   # Claude Code hooks
+cli/echo install --adapter pi           # Pi extension
+cli/echo install --adapter omp          # oh-my-pi extension
+cli/echo install --adapter jcode        # Jcode lifecycle hooks
+cli/echo install --adapter grok         # Grok Build lifecycle hooks
+cli/echo install --adapter codex        # Codex lifecycle hooks
+cli/echo install --adapter mcp          # Claude Code voice-ask tool
+```
+
+These stable CLI commands delegate to the equivalent underlying commands:
+
+```bash
+bash scripts/install.sh --adapter claudecode
+bash scripts/install.sh --adapter pi
+bash scripts/install.sh --adapter omp
+bash scripts/install.sh --adapter jcode
+bash scripts/install.sh --adapter grok
+bash scripts/install.sh --adapter codex
+bash scripts/install.sh --adapter mcp
 ```
 
 Voice ask requires one package that notifications do not: `sox`, which provides the hard-required
