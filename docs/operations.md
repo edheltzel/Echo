@@ -13,6 +13,38 @@ Service identity:
 
 Run all commands from the repo root.
 
+## The everyday four
+
+`cli/echo` is the stable human surface; the scripts below it stay available and are what it
+calls. In the order you need them:
+
+1. **Install or update** - `cli/echo update` after a `git pull`, `cli/echo install --adapter <host>`
+   the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
+2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
+3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
+   See [Mute](#mute).
+4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
+   See [`voices.md`](voices.md#per-project-persona--voice-local-override).
+
+## Doctor
+
+```bash
+cli/echo doctor
+```
+
+The canonical "did my install work" check. It prints one row per check - platform, `bun`,
+converse dependencies, staged payload version, LaunchAgent, service, health, providers, and
+adapter registrations - and a healthy run ends with:
+
+```
+Result: READY
+```
+
+A failing row prints its own recovery command indented underneath it, and the run ends with
+`Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor`, exiting non-zero. The
+`payload` row names the staged daemon version, so it is also how you confirm which release is
+actually running (`v0.10.0` on the current release).
+
 ## Start
 
 ```bash
@@ -124,7 +156,8 @@ rm ~/.config/echo/wezterm-test.json
 ```
 
 The rollout capture was made from the real terminal path with WezTerm
-`20260716-195552-76b606ec` on macOS, Echo `0.7.1` staged payload, and Pi `0.82.1`. The adapter
+`20260716-195552-76b606ec` on macOS, Echo `0.7.1` staged payload (the then-current release;
+native-delivery behavior is unchanged in v0.10.0), and Pi `0.82.1`. The adapter
 selected terminal-native WezTerm OSC 777 delivery (`visual: {status: "shown", route:
 "terminal", terminal: "wezterm"}`); the exact native marker suppressed the AppleScript
 fallback. The temporary window was closed after capture and the global WezTerm configuration
@@ -151,24 +184,50 @@ were then restored. This counterfactual isolates host output masking from Echo s
 
 ## Mute
 
-`scripts/mute.sh` wraps `POST /mute` on the configured port (default `:3246`). For an
-isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config containing `PORT`. While muted,
-notifications are still accepted,
-processed, and logged - only the audio is suppressed, across every provider:
+Runtime mute turns the audio off while notifications are still accepted, processed, and
+logged, across every provider. `cli/echo mute` is the command to use:
 
 ```bash
-bash scripts/mute.sh status    # prints the current state, e.g. {"mute":{"muted":false,"muted_until":null}}
-bash scripts/mute.sh on        # mute indefinitely
-bash scripts/mute.sh on 30     # mute for 30 minutes, then auto-resume
-bash scripts/mute.sh off       # unmute now
-bash scripts/mute.sh toggle    # flip state - same as an empty POST /mute
+cli/echo mute status    # current state, e.g. {"mute":{"muted":false,"muted_until":null}}
+cli/echo mute on        # mute indefinitely
+cli/echo mute off       # unmute now
+cli/echo mute toggle    # flip state
+cli/echo mute 30m       # timed mute; `1h` and a bare number of minutes also work
 ```
 
-Each command prints the resulting state as JSON. Mute state survives daemon restarts,
-deadline included - the state-file location and its `ECHO_MUTE_STATE_PATH` override are in
-[`configuration.md`](configuration.md). A timed mute expires silently: voice simply resumes
-on the next notification. The `/mute` endpoint contract and one-keystroke hotkey bindings
-(Raycast, Apple Shortcuts, Stream Deck) are in [`http-api.md`](http-api.md).
+Each command prints the resulting state as JSON. Mute state survives daemon restarts, deadline
+included - the state-file location and its `ECHO_MUTE_STATE_PATH` override are in
+[`configuration.md`](configuration.md). A timed mute expires silently: voice simply resumes on
+the next notification.
+
+**Mute is machine-wide, not per session.** One Echo daemon serves the whole machine on the
+configured port (default `:3246`), so muting it silences Echo audio for *every* agent, script,
+and terminal that speaks through it - not only the session you typed the command in. Any other
+agent can unmute it just as easily. `cli/echo mute status` is the way to find out which state
+you are actually in.
+
+**Mute only silences audio Echo produced.** In v0.10.0, live chat (Oh My Pi `/live`) speaks
+through its own audio path and keeps talking while Echo is muted; muting Echo removes the
+spoken completion line layered on top of it, not the live voice itself. Exposing mute as a host
+slash command is tracked separately in
+[issue #166](https://github.com/edheltzel/Echo/issues/166); until then it is the CLI above.
+
+### The underlying script
+
+`cli/echo mute` wraps `scripts/mute.sh`, which wraps `POST /mute` on the configured port. It
+takes minutes rather than a duration string, and remains available:
+
+```bash
+bash scripts/mute.sh status
+bash scripts/mute.sh on        # indefinite
+bash scripts/mute.sh on 30     # 30 minutes
+bash scripts/mute.sh off
+bash scripts/mute.sh toggle    # same as an empty POST /mute
+```
+
+For an isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config containing `PORT`.
+The `/mute` endpoint contract and one-keystroke hotkey bindings (Raycast, Apple Shortcuts,
+Stream Deck) are in [`http-api.md`](http-api.md).
 
 ## Update after a `git pull`
 
@@ -178,8 +237,9 @@ checkout, so editing `core/`/`shared/` and merely restarting keeps running the *
 To pick up daemon-source or config changes, re-stage:
 
 ```bash
-cli/echo update                 # re-stage the payload from this checkout + reload
-# equivalently: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|mcp|pi|omp>
+cli/echo update                          # re-stage the payload from this checkout + reload
+cli/echo install --adapter claudecode    # first install, or to (re)wire a host adapter
+# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp>
 ```
 
 - Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.
