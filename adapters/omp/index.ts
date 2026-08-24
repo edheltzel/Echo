@@ -18,6 +18,11 @@ import { SessionConsent, type SessionConsentDecision } from "@echo/converse/sess
 
 const DEDUPE_WINDOW_MS = 5_000;
 const LIVE_DELEGATION_MESSAGE_TYPE = "live-delegation";
+// omp emits no live-end signal at all: the live controller stops without putting anything on
+// the extension bus. So the mark is released by the next turn that is NOT a live delegation,
+// and this cap bounds how long a session can stay silent if no such turn ever arrives. Every
+// new delegation refreshes it; suppression must never be unbounded.
+const LIVE_MODE_MAX_SILENCE_MS = 10 * 60_000;
 
 type OmpExtensionContext = ExtensionContext & {
   mode?: "tui" | "rpc" | "json" | "print";
@@ -110,7 +115,17 @@ export default function echoVoiceOmpAdapter(
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
   const askConsent = new SessionConsent();
-  const liveSessionIds = new Set<string>();
+  // sessionId -> when the session's most recent live delegation was seen.
+  const liveSessionIds = new Map<string, number>();
+
+  function isLiveSession(sessionId: string | undefined, now = Date.now()): boolean {
+    if (!sessionId) return false;
+    const markedAt = liveSessionIds.get(sessionId);
+    if (markedAt === undefined) return false;
+    if (now - markedAt <= LIVE_MODE_MAX_SILENCE_MS) return true;
+    liveSessionIds.delete(sessionId);
+    return false;
+  }
 
   // Per-project config: layer a persona override from omp's native config
   // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key -
@@ -137,8 +152,10 @@ export default function echoVoiceOmpAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     const sessionId = resolveSessionId(ctx);
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
-    // Suppress voice if this session is in live mode
-    if (sessionId && liveSessionIds.has(sessionId)) return false;
+    // Suppress the notification while this session is in live mode. This is the ONLY
+    // suppression point: the voice-line instruction still goes into the system prompt, so the
+    // first turn after live mode ends still carries the 🗣️ line it needs to be spoken.
+    if (isLiveSession(sessionId)) return false;
     try {
       const result = await sendNotification(
         cfg,
@@ -196,9 +213,6 @@ export default function echoVoiceOmpAdapter(
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
       return undefined;
     }
-    const sessionId = resolveSessionId(ctx);
-    if (sessionId && liveSessionIds.has(sessionId)) return undefined;
-
     const base = readSystemPrompt(event);
     if (base === undefined) return undefined; // feature-detect: unknown shape → safe no-op
 
@@ -230,8 +244,13 @@ export default function echoVoiceOmpAdapter(
     const role = "role" in message ? (message as { role?: unknown }).role : undefined;
     const customType = "customType" in message ? (message as { customType?: unknown }).customType : undefined;
     if (role === "custom" && customType === LIVE_DELEGATION_MESSAGE_TYPE) {
-      liveSessionIds.add(sessionId);
-    } else if (role === "user") {
+      liveSessionIds.set(sessionId, Date.now());
+    } else if (role === "user" || role === "custom") {
+      // Any other turn-triggering message ends live mode. Typed user messages are not the only
+      // way a turn starts - prewalk, advisor and session-stop continuations all drive turns with
+      // `role: "custom"` - so releasing only on `role: "user"` leaves agent-driven turns silent.
+      // Assistant/tool messages are deliberately excluded: they occur INSIDE a live delegation's
+      // own turn and would release the mark immediately.
       liveSessionIds.delete(sessionId);
     }
   });
@@ -278,6 +297,13 @@ export default function echoVoiceOmpAdapter(
   // attributes the microphone grant to the host terminal (docs/converse.md).
   registerEchoAskTool(omp, {
     source: "omp",
+    // omp's live conversation already holds the microphone, so a spoken ask would put two
+    // consumers on one device and speak over live audio. Fail soft as unavailable: the model
+    // learns it must ask in text, and nothing opens the microphone.
+    unavailableReason: (ctx) =>
+      isLiveSession(resolveSessionId(ctx as OmpExtensionContext))
+        ? "echo_ask is unavailable while this omp session is in live mode - the live conversation owns the microphone. Ask in text instead."
+        : undefined,
     ensureConsent: (ctx, signal) => {
       const extensionContext = ctx as OmpExtensionContext;
       return askConsent.ensure(resolveSessionId(extensionContext), () => promptForAskConsent(extensionContext, signal));
