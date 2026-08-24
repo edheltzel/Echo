@@ -17,6 +17,7 @@ import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 
 const DEDUPE_WINDOW_MS = 5_000;
+const LIVE_DELEGATION_MESSAGE_TYPE = "live-delegation";
 
 type OmpExtensionContext = ExtensionContext & {
   mode?: "tui" | "rpc" | "json" | "print";
@@ -195,6 +196,8 @@ export default function echoVoiceOmpAdapter(
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) {
       return undefined;
     }
+    const sessionId = resolveSessionId(ctx);
+    if (sessionId && liveSessionIds.has(sessionId)) return undefined;
 
     const base = readSystemPrompt(event);
     if (base === undefined) return undefined; // feature-detect: unknown shape → safe no-op
@@ -220,6 +223,19 @@ export default function echoVoiceOmpAdapter(
     await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName), ctx);
   });
 
+  omp.on("message_start", (event, ctx) => {
+    const sessionId = resolveSessionId(ctx);
+    const message = eventMessage(event);
+    if (!sessionId || typeof message !== "object" || message === null) return;
+    const role = "role" in message ? (message as { role?: unknown }).role : undefined;
+    const customType = "customType" in message ? (message as { customType?: unknown }).customType : undefined;
+    if (role === "custom" && customType === LIVE_DELEGATION_MESSAGE_TYPE) {
+      liveSessionIds.add(sessionId);
+    } else if (role === "user") {
+      liveSessionIds.delete(sessionId);
+    }
+  });
+
   omp.on("message_end", async (event, ctx) => {
     await speakAssistantCompletion(event, ctx);
   });
@@ -237,18 +253,6 @@ export default function echoVoiceOmpAdapter(
       const sessionId = resolveSessionId(ctx);
       if (sessionId) liveSessionIds.delete(sessionId);
     }
-  });
-
-  // Track when live mode starts (replaces editor with live chat interface)
-  omp.on("live_start", (event, ctx) => {
-    const sessionId = resolveSessionId(ctx);
-    if (sessionId) liveSessionIds.add(sessionId);
-  });
-
-  // Track when live mode ends
-  omp.on("live_end", (event, ctx) => {
-    const sessionId = resolveSessionId(ctx);
-    if (sessionId) liveSessionIds.delete(sessionId);
   });
 
   omp.registerCommand("voice-status", {

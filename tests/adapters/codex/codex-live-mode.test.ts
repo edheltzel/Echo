@@ -1,108 +1,81 @@
-import { describe, it, expect } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   handleCodexHookResult,
   type CodexHookPayload,
 } from "../../../adapters/codex/hook.ts";
-import { loadCodexVoiceConfig } from "../../../adapters/codex/config.ts";
+import type { CodexVoiceConfig } from "../../../adapters/codex/config.ts";
+
+const originalFetch = globalThis.fetch;
+const tempDirs: string[] = [];
+
+const config: CodexVoiceConfig = {
+  endpoint: "http://voice.example/notify",
+  title: "Codex Notification",
+  startupCatchphrases: ["Codex online."],
+  personaName: "Codex",
+  voiceId: "codex",
+  voiceEnabled: true,
+  greetOnSessionStart: false,
+  speakCompletions: true,
+};
+
+function stopPayload(transcriptPath: string, turnId: string): CodexHookPayload {
+  return {
+    session_id: "sess-1",
+    turn_id: turnId,
+    transcript_path: transcriptPath,
+    cwd: "/project",
+    hook_event_name: "Stop",
+    model: "gpt-5.6-codex",
+    permission_mode: "default",
+    stop_hook_active: false,
+    last_assistant_message: "Task completed successfully.",
+  };
+}
+
+function turnContext(turnId: string, realtimeActive: boolean): string {
+  return JSON.stringify({
+    timestamp: "2026-08-24T12:00:00Z",
+    type: "turn_context",
+    payload: {
+      turn_id: turnId,
+      cwd: "/project",
+      approval_policy: "never",
+      sandbox_policy: { type: "danger-full-access" },
+      model: "gpt-5.6-codex",
+      realtime_active: realtimeActive,
+      summary: "auto",
+    },
+  });
+}
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("codex live mode suppression", () => {
-  it("skips speaking when live mode is active (is_live: true)", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "stop",
-      session_id: "sess-live-1",
-      last_assistant_message: "🗣️ Codex: Task completed successfully.",
-      is_live: true,
+  test("uses the matching Codex turn_context realtime state without muting the daemon", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "echo-codex-live-"));
+    tempDirs.push(dir);
+    const transcriptPath = join(dir, "rollout.jsonl");
+    writeFileSync(transcriptPath, `${turnContext("turn-live", true)}\n`);
+
+    const requests: string[] = [];
+    globalThis.fetch = async (input) => {
+      requests.push(String(input));
+      return new Response("{}", { status: 202 });
     };
 
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
+    expect(await handleCodexHookResult(stopPayload(transcriptPath, "turn-live"), config)).toBe("skipped");
+    expect(requests).toEqual([]);
 
-    expect(result).toBe("skipped");
-  });
-
-  it("skips speaking when live mode is active (isLive: true)", async () => {
-    const payload: CodexHookPayload = {
-      hookEventName: "stop",
-      sessionId: "sess-live-2",
-      lastAssistantMessage: "🗣️ Codex: All done.",
-      isLive: true,
-    };
-
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
-
-    expect(result).toBe("skipped");
-  });
-
-  it("skips speaking when CODEX_LIVE environment variable is set", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "stop",
-      session_id: "sess-live-3",
-      last_assistant_message: "🗣️ Codex: Done.",
-    };
-
-    const env = { CODEX_LIVE: "true" };
-    const config = loadCodexVoiceConfig(env);
-    const result = await handleCodexHookResult(payload, config, env);
-
-    expect(result).toBe("skipped");
-  });
-
-  it("does not skip when live mode is false", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "stop",
-      session_id: "sess-normal-1",
-      last_assistant_message: "🗣️ Codex: Finished the work.",
-      is_live: false,
-    };
-
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
-
-    // Should not be skipped due to live mode (may be skipped for other reasons like subagent)
-    expect(result).not.toBe("skipped");
-  });
-
-  it("does not skip when live mode is not specified", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "stop",
-      session_id: "sess-normal-2",
-      last_assistant_message: "🗣️ Codex: Work completed.",
-    };
-
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
-
-    // Should proceed normally
-    expect(result).not.toBe("skipped");
-  });
-
-  it("respects subagent suppression independent of live mode", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "subagent_stop",
-      session_id: "sess-subagent-1",
-      last_assistant_message: "🗣️ Codex: Subagent work done.",
-      is_live: false,
-    };
-
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
-
-    expect(result).toBe("skipped");
-  });
-
-  it("handles live mode with subagent event (subagent takes precedence)", async () => {
-    const payload: CodexHookPayload = {
-      hook_event_name: "subagent_stop",
-      session_id: "sess-sub-live-1",
-      last_assistant_message: "🗣️ Codex: Subagent result.",
-      is_live: true,
-    };
-
-    const config = loadCodexVoiceConfig();
-    const result = await handleCodexHookResult(payload, config);
-
-    // Both conditions suppress, result should be skipped
-    expect(result).toBe("skipped");
+    appendFileSync(transcriptPath, `${turnContext("turn-normal", false)}\n`);
+    expect(await handleCodexHookResult(stopPayload(transcriptPath, "turn-normal"), config)).toBe("sent");
+    expect(requests).toEqual(["http://voice.example/notify"]);
+    expect(requests.some((request) => new URL(request).pathname === "/mute")).toBe(false);
   });
 });
