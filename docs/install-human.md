@@ -56,8 +56,10 @@ If it refuses with `Port 3246 is occupied but not answering Echo's /health`, som
 cli/echo install --adapter claudecode    # or: bash scripts/install.sh --adapter claudecode
 ```
 
-Every adapter section below takes the same shape: `cli/echo install --adapter <host>`, or the
-`scripts/install.sh` call it wraps. This installs the same core server and re-applies Claude Code hook registrations through `adapters/claudecode/restore-hooks.ts`.
+Only the core-only and Claude Code sections lead with `cli/echo install`; the remaining adapter
+sections show the equivalent `scripts/install.sh` command underneath. This installs the same core
+server and re-applies Claude Code hook registrations through
+`adapters/claudecode/restore-hooks.ts`.
 
 ## Add the Pi adapter
 
@@ -182,9 +184,11 @@ Inside the repo, in your host (Claude Code, Pi, or omp):
 ```
 
 This auditions edge-tts voices and merge-writes a `daidentity` block into that project's own
-config, preserving every other setting; it takes effect on the next session there. For the
-global default rather than one repo's, use `cli/echo voice <name> <edge-tts-voice-id>`. Both are
-covered in [`voices.md`](voices.md#per-project-persona--voice-local-override).
+config, preserving every other setting; it takes effect on the next session there. For a global
+Pi/omp default rather than one repo's, use `cli/echo voice <name> <edge-tts-voice-id>`. Claude Code
+ignores those persona values; configure its global persona and voice in
+`~/.claude/settings.json`. Both paths are covered in
+[`voices.md`](voices.md#per-project-persona--voice-local-override).
 
 ## Uninstall
 
