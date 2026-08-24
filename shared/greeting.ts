@@ -20,3 +20,11 @@ export const DEFAULT_PERSONA_GREETINGS: string[] = [
 export function applyNameToken(text: string, name: string): string {
   return text.replace(/\{name\}/gi, name);
 }
+
+/** Random pick from a greeting pool. `random` is injectable for tests. */
+export function pickStartupCatchphrase(
+  pool: string[],
+  random: () => number = Math.random,
+): string {
+  return pool[Math.floor(random() * pool.length)];
+}

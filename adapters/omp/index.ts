@@ -1,18 +1,12 @@
 import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
-import {
-  applyPersonaOverride,
-  loadOmpVoiceConfig,
-  loadProjectPersona,
-  pickStartupCatchphrase,
-  shouldSuppressVoice,
-  type OmpVoiceConfig,
-} from "./config.ts";
+import { loadOmpVoiceConfig, loadProjectPersona, type OmpVoiceConfig } from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
-import { applyNameToken } from "@echo/shared/greeting.ts";
+import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
+import { applyPersonaOverride, shouldSuppressVoice } from "@echo/shared/persona.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 

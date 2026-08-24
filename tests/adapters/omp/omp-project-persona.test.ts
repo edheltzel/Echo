@@ -4,13 +4,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import echoVoiceOmpAdapter from "../../../adapters/omp/index";
-import {
-  applyPersonaOverride,
-  loadOmpVoiceConfig,
-  loadProjectPersona,
-  type OmpVoiceConfig,
-} from "../../../adapters/omp/config";
+import { loadOmpVoiceConfig, loadProjectPersona, type OmpVoiceConfig } from "../../../adapters/omp/config";
 import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
+import { applyPersonaOverride } from "../../../shared/persona";
 
 // omp project persona override - SAME convention as the Claude Code and Pi adapters:
 // a `daidentity` block in the host's native config. omp's config is YAML, layered
