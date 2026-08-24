@@ -201,8 +201,11 @@ export default function echoVoiceOmpAdapter(
   }
 
   // Inject the 🗣️ convention into omp's system prompt so the model emits the
-  // spoken line that message_end/turn_end then voices. Gated on the same flags
-  // as the speak side so disabled/suppressed contexts neither emit nor speak it.
+  // spoken line that message_end/turn_end then voices. Gated on the same config
+  // flags as the speak side so disabled/suppressed contexts neither emit nor speak it.
+  // Live mode deliberately does NOT gate here: it suppresses the notification only
+  // (see speak()), and this handler runs before the message_start that would release
+  // the mark, so gating it would read a stale flag.
   const onBeforeAgentStart = omp.on.bind(omp) as unknown as (
     event: "before_agent_start",
     handler: (event: unknown, ctx: OmpExtensionContext) => unknown,
