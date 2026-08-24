@@ -12,7 +12,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions.
-- **Codex adapter** - Codex lifecycle hooks speak session starts and turn completions.
+- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 
 ## Prerequisites
@@ -175,8 +175,8 @@ Result: READY
 ```
 
 Any failing row prints its own recovery command underneath, and the run ends with
-`Result: DEGRADED` and a non-zero exit. The `payload` row names the staged daemon version, so it
-is also how you confirm which release is running (`v0.10.0` on the current release).
+`Result: DEGRADED` and a non-zero exit. The `payload` row reports the staged daemon version; see
+[Doctor](operations.md#doctor) for the detailed check contract and current-release example.
 
 ### Verify manually
 

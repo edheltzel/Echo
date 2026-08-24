@@ -175,7 +175,7 @@ spoken completion line on top of it. Running mute as a host slash command is tra
 in [issue #166](https://github.com/edheltzel/Echo/issues/166); today it is the CLI above.
 
 `/echo-voice` scaffolds a project-local persona for Claude Code, Pi, and omp without hand-editing
-JSON. For a global Pi/omp default instead of one repo's, use
+the host's JSON or YAML config. For a global Pi/omp default instead of one repo's, use
 `cli/echo voice <name> <edge-tts-voice-id>`. Claude Code ignores those persona values; configure
 its global persona and voice in `~/.claude/settings.json`. Both paths are covered in
 [docs/voices.md](docs/voices.md#per-project-persona--voice-local-override).
