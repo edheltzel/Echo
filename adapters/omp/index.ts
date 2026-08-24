@@ -109,6 +109,7 @@ export default function echoVoiceOmpAdapter(
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
   const askConsent = new SessionConsent();
+  const liveSessionIds = new Set<string>();
 
   // Per-project config: layer a persona override from omp's native config
   // (<cwd>/.omp/config.yml over ~/.omp/agent/config.yml, project wins per key -
@@ -133,15 +134,18 @@ export default function echoVoiceOmpAdapter(
 
   async function speak(message: string, ctx: OmpExtensionContext): Promise<boolean> {
     const cfg = resolveConfig(resolveCwd(ctx));
+    const sessionId = resolveSessionId(ctx);
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
+    // Suppress voice if this session is in live mode
+    if (sessionId && liveSessionIds.has(sessionId)) return false;
     try {
       const result = await sendNotification(
         cfg,
         message,
         "omp",
-        resolveSessionId(ctx),
+        sessionId,
         ctx.signal,
-        nativeContextFromAdapterContext(ctx, process.env, resolveSessionId(ctx), ctx.hasUI === true),
+        nativeContextFromAdapterContext(ctx, process.env, sessionId, ctx.hasUI === true),
       );
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
@@ -224,10 +228,27 @@ export default function echoVoiceOmpAdapter(
     await speakAssistantCompletion(event, ctx);
   });
 
-  omp.on("session_shutdown", () => {
+  omp.on("session_shutdown", (event, ctx: OmpExtensionContext | undefined) => {
     askConsent.end();
     spoken.clear();
     pending.clear();
+    // Clean up live mode tracking for this session
+    if (ctx) {
+      const sessionId = resolveSessionId(ctx);
+      if (sessionId) liveSessionIds.delete(sessionId);
+    }
+  });
+
+  // Track when live mode starts (replaces editor with live chat interface)
+  omp.on("live_start", (event, ctx) => {
+    const sessionId = resolveSessionId(ctx);
+    if (sessionId) liveSessionIds.add(sessionId);
+  });
+
+  // Track when live mode ends
+  omp.on("live_end", (event, ctx) => {
+    const sessionId = resolveSessionId(ctx);
+    if (sessionId) liveSessionIds.delete(sessionId);
   });
 
   omp.registerCommand("voice-status", {

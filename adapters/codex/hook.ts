@@ -27,6 +27,9 @@ export interface CodexHookPayload {
   // Codex Stop may use these
   reason?: string;
   stop_hook_active?: boolean;
+  // Live mode indicator (Codex live transport)
+  is_live?: boolean;
+  isLive?: boolean;
   [key: string]: unknown;
 }
 
@@ -85,6 +88,12 @@ function sessionIdOf(payload: CodexHookPayload, env: Record<string, string | und
   return typeof id === "string" && id.trim() ? id.trim() : undefined;
 }
 
+function isLiveMode(payload: CodexHookPayload, env: Record<string, string | undefined> = process.env): boolean {
+  // Check if Codex live transport indicates live mode
+  const isLive = payload.is_live ?? payload.isLive ?? env.CODEX_LIVE ?? false;
+  return typeof isLive === "boolean" ? isLive : (typeof isLive === "string" ? ["1", "true", "yes", "on"].includes(isLive.toLowerCase()) : false);
+}
+
 export async function handleCodexHookResult(
   payload: CodexHookPayload,
   config: CodexVoiceConfig = resolveCodexConfig(),
@@ -93,6 +102,9 @@ export async function handleCodexHookResult(
   const event = normalizeHookEvent(payload, env);
 
   if (event.includes("subagent")) return "skipped";
+
+  // Suppress voice when in live mode (Codex live transport)
+  if (isLiveMode(payload, env)) return "skipped";
 
   let message: string | null = null;
   const sessionId = sessionIdOf(payload, env);
