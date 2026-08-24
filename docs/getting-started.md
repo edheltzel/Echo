@@ -160,6 +160,46 @@ Repeat Step 4 — you should now hear Ava.
 device and volume, then check the resolution log (check 3 above): if the last line has
 `"success":false`, the `attempts` array tells you which provider failed and how.
 
+## Step 6: Learn the four everyday commands
+
+Everything above used raw `curl` to prove Echo works. Day to day you use `cli/echo`, the stable
+wrapper over the scripts and the daemon API. Run these from the repo root:
+
+```bash
+cli/echo doctor    # is my install healthy? ends in `Result: READY`
+cli/echo mute on   # silence the audio; also: off | toggle | status | 30m | 1h
+cli/echo mute off  # bring it back
+cli/echo update    # after a `git pull` - restarting alone keeps the old daemon payload
+```
+
+`cli/echo doctor` prints one row per check and ends with `Result: READY` when everything is
+current. Any failing row prints the command that fixes it, and the run ends with
+`Result: DEGRADED` and a non-zero exit. Its `payload` row names the staged daemon version, which
+is how you confirm which release is running (`v0.10.0` on the current release).
+
+Two things to know about mute before you rely on it:
+
+- **It is machine-wide.** One Echo daemon serves your whole Mac on `:3246`, so `cli/echo mute on`
+  silences Echo for *every* agent and script speaking through it, not just the session you are
+  in. `cli/echo mute status` tells you the current state.
+- **It only silences audio Echo produced.** In v0.10.0, live chat (Oh My Pi `/live`) speaks
+  through its own audio path and keeps talking while Echo is muted.
+
+## Step 7: Give this project its own persona
+
+Step 5 selected a voice per request. To make a whole repo speak as a named persona, run this
+inside that repo, in your host (Claude Code, Pi, or omp):
+
+```text
+/echo-voice [name] [voice]
+```
+
+It auditions edge-tts voices and writes a `daidentity` block into the project's own config,
+preserving every other setting. Anything you omit is prompted for, and it takes effect on the
+next session in that repo. For the global default instead of one repo's, use
+`cli/echo voice <name> <edge-tts-voice-id>`. Both are covered in
+[voices.md](voices.md#per-project-persona--voice-local-override).
+
 ## What you've learned
 
 In this tutorial, you:
@@ -168,6 +208,7 @@ In this tutorial, you:
 - Verified its health over HTTP
 - Made it speak with a plain `curl` — no fields required beyond your message
 - Selected a persona voice with `voice_id`
+- Learned the four everyday commands: update, doctor, mute, persona
 - Learned where the logs are when something sounds wrong
 
 ## Next steps
@@ -176,5 +217,7 @@ In this tutorial, you:
   [install-human.md](install-human.md)
 - **Change or add voices** — pick different persona voices by ear:
   [voices.md](voices.md)
+- **Run Echo day to day**: start/stop/restart, mute, update after a pull, read logs:
+  [operations.md](operations.md)
 - **Look up the full HTTP API** — every `/notify` field:
   [http-api.md](http-api.md)
