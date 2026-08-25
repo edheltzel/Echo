@@ -12,8 +12,9 @@ bash scripts/install.sh --adapter codex
 
 ## Behavior
 
-- **Stop**: speaks an explicit final `Name: summary` voice line when present,
-  otherwise a short fallback summary of the last assistant message.
+- **Normal Stop**: speaks an explicit final `Name: summary` voice line when present,
+  otherwise a short fallback summary of the last assistant message. Codex live-turn suppression
+  is documented in [`docs/adapters.md`](../../docs/adapters.md#live-session-voice-suppression---omp-and-codex).
 - **SessionStart** greetings: opt-in via `ECHO_VOICE_GREET_ON_START=true`.
 - Subagent-related stop events stay silent.
 

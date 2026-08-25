@@ -30,10 +30,13 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   `../tests/converse/architecture-invariants.test.ts` do not enforce runtime ancestry or indirect
   dependency behavior.
 - **Consent once per live host session, fail closed otherwise.** `runAskTool` must receive a
-  `granted` decision before it can call `askOnce`. `SessionConsent` keeps one grant or denial in
-  memory, shares concurrent prompts, and invalidates late answers at session end. Pi/omp bind it
-  to extension session lifecycle; MCP can bind only to its stdio process because the protocol has
-  no conversation lifecycle. Exact surfaces and expiry: `../docs/converse.md`.
+  `granted` decision before it can call `askOnce`. A host that already owns the microphone
+  declines earlier still, through `unavailableReason` (`ask_unavailable`), which is resolved
+  before consent so no grant is requested that the host could not honor. `SessionConsent` keeps
+  one grant or denial in memory, shares concurrent prompts, and invalidates late answers at
+  session end. Pi/omp bind it to extension session lifecycle; MCP can bind only to its stdio
+  process because the protocol has no conversation lifecycle. Exact surfaces and expiry:
+  `../docs/converse.md`.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
   the coordinator reports this request's playback completed and core grants the reservation, or
   core's own guard silences the question. Use `withCaptureHeld`, which returns to `idle` in its
