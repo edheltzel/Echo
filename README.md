@@ -50,6 +50,12 @@ Requires macOS and [Bun](https://bun.sh/). New to Echo? Follow the guided tutori
 instead: **[docs/getting-started.md](docs/getting-started.md)**.
 
 ```bash
+cli/echo install --adapter none
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter none
 ```
 
@@ -80,12 +86,25 @@ Hear nothing, or an unexpected voice? See [If you hear nothing - or the wrong vo
 The quickstart above installs the core only. To also wire a host adapter:
 
 ```bash
-bash scripts/install.sh --adapter claudecode   # Claude Code hooks
-bash scripts/install.sh --adapter pi           # Pi extension
-bash scripts/install.sh --adapter omp          # oh-my-pi extension
-bash scripts/install.sh --adapter jcode        # Jcode lifecycle hooks
-bash scripts/install.sh --adapter grok         # Grok Build lifecycle hooks
-bash scripts/install.sh --adapter mcp          # Claude Code voice-ask tool
+cli/echo install --adapter claudecode   # Claude Code hooks
+cli/echo install --adapter pi           # Pi extension
+cli/echo install --adapter omp          # oh-my-pi extension
+cli/echo install --adapter jcode        # Jcode lifecycle hooks
+cli/echo install --adapter grok         # Grok Build lifecycle hooks
+cli/echo install --adapter codex        # Codex lifecycle hooks
+cli/echo install --adapter mcp          # Claude Code voice-ask tool
+```
+
+These stable CLI commands delegate to the equivalent underlying commands:
+
+```bash
+bash scripts/install.sh --adapter claudecode
+bash scripts/install.sh --adapter pi
+bash scripts/install.sh --adapter omp
+bash scripts/install.sh --adapter jcode
+bash scripts/install.sh --adapter grok
+bash scripts/install.sh --adapter codex
+bash scripts/install.sh --adapter mcp
 ```
 
 Voice ask requires one package that notifications do not: `sox`, which provides the hard-required
@@ -116,14 +135,50 @@ supported route, not a workaround; that checklist gives the agent an assertion a
 
 ## Operation
 
-`cli/echo` is the stable wrapper over the scripts and the daemon API:
+`cli/echo` is the stable wrapper over the scripts and the daemon API. These four steps are the
+whole everyday surface, in the order you need them:
 
 ```bash
-cli/echo doctor                # is my install healthy? one recovery command per failed check
-cli/echo status
-cli/echo update                # after a git pull - restarting alone keeps the old daemon
-cli/echo mute 30m              # or: on | off | toggle | status
+# 1. Install or update. `update` re-stages the daemon from this checkout; restarting alone
+#    keeps the old payload running. Use `install` the first time, or to (re)wire an adapter.
+cli/echo update
+cli/echo install --adapter claudecode   # none|claudecode|jcode|grok|codex|mcp|pi|omp
+
+# 2. Check health. Prints one row per check and ends in `Result: READY`.
+cli/echo doctor
+
+# 3. Mute and unmute. Audio off; notifications are still accepted, processed, and logged.
+cli/echo mute on          # also: off | toggle | status
+cli/echo mute 30m         # timed; `1h` works too. Voice resumes by itself.
+
+# 4. Set this project's persona (name + voice). Run it inside the repo, in your host.
+/echo-voice [name] [voice]
 ```
+
+A healthy `cli/echo doctor` ends with:
+
+```
+Result: READY
+```
+
+Any failing row prints its own recovery command underneath, and the run ends with
+`Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor` and a non-zero exit.
+
+**Mute is machine-wide.** One Echo daemon serves the whole machine on `:3246`, so
+`cli/echo mute on` silences Echo audio for *every* agent, script, and terminal speaking through
+it, not just the session you ran it from. `cli/echo mute status` tells you the current state and
+any pending deadline.
+
+**Mute does not silence audio Echo did not produce.** In v0.10.0, live chat (Oh My Pi `/live`)
+generates its own speech and keeps talking while Echo is muted. Muting Echo removes only the
+spoken completion line on top of it. Running mute as a host slash command is tracked separately
+in [issue #166](https://github.com/edheltzel/Echo/issues/166); today it is the CLI above.
+
+`/echo-voice` scaffolds a project-local persona for Claude Code, Pi, and omp without hand-editing
+the host's JSON or YAML config. For a global Pi/omp default instead of one repo's, use
+`cli/echo voice <name> <edge-tts-voice-id>`. Claude Code ignores those persona values; configure
+its global persona and voice in `~/.claude/settings.json`. Both paths are covered in
+[docs/voices.md](docs/voices.md#per-project-persona--voice-local-override).
 
 The underlying scripts stay available:
 

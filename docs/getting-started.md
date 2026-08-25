@@ -47,6 +47,12 @@ and `adapters/` directories.
 Run the installer. It registers Echo as the LaunchAgent `com.echo` and starts it:
 
 ```bash
+cli/echo install --adapter none
+```
+
+The equivalent underlying command is:
+
+```bash
 bash scripts/install.sh --adapter none
 ```
 
@@ -58,7 +64,7 @@ OK echo is healthy on :3246
 
 If you instead see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`,
 open that log — the last few lines say what failed. Fix and rerun the installer; it is
-safe to run repeatedly.
+safe to run `cli/echo install --adapter none` repeatedly.
 
 ## Step 3: Verify it's healthy
 
@@ -118,7 +124,7 @@ Work through these checks in order:
    ```
 
    You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
-   `not loaded` or `Health: FAIL`, rerun `bash scripts/install.sh --adapter none`. Should the
+   `not loaded` or `Health: FAIL`, rerun `cli/echo install --adapter none`. Should the
    installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` —
    it names each degraded check and the command that fixes it.
 
@@ -160,6 +166,13 @@ Repeat Step 4 — you should now hear Ava.
 device and volume, then check the resolution log (check 3 above): if the last line has
 `"success":false`, the `attempts` array tells you which provider failed and how.
 
+## Step 6: Continue with the everyday workflow
+
+Everything above used raw `curl` to prove Echo works. Day to day, follow the canonical order:
+install or update, run doctor, mute or unmute, then set a persona. The commands and current
+behavior live in the README's [Operation](../README.md#operation) section and
+[The everyday four](operations.md#the-everyday-four) in the operations guide.
+
 ## What you've learned
 
 In this tutorial, you:
@@ -168,13 +181,20 @@ In this tutorial, you:
 - Verified its health over HTTP
 - Made it speak with a plain `curl` — no fields required beyond your message
 - Selected a persona voice with `voice_id`
+- Found the canonical install/update, doctor, mute, and persona workflow
 - Learned where the logs are when something sounds wrong
 
 ## Next steps
 
 - **Wire up a host adapter** — have Claude Code, Jcode, Grok Build, Pi, or oh-my-pi speak automatically:
   [install-human.md](install-human.md)
+- **Give the project its own persona after wiring Claude Code, Pi, or omp** - run
+  `/echo-voice [name] [voice]` inside the repo. For a global Pi/omp default, use
+  `cli/echo voice <name> <edge-tts-voice-id>`; configure Claude Code's global persona and voice in
+  `~/.claude/settings.json`. See [voices.md](voices.md#per-project-persona--voice-local-override).
 - **Change or add voices** — pick different persona voices by ear:
   [voices.md](voices.md)
+- **Run Echo day to day**: start/stop/restart, mute, update after a pull, read logs:
+  [operations.md](operations.md)
 - **Look up the full HTTP API** — every `/notify` field:
   [http-api.md](http-api.md)
