@@ -136,11 +136,32 @@ surface wins.
 
 Live mode is an adapter-local suppression state, not a daemon mute. omp marks only the
 session whose public custom message has `role: "custom"` and
-`customType: "live-delegation"`; while marked, it neither injects the completion voice
-instruction nor sends voice notifications. The next ordinary user message clears the mark,
-and session shutdown forgets it. Codex reads the matching `turn_context` record from the
-hook payload's transcript and skips that turn when `realtime_active` is `true`; missing or
-unreadable metadata leaves ordinary notification behavior unchanged.
+`customType: "live-delegation"`. While marked it suppresses the **notification** - the
+`/notify` POST, and with it the native terminal banner that rides the same call. It still
+injects the completion voice instruction, so the first turn after live mode ends carries its
+own `🗣️` line.
+
+**omp emits no live-end signal** - its live controller stops without putting anything on the
+extension bus - so the mark is released by inference, three ways:
+
+- the next turn-triggering message that is not a live delegation: `role: "user"`, or
+  `role: "custom"` with any other `customType`. Typed user messages are not the only way a
+  turn starts; prewalk, advisor and session-stop continuations all trigger turns with
+  `role: "custom"`, and releasing only on `role: "user"` left those turns silent. Assistant
+  and tool messages are excluded because they occur inside the delegation's own turn. A
+  steered custom message can therefore release mid-turn - that direction is fail-open.
+- a cap of 10 minutes since the most recent delegation (`LIVE_MODE_MAX_SILENCE_MS`,
+  refreshed by each one), so suppression can never be unbounded.
+- `session_shutdown`, which forgets the session entirely.
+
+`echo_ask` is reported as unavailable while a session is marked, and refuses before consent:
+omp's live conversation already owns the microphone that a spoken ask would open.
+
+Codex reads the matching `turn_context` record from the hook payload's transcript and skips
+that turn when `realtime_active` is `true`. The match is on `turn_id`, never on the newest
+record, so a live turn cannot silence the rest of the session; missing or unreadable metadata
+leaves ordinary notification behavior unchanged. Codex needs no release rule because the hook
+is a fresh process per turn and holds no state.
 
 Neither adapter calls `/mute` or changes the daemon's mute state. Other concurrent sessions
 continue posting their notifications normally.

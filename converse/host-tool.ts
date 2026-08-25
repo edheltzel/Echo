@@ -53,6 +53,12 @@ export interface AskToolOptions {
   signal?: AbortSignal;
   /** Must return granted before this call may reach the microphone. */
   ensureConsent?: () => Promise<SessionConsentDecision>;
+  /**
+   * Reason this host cannot take a spoken turn right now, or undefined when it can. Checked
+   * before consent, so a host that already owns the microphone (omp live mode) neither prompts
+   * the human nor reaches capture.
+   */
+  unavailableReason?: () => string | undefined;
   /** Injected in tests; the real one runs a full turn. */
   ask?: (options: AskOptions) => Promise<AskResult>;
 }
@@ -74,6 +80,8 @@ export interface AskToolHostOptions {
   resolveVoice?: (ctx: unknown) => { voiceId?: string; title?: string };
   /** Resolve or request the one consent decision for this live host session. */
   ensureConsent?: (ctx: unknown, signal?: AbortSignal) => Promise<SessionConsentDecision>;
+  /** Reason this host session cannot take a spoken turn right now, resolved per call. */
+  unavailableReason?: (ctx: unknown) => string | undefined;
   ask?: AskToolOptions["ask"];
 }
 
@@ -109,6 +117,7 @@ export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolH
     ) => {
       const voice = options.resolveVoice?.(ctx) ?? {};
       const ensureConsent = options.ensureConsent;
+      const unavailableReason = options.unavailableReason;
       const outcome = await runAskTool(params, {
         source: options.source,
         voiceId: voice.voiceId,
@@ -117,6 +126,7 @@ export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolH
         ensureConsent: ensureConsent
           ? () => ensureConsent(ctx, signal)
           : undefined,
+        unavailableReason: unavailableReason ? () => unavailableReason(ctx) : undefined,
         ask: options.ask,
       });
       return {
@@ -150,6 +160,13 @@ export async function runAskTool(params: unknown, options: AskToolOptions): Prom
       isError: true,
       details: { error: "invalid_request" },
     };
+  }
+
+  // Checked before consent: a host that is already using the microphone must not prompt the
+  // human for a grant it cannot honor.
+  const unavailable = options.unavailableReason?.();
+  if (unavailable) {
+    return { text: unavailable, isError: true, details: { error: "ask_unavailable" } };
   }
 
   const consent = await options.ensureConsent?.() ?? "unavailable";
