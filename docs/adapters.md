@@ -132,6 +132,19 @@ Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
 `grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
 surface wins.
 
+## Live-session voice suppression - omp and Codex
+
+Live mode is an adapter-local suppression state, not a daemon mute. omp marks only the
+session whose public custom message has `role: "custom"` and
+`customType: "live-delegation"`; while marked, it neither injects the completion voice
+instruction nor sends voice notifications. The next ordinary user message clears the mark,
+and session shutdown forgets it. Codex reads the matching `turn_context` record from the
+hook payload's transcript and skips that turn when `realtime_active` is `true`; missing or
+unreadable metadata leaves ordinary notification behavior unchanged.
+
+Neither adapter calls `/mute` or changes the daemon's mute state. Other concurrent sessions
+continue posting their notifications normally.
+
 ## Pi adapter - per-turn completions (issue #15)
 
 Pi's own models don't emit the `🗣️` voice line on their own, so the Pi adapter **injects** the
