@@ -2,7 +2,7 @@
 
 Claude Code integration for Echo.
 
-This adapter owns all Claude Code lifecycle glue:
+This adapter owns all Claude Code integration glue:
 
 - `hooks/VoiceGreeting.hook.ts` - session-start greeting
 - `hooks/VoiceGate.hook.ts` - subagent voice curl suppression
@@ -22,10 +22,12 @@ run `cli/echo voice <name> <edge-tts-voice-id>` interactively and answer **yes**
 is stored in `ECHO_VOICE_SUPPRESS_SUBAGENTS`: `true` means silent (default), while
 `false` allows subagent curls through the gate. Main-session voice is unaffected.
 
-## Re-apply hooks
+## Re-apply registrations
 
 ```bash
 bun run adapters/claudecode/restore-hooks.ts
+bun run adapters/claudecode/reconcile-commands.ts
 ```
 
-The script backs up settings before mutating them and is safe to run repeatedly.
+The first command backs up settings before mutating them. The second reconciles only Echo's
+`echo-voice.md` and `echo-mute.md` symlinks. Both are safe to run repeatedly.

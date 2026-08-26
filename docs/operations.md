@@ -210,8 +210,9 @@ you are actually in.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp also expose `/echo-mute [on|off|toggle|status|duration]`.
-It runs `cli/echo mute` (empty args → `toggle`) and does not add a second mute path.
+**Host slash command.** Claude Code, Pi, and omp also expose
+`/echo-mute [on|off|toggle|status|duration]`. It runs `cli/echo mute` (empty args → `toggle`)
+and does not add a second mute path.
 
 ### The underlying script
 

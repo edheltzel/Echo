@@ -126,7 +126,7 @@ not a review nit.
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
-| Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
+| Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks, `/echo-voice` and `/echo-mute` commands, and their reconcilers. |
 | Jcode adapter | `adapters/jcode/` | Jcode lifecycle hooks (`session_start` / `turn_end`) speaking explicit completion lines. |
 | Grok Build adapter | `adapters/grok/` | Grok Build lifecycle hooks (`SessionStart` / `Stop`) via a single global `~/.grok/hooks/echo-voice.json` registration. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
