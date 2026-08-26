@@ -9,11 +9,8 @@ import {
   resolveStartupCatchphrases,
 } from "../../../adapters/claudecode/hooks/lib/greeting";
 
-// A project persona name must drive the STARTUP greeting - not just the voice.
-// The regression the neutral test global (identity-layered's GLOBAL_ATLAS) missed:
-// Ed's real ~/.claude sets an explicit `displayName` AND a pool of "Atlas ..." literal
-// catchphrases, so a repo that set only name+voice (via /echo-voice) inherited the
-// global displayName and the "Atlas" pool → greeting said "Atlas" in the project voice.
+// Project names still win displayName precedence, but startup name announcement is
+// opt-in. Inherited custom literals remain unchanged; shared defaults follow sayName.
 const GLOBAL_ATLAS = {
   name: "Atlas",
   displayName: "Atlas",

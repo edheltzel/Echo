@@ -108,12 +108,12 @@ Every host reads a **`daidentity` block from its native config**, project layere
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
 Grok, and Codex use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
-Setting a persona **name** does **not** change the startup greeting. The default pool
-is nameless (`standing by`, `ready when you are`, `waiting for direction`, `engaged`).
-Opt in with `daidentity.sayName: true` to use the named pool (`{name}, standing by`,
-…). Custom `startupCatchphrases` stay verbatim; only default pools and lines that
-contain `{name}` honor `sayName`. Per-turn speech is unchanged. A repo with no persona
-is untouched.
+A persona **name** alone does **not** change the startup greeting. The shared default
+pool is exactly `standing by`, `ready when you are`, `waiting for direction`, and
+`engaged`. `daidentity.sayName: true` selects the corresponding `{name}` pool.
+`startupCatchphrases` resolves project-over-global as one atomic array: lines without
+`{name}` stay verbatim, including inherited custom lines; a `{name}` token expands only
+when `sayName` is true and is removed cleanly otherwise. Per-turn speech is unchanged.
 
 ### Claude Code
 
@@ -125,10 +125,10 @@ precedence, tightest scope wins **per key**:
 3. `~/.claude/settings.json` (global)
 4. neutral defaults
 
-So a repo can give itself its own spoken identity, overriding the global persona **in
-that repo only** - at the startup greeting *and* on every per-turn line. Every other
-repo keeps the global persona. Unset keys fall through to global (set just a name +
-voice and inherit everything else).
+So a repo can override the global persona **in that repo only**. The resolved voice
+applies to the startup greeting, while per-turn lines use the resolved name and voice;
+startup name announcement follows the shared policy above. Every other repo keeps the
+global persona, and unset keys fall through to it.
 
 Drop a `daidentity` block into the project's `.claude/settings.json`:
 
@@ -137,12 +137,13 @@ Drop a `daidentity` block into the project's `.claude/settings.json`:
   "daidentity": {
     "name": "Echo",
     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } }
-    // optional: "sayName": true   // announce the persona name at startup
-    // optional: "startupCatchphrases": ["Echo online."]
-    //   an array here REPLACES the default/global pool in this repo
   }
 }
 ```
+
+Add `"sayName": true` inside `daidentity` to announce the resolved name at startup.
+An optional `"startupCatchphrases": ["Echo online."]` array replaces the inherited or
+default pool in this repo.
 
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - no
 `core/voices.json` edit is needed; it flows straight through as the DA voice. The block

@@ -23,6 +23,7 @@ export interface GrokVoiceConfig {
 // Same daidentity shape as Claude Code / Pi / omp:
 //   { "daidentity": { "name": "Themis",
 //                     "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } },
+//                     "sayName": true,
 //                     "startupCatchphrases": ["{name} online."] } }
 export interface EchoPersonaOverride {
   personaName?: string;

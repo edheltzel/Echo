@@ -350,7 +350,8 @@ export async function handleVoice(
   // Skip startup catchphrase - already spoken by VoiceGreeting.hook.ts at SessionStart.
   // Without this, the AI's first 🗣️ line echoing the greeting causes a double-fire.
   // Uses the same layered identity VoiceGreeting resolves, so a project persona's
-  // catchphrases are deduped in that repo (not the global pool).
+  // catchphrases are deduped in that repo (not the global pool). Only normalized
+  // full-line equality counts; ordinary speech may contain generic greeting fragments.
   const matchingCatchphrase = findStartupCatchphraseMatch(voiceCompletion, identity);
   if (matchingCatchphrase) {
     console.error(`[Voice] Skipping - matches startup catchphrase: "${matchingCatchphrase}"`);

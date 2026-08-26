@@ -8,8 +8,8 @@ You are scaffolding a **project-local Echo persona** for the current repository.
 Echo resolves the DA identity with layered precedence - `.claude/settings.local.json`
 → `.claude/settings.json` → `~/.claude/settings.json` → defaults, per key - so a
 `daidentity` block in *this* project's `.claude/settings.json` overrides the global
-persona **for this repo only** (name + voice on every per-turn line). The startup
-greeting stays nameless unless `sayName` is true or you set `startupCatchphrases`.
+persona **for this repo only** (name + voice on every per-turn line). Follow the
+authoritative startup policy in `docs/voices.md#per-project-persona--voice`.
 Every other repo keeps the global persona.
 
 Arguments (either may be omitted): `$ARGUMENTS`
@@ -40,10 +40,10 @@ Arguments (either may be omitted): `$ARGUMENTS`
      }
    }
    ```
-   - Optionally, if the user wants the greeting to announce the name, add
-     `"sayName": true`. If they want project-specific startup lines, add
-     `"startupCatchphrases": ["...", "..."]` (verbatim; an array here **replaces**
-     the default pool in this repo).
+   - Following `docs/voices.md`, add `"sayName": true` only when the user wants the
+     startup greeting to announce the name. For project-specific startup lines, add
+     `"startupCatchphrases": ["...", "..."]`; the array replaces the inherited or
+     default pool, and `{name}` remains governed by `sayName`.
    - Write the merged JSON back with 2-space indentation.
 
 5. **Decide shared vs per-machine.** Default to the checked-in `.claude/settings.json`
@@ -52,8 +52,8 @@ Arguments (either may be omitted): `$ARGUMENTS`
    overlay; it wins over `.claude/settings.json` per key).
 
 6. **Confirm.** Show the final `daidentity` block and tell the user it takes effect
-   on the **next** Claude Code session started in this repo (per-turn lines use the new
-   voice; the greeting announces the name only if `sayName` is true). Note that `~/.claude/settings.json`
-   is untouched - the global persona is unchanged everywhere else.
+   on the **next** Claude Code session started in this repo. Summarize any startup
+   options written and note that `~/.claude/settings.json` is untouched - the global
+   persona is unchanged everywhere else.
 
 Keep it surgical: touch only the `daidentity` persona keys, leave all other settings intact.

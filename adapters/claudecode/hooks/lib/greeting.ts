@@ -4,9 +4,9 @@ import { applyNameToken, defaultStartupGreetings } from '@echo/shared/greeting.t
 /**
  * Resolve the spoken startup catchphrase for a DA identity.
  *
- * Name alone does not announce. `sayName` selects the named default pool;
- * project-authored catchphrases stay verbatim. A repo with no persona keeps
- * the inherited global pool. `{name}` honors sayName.
+ * Name alone does not announce. `sayName` selects the named default pool.
+ * Configured lines without `{name}` stay verbatim; token-bearing lines honor
+ * `sayName`. A repo with no persona keeps the inherited global pool.
  */
 export function resolveStartupCatchphrase(identity: Identity, random: () => number = Math.random): string {
   const pool = resolveStartupCatchphrases(identity);

@@ -27,9 +27,9 @@ bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedica
 
 ## Behavior
 
-- `session_start` → speaks a greeting once for user-visible session starts. The default
-  pool is nameless. `daidentity.sayName: true` opts into a named pool; custom
-  `startupCatchphrases` stay verbatim. `ECHO_VOICE_CATCHPHRASE` pins the greeting to one line.
+- `session_start` → speaks a greeting once for user-visible session starts.
+  [The persona and voice guide](../../docs/voices.md#per-project-persona--voice) owns
+  pool, `sayName`, and custom-line semantics. `ECHO_VOICE_CATCHPHRASE` pins one line.
 - `message_end` / `turn_end` → extracts the final `🗣️` line from assistant text and speaks it once.
 - Registers the `echo_ask` tool (speak a question, return the spoken reply as text) when the
   runtime exposes a tool API; a runtime without one keeps its voice notifications. Contract:

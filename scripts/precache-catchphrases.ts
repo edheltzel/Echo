@@ -26,7 +26,7 @@ const args = process.argv.slice(2);
 const ECHO_URL = loadEchoConfiguration().ECHO_NOTIFY_URL ?? "http://localhost:3246/notify";
 
 // Mirror the hook's catchphrase extraction: single `startupCatchphrase` plus the
-// `startupCatchphrases` pool, `{name}` expanded to the DA display name.
+// `startupCatchphrases` pool, with `{name}` resolved according to `sayName`.
 async function phrasesFromSettings(path: string): Promise<string[]> {
   const s = await Bun.file(path).json();
   const id = s.daidentity ?? {};
