@@ -11,9 +11,9 @@ import {
 import type { ScaffoldContext } from "../../shared/persona-scaffold";
 
 describe("parseMuteArgs", () => {
-  test("empty → status; otherwise pass tokens through", () => {
-    expect(parseMuteArgs("")).toEqual(["status"]);
-    expect(parseMuteArgs("   ")).toEqual(["status"]);
+  test("empty → toggle; otherwise pass tokens through", () => {
+    expect(parseMuteArgs("")).toEqual(["toggle"]);
+    expect(parseMuteArgs("   ")).toEqual(["toggle"]);
     expect(parseMuteArgs("on")).toEqual(["on"]);
     expect(parseMuteArgs("  toggle  ")).toEqual(["toggle"]);
     expect(parseMuteArgs("30m")).toEqual(["30m"]);
@@ -55,16 +55,17 @@ describe("createEchoMuteCommand", () => {
         return { exitCode: 0, stdout: '{"muted":true}\n', stderr: "" };
       },
     });
+    expect(cmd.description).toContain("every session on this machine");
     await cmd.handler("on", ctx(notes));
     expect(seen).toEqual({ cliPath: "/stub/cli/echo", muteArgs: ["on"] });
     expect(notes.at(-1)).toEqual({ msg: '{"muted":true}', type: "info" });
   });
 
-  test("bare args request status; nonzero exit is an error notify", async () => {
+  test("bare args request toggle; nonzero exit is an error notify", async () => {
     const notes: Array<{ msg: string; type?: string }> = [];
     const cmd = createEchoMuteCommand({
       run: async (_cliPath, muteArgs): Promise<MuteRunResult> => {
-        expect(muteArgs).toEqual(["status"]);
+        expect(muteArgs).toEqual(["toggle"]);
         return { exitCode: 2, stdout: "", stderr: "Usage: echo mute …\n" };
       },
     });

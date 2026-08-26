@@ -1,19 +1,19 @@
 ---
-description: Mute or unmute Echo audio (on/off/toggle/status or a duration like 30m).
+description: Mute Echo audio for every session on this machine (on/off/toggle/status/duration).
 argument-hint: [on|off|toggle|status|duration]
 allowed-tools: Bash
 ---
 
 Mute Echo through the existing CLI. Do not POST `/mute` yourself and do not invent a second mute path.
 
-Arguments: `$ARGUMENTS` (`on`, `off`, `toggle`, `status`, or a duration such as `30m` / `1h`). Empty means `status`.
+Arguments: `$ARGUMENTS` (`on`, `off`, `toggle`, `status`, or a duration such as `30m` / `1h`). Empty means `toggle`.
 
 Resolve `cli/echo` from the installer symlink, then run it:
 
 ```bash
 CMD="${HOME}/.claude/commands/echo-mute.md"
 CLI="$(cd "$(dirname "$(realpath "$CMD")")/../../.." && pwd)/cli/echo"
-ARGS="${1:-status}"
+ARGS="${1:-toggle}"
 bash "$CLI" mute "$ARGS"
 ```
 

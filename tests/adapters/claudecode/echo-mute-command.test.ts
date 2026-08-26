@@ -10,14 +10,15 @@ describe("claude /echo-mute command file", () => {
     expect(readdirSync(COMMANDS).sort()).toEqual(["echo-mute.md", "echo-voice.md"]);
     expect(existsSync(join(COMMANDS, "echo-mute.md"))).toBe(true);
     const md = readFileSync(join(COMMANDS, "echo-mute.md"), "utf8");
-    expect(md).toContain('ARGS="${1:-status}"');
-    expect(md).not.toContain("${ARGUMENTS:-status}");
+    expect(md).toContain('ARGS="${1:-toggle}"');
+    expect(md).not.toContain("${ARGUMENTS:-toggle}");
     expect(md).toContain('bash "$CLI" mute "$ARGS"');
     expect(md).toContain("cli/echo");
     expect(md).toContain("argument-hint: [on|off|toggle|status|duration]");
+    expect(md).toContain("every session on this machine");
   });
 
-  test("forwards a non-empty argument and defaults empty input to status", () => {
+  test("forwards a non-empty argument and defaults empty input to toggle", () => {
     const root = mkdtempSync(join(tmpdir(), "echo-claude-mute-command-"));
     try {
       const repo = join(root, "repo");
@@ -33,7 +34,7 @@ describe("claude /echo-mute command file", () => {
       symlinkSync(source, join(commands, "echo-mute.md"));
       writeFileSync(cli, `#!/bin/bash\nprintf '%s\\n' "$@" > ${JSON.stringify(log)}\n`, { mode: 0o755 });
 
-      for (const [argument, expected] of [["toggle", "mute\ntoggle\n"], ["", "mute\nstatus\n"]]) {
+      for (const [argument, expected] of [["status", "mute\nstatus\n"], ["", "mute\ntoggle\n"]]) {
         const rendered = md
           .replace(/\$\{1:-([^}]+)\}/g, (_match, fallback: string) => argument || fallback)
           .replaceAll("$ARGUMENTS", argument);

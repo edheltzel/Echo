@@ -117,7 +117,7 @@ Code's symlinked markdown command). Takes effect on the next Pi session in that 
 /echo-mute [on|off|toggle|status|duration]
 ```
 
-Runs `cli/echo mute`. Empty args report status. Same machine-wide mute as the CLI.
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
 
 ## Status command
 

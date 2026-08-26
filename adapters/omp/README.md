@@ -69,7 +69,7 @@ installer step). Takes effect on the next omp session in that repo.
 /echo-mute [on|off|toggle|status|duration]
 ```
 
-Runs `cli/echo mute`. Empty args report status. Same machine-wide mute as the CLI.
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
 
 ## Status command
 

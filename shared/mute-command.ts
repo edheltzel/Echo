@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { EchoVoiceCommand, ScaffoldContext } from "./persona-scaffold.ts";
 
 // Host-neutral `/echo-mute` command. Adapters register this; mute itself stays
-// in `cli/echo mute`. Empty args mean `status` so a bare `/echo-mute` is useful.
+// in `cli/echo mute`.
 
 export const DEFAULT_ECHO_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "cli", "echo");
 
@@ -12,7 +12,7 @@ export type MuteRunner = (cliPath: string, muteArgs: string[]) => Promise<MuteRu
 
 export function parseMuteArgs(args: string): string[] {
   const tokens = args.trim().split(/\s+/).filter((t) => t.length > 0);
-  return tokens.length === 0 ? ["status"] : tokens;
+  return tokens.length === 0 ? ["toggle"] : tokens;
 }
 
 export async function runEchoMute(cliPath: string, muteArgs: string[]): Promise<MuteRunResult> {
@@ -35,7 +35,7 @@ export function createEchoMuteCommand(opts?: {
   const cliPath = opts?.cliPath ?? DEFAULT_ECHO_CLI;
   const run = opts?.run ?? runEchoMute;
   return {
-    description: "Mute Echo audio (on/off/toggle/status/duration)",
+    description: "Mute Echo audio for every session on this machine (on/off/toggle/status/duration)",
     handler: async (args: string, ctx: ScaffoldContext) => {
       try {
         const result = await run(cliPath, parseMuteArgs(args));

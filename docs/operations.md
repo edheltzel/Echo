@@ -211,7 +211,7 @@ through its own audio path and keeps talking while Echo is muted; muting Echo re
 spoken completion line layered on top of it, not the live voice itself.
 
 **Host slash command.** Claude Code, Pi, and omp also expose `/echo-mute [on|off|toggle|status|duration]`.
-It runs `cli/echo mute` (empty args → `status`) and does not add a second mute path.
+It runs `cli/echo mute` (empty args → `toggle`) and does not add a second mute path.
 
 ### The underlying script
 
@@ -306,10 +306,11 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
 and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
-Claude Code hook entries in `~/.claude/settings.json`, the `echo-converse` MCP server in
-`~/.claude.json`, Jcode's `turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok
-Build's `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp
-`echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
+Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
+symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
+`turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
+`~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
+omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
 tool; remove those entries by hand before deleting the repo directory, or hosts will keep
 pointing at dead paths.
 

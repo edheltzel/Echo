@@ -33,6 +33,7 @@ cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--chec
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
+/echo-mute [on|off|toggle|status|duration]  # bare toggles; affects every Echo session
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
