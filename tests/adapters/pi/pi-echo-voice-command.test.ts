@@ -22,6 +22,7 @@ function registerAndGetEchoVoice(): { handler: CmdHandler; notes: Array<{ msg: s
   atlasVoicePiAdapter(api);
   const cmd = commands.get("echo-voice");
   if (!cmd) throw new Error("pi adapter did not register /echo-voice");
+  if (!commands.has("echo-mute")) throw new Error("pi adapter did not register /echo-mute");
   return { handler: cmd.handler, notes };
 }
 

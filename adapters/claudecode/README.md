@@ -8,6 +8,8 @@ This adapter owns all Claude Code lifecycle glue:
 - `hooks/VoiceGate.hook.ts` - subagent voice curl suppression
 - `hooks/handlers/VoiceNotification.ts` - stop-phase `🗣️` completion speech
 - `restore-hooks.ts` - idempotent registration into Claude Code settings
+- `commands/echo-voice.md` / `commands/echo-mute.md` - slash commands, symlinked into
+  `~/.claude/commands/` by the installer (`/echo-mute` runs `cli/echo mute`)
 
 The universal server core must not import this adapter. The adapter sends HTTP requests to the core `/notify` endpoint.
 

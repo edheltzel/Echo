@@ -150,6 +150,7 @@ cli/echo doctor
 # 3. Mute and unmute. Audio off; notifications are still accepted, processed, and logged.
 cli/echo mute on          # also: off | toggle | status
 cli/echo mute 30m         # timed; `1h` works too. Voice resumes by itself.
+/echo-mute                # same CLI, from Claude Code / Pi / omp (on|off|toggle|status|30m)
 
 # 4. Set this project's persona (name + voice). Run it inside the repo, in your host.
 /echo-voice [name] [voice]
@@ -171,8 +172,8 @@ any pending deadline.
 
 **Mute does not silence audio Echo did not produce.** In v0.10.0, live chat (Oh My Pi `/live`)
 generates its own speech and keeps talking while Echo is muted. Muting Echo removes only the
-spoken completion line on top of it. Running mute as a host slash command is tracked separately
-in [issue #166](https://github.com/edheltzel/Echo/issues/166); today it is the CLI above.
+spoken completion line on top of it. `/echo-mute` on Claude Code, Pi, and omp is the same
+`cli/echo mute` command, not a second mute system.
 
 `/echo-voice` scaffolds a project-local persona for Claude Code, Pi, and omp without hand-editing
 the host's JSON or YAML config. For a global Pi/omp default instead of one repo's, use

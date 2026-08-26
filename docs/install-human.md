@@ -211,8 +211,9 @@ cli/echo mute 30m        # timed; `1h` works too. Voice resumes by itself.
 Notifications are still accepted, processed, and logged while muted; only the audio stops. Two
 things to know: mute is **machine-wide**, because one daemon on `:3246` serves everything that
 speaks through Echo, and it only silences audio **Echo produced** - in v0.10.0, live chat (Oh My
-Pi `/live`) speaks through its own path and keeps talking. Full behavior, including the
-`scripts/mute.sh` form and the state file, is in [`operations.md`](operations.md#mute).
+Pi `/live`) speaks through its own path and keeps talking. Claude Code, Pi, and omp also expose
+`/echo-mute`, which runs this same CLI. Full behavior, including the `scripts/mute.sh` form and
+the state file, is in [`operations.md`](operations.md#mute).
 
 ## Give a project its own persona
 
