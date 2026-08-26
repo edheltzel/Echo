@@ -20,6 +20,7 @@ const config: CodexVoiceConfig = {
   title: "Codex Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Codex",
+  sayName: true,
   voiceId: "codex",
   voiceEnabled: true,
   greetOnSessionStart: false,

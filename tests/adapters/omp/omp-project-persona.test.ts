@@ -10,7 +10,7 @@ import {
   loadProjectPersona,
   type OmpVoiceConfig,
 } from "../../../adapters/omp/config";
-import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
+import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 
 // omp project persona override - SAME convention as the Claude Code and Pi adapters:
 // a `daidentity` block in the host's native config. omp's config is YAML, layered
@@ -104,6 +104,7 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     title: "omp Notification",
     startupCatchphrases: ["Base ready."],
     personaName: "omp",
+    sayName: false,
     voiceId: "pi",
     voiceEnabled: true,
     greetOnSessionStart: true,
@@ -115,13 +116,19 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override → name-default greeting pool; non-persona keys untouched", () => {
+  test("name + voice override stays nameless unless sayName", () => {
     const out = applyPersonaOverride(base, { personaName: "Libby", voiceId: "en-GB-LibbyNeural" });
     expect(out.personaName).toBe("Libby");
     expect(out.voiceId).toBe("en-GB-LibbyNeural");
-    // Name override with no catchphrases of its own → name-templated default pool.
-    expect(out.startupCatchphrases).toBe(DEFAULT_PERSONA_GREETINGS);
+    expect(out.startupCatchphrases).toBe(NAMELESS_STARTUP_GREETINGS);
+    expect(out.sayName).toBe(false);
     expect(out.speakCompletions).toBe(true);
+  });
+
+  test("sayName true with no custom lines uses the named pool", () => {
+    const out = applyPersonaOverride(base, { personaName: "Libby", sayName: true });
+    expect(out.sayName).toBe(true);
+    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
   });
 
   test("name override WITH its own catchphrases → keeps the custom pool", () => {
@@ -217,9 +224,7 @@ describe("integration - omp project override flows through greeting + completion
     expect(payloads[0].source).toBe("omp");                             // omp-tagged
   });
 
-  test("name+voice persona with NO catchphrases → greeting ANNOUNCES the persona name", async () => {
-    // The /echo-voice-shaped case: daidentity has name + voice but no startupCatchphrases.
-    // Previously the greeting was a neutral pool line ("Session ready.") with no name.
+  test("name+voice persona with NO catchphrases stays nameless", async () => {
     const payloads: any[] = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
@@ -237,7 +242,8 @@ describe("integration - omp project override flows through greeting + completion
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
       expect(payloads).toHaveLength(1);
       expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");
-      expect(payloads[0].message).toContain("EchoOmp"); // NAME announced (was neutral before)
+      expect(payloads[0].message).not.toContain("EchoOmp");
+      expect(NAMELESS_STARTUP_GREETINGS).toContain(payloads[0].message);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

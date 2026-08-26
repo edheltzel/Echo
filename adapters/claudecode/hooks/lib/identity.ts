@@ -20,6 +20,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { parseEchoBoolean } from '@echo/shared/echo-env.ts';
 
 const HOME = process.env.HOME!;
 
@@ -79,6 +80,8 @@ export interface Identity {
   personaFromProject?: boolean;
   /** True when a project-scope layer set its own startupCatchphrases array. */
   catchphrasesFromProject?: boolean;
+  /** Opt-in: announce the persona name in the default startup greeting. */
+  sayName?: boolean;
 }
 
 export interface Principal {
@@ -217,6 +220,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
     startupCatchphrase: (daidentity as any).startupCatchphrase as string | undefined,
     personaFromProject,
     catchphrasesFromProject,
+    sayName: parseEchoBoolean((daidentity as { sayName?: unknown }).sayName, false),
   };
 }
 

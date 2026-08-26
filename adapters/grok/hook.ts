@@ -128,7 +128,7 @@ export async function handleGrokHookResult(
   } else if (event === "session_start") {
     if (!config.greetOnSessionStart) return "skipped";
     if (!isNewSessionSource(payload.source)) return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName);
+    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
   } else {
     return "skipped";
   }

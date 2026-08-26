@@ -179,10 +179,11 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
   `~/.config/echo/config.json` is the durable local configuration surface and wins over
   the one-release environment fallback; an existing host process must be relaunched after edits.
-- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from a
-  pool of neutral catchphrases (`adapters/pi/config.ts`, mirroring the Claude Code adapter's
-  `startupCatchphrases`). Configuring `ECHO_VOICE_CATCHPHRASE` in config.json replaces the
-  pool with that single line; setting `ECHO_VOICE_GREET_ON_START` there to `false` disables it.
+- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from
+  the shared pool in `shared/greeting.ts` (nameless by default). `daidentity.sayName: true`
+  opts into the named `{name}` pool. Configuring `ECHO_VOICE_CATCHPHRASE` in config.json
+  replaces the pool with that single line; setting `ECHO_VOICE_GREET_ON_START` there to
+  `false` disables it.
 - **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
   (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike

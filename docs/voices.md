@@ -108,11 +108,12 @@ Every host reads a **`daidentity` block from its native config**, project layere
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
 Grok, and Codex use JSON `settings.json`; omp uses its native YAML `config.yml`.
 
-Setting a persona **name** also changes the **startup greeting** for that repo: the
-greeting announces the persona name (e.g. "Echo online and standing by.") in the set
-voice, instead of the global/neutral greeting that names a different persona. A repo that
-sets its own `startupCatchphrases` keeps full control; a repo with no persona is
-untouched. (`{name}` in any catchphrase is substituted with the persona name.)
+Setting a persona **name** does **not** change the startup greeting. The default pool
+is nameless (`standing by`, `ready when you are`, `waiting for direction`, `engaged`).
+Opt in with `daidentity.sayName: true` to use the named pool (`{name}, standing by`,
+…). Custom `startupCatchphrases` stay verbatim; only default pools and lines that
+contain `{name}` honor `sayName`. Per-turn speech is unchanged. A repo with no persona
+is untouched.
 
 ### Claude Code
 
@@ -136,8 +137,9 @@ Drop a `daidentity` block into the project's `.claude/settings.json`:
   "daidentity": {
     "name": "Echo",
     "voices": { "main": { "voiceId": "en-US-AndrewNeural" } }
+    // optional: "sayName": true   // announce the persona name at startup
     // optional: "startupCatchphrases": ["Echo online."]
-    //   an array here REPLACES the global pool in this repo; omit to keep the global one
+    //   an array here REPLACES the default/global pool in this repo
   }
 }
 ```

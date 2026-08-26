@@ -141,7 +141,7 @@ export async function handleCodexHookResult(
     message = messageFromStop(lastAssistantMessage(payload), config.personaName);
   } else if (event === "session_start" || event === "sessionstart") {
     if (!config.greetOnSessionStart) return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName);
+    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
   } else {
     return "skipped";
   }

@@ -1,23 +1,21 @@
 import type { Identity } from './identity';
-import { DEFAULT_PERSONA_GREETINGS } from '@echo/shared/greeting.ts';
+import { applyNameToken, defaultStartupGreetings } from '@echo/shared/greeting.ts';
 
 /**
  * Resolve the spoken startup catchphrase for a DA identity.
  *
- * A repo that renamed the persona but kept the default greeting (name + voice via
- * `/echo-voice`, no `startupCatchphrases` of its own) announces ITS name - using the
- * `{name}` default pool - instead of the inherited global pool (which names a different
- * persona). A project that set its own catchphrases still wins; a repo with no persona
- * keeps the global pool untouched. `{name}` is substituted with the resolved displayName.
- * `random` is injectable for deterministic tests.
+ * Name alone does not announce. `sayName` selects the named default pool;
+ * project-authored catchphrases stay verbatim. A repo with no persona keeps
+ * the inherited global pool. `{name}` honors sayName.
  */
 export function resolveStartupCatchphrase(identity: Identity, random: () => number = Math.random): string {
-  const daName = identity.displayName;
-  const pool = (identity.personaFromProject && !identity.catchphrasesFromProject)
-    ? DEFAULT_PERSONA_GREETINGS
-    : identity.startupCatchphrases;
-  const raw = pool?.length
-    ? pool[Math.floor(random() * pool.length)]
-    : identity.startupCatchphrase || `${daName} standing by`;
-  return raw.replace(/\{name\}/gi, daName);
+  const useCustom = Boolean(identity.catchphrasesFromProject)
+    || (!identity.personaFromProject && Boolean(identity.startupCatchphrases?.length));
+  const pool = useCustom && identity.startupCatchphrases?.length
+    ? identity.startupCatchphrases
+    : defaultStartupGreetings(Boolean(identity.sayName));
+  const raw = pool[Math.floor(random() * pool.length)]
+    ?? identity.startupCatchphrase
+    ?? "standing by";
+  return applyNameToken(raw, identity.displayName, Boolean(identity.sayName));
 }

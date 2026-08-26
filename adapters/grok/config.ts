@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 
 export interface GrokVoiceConfig {
@@ -9,6 +9,7 @@ export interface GrokVoiceConfig {
   title: string;
   startupCatchphrases: string[];
   personaName: string;
+  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -23,6 +24,7 @@ export interface EchoPersonaOverride {
   personaName?: string;
   voiceId?: string;
   startupCatchphrases?: string[];
+  sayName?: boolean;
 }
 
 function booleanEnv(value: string | undefined, fallback: boolean): boolean {
@@ -73,15 +75,13 @@ export function loadProjectPersona(
     d?.voices?.main?.voiceId ?? d?.voiceId;
   const name = project?.name ?? global?.name;
   const voiceId = voiceOf(project) ?? voiceOf(global);
-  const rawPhrases = project?.startupCatchphrases ?? global?.startupCatchphrases;
-  const phrases = Array.isArray(rawPhrases)
-    ? (rawPhrases as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-    : undefined;
+  const greeting = personaGreetingFields(project, global);
 
   const override: EchoPersonaOverride = {};
   if (typeof name === "string" && name.trim()) override.personaName = name.trim();
   if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-  if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
+  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
+  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
   return Object.keys(override).length > 0 ? override : null;
 }
 
@@ -90,12 +90,14 @@ export function applyPersonaOverride(
   override: EchoPersonaOverride | null,
 ): GrokVoiceConfig {
   if (!override) return base;
+  const sayName = override.sayName ?? base.sayName;
   const startupCatchphrases = override.startupCatchphrases
-    ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
+    ?? defaultStartupGreetings(sayName);
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
     voiceId: override.voiceId ?? base.voiceId,
+    sayName,
     startupCatchphrases,
   };
 }
@@ -108,8 +110,9 @@ export function loadGrokVoiceConfig(
   const base: GrokVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Grok Notification",
-    startupCatchphrases: catchphrase === undefined ? DEFAULT_PERSONA_GREETINGS : [catchphrase],
+    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(false) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Grok",
+    sayName: false,
     voiceId: env.ECHO_VOICE_ID ?? "grok",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     // Grok fires SessionStart for every new TUI/headless session. Keep greetings

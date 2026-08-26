@@ -13,6 +13,7 @@ const config: OmpVoiceConfig = {
   title: "OMP Notification",
   startupCatchphrases: ["OMP online."],
   personaName: "OMP",
+  sayName: false,
   voiceId: "omp",
   voiceEnabled: true,
   greetOnSessionStart: false,

@@ -29,7 +29,7 @@ const firstPick = () => 0; // deterministic catchphrase pick
 
 afterEach(() => { clearCache(); for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
-describe("Claude Code startup greeting announces the project persona name", () => {
+describe("Claude Code startup greeting stays nameless unless sayName", () => {
   test("displayName precedence: project name overrides an inherited global displayName", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-");
@@ -42,15 +42,26 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(id.catchphrasesFromProject).toBe(false);
   });
 
-  test("name+voice, no catchphrases → greeting announces the project name, not Atlas", () => {
+  test("name+voice, no catchphrases, no sayName is nameless", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-");
     writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
 
     const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
-    expect(greeting).toContain("EchoCC");
+    expect(greeting).not.toContain("EchoCC");
     expect(greeting).not.toContain("Atlas");
-    expect(greeting).toBe("EchoCC online and standing by.");
+    expect(greeting).toBe("standing by");
+  });
+
+  test("sayName true uses the named default pool", () => {
+    const home = fakeHome();
+    const proj = tmp("echo-proj-");
+    writeSettings(proj, {
+      daidentity: { name: "EchoCC", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
+    });
+
+    const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
+    expect(greeting).toBe("EchoCC, standing by");
   });
 
   test("project sets its OWN catchphrases → those win over the name default", () => {
@@ -71,6 +82,7 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(id.displayName).toBe("Atlas");
     expect(id.personaFromProject).toBe(false);
     expect(resolveStartupCatchphrase(id, firstPick)).toBe("Atlas online and standing by.");
+    expect(id.sayName).toBe(false);
   });
 });
 

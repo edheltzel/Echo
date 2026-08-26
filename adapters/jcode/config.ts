@@ -1,4 +1,4 @@
-import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import { defaultStartupGreetings } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 
 export interface JcodeVoiceConfig {
@@ -6,6 +6,7 @@ export interface JcodeVoiceConfig {
   title: string;
   startupCatchphrases: string[];
   personaName: string;
+  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -27,8 +28,9 @@ export function loadJcodeVoiceConfig(
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Jcode Notification",
-    startupCatchphrases: catchphrase === undefined ? DEFAULT_PERSONA_GREETINGS : [catchphrase],
+    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(false) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Jcode",
+    sayName: false,
     voiceId: env.ECHO_VOICE_ID,
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     // Jcode fires lifecycle hooks for TUI, headless, and swarm workers without a
