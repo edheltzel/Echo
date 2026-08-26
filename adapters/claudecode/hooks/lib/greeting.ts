@@ -9,13 +9,15 @@ import { applyNameToken, defaultStartupGreetings } from '@echo/shared/greeting.t
  * the inherited global pool. `{name}` honors sayName.
  */
 export function resolveStartupCatchphrase(identity: Identity, random: () => number = Math.random): string {
-  const useCustom = Boolean(identity.catchphrasesFromProject)
-    || (!identity.personaFromProject && Boolean(identity.startupCatchphrases?.length));
-  const pool = useCustom && identity.startupCatchphrases?.length
+  const pool = resolveStartupCatchphrases(identity);
+  return pool[Math.floor(random() * pool.length)] ?? "standing by";
+}
+
+export function resolveStartupCatchphrases(identity: Identity): string[] {
+  const pool = identity.startupCatchphrases?.length
     ? identity.startupCatchphrases
-    : defaultStartupGreetings(Boolean(identity.sayName));
-  const raw = pool[Math.floor(random() * pool.length)]
-    ?? identity.startupCatchphrase
-    ?? "standing by";
-  return applyNameToken(raw, identity.displayName, Boolean(identity.sayName));
+    : identity.startupCatchphrase
+      ? [identity.startupCatchphrase]
+      : defaultStartupGreetings(Boolean(identity.sayName));
+  return pool.map((phrase) => applyNameToken(phrase, identity.displayName, Boolean(identity.sayName)));
 }

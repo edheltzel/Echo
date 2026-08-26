@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
-import { resolveStartupCatchphrase } from "../../../adapters/claudecode/hooks/lib/greeting";
+import {
+  resolveStartupCatchphrase,
+  resolveStartupCatchphrases,
+} from "../../../adapters/claudecode/hooks/lib/greeting";
 
 // A project persona name must drive the STARTUP greeting - not just the voice.
 // The regression the neutral test global (identity-layered's GLOBAL_ATLAS) missed:
@@ -24,7 +27,11 @@ function writeSettings(root: string, json: unknown): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "settings.json"), JSON.stringify(json));
 }
-function fakeHome(): string { const h = tmp("echo-home-"); writeSettings(h, { daidentity: GLOBAL_ATLAS }); return h; }
+function fakeHome(daidentity: Record<string, unknown> = GLOBAL_ATLAS): string {
+  const h = tmp("echo-home-");
+  writeSettings(h, { daidentity });
+  return h;
+}
 const firstPick = () => 0; // deterministic catchphrase pick
 
 afterEach(() => { clearCache(); for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -42,19 +49,33 @@ describe("Claude Code startup greeting stays nameless unless sayName", () => {
     expect(id.catchphrasesFromProject).toBe(false);
   });
 
-  test("name+voice, no catchphrases, no sayName is nameless", () => {
+  test("project name inherits global custom catchphrases verbatim", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-");
     writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
 
     const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
-    expect(greeting).not.toContain("EchoCC");
-    expect(greeting).not.toContain("Atlas");
+    expect(greeting).toBe("Atlas online and standing by.");
+  });
+
+  test("name+voice, no configured catchphrases, no sayName is nameless", () => {
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
+    const proj = tmp("echo-proj-");
+    writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
+
+    const id = getIdentity(proj, home);
+    const greeting = resolveStartupCatchphrase(id, firstPick);
+    expect(resolveStartupCatchphrases(id)).toEqual([
+      "standing by",
+      "ready when you are",
+      "waiting for direction",
+      "engaged",
+    ]);
     expect(greeting).toBe("standing by");
   });
 
   test("sayName true uses the named default pool", () => {
-    const home = fakeHome();
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
     const proj = tmp("echo-proj-");
     writeSettings(proj, {
       daidentity: { name: "EchoCC", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
@@ -72,6 +93,30 @@ describe("Claude Code startup greeting stays nameless unless sayName", () => {
     const id = getIdentity(proj, home);
     expect(id.catchphrasesFromProject).toBe(true);
     expect(resolveStartupCatchphrase(id, firstPick)).toBe("Echo reporting.");
+  });
+
+  test("legacy singular startupCatchphrase is honored", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrase: "Legacy greeting.",
+    });
+    const proj = tmp("echo-proj-");
+
+    const id = getIdentity(proj, home);
+    expect(resolveStartupCatchphrases(id)).toEqual(["Legacy greeting."]);
+    expect(resolveStartupCatchphrase(id, firstPick)).toBe("Legacy greeting.");
+  });
+
+  test("sayName false removes name tokens from the dedup pool", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: ["{name}, ready"],
+    });
+    const proj = tmp("echo-proj-");
+
+    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
   });
 
   test("no project persona → global Atlas greeting stays untouched", () => {

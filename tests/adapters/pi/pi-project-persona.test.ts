@@ -115,18 +115,24 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override stays nameless unless sayName", () => {
+  test("name + voice override preserves a custom base greeting", () => {
     const out = applyPersonaOverride(base, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
     expect(out.personaName).toBe("Echo");
     expect(out.voiceId).toBe("en-US-AndrewNeural");
-    expect(out.startupCatchphrases).toBe(NAMELESS_STARTUP_GREETINGS);
+    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
     expect(out.sayName).toBe(false);
     expect(out.speakCompletions).toBe(true);
   });
 
-  test("sayName true with no custom lines uses the named pool", () => {
+  test("sayName true preserves a custom base greeting", () => {
     const out = applyPersonaOverride(base, { personaName: "Echo", sayName: true });
     expect(out.sayName).toBe(true);
+    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
+  });
+
+  test("sayName switches the shared default pool", () => {
+    const defaultBase = { ...base, startupCatchphrases: NAMELESS_STARTUP_GREETINGS };
+    const out = applyPersonaOverride(defaultBase, { personaName: "Echo", sayName: true });
     expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
   });
 

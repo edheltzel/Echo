@@ -14,6 +14,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody } from '../lib/identity';
+import { resolveStartupCatchphrases } from '../lib/greeting';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
@@ -117,21 +118,6 @@ export function logVoiceEvent(event: VoiceEvent): void {
 
 function normalizeSpokenText(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-// Resolve the startup catchphrase pool from a (layered) identity, applying the
-// `{name}` substitution so the dedup compares against exactly what VoiceGreeting
-// spoke. Project persona → project's phrases; otherwise the global pool.
-function resolvedCatchphrases(identity: Identity): string[] {
-  const daName = identity.displayName;
-  const phrases = [
-    identity.startupCatchphrase,
-    ...(identity.startupCatchphrases ?? []),
-  ];
-
-  return phrases
-    .filter((phrase): phrase is string => typeof phrase === 'string' && phrase.trim().length > 0)
-    .map((phrase) => phrase.replace(/\{name\}/gi, daName));
 }
 
 async function sendNotification(
@@ -370,7 +356,7 @@ export async function handleVoice(
   // Uses the same layered identity VoiceGreeting resolves, so a project persona's
   // catchphrases are deduped in that repo (not the global pool).
   const normalized = normalizeSpokenText(voiceCompletion);
-  for (const catchphrase of resolvedCatchphrases(identity)) {
+  for (const catchphrase of resolveStartupCatchphrases(identity)) {
     const catchNormalized = normalizeSpokenText(catchphrase);
     if (catchNormalized && (normalized === catchNormalized || normalized.includes(catchNormalized))) {
       console.error(`[Voice] Skipping - matches startup catchphrase: "${catchphrase}"`);

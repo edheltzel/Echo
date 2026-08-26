@@ -28,6 +28,18 @@ export function defaultStartupGreetings(sayName = false): string[] {
   return sayName ? NAMED_STARTUP_GREETINGS : NAMELESS_STARTUP_GREETINGS;
 }
 
+export function resolvePersonaStartupGreetings(
+  base: string[],
+  override: string[] | undefined,
+  sayName = false,
+): string[] {
+  if (override !== undefined) return override;
+  if (base === NAMELESS_STARTUP_GREETINGS || base === NAMED_STARTUP_GREETINGS) {
+    return defaultStartupGreetings(sayName);
+  }
+  return base;
+}
+
 /** Fill `{name}` only when sayName is on. Custom lines without the token stay verbatim. */
 export function applyNameToken(text: string, name: string, sayName = false): string {
   if (!/\{name\}/i.test(text)) return text;
@@ -42,13 +54,13 @@ export function applyNameToken(text: string, name: string, sayName = false): str
   return text.replace(/\{name\}/gi, name);
 }
 
-/** Catchphrases from the project layer, else inherited, unless a project persona name is set without its own lines. */
+/** Catchphrases and sayName resolved project-over-global per key. */
 export function personaGreetingFields(
   project: Record<string, unknown> | null,
   global: Record<string, unknown> | null,
 ): { phrases?: string[]; sayName?: boolean } {
   const rawPhrases = project?.startupCatchphrases
-    ?? (typeof project?.name === "string" && project.name.trim() ? undefined : global?.startupCatchphrases);
+    ?? global?.startupCatchphrases;
   const phrases = Array.isArray(rawPhrases)
     ? rawPhrases.filter((c): c is string => typeof c === "string" && c.trim().length > 0)
     : undefined;

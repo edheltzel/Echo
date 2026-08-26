@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
+import {
+  defaultStartupGreetings,
+  personaGreetingFields,
+  resolvePersonaStartupGreetings,
+} from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 
 export interface GrokVoiceConfig {
@@ -91,8 +95,11 @@ export function applyPersonaOverride(
 ): GrokVoiceConfig {
   if (!override) return base;
   const sayName = override.sayName ?? base.sayName;
-  const startupCatchphrases = override.startupCatchphrases
-    ?? defaultStartupGreetings(sayName);
+  const startupCatchphrases = resolvePersonaStartupGreetings(
+    base.startupCatchphrases,
+    override.startupCatchphrases,
+    sayName,
+  );
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
