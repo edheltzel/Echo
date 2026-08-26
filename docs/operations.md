@@ -22,6 +22,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
+   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -207,9 +208,11 @@ you are actually in.
 
 **Mute only silences audio Echo produced.** In v0.10.0, live chat (Oh My Pi `/live`) speaks
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
-spoken completion line layered on top of it, not the live voice itself. Exposing mute as a host
-slash command is tracked separately in
-[issue #166](https://github.com/edheltzel/Echo/issues/166); until then it is the CLI above.
+spoken completion line layered on top of it, not the live voice itself.
+
+**Host slash command.** Claude Code, Pi, and omp also expose
+`/echo-mute [on|off|toggle|status|duration]`. It runs `cli/echo mute` (empty args → `toggle`)
+and does not add a second mute path.
 
 ### The underlying script
 
@@ -304,10 +307,11 @@ bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews i
 
 Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
 and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
-Claude Code hook entries in `~/.claude/settings.json`, the `echo-converse` MCP server in
-`~/.claude.json`, Jcode's `turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok
-Build's `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the omp
-`echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
+Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
+symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
+`turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
+`~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
+omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
 tool; remove those entries by hand before deleting the repo directory, or hosts will keep
 pointing at dead paths.
 

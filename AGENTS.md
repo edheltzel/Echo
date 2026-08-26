@@ -33,6 +33,7 @@ cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--chec
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h
+/echo-mute [on|off|toggle|status|duration]  # bare toggles; affects every Echo session
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
@@ -159,10 +160,10 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
+| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona and mute commands, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
-| Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
+| Claude Code hooks, slash commands + reconcilers | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
