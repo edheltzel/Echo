@@ -3,7 +3,7 @@
  * precache-catchphrases.ts - pre-warm the TTS cache for short, repeated phrases.
  *
  * edge-tts is Microsoft's ONLINE service, so a cold startup catchphrase pays a
- * 2–8 s network synth. The daemon caches short phrases after first use, but that
+ * 2-8 s network synth. The daemon caches short phrases after first use, but that
  * still leaves the FIRST session after a voice/phrase change slow. This script
  * warms the cache up front by POSTing each phrase to the RUNNING daemon exactly
  * as the greeting hook does (no voice_id → identity voice), so the daemon
@@ -19,20 +19,21 @@
  *   Set ECHO_NOTIFY_URL in ~/.config/echo/config.json, then run this script.
  */
 
-import { loadEchoConfiguration } from "../shared/echo-env.ts";
+import { parseEchoBoolean, loadEchoConfiguration } from "../shared/echo-env.ts";
+import { applyNameToken } from "../shared/greeting.ts";
 
 const args = process.argv.slice(2);
 const ECHO_URL = loadEchoConfiguration().ECHO_NOTIFY_URL ?? "http://localhost:3246/notify";
 
 // Mirror the hook's catchphrase extraction: single `startupCatchphrase` plus the
-// `startupCatchphrases` pool, `{name}` expanded to the DA display name.
+// `startupCatchphrases` pool, with `{name}` resolved according to `sayName`.
 async function phrasesFromSettings(path: string): Promise<string[]> {
   const s = await Bun.file(path).json();
   const id = s.daidentity ?? {};
   const name = id.displayName || id.name || "Atlas";
   return [id.startupCatchphrase, ...(Array.isArray(id.startupCatchphrases) ? id.startupCatchphrases : [])]
     .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
-    .map((p) => p.replace(/\{name\}/gi, name));
+    .map((p) => applyNameToken(p, name, parseEchoBoolean(id.sayName, false)));
 }
 
 const settingsIdx = args.indexOf("--settings");

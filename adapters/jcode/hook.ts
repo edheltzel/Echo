@@ -39,7 +39,7 @@ export async function handleJcodeHookResult(
     );
   } else if (env.JCODE_HOOK_EVENT === "session_start") {
     if (!config.greetOnSessionStart || env.JCODE_HOOK_SOURCE !== "create") return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName);
+    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
   }
 
   if (!message) return "skipped";

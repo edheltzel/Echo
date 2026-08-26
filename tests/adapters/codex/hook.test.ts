@@ -20,6 +20,7 @@ const config: CodexVoiceConfig = {
   title: "Codex Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Codex",
+  sayName: true,
   voiceId: "codex",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -115,5 +116,10 @@ describe("Codex lifecycle hook adapter", () => {
     const resolved = applyPersonaOverride(base, override);
     expect(resolved.personaName).toBe("Themis");
     expect(resolved.voiceId).toBe("en-GB-LibbyNeural");
+  });
+
+  test("project persona preserves a custom base greeting", () => {
+    const resolved = applyPersonaOverride(config, { personaName: "Themis", sayName: false });
+    expect(resolved.startupCatchphrases).toBe(config.startupCatchphrases);
   });
 });

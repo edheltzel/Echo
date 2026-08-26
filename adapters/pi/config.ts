@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import {
+  defaultStartupGreetings,
+  personaGreetingFields,
+  resolvePersonaStartupGreetings,
+} from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 
@@ -10,6 +14,7 @@ export interface PiVoiceConfig {
   title: string;
   startupCatchphrases: string[];
   personaName: string;
+  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -17,18 +22,7 @@ export interface PiVoiceConfig {
   suppressInSubagents: boolean;
 }
 
-// Default greeting pool, mirroring the Claude Code adapter's startupCatchphrases
-// mechanism (VoiceGreeting.hook.ts): short neutral session-ready lines, random
-// pick per session_start. No hardcoded persona/DA name - Pi and omp share this
-// adapter (neutral-default-identity rule). A catchphrase env override replaces
-// the pool with that single line, pinning the greeting.
-export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
-  "Session ready.",
-  "Ready when you are.",
-  "Online and standing by.",
-  "Let's get to work.",
-  "Up and listening.",
-];
+// Default greeting pool lives in @echo/shared/greeting.ts (nameless unless sayName).
 
 /** Random pick from the greeting pool; `random` is injectable for tests. */
 export function pickStartupCatchphrase(
@@ -55,8 +49,9 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = load
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "Pi Notification",
-    startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
+    startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : defaultStartupGreetings(false),
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "Pi",
+    sayName: false,
     voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? "pi",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED ?? env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
@@ -81,6 +76,7 @@ export interface EchoPersonaOverride {
   personaName?: string;
   voiceId?: string;
   startupCatchphrases?: string[];
+  sayName?: boolean;
 }
 
 function defaultReadFile(path: string): string | null {
@@ -128,15 +124,13 @@ export function loadProjectPersona(
     d?.voices?.main?.voiceId ?? d?.voiceId;
   const name = project?.name ?? global?.name;
   const voiceId = voiceOf(project) ?? voiceOf(global);
-  const rawPhrases = project?.startupCatchphrases ?? global?.startupCatchphrases;
-  const phrases = Array.isArray(rawPhrases)
-    ? (rawPhrases as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-    : undefined;
+  const greeting = personaGreetingFields(project, global);
 
   const override: EchoPersonaOverride = {};
   if (typeof name === "string" && name.trim()) override.personaName = name.trim();
   if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-  if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
+  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
+  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
 
   return Object.keys(override).length > 0 ? override : null;
 }
@@ -147,15 +141,17 @@ export function applyPersonaOverride(
   override: EchoPersonaOverride | null,
 ): PiVoiceConfig {
   if (!override) return base;
-  // When a repo sets a persona NAME but no startup lines of its own, announce that
-  // name at startup (the `{name}` default pool) instead of the neutral base pool -
-  // its own catchphrases still win when present. Greeting-time code substitutes `{name}`.
-  const startupCatchphrases = override.startupCatchphrases
-    ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
+  const sayName = override.sayName ?? base.sayName;
+  const startupCatchphrases = resolvePersonaStartupGreetings(
+    base.startupCatchphrases,
+    override.startupCatchphrases,
+    sayName,
+  );
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
     voiceId: override.voiceId ?? base.voiceId,
+    sayName,
     startupCatchphrases,
   };
 }

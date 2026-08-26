@@ -7,6 +7,7 @@ const config: PiVoiceConfig = {
   title: "Pi Notification",
   startupCatchphrases: ["Pi ready."],
   personaName: "Pi",
+  sayName: false,
   voiceId: "kai",
   voiceEnabled: true,
   greetOnSessionStart: true,

@@ -9,6 +9,7 @@ const config: JcodeVoiceConfig = {
   title: "Jcode Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Jcode",
+  sayName: true,
   voiceId: "jcode",
   voiceEnabled: true,
   greetOnSessionStart: false,

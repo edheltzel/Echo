@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  DEFAULT_STARTUP_CATCHPHRASES,
   loadPiVoiceConfig,
   pickStartupCatchphrase,
   shouldSuppressVoice,
 } from "../../../adapters/pi/config";
+import { NAMELESS_STARTUP_GREETINGS } from "../../../shared/greeting";
 import { edgeRateFromSpeed } from "../../../core/edge-rate";
 import { loadEchoEnvironment } from "../../../shared/echo-env";
 
@@ -16,7 +16,8 @@ describe("Pi voice config", () => {
     const config = loadPiVoiceConfig({});
     expect(config.endpoint).toBe("http://localhost:3246/notify");
     expect(config.title).toBe("Pi Notification");
-    expect(config.startupCatchphrases).toEqual(DEFAULT_STARTUP_CATCHPHRASES);
+    expect(config.startupCatchphrases).toEqual(NAMELESS_STARTUP_GREETINGS);
+    expect(config.sayName).toBe(false);
     expect(config.voiceEnabled).toBe(true);
     expect(config.personaName).toBe("Pi");
   });
@@ -69,10 +70,11 @@ describe("Pi voice config", () => {
   test("default greeting pool has variety and no hardcoded persona name (#81)", () => {
     // A pool of one would make the random pick pointless; a persona name would
     // violate the neutral-default-identity rule (Pi and omp share this adapter).
-    expect(DEFAULT_STARTUP_CATCHPHRASES.length).toBeGreaterThan(1);
-    for (const phrase of DEFAULT_STARTUP_CATCHPHRASES) {
+    expect(NAMELESS_STARTUP_GREETINGS.length).toBeGreaterThan(1);
+    for (const phrase of NAMELESS_STARTUP_GREETINGS) {
       expect(phrase.trim().length).toBeGreaterThan(0);
       expect(phrase).not.toMatch(/\bPi\b/i);
+      expect(phrase).not.toContain("{name}");
     }
   });
 
@@ -102,7 +104,7 @@ describe("Pi voice config", () => {
     // of N>1 collapse to one distinct value with probability N^(1-200).
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) {
-      seen.add(pickStartupCatchphrase(DEFAULT_STARTUP_CATCHPHRASES));
+      seen.add(pickStartupCatchphrase(NAMELESS_STARTUP_GREETINGS));
     }
     expect(seen.size).toBeGreaterThan(1);
   });

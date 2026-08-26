@@ -211,7 +211,7 @@ export default function atlasVoicePiAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
-    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName), ctx);
+    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName, cfg.sayName), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {

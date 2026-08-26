@@ -22,6 +22,7 @@ const config: GrokVoiceConfig = {
   title: "Grok Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Grok",
+  sayName: true,
   voiceId: "grok",
   voiceEnabled: true,
   greetOnSessionStart: false,

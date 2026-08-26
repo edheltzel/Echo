@@ -10,7 +10,7 @@ import {
   loadProjectPersona,
   type PiVoiceConfig,
 } from "../../../adapters/pi/config";
-import { DEFAULT_PERSONA_GREETINGS } from "../../../shared/greeting";
+import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 
 // Pi project persona override - SAME convention as the Claude Code adapter: a
 // `daidentity` block in the host's native settings.json, layered project over
@@ -103,6 +103,7 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     title: "Pi Notification",
     startupCatchphrases: ["Base ready."],
     personaName: "Pi",
+    sayName: false,
     voiceId: "pi",
     voiceEnabled: true,
     greetOnSessionStart: true,
@@ -114,14 +115,25 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override → name-default greeting pool; non-persona keys untouched", () => {
+  test("name + voice override preserves a custom base greeting", () => {
     const out = applyPersonaOverride(base, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
     expect(out.personaName).toBe("Echo");
     expect(out.voiceId).toBe("en-US-AndrewNeural");
-    // A name override with no catchphrases of its own switches to the name-templated
-    // default pool so the greeting announces the persona name (was: kept "Base ready.").
-    expect(out.startupCatchphrases).toBe(DEFAULT_PERSONA_GREETINGS);
+    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
+    expect(out.sayName).toBe(false);
     expect(out.speakCompletions).toBe(true);
+  });
+
+  test("sayName true preserves a custom base greeting", () => {
+    const out = applyPersonaOverride(base, { personaName: "Echo", sayName: true });
+    expect(out.sayName).toBe(true);
+    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
+  });
+
+  test("sayName switches the shared default pool", () => {
+    const defaultBase = { ...base, startupCatchphrases: NAMELESS_STARTUP_GREETINGS };
+    const out = applyPersonaOverride(defaultBase, { personaName: "Echo", sayName: true });
+    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
   });
 
   test("name override WITH its own catchphrases → keeps the custom pool", () => {
@@ -200,9 +212,7 @@ describe("integration - project override flows through greeting + completion", (
     expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");  // project voice, not "pi"
   });
 
-  test("name+voice persona with NO catchphrases → greeting ANNOUNCES the persona name", async () => {
-    // The /echo-voice-shaped case: daidentity has name + voice but no startupCatchphrases.
-    // Previously the greeting was a neutral pool line ("Session ready.") with no name.
+  test("name+voice persona with NO catchphrases stays nameless", async () => {
     const payloads: any[] = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
@@ -220,7 +230,33 @@ describe("integration - project override flows through greeting + completion", (
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
       expect(payloads).toHaveLength(1);
       expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
-      expect(payloads[0].message).toContain("EchoPi"); // NAME announced (was neutral before)
+      expect(payloads[0].message).not.toContain("EchoPi");
+      expect(NAMELESS_STARTUP_GREETINGS).toContain(payloads[0].message);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("sayName true announces the persona name from the named pool", async () => {
+    const payloads: any[] = [];
+    globalThis.fetch = async (_i, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    };
+    const dir = mkdtempSync(join(tmpdir(), "echo-pi-sayname-"));
+    mkdirSync(join(dir, ".pi"), { recursive: true });
+    writeFileSync(
+      join(dir, ".pi", "settings.json"),
+      JSON.stringify({
+        daidentity: { name: "EchoPi", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
+      }),
+    );
+    try {
+      const { handlers, api } = createMockPi();
+      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
+      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].message).toContain("EchoPi");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
