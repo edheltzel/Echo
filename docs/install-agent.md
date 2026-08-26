@@ -65,11 +65,19 @@ If FAIL: check rate limit and server logs.
 bash scripts/install.sh --adapter claudecode
 ```
 
-Expected: restore-hooks output reports existing or added Claude Code hook registrations.
+Expected: restore-hooks output reports existing or added Claude Code hook registrations, then
+the command reconcile reports `echo-voice.md` and `echo-mute.md` as created, repointed, or
+already current.
 
-This wires the repo-owned per-turn voice **Stop** hook (`adapters/claudecode/hooks/VoiceCompletion.hook.ts`) into `settings.json`. Registration is idempotent: re-running the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates), so an uninstall→reinstall cycle always converges to exactly one Stop entry.
+This wires the repo-owned per-turn voice **Stop** hook
+(`adapters/claudecode/hooks/VoiceCompletion.hook.ts`) into `settings.json` and reconciles both
+slash-command symlinks in `~/.claude/commands/`. Registration is idempotent: re-running
+the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates) and
+repoints stale Echo-owned command links to this checkout.
 
-If FAIL: confirm the Claude Code settings file exists and is writable.
+If FAIL: confirm the Claude Code settings file and command directory are writable. A foreign
+file or symlink occupying either command name is preserved and reported as a fatal ownership
+conflict; inspect it manually rather than replacing it blindly.
 
 ## 6. Install Pi adapter when needed
 

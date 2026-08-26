@@ -11,6 +11,7 @@ import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
+import { createEchoMuteCommand } from "@echo/shared/mute-command.ts";
 import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
@@ -324,4 +325,5 @@ export default function echoVoiceOmpAdapter(
     "echo-voice",
     createEchoVoiceCommand({ configPath: [".omp", "config.yml"], merge: mergePersonaYaml }),
   );
+  omp.registerCommand("echo-mute", createEchoMuteCommand());
 }

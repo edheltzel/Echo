@@ -62,6 +62,14 @@ edge-tts name, then merges the `daidentity` block into `<project>/.omp/config.ym
 `config.yml` **aborts** rather than clobbering it. The command ships with the adapter (no
 installer step). Takes effect on the next omp session in that repo.
 
+### Mute from the host
+
+```text
+/echo-mute [on|off|toggle|status|duration]
+```
+
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
+
 ## Status command
 
 Inside omp:

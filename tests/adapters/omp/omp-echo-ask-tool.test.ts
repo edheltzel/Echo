@@ -167,6 +167,6 @@ describe("omp adapter: echo_ask tool", () => {
 
     echoVoiceOmpAdapter(host.api, loadOmpVoiceConfig({}));
 
-    expect([...host.commands.keys()].sort()).toEqual(["echo-voice", "voice-status"]);
+    expect([...host.commands.keys()].sort()).toEqual(["echo-mute", "echo-voice", "voice-status"]);
   });
 });

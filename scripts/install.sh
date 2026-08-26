@@ -30,6 +30,7 @@ PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 # reload cannot prove the newly staged one healthy. Empty on a first install.
 PAYLOAD_ROLLBACK=""
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+CLAUDE_COMMANDS_DIR="${ECHO_CLAUDE_COMMANDS_DIR:-$HOME/.claude/commands}"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 CLAUDE_MCP_CONFIG="${ECHO_MCP_CONFIG_PATH:-$HOME/.claude.json}"
 JCODE_CONFIG="${JCODE_CONFIG_PATH:-${JCODE_HOME:-$HOME/.jcode}/config.toml}"
@@ -209,6 +210,18 @@ claudecode_installed() {
   [ -f "$CLAUDE_SETTINGS" ] && grep -qE '"[^"]*/adapters/claudecode/hooks/[^/"]+\.hook\.ts"' "$CLAUDE_SETTINGS"
 }
 
+claudecode_commands_installed() {
+  local entry target
+  for entry in "$CLAUDE_COMMANDS_DIR/echo-voice.md" "$CLAUDE_COMMANDS_DIR/echo-mute.md"; do
+    [ -L "$entry" ] || continue
+    target="$(readlink "$entry" 2>/dev/null || true)"
+    case "$target" in
+      */adapters/claudecode/commands/echo-voice.md|*/adapters/claudecode/commands/echo-mute.md) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # Anchored to the server path echo owns: present even when the path is dead
 # (a renamed clone), which is the state refresh-all has to heal.
 mcp_installed() {
@@ -312,6 +325,8 @@ preflight() {
       # --check exits 3 when changes are pending — normal before an install; only
       # a real failure (unparseable settings, missing Bash matcher) aborts.
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check >/dev/null || [ $? -eq 3 ]
+      echo "> Preflighting Claude Code slash-command registration"
+      bun run "$REPO_ROOT/adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
     mcp)
       echo "> Preflighting MCP server registration"
@@ -491,26 +506,13 @@ reload_core_service() {
   fi
 }
 
-# Symlink the Claude Code slash commands into ~/.claude/commands. `ln -sfn` is
-# idempotent and re-points at the current repo path, so a repo move heals with a
-# rerun (#77). Repo-owned source stays the single source of truth.
-link_claudecode_commands() {
-  local commands_dir="$HOME/.claude/commands"
-  mkdir -p "$commands_dir"
-  local src
-  for src in "$REPO_ROOT/adapters/claudecode/commands/"*.md; do
-    [ -e "$src" ] || continue
-    ln -sfn "$src" "$commands_dir/$(basename "$src")"
-  done
-}
-
 install_adapter() {
   case "$ADAPTER" in
     claudecode)
       echo "> Installing Claude Code adapter hook registrations"
       bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts"
-      echo "> Linking Claude Code slash commands"
-      link_claudecode_commands
+      echo "> Reconciling Claude Code slash commands"
+      bun run "$REPO_ROOT/adapters/claudecode/reconcile-commands.ts"
       ;;
     mcp)
       echo "> Registering the echo-converse MCP server"
@@ -547,11 +549,17 @@ refresh_installed_adapters() {
   # A directory rename leaves stale paths in every registered host config (#77):
   # re-reconcile each installed adapter on every run, regardless of --adapter.
   # A broken secondary adapter config must not fail the requested install — warn instead.
-  if [ "$ADAPTER" != "claudecode" ] && claudecode_installed; then
-    echo "> Refreshing Claude Code adapter hook registrations"
-    bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
-      || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
-    link_claudecode_commands
+  if [ "$ADAPTER" != "claudecode" ]; then
+    if claudecode_installed; then
+      echo "> Refreshing Claude Code adapter hook registrations"
+      bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" \
+        || echo "WARN: Claude Code hook refresh failed — run adapters/claudecode/restore-hooks.ts manually" >&2
+    fi
+    if claudecode_installed || claudecode_commands_installed; then
+      echo "> Refreshing Claude Code slash-command registrations"
+      bun run "$REPO_ROOT/adapters/claudecode/reconcile-commands.ts" \
+        || echo "WARN: Claude Code slash-command refresh failed — run adapters/claudecode/reconcile-commands.ts manually" >&2
+    fi
   fi
   if [ "$ADAPTER" != "mcp" ] && mcp_installed; then
     echo "> Refreshing MCP server registration"
@@ -703,8 +711,12 @@ check_installation() {
 
   # --check is read-only and always reports: a failing adapter check must not
   # abort the remaining checks. Adapter --check exits 3 when changes are pending.
-  local show_claude=0
-  claudecode_installed && show_claude=1
+  local show_claude=0 claude_hooks=0 claude_commands=0
+  claudecode_installed && claude_hooks=1
+  claudecode_commands_installed && claude_commands=1
+  [ "$ADAPTER" = "claudecode" ] && show_claude=1
+  [ "$claude_hooks" -eq 1 ] && show_claude=1
+  [ "$claude_commands" -eq 1 ] && show_claude=1
   mcp_installed && show_claude=1
   if ! skip_workspace_link && ! workspace_link_ok claudecode; then
     show_claude=1
@@ -712,10 +724,15 @@ check_installation() {
   if [ "$show_claude" -eq 1 ]; then
     begin_harness "Claude Code"
     report_workspace claudecode
-    if claudecode_installed; then
+    if [ "$ADAPTER" = "claudecode" ] || [ "$claude_hooks" -eq 1 ]; then
       rc=0
       out="$(bun run "$REPO_ROOT/adapters/claudecode/restore-hooks.ts" --check)" || rc=$?
       apply_adapter_check "Adapter registration" "$rc" "$out" "Claude Code hook check failed"
+    fi
+    if [ "$ADAPTER" = "claudecode" ] || [ "$claude_hooks" -eq 1 ] || [ "$claude_commands" -eq 1 ]; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?
+      apply_adapter_check "Slash commands" "$rc" "$out" "Claude Code slash-command check failed"
     fi
     if mcp_installed; then
       rc=0

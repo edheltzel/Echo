@@ -7,7 +7,8 @@ This guide installs `echo`, a local voice notification server for coding agents 
 The installer writes a macOS LaunchAgent for the universal core server and optionally registers one host adapter:
 
 - **Core only** - any process can POST to `/notify`.
-- **Claude Code adapter** - Claude Code lifecycle hooks speak.
+- **Claude Code adapter** - lifecycle hooks speak, with `/echo-voice` and `/echo-mute`
+  slash commands.
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
@@ -57,8 +58,11 @@ If it refuses with `Port 3246 is occupied but not answering Echo's /health`, som
 cli/echo install --adapter claudecode    # or: bash scripts/install.sh --adapter claudecode
 ```
 
-This installs the same core server and re-applies Claude Code hook registrations through
-`adapters/claudecode/restore-hooks.ts`.
+This installs the same core server, re-applies Claude Code hook registrations through
+`adapters/claudecode/restore-hooks.ts`, and reconciles the `echo-voice.md` and `echo-mute.md`
+symlinks in `~/.claude/commands/` through `adapters/claudecode/reconcile-commands.ts`.
+The reconciler preserves a non-Echo file or symlink occupying either command name and aborts
+the install instead of overwriting it.
 
 ## Add the Pi adapter
 
@@ -211,8 +215,9 @@ cli/echo mute 30m        # timed; `1h` works too. Voice resumes by itself.
 Notifications are still accepted, processed, and logged while muted; only the audio stops. Two
 things to know: mute is **machine-wide**, because one daemon on `:3246` serves everything that
 speaks through Echo, and it only silences audio **Echo produced** - in v0.10.0, live chat (Oh My
-Pi `/live`) speaks through its own path and keeps talking. Full behavior, including the
-`scripts/mute.sh` form and the state file, is in [`operations.md`](operations.md#mute).
+Pi `/live`) speaks through its own path and keeps talking. Claude Code, Pi, and omp also expose
+`/echo-mute`, which runs this same CLI. Full behavior, including the `scripts/mute.sh` form and
+the state file, is in [`operations.md`](operations.md#mute).
 
 ## Give a project its own persona
 

@@ -110,6 +110,14 @@ preserving every other setting. A present-but-unparseable `settings.json` **abor
 than clobbering it. The command ships with the adapter (no installer step, unlike Claude
 Code's symlinked markdown command). Takes effect on the next Pi session in that repo.
 
+### Mute from the host
+
+```text
+/echo-mute [on|off|toggle|status|duration]
+```
+
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
+
 ## Status command
 
 Inside Pi:
