@@ -14,7 +14,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody } from '../lib/identity';
-import { resolveStartupCatchphrases } from '../lib/greeting';
+import { findStartupCatchphraseMatch } from '../lib/greeting';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
@@ -114,10 +114,6 @@ export function logVoiceEvent(event: VoiceEvent): void {
   } catch {
     // Silent fail
   }
-}
-
-function normalizeSpokenText(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 async function sendNotification(
@@ -355,13 +351,10 @@ export async function handleVoice(
   // Without this, the AI's first 🗣️ line echoing the greeting causes a double-fire.
   // Uses the same layered identity VoiceGreeting resolves, so a project persona's
   // catchphrases are deduped in that repo (not the global pool).
-  const normalized = normalizeSpokenText(voiceCompletion);
-  for (const catchphrase of resolveStartupCatchphrases(identity)) {
-    const catchNormalized = normalizeSpokenText(catchphrase);
-    if (catchNormalized && (normalized === catchNormalized || normalized.includes(catchNormalized))) {
-      console.error(`[Voice] Skipping - matches startup catchphrase: "${catchphrase}"`);
-      return;
-    }
+  const matchingCatchphrase = findStartupCatchphraseMatch(voiceCompletion, identity);
+  if (matchingCatchphrase) {
+    console.error(`[Voice] Skipping - matches startup catchphrase: "${matchingCatchphrase}"`);
+    return;
   }
 
   // Resolve the speaker for this turn: an active main-session persona speaks in

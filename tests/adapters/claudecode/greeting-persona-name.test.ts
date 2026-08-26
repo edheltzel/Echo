@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
 import {
+  findStartupCatchphraseMatch,
   resolveStartupCatchphrase,
   resolveStartupCatchphrases,
 } from "../../../adapters/claudecode/hooks/lib/greeting";
@@ -117,6 +118,40 @@ describe("Claude Code startup greeting stays nameless unless sayName", () => {
     const proj = tmp("echo-proj-");
 
     expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
+  });
+
+  test("invalid custom entries are excluded before name token expansion", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: [null, 42, "", "  ", "{name}, ready"],
+    });
+    const proj = tmp("echo-proj-");
+
+    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
+  });
+
+  test("default greetings deduplicate only exact normalized lines", () => {
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
+    const proj = tmp("echo-proj-");
+    const id = getIdentity(proj, home);
+
+    expect(findStartupCatchphraseMatch("Engaged!", id)).toBe("engaged");
+    expect(findStartupCatchphraseMatch("I engaged the new adapter", id)).toBeUndefined();
+    expect(findStartupCatchphraseMatch("Standing by while tests run", id)).toBeUndefined();
+  });
+
+  test("custom greetings deduplicate only exact normalized lines", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: ["Atlas reporting."],
+    });
+    const proj = tmp("echo-proj-");
+    const id = getIdentity(proj, home);
+
+    expect(findStartupCatchphraseMatch("Atlas reporting", id)).toBe("Atlas reporting.");
+    expect(findStartupCatchphraseMatch("Status: Atlas reporting", id)).toBeUndefined();
   });
 
   test("no project persona → global Atlas greeting stays untouched", () => {

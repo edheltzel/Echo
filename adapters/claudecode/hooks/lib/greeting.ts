@@ -14,10 +14,25 @@ export function resolveStartupCatchphrase(identity: Identity, random: () => numb
 }
 
 export function resolveStartupCatchphrases(identity: Identity): string[] {
-  const pool = identity.startupCatchphrases?.length
-    ? identity.startupCatchphrases
-    : identity.startupCatchphrase
+  const configured = identity.startupCatchphrases?.filter(
+    (phrase): phrase is string => typeof phrase === 'string' && phrase.trim().length > 0,
+  );
+  const pool = configured?.length
+    ? configured
+    : typeof identity.startupCatchphrase === 'string' && identity.startupCatchphrase.trim().length > 0
       ? [identity.startupCatchphrase]
       : defaultStartupGreetings(Boolean(identity.sayName));
   return pool.map((phrase) => applyNameToken(phrase, identity.displayName, Boolean(identity.sayName)));
+}
+
+function normalizeSpokenText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+export function findStartupCatchphraseMatch(spokenText: string, identity: Identity): string | undefined {
+  const normalized = normalizeSpokenText(spokenText);
+  return resolveStartupCatchphrases(identity).find((catchphrase) => {
+    const catchNormalized = normalizeSpokenText(catchphrase);
+    return catchNormalized.length > 0 && normalized === catchNormalized;
+  });
 }
