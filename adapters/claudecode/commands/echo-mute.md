@@ -13,7 +13,8 @@ Resolve `cli/echo` from the installer symlink, then run it:
 ```bash
 CMD="${HOME}/.claude/commands/echo-mute.md"
 CLI="$(cd "$(dirname "$(realpath "$CMD")")/../../.." && pwd)/cli/echo"
-ARGS="${1:-toggle}"
+ARGS="$ARGUMENTS"
+[ -n "$ARGS" ] || ARGS=toggle
 bash "$CLI" mute "$ARGS"
 ```
 

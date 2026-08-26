@@ -10,8 +10,9 @@ describe("claude /echo-mute command file", () => {
     expect(readdirSync(COMMANDS).sort()).toEqual(["echo-mute.md", "echo-voice.md"]);
     expect(existsSync(join(COMMANDS, "echo-mute.md"))).toBe(true);
     const md = readFileSync(join(COMMANDS, "echo-mute.md"), "utf8");
-    expect(md).toContain('ARGS="${1:-toggle}"');
-    expect(md).not.toContain("${ARGUMENTS:-toggle}");
+    expect(md).toContain('ARGS="$ARGUMENTS"');
+    expect(md).toContain('[ -n "$ARGS" ] || ARGS=toggle');
+    expect(md).not.toContain('ARGS="${1:-toggle}"');
     expect(md).toContain('bash "$CLI" mute "$ARGS"');
     expect(md).toContain("cli/echo");
     expect(md).toContain("argument-hint: [on|off|toggle|status|duration]");
@@ -35,9 +36,7 @@ describe("claude /echo-mute command file", () => {
       writeFileSync(cli, `#!/bin/bash\nprintf '%s\\n' "$@" > ${JSON.stringify(log)}\n`, { mode: 0o755 });
 
       for (const [argument, expected] of [["status", "mute\nstatus\n"], ["", "mute\ntoggle\n"]]) {
-        const rendered = md
-          .replace(/\$\{1:-([^}]+)\}/g, (_match, fallback: string) => argument || fallback)
-          .replaceAll("$ARGUMENTS", argument);
+        const rendered = md.replaceAll("$ARGUMENTS", argument);
         const block = rendered.match(/```bash\n([\s\S]*?)\n```/)?.[1];
         if (!block) throw new Error("missing bash block");
         const result = Bun.spawnSync(["/bin/bash", "-c", block], {
