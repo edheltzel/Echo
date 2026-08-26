@@ -34,6 +34,8 @@ describe("install script adapter support", () => {
   test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
     expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?');
     expect(script).toContain("adapters/jcode/reconcile.ts");
     expect(script).toContain("adapters/grok/reconcile.ts");
     expect(script).toContain("adapters/codex/reconcile.ts");
@@ -125,6 +127,43 @@ exit 0
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Pi CLI is required");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
+      expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude Code preflight preserves a foreign slash command before mutating host state", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-claude-command-fatal-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const claude = join(home, ".claude");
+      const commands = join(claude, "commands");
+      const launchctlLog = join(root, "launchctl.log");
+      mkdirSync(commands, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(
+        join(claude, "settings.json"),
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }, null, 2) + "\n",
+      );
+      const foreign = join(commands, "echo-mute.md");
+      writeFileSync(foreign, "third-party command\n");
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+
+      const result = await runInstall(["--adapter", "claudecode"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("FATAL");
+      expect(result.stderr).toContain("will not overwrite");
+      expect(readFileSync(foreign, "utf8")).toBe("third-party command\n");
+      expect(existsSync(join(commands, "echo-voice.md"))).toBe(false);
       expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
       expect(existsSync(launchctlLog)).toBe(false);
     } finally {
@@ -352,6 +391,7 @@ exit 0
 
       // Registrations left behind by a renamed repo directory: markers present, paths dead.
       const claudeSettings = join(home, ".claude/settings.json");
+      const claudeCommands = join(home, ".claude/commands");
       const piSettings = join(home, ".pi/agent/settings.json");
       writeFileSync(
         claudeSettings,
@@ -391,6 +431,8 @@ exit 0
       expect(piAfterFirst).not.toContain("/old/clone/");
       expect(claudeAfterFirst).toContain("adapters/claudecode/hooks/VoiceGate.hook.ts");
       expect(piAfterFirst).toContain("adapters/pi");
+      expect(readlinkSync(join(claudeCommands, "echo-mute.md"))).toBe(realpathSync(resolve("adapters/claudecode/commands/echo-mute.md")));
+      expect(readlinkSync(join(claudeCommands, "echo-voice.md"))).toBe(realpathSync(resolve("adapters/claudecode/commands/echo-voice.md")));
 
       // Rerunning is a no-op: settings bytes unchanged.
       const second = await runInstall(["--adapter", "none"], env);
@@ -576,6 +618,7 @@ exit 0
       const launchctlLog = join(root, "launchctl.log");
       mkdirSync(launchAgents, { recursive: true });
       mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(join(home, ".claude/commands"), { recursive: true });
       mkdirSync(join(home, ".pi/agent"), { recursive: true });
       mkdirSync(bin, { recursive: true });
 
@@ -614,6 +657,8 @@ exit 0
         ) + "\n";
       const piOriginal = JSON.stringify({ packages: ["/old/clone/adapters/pi"] }, null, 2) + "\n";
       writeFileSync(claudeSettings, claudeOriginal);
+      symlinkSync("/old/clone/adapters/claudecode/commands/echo-mute.md", join(home, ".claude/commands/echo-mute.md"));
+      symlinkSync("/old/clone/adapters/claudecode/commands/echo-voice.md", join(home, ".claude/commands/echo-voice.md"));
       writeFileSync(piSettings, piOriginal);
 
       writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
@@ -633,12 +678,15 @@ exit 0
       expect(result.stdout).toContain("Checking Claude Code");
       expect(result.stdout).toContain("Checking Pi");
       expect(result.stdout).toContain("[\\] Adapter registration");
+      expect(result.stdout).toContain("[\\] Slash commands");
       expect(result.stdout).toContain("[\\] LaunchAgent");
       expect(result.stdout).not.toContain("\x1b");
       expect(result.stdout).toContain("would be updated");
       // Nothing was mutated and no service was touched.
       expect(readFileSync(plistPath, "utf8")).toBe(plist);
       expect(readFileSync(claudeSettings, "utf8")).toBe(claudeOriginal);
+      expect(readlinkSync(join(home, ".claude/commands/echo-mute.md"))).toContain("/old/clone/");
+      expect(readlinkSync(join(home, ".claude/commands/echo-voice.md"))).toContain("/old/clone/");
       expect(readFileSync(piSettings, "utf8")).toBe(piOriginal);
       expect(existsSync(launchctlLog)).toBe(false);
     } finally {

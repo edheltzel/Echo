@@ -13,8 +13,8 @@ Resolve `cli/echo` from the installer symlink, then run it:
 ```bash
 CMD="${HOME}/.claude/commands/echo-mute.md"
 CLI="$(cd "$(dirname "$(realpath "$CMD")")/../../.." && pwd)/cli/echo"
-ARGS="${ARGUMENTS:-status}"
-bash "$CLI" mute $ARGS
+ARGS="${1:-status}"
+bash "$CLI" mute "$ARGS"
 ```
 
 If that file is missing, try `cli/echo` at the current repo root (`git rev-parse --show-toplevel`).
