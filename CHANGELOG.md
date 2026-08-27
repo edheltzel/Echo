@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
+## [v0.11.0](https://github.com/edheltzel/Echo/tree/v0.11.0) - 2026-08-26
+
+[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.10.0...v0.11.0)
+
+### Added
+
+- `/echo-mute` for Claude Code, Pi, and omp, sharing the existing machine-wide mute CLI.
+- Startup greeting names are opt-in through `daidentity.sayName`, with four concise nameless defaults.
+
+### Changed
+
+- OMP and Codex live-session handling now suppresses only Echo notifications and preserves safe release behavior.
+
 ## [v0.10.0](https://github.com/edheltzel/Echo/tree/v0.10.0) - 2026-08-22
 
 [Full Changelog](https://github.com/edheltzel/Echo/compare/v0.9.0...v0.10.0)
