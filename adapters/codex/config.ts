@@ -65,7 +65,7 @@ function readDaidentity(
 export function loadProjectPersona(
   cwd: string | undefined,
   readFile: (path: string) => string | null = defaultReadFile,
-  home: string = homedir(),
+  home: string = process.env.HOME ?? homedir(),
 ): EchoPersonaOverride | null {
   const global = readDaidentity(join(home, ".codex", "settings.json"), readFile);
   const project = cwd ? readDaidentity(join(cwd, ".codex", "settings.json"), readFile) : null;
@@ -108,6 +108,7 @@ export function applyPersonaOverride(
 export function loadCodexVoiceConfig(
   env: Record<string, string | undefined> = process.env,
   cwd: string | undefined = process.cwd(),
+  home: string = process.env.HOME ?? homedir(),
 ): CodexVoiceConfig {
   const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
   const base: CodexVoiceConfig = {
@@ -121,7 +122,7 @@ export function loadCodexVoiceConfig(
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
-  return applyPersonaOverride(base, loadProjectPersona(cwd));
+  return applyPersonaOverride(base, loadProjectPersona(cwd, defaultReadFile, home));
 }
 
 export function pickStartupCatchphrase(pool: string[], random: () => number = Math.random): string {

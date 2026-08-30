@@ -203,7 +203,7 @@ describe("integration - project override flows through greeting + completion", (
       return new Response("{}", { status: 200 });
     };
     const { handlers, api } = createMockPi();
-    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env)); // base persona=Pi, voice=pi
+    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env), (cwd) => loadProjectPersona(cwd, undefined, fakeHome));
 
     await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(projectDir));
 
@@ -226,7 +226,7 @@ describe("integration - project override flows through greeting + completion", (
     );
     try {
       const { handlers, api } = createMockPi();
-      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
+      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env), (cwd) => loadProjectPersona(cwd, undefined, fakeHome));
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
       expect(payloads).toHaveLength(1);
       expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
@@ -253,7 +253,7 @@ describe("integration - project override flows through greeting + completion", (
     );
     try {
       const { handlers, api } = createMockPi();
-      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
+      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env), (cwd) => loadProjectPersona(cwd, undefined, fakeHome));
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
       expect(payloads).toHaveLength(1);
       expect(payloads[0].message).toContain("EchoPi");
@@ -269,7 +269,7 @@ describe("integration - project override flows through greeting + completion", (
       return new Response("{}", { status: 200 });
     };
     const { handlers, api } = createMockPi();
-    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
+    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env), (cwd) => loadProjectPersona(cwd, undefined, fakeHome));
 
     await handlers.get("message_end")?.(
       { message: { role: "assistant", id: "m1", content: "Did the thing.\n🗣️ Shipped the fix." } },
@@ -289,7 +289,7 @@ describe("integration - project override flows through greeting + completion", (
     const bare = mkdtempSync(join(tmpdir(), "echo-pi-bare-"));
     try {
       const { handlers, api } = createMockPi();
-      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
+      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env), (cwd) => loadProjectPersona(cwd, undefined, fakeHome));
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(bare));
       expect(payloads[0].voice_id).toBe("pi"); // base voice, no override
     } finally {

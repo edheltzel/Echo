@@ -31,7 +31,7 @@ interface MockExtensionApi {
 function registerAdapter(api: MockExtensionApi): void {
   // The mock implements the only ExtensionAPI methods exercised by this adapter.
   const extensionApi = api as unknown as ExtensionAPI;
-  atlasVoicePiAdapter(extensionApi, loadPiVoiceConfig(process.env));
+  atlasVoicePiAdapter(extensionApi, loadPiVoiceConfig(process.env), () => null);
 }
 
 

@@ -135,7 +135,7 @@ describe("Grok lifecycle hook adapter", () => {
   });
 
   test("preserves notify URL aliases for Grok config", () => {
-    expect(loadGrokVoiceConfig({ ATLAS_VOICE_NOTIFY_URL: "http://127.0.0.1:8899/notify" }).endpoint)
+    expect(loadGrokVoiceConfig({ ATLAS_VOICE_NOTIFY_URL: "http://127.0.0.1:8899/notify" }, undefined, "/tmp/echo-absent-home").endpoint)
       .toBe("http://127.0.0.1:8899/notify");
   });
 

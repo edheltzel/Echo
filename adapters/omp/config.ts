@@ -126,7 +126,7 @@ function ompAgentDir(home: string): string {
 export function loadProjectPersona(
   cwd: string | undefined,
   readFile: (path: string) => string | null = defaultReadFile,
-  home: string = homedir(),
+  home: string = process.env.HOME ?? homedir(),
 ): EchoPersonaOverride | null {
   const global = readDaidentity(join(ompAgentDir(home), "config.yml"), readFile);
   const project = cwd ? readDaidentity(join(cwd, ".omp", "config.yml"), readFile) : null;

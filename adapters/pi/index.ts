@@ -5,6 +5,7 @@ import {
   loadProjectPersona,
   pickStartupCatchphrase,
   shouldSuppressVoice,
+  type EchoPersonaOverride,
   type PiVoiceConfig,
 } from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
@@ -100,6 +101,7 @@ function buildVoiceLineInstruction(personaName: string): string {
 export default function atlasVoicePiAdapter(
   pi: ExtensionAPI,
   config: PiVoiceConfig = loadPiVoiceConfig(loadEchoEnvironment()),
+  loadPersona: (cwd: string | undefined) => EchoPersonaOverride | null = loadProjectPersona,
 ): void {
   const spoken = new Map<string, number>();
   const pending = new Set<string>();
@@ -111,12 +113,13 @@ export default function atlasVoicePiAdapter(
   // `config`, resolved from ctx.cwd and memoized per cwd. A repo with no daidentity
   // - and every omp session, since .pi/ isn't omp's dir - resolves to the base
   // config unchanged. omp's own .omp reader lands with the #109 adapter split.
+  // Tests inject `loadPersona` so operator ~/.pi never overlays configured greetings.
   const configByCwd = new Map<string, PiVoiceConfig>();
   function resolveConfig(cwd: string | undefined): PiVoiceConfig {
     const key = cwd ?? "";
     const cached = configByCwd.get(key);
     if (cached) return cached;
-    const resolved = applyPersonaOverride(config, loadProjectPersona(key));
+    const resolved = applyPersonaOverride(config, loadPersona(key || undefined));
     configByCwd.set(key, resolved);
     return resolved;
   }
