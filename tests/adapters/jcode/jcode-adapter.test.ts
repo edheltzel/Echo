@@ -156,6 +156,11 @@ describe("Jcode lifecycle hook adapter", () => {
       .toBe("http://127.0.0.1:8899/notify");
   });
 
+  test("defaults voice_id to en-HK-SamNeural", () => {
+    expect(loadJcodeVoiceConfig({}).voiceId).toBe("en-HK-SamNeural");
+    expect(loadJcodeVoiceConfig({ ECHO_VOICE_ID: "custom" }).voiceId).toBe("custom");
+  });
+
   test("executable exits zero for skipped hooks and nonzero for notify failures", async () => {
     const hookPath = new URL("../../../adapters/jcode/hook.ts", import.meta.url).pathname;
     const baseEnv = {

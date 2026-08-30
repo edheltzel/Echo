@@ -31,7 +31,7 @@ export function loadJcodeVoiceConfig(
     startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(false) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Jcode",
     sayName: false,
-    voiceId: env.ECHO_VOICE_ID,
+    voiceId: env.ECHO_VOICE_ID ?? "en-HK-SamNeural",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     // Jcode fires lifecycle hooks for TUI, headless, and swarm workers without a
     // foreground/child discriminator. Keep greetings opt-in to avoid session floods.
