@@ -67,12 +67,13 @@ A conforming registration:
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
 `~/.claude/settings.json`) and `adapters/claudecode/reconcile-commands.ts` (the
 `echo-voice.md` and `echo-mute.md` symlinks in `~/.claude/commands/`),
-`adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
+`adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`),
 `adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`,
-#18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
+#18/#109), and `adapters/opencode/reconcile.ts` (the `echo-voice.ts` symlink in
+`~/.config/opencode/plugins/`). `scripts/install.sh` re-reconciles **every installed adapter on every run**
 regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
-commands into both. Future hosts (Codex/OpenCode #30) inherit this contract.
+commands into both.
 
 ## Native terminal visuals
 
@@ -274,3 +275,21 @@ the adapter absorbs:
 omp reads the same canonical `ECHO_VOICE_*` configuration as Pi and defaults to the same
 `voice_id: "pi"`, but speaks as `personaName: "omp"`. Local values from
 `~/.config/echo/config.json` override those defaults for both hosts.
+
+## OpenCode adapter
+
+`adapters/opencode/` is an OpenCode plugin. It registers one Echo-owned
+`echo-voice.ts` symlink in `~/.config/opencode/plugins/` pointing at `plugin.ts`.
+Host config files are not rewritten.
+
+- **`session.idle`:** speaks the final `🗣️` line, else a short fallback summary.
+- **`session.created`:** greeting is opt-in (`ECHO_VOICE_GREET_ON_START`).
+- **Subagents:** `parentID` set stays silent. If `session.get` cannot resolve the
+  session, the adapter fails closed (silent) rather than treating it as a root
+  session.
+- **Registration:** `--adapter opencode`. Reconcile owns only
+  `plugins/echo-voice.ts`. Sibling plugins are never rewritten or pruned. A
+  non-Echo occupant of that name is FATAL, never replaced.
+- **Persona:** same `daidentity` shape as Codex, from project `opencode.jsonc` /
+  `opencode.json` over the first existing global OpenCode config file. See [`voices.md`](voices.md#per-project-persona--voice)
+  and [`adapters/opencode/README.md`](../adapters/opencode/README.md).

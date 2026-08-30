@@ -48,7 +48,7 @@
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
 | oh-my-pi (omp) | `adapters/omp/` | Supported - sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | MCP (Claude Code voice ask) | `adapters/mcp/` | Supported - serves the `echo_ask` tool over stdio | `bash scripts/install.sh --adapter mcp` |
-| OpenCode | TBD | Planned | Future adapter |
+| OpenCode | `adapters/opencode/` | Native plugin adapter | `bash scripts/install.sh --adapter opencode` |
 
 ### Terminal visual capabilities
 

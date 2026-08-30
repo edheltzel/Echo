@@ -1,0 +1,9 @@
+{
+  "name": "@echo/opencode-adapter",
+  "version": "0.1.0",
+  "description": "OpenCode plugin adapter for Echo",
+  "type": "module",
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}

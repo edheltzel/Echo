@@ -103,10 +103,11 @@ its own spoken identity - **name + voice** - in that repo only:
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 | Grok Build | `<project>/.grok/settings.json` | `~/.grok/settings.json` (see [`adapters/grok/README.md`](../adapters/grok/README.md)) |
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
+| OpenCode | `<project>/opencode.jsonc` or `opencode.json` | first existing `~/.config/opencode/{opencode.jsonc,opencode.json,config.json}` (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
 Every host reads a **`daidentity` block from its native config**, project layered over
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
-Grok, and Codex use JSON `settings.json`; omp uses its native YAML `config.yml`.
+Grok, and Codex use JSON; OpenCode uses JSON or JSONC; omp uses its native YAML `config.yml`.
 
 A persona **name** alone does **not** change the startup greeting. The shared default
 pool is exactly `standing by`, `ready when you are`, `waiting for direction`, and

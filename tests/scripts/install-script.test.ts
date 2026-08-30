@@ -31,8 +31,8 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, omp, and OpenCode adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]');
     expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?');
@@ -48,6 +48,8 @@ describe("install script adapter support", () => {
     // into the same three places every adapter must: preflight, install, check.
     expect(script).toContain('adapters/mcp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
     expect(script).toContain('adapters/mcp/reconcile.ts" --check)" || rc=$?');
+    expect(script).toContain("adapters/opencode/reconcile.ts");
+    expect(script).toContain('adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
   });
 
   test("uses the com.echo service name and migrates both legacy labels", () => {
