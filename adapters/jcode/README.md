@@ -17,3 +17,9 @@ Jcode currently supports one command per hook. Installation refuses to replace a
 `session_start` or `turn_end` command. Hook commands are shell-quoted for checkout paths with
 spaces. Unsupported TOML shapes fail closed rather than risking config corruption; convert an
 inline or array-form `hooks` value to the documented `[hooks]` table before retrying.
+
+Jcode has no native slash command. Mute Echo with the same CLI every other host uses:
+
+```bash
+cli/echo mute toggle    # or: on | off | status | 30m
+```

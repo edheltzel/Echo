@@ -38,12 +38,13 @@ JCODE_CONFIG="${JCODE_CONFIG_PATH:-${JCODE_HOME:-$HOME/.jcode}/config.toml}"
 OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 # adapters/grok/reconcile.ts honors GROK_HOME / ECHO_GROK_HOOKS_DIR the same way.
 GROK_HOOKS="${ECHO_GROK_HOOKS_DIR:-${GROK_HOME:-$HOME/.grok}/hooks}"
+OPENCODE_COMMANDS="${ECHO_OPENCODE_COMMANDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/commands}"
 ADAPTER="none"
 CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -83,7 +84,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  none|claudecode|jcode|grok|codex|mcp|pi|omp) ;;
+  none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -275,6 +276,10 @@ codex_installed() {
   [ -f "$f" ] && grep -qE 'adapters/codex/hook\.ts' "$f"
 }
 
+opencode_installed() {
+  [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
+}
+
 # Materialize the workspace links every adapter depends on. Each adapter package
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
 # `bun install` must have run before a host can load one. Idempotent and offline —
@@ -375,6 +380,14 @@ preflight() {
       fi
       echo "> Preflighting Codex lifecycle-hook registration"
       bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
+      ;;
+    opencode)
+      if ! command -v opencode >/dev/null 2>&1; then
+        echo "OpenCode CLI is required for --adapter opencode" >&2
+        exit 1
+      fi
+      echo "> Preflighting OpenCode mute-command registration"
+      bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 
@@ -542,6 +555,10 @@ install_adapter() {
       echo "> Reconciling Codex lifecycle-hook registration"
       bun run "$REPO_ROOT/adapters/codex/reconcile.ts"
       ;;
+    opencode)
+      echo "> Reconciling OpenCode mute-command registration"
+      bun run "$REPO_ROOT/adapters/opencode/reconcile.ts"
+      ;;
   esac
 }
 
@@ -590,6 +607,11 @@ refresh_installed_adapters() {
     echo "> Refreshing Codex lifecycle-hook registration"
     bun run "$REPO_ROOT/adapters/codex/reconcile.ts" \
       || echo "WARN: Codex registration refresh failed - run adapters/codex/reconcile.ts manually" >&2
+  fi
+  if [ "$ADAPTER" != "opencode" ] && opencode_installed; then
+    echo "> Refreshing OpenCode mute-command registration"
+    bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" \
+      || echo "WARN: OpenCode registration refresh failed - run adapters/opencode/reconcile.ts manually" >&2
   fi
 }
 
@@ -817,6 +839,22 @@ check_installation() {
       rc=0
       out="$(bun run "$REPO_ROOT/adapters/codex/reconcile.ts" --check)" || rc=$?
       apply_adapter_check "Adapter registration" "$rc" "$out" "Codex registration check failed"
+    fi
+  fi
+
+  local show_opencode=0
+  [ "$ADAPTER" = "opencode" ] && show_opencode=1
+  opencode_installed && show_opencode=1
+  if ! skip_workspace_link && ! workspace_link_ok opencode; then
+    show_opencode=1
+  fi
+  if [ "$show_opencode" -eq 1 ]; then
+    begin_harness "OpenCode"
+    report_workspace opencode
+    if [ "$ADAPTER" = "opencode" ] || opencode_installed; then
+      rc=0
+      out="$(bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check)" || rc=$?
+      apply_adapter_check "Mute command" "$rc" "$out" "OpenCode mute-command check failed"
     fi
   fi
 

@@ -3,7 +3,7 @@
   "version": "0.11.0",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/jcode", "adapters/grok", "adapters/codex", "adapters/mcp", "adapters/omp", "adapters/pi"],
+  "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/jcode", "adapters/grok", "adapters/codex", "adapters/mcp", "adapters/omp", "adapters/pi", "adapters/opencode"],
   "devDependencies": {
     "@types/bun": "^1.3.14"
   }

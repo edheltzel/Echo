@@ -308,6 +308,20 @@ describe("echo mute", () => {
     }
   });
 
+  test("toggle, status, and off dispatch to mute.sh (never the live daemon)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-verbs-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "toggle"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "status"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "off"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/mute");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a bad duration and requires an argument", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-mute-bad-"));
     try {

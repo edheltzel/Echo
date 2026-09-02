@@ -72,7 +72,9 @@ Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook e
 #18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
 regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
-commands into both. Future hosts (Codex/OpenCode #30) inherit this contract.
+commands into both. Codex and OpenCode follow the same contract: Codex reconciles hooks plus
+an `/echo-mute` skill; OpenCode's adapter is mute-only (`echo-mute.md` under
+`~/.config/opencode/commands/`).
 
 ## Native terminal visuals
 
@@ -104,7 +106,8 @@ Startup greetings are disabled by default; when enabled they run only for root
 `session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
 is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
 overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
-fails closed on TOML table shapes it cannot preserve safely.
+fails closed on TOML table shapes it cannot preserve safely. Jcode has no native slash
+command surface; mute is `cli/echo mute` (the same CLI every other host uses).
 
 ## Grok Build adapter - lifecycle hooks
 
@@ -124,14 +127,23 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
   through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
   payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
-- **Registration:** one Echo-owned file `~/.grok/hooks/echo-voice.json` via
-  `adapters/grok/reconcile.ts`. Sibling files (for example firstmate's `fm-turn-end.json`) are
-  never rewritten or pruned. `GROK_HOME` / `ECHO_GROK_HOOKS_DIR` redirect the target for tests.
+- **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` (lifecycle voice, still invoked
+  with `bun`) and `~/.grok/skills/echo-mute` (`/echo-mute` → bash `cli/echo mute`) via
+  `adapters/grok/reconcile.ts`. The bun hook is not the mute path. Sibling files (for example
+  firstmate's `fm-turn-end.json`) are never rewritten or pruned. `GROK_HOME` /
+  `ECHO_GROK_HOOKS_DIR` / `ECHO_GROK_SKILLS_DIR` redirect the targets for tests.
   Wired into `install.sh` as `--adapter grok`.
 
 Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
 `grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
 surface wins.
+
+## OpenCode adapter - mute only
+
+`adapters/opencode/` registers `/echo-mute` as an OpenCode custom command
+(`~/.config/opencode/commands/echo-mute.md` → bash `cli/echo mute`). It does not speak
+lifecycle events, does not POST `/notify`, and does not add OpenCode-named daemon routes.
+Host start is not claimed live-proved from unit tests alone.
 
 ## Live-session voice suppression - omp and Codex
 

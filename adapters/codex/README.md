@@ -48,3 +48,15 @@ Other hooks (Firstmate turn-end guards, arm checks, foreign tools) are preserved
 | `CODEX_HOME` | Codex home (default `~/.codex`) when no project hooks file exists |
 
 Never point tests at the operator's real `~/.codex/hooks.json` without a scratch file.
+
+## Mute from the host
+
+Codex lifecycle hooks still run under `bun` and are **not** the mute path. Mute is a skill
+at `~/.codex/skills/echo-mute` that runs `bash cli/echo mute`.
+
+```text
+/echo-mute [on|off|toggle|status|duration]
+```
+
+Empty args toggle. Same machine-wide mute as the CLI. Codex slash/skills UI is unproven;
+this registration is shipped, not claimed live-proved here.
