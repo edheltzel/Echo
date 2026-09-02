@@ -22,7 +22,8 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command. Grok, Codex, and OpenCode
+   register the same CLI when the host can surface it; Jcode uses the CLI directly.
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -210,9 +211,19 @@ you are actually in.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp also expose
-`/echo-mute [on|off|toggle|status|duration]`. It runs `cli/echo mute` (empty args → `toggle`)
-and does not add a second mute path.
+**Host slash command.** Hosts register `/echo-mute [on|off|toggle|status|duration]` when they
+can. Every registration runs `cli/echo mute` (empty args → `toggle`) and does not add a second
+mute path. Harnesses spawn bash on that CLI; they do not `Bun.spawn` it as a hard requirement
+(Pi has no Bun global) and they do not POST `/mute`.
+
+| Host | Surface | Live-proved here |
+| --- | --- | --- |
+| Claude Code | `~/.claude/commands/echo-mute.md` (bash) | yes |
+| Pi / omp | `registerCommand("echo-mute")` → bash `cli/echo mute` | Pi was the miss this change fixes; omp already shared the helper |
+| Grok | `~/.grok/skills/echo-mute` (user-invocable skill; lifecycle hook is not the mute path) | no — ship the registration |
+| Codex | `~/.codex/skills/echo-mute` (skill; hooks UI unproven) | no |
+| OpenCode | `~/.config/opencode/commands/echo-mute.md` | no — host may not start |
+| Jcode | no native slash; use `cli/echo mute` | n/a |
 
 ### The underlying script
 
@@ -241,7 +252,7 @@ To pick up daemon-source or config changes, re-stage:
 ```bash
 cli/echo update                          # re-stage the payload from this checkout + reload
 cli/echo install --adapter claudecode    # first install, or to (re)wire a host adapter
-# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp>
+# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode>
 ```
 
 - Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.

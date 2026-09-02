@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createEchoMuteCommand,
+  hasBunSpawn,
   parseMuteArgs,
   runEchoMute,
+  runEchoMutePosix,
   type MuteRunResult,
 } from "../../shared/mute-command";
 import type { ScaffoldContext } from "../../shared/persona-scaffold";
@@ -28,15 +30,45 @@ describe("runEchoMute", () => {
     roots.length = 0;
   });
 
-  test("spawns the given CLI with mute + args (never the live daemon)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "echo-mute-cli-"));
+  function stubCli(name: string): string {
+    const root = mkdtempSync(join(tmpdir(), name));
     roots.push(root);
     const cli = join(root, "echo");
     writeFileSync(cli, "#!/bin/bash\nprintf 'argv:%s\\n' \"$*\"\nexit 0\n", { mode: 0o755 });
+    return cli;
+  }
 
-    const result = await runEchoMute(cli, ["30m"]);
+  test("spawns the given CLI with mute + args (never the live daemon)", async () => {
+    const result = await runEchoMute(stubCli("echo-mute-cli-"), ["30m"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("argv:mute 30m");
+  });
+
+  test("posix spawn path runs bash cli/echo mute without Bun.spawn", async () => {
+    const result = await runEchoMutePosix(stubCli("echo-mute-posix-"), ["status"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("argv:mute status");
+  });
+});
+
+describe("mute-command Pi-safe spawn", () => {
+  test("source does not treat Bun.spawn as a hard requirement", () => {
+    const src = readFileSync("shared/mute-command.ts", "utf8");
+    expect(src).toContain("node:child_process");
+    expect(src).toContain("runEchoMutePosix");
+    expect(src).toContain('"/bin/bash"');
+    expect(src).toMatch(/hasBunSpawn|Bun\?\.spawn/);
+    expect(src).not.toMatch(/fetch\([^)]*\/mute/);
+    expect(src).not.toMatch(/\bcurl\b[^\n]*\/mute/);
+    // Bun.spawn may exist as a fast path, but the default runner must fall
+    // through to POSIX spawn when the Bun global is missing (Pi).
+    expect(src).toContain("if (hasBunSpawn())");
+    expect(src).toContain("return runEchoMutePosix");
+  });
+
+  test("hasBunSpawn reflects this process without throwing", () => {
+    expect(typeof hasBunSpawn()).toBe("boolean");
+    expect(hasBunSpawn()).toBe(typeof (globalThis as { Bun?: { spawn?: unknown } }).Bun?.spawn === "function");
   });
 });
 

@@ -54,6 +54,9 @@ jobs:
       - name: Build Codex adapter
         id: codex
         run: bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
+      - name: Build OpenCode mute adapter
+        id: opencode
+        run: bun build adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
       - name: Fail closed unless every check ran
         if: always() && !cancelled()
         env:
@@ -68,9 +71,10 @@ jobs:
           JCODE: ${{ steps.jcode.outcome }}
           GROK: ${{ steps.grok.outcome }}
           CODEX: ${{ steps.codex.outcome }}
+          OPENCODE: ${{ steps.opencode.outcome }}
         run: |
           rc=0
-          for pair in install:"$INSTALL" unit:"$UNIT" smoke:"$SMOKE" adapters:"$ADAPTERS" converse:"$CONVERSE" pi:"$PI" omp:"$OMP" mcp:"$MCP" jcode:"$JCODE" grok:"$GROK" codex:"$CODEX"; do
+          for pair in install:"$INSTALL" unit:"$UNIT" smoke:"$SMOKE" adapters:"$ADAPTERS" converse:"$CONVERSE" pi:"$PI" omp:"$OMP" mcp:"$MCP" jcode:"$JCODE" grok:"$GROK" codex:"$CODEX" opencode:"$OPENCODE"; do
             name=${pair%%:*}
             outcome=${pair#*:}
             if [ "$outcome" != success ]; then

@@ -3,9 +3,10 @@
 /**
  * Idempotent reconcile for the Codex host adapter.
  *
- * Echo owns one identifiable command entry inside the Codex hooks document
- * (project `.codex/hooks.json` when present, else `~/.codex/hooks.json`):
- *   bun '<repo>/adapters/codex/hook.ts'
+ * Echo owns:
+ *   bun '<repo>/adapters/codex/hook.ts' inside the Codex hooks document
+ *     (project `.codex/hooks.json` when present, else `~/.codex/hooks.json`)
+ *   ~/.codex/skills/echo-mute/  (skill → bash cli/echo mute; not the bun hook)
  *
  * Other hooks (Firstmate turn-end, arm checks, foreign tools) are preserved.
  *
@@ -23,6 +24,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOwnedSymlink, ownedLinkLog, planOwnedSymlink } from "@echo/shared/owned-symlink.ts";
 
 const CHECK_ONLY = process.argv.includes("--check");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +38,31 @@ function fatal(message: string): never {
 
 function shellQuote(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
+}
+
+function resolveSkillsDir(): string {
+  if (process.env.ECHO_CODEX_SKILLS_DIR?.trim()) {
+    return process.env.ECHO_CODEX_SKILLS_DIR.trim();
+  }
+  // Isolate tests (and any ECHO_CODEX_HOOKS_FILE override) from ~/.codex/skills.
+  if (process.env.ECHO_CODEX_HOOKS_FILE?.trim()) {
+    return join(dirname(process.env.ECHO_CODEX_HOOKS_FILE.trim()), "skills");
+  }
+  const home = process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+  return join(home, "skills");
+}
+
+function canonicalMuteSkill(): string {
+  const skillDir = join(ADAPTER_DIR, "skills", "echo-mute");
+  try {
+    return realpathSync(skillDir);
+  } catch {
+    fatal(`the Codex mute skill is missing at ${skillDir}`);
+  }
+}
+
+function isEchoMuteSkillSpelling(target: string): boolean {
+  return /(^|\/)adapters\/codex\/skills\/echo-mute\/?$/.test(target);
 }
 
 function resolveHooksFile(): string {
@@ -140,29 +167,39 @@ if (existsSync(hooksFile)) {
 if (!doc.hooks || typeof doc.hooks !== "object") doc.hooks = {};
 
 const hooksRoot = doc.hooks as Record<string, any>;
-let changed = false;
-changed = ensureEvent(hooksRoot, "SessionStart", command, 10) || changed;
-changed = ensureEvent(hooksRoot, "Stop", command, 30) || changed;
-changed = pruneStaleEcho(hooksRoot, command) || changed;
+let hooksChanged = false;
+hooksChanged = ensureEvent(hooksRoot, "SessionStart", command, 10) || hooksChanged;
+hooksChanged = ensureEvent(hooksRoot, "Stop", command, 30) || hooksChanged;
+hooksChanged = pruneStaleEcho(hooksRoot, command) || hooksChanged;
+
+const muteSkill = planOwnedSymlink({
+  destination: join(resolveSkillsDir(), "echo-mute"),
+  source: canonicalMuteSkill(),
+  isEchoSpelling: isEchoMuteSkillSpelling,
+  fatal,
+});
+log.push(ownedLinkLog(muteSkill, "skills/echo-mute"));
+const changed = hooksChanged || muteSkill.kind !== "current";
 
 if (CHECK_ONLY) {
   if (changed) {
-    console.log("pending: Codex Echo hook registration needs update");
+    console.log("pending: Codex Echo hook/mute registration needs update");
     process.exit(3);
   }
-  console.log("✓ preflight passed - Codex hooks already current");
+  console.log("✓ preflight passed - Codex hooks and mute skill already current");
   process.exit(0);
 }
 
-if (!changed) {
+if (hooksChanged) {
+  mkdirSync(dirname(hooksFile), { recursive: true });
+  const text = `${JSON.stringify(doc, null, 2)}\n`;
+  const tmp = `${hooksFile}.tmp-${process.pid}`;
+  writeFileSync(tmp, text, { mode: 0o644 });
+  renameSync(tmp, hooksFile);
+  console.log(`✓ Codex hooks updated → ${hooksFile}`);
+} else {
   console.log("= Codex Echo hooks already current");
-  process.exit(0);
 }
 
-mkdirSync(dirname(hooksFile), { recursive: true });
-const text = `${JSON.stringify(doc, null, 2)}\n`;
-const tmp = `${hooksFile}.tmp-${process.pid}`;
-writeFileSync(tmp, text, { mode: 0o644 });
-renameSync(tmp, hooksFile);
-console.log(`✓ Codex hooks updated → ${hooksFile}`);
+applyOwnedSymlink(muteSkill);
 for (const line of log) console.log(line);

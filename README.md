@@ -142,7 +142,7 @@ whole everyday surface, in the order you need them:
 # 1. Install or update. `update` re-stages the daemon from this checkout; restarting alone
 #    keeps the old payload running. Use `install` the first time, or to (re)wire an adapter.
 cli/echo update
-cli/echo install --adapter claudecode   # none|claudecode|jcode|grok|codex|mcp|pi|omp
+cli/echo install --adapter claudecode   # none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode
 
 # 2. Check health. Prints one row per check and ends in `Result: READY`.
 cli/echo doctor
@@ -150,7 +150,7 @@ cli/echo doctor
 # 3. Mute and unmute. Audio off; notifications are still accepted, processed, and logged.
 cli/echo mute on          # also: off | toggle | status
 cli/echo mute 30m         # timed; `1h` works too. Voice resumes by itself.
-/echo-mute                # same CLI, from Claude Code / Pi / omp (on|off|toggle|status|30m)
+/echo-mute                # same CLI, from hosts that register it (on|off|toggle/status/30m)
 
 # 4. Set this project's persona (name + voice). Run it inside the repo, in your host.
 /echo-voice [name] [voice]
@@ -172,8 +172,11 @@ any pending deadline.
 
 **Mute does not silence audio Echo did not produce.** In v0.10.0, live chat (Oh My Pi `/live`)
 generates its own speech and keeps talking while Echo is muted. Muting Echo removes only the
-spoken completion line on top of it. `/echo-mute` on Claude Code, Pi, and omp is the same
-`cli/echo mute` command, not a second mute system.
+spoken completion line on top of it. `/echo-mute` is the same `cli/echo mute` command on every
+host that can register it, not a second mute system. Claude Code, Pi, and omp are the live
+slash surfaces. Grok, Codex, and OpenCode ship registrations (skill or markdown command) that
+run that same CLI; those hosts are not claimed live-proved here. Jcode has no native slash —
+use `cli/echo mute`.
 
 `/echo-voice` scaffolds a project-local persona for Claude Code, Pi, and omp without hand-editing
 the host's JSON or YAML config. For a global Pi/omp default instead of one repo's, use
