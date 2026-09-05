@@ -75,6 +75,18 @@ slash-command symlinks in `~/.claude/commands/`. Registration is idempotent: re-
 the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates) and
 repoints stale Echo-owned command links to this checkout.
 
+Optional mute plugin (does not replace this step; no hooks, no LaunchAgent):
+
+```bash
+claude plugin validate adapters/claudecode/plugin --strict
+claude --plugin-dir adapters/claudecode/plugin
+```
+
+Expected: validate exits 0. Plugin skill is `/echo:echo-mute` (Claude namespaces plugin
+skills as `/plugin-name:skill-name`). Bare `/echo-mute` remains the installer command from
+this step. Both shell to `cli/echo mute` via PATH or the current checkout, never via
+walking `~/.claude/commands` from the plugin skill.
+
 If FAIL: confirm the Claude Code settings file and command directory are writable. A foreign
 file or symlink occupying either command name is preserved and reported as a fatal ownership
 conflict; inspect it manually rather than replacing it blindly.
