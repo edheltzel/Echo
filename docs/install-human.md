@@ -79,7 +79,9 @@ bash scripts/install.sh --adapter pi
 
 This installs the core server, then registers `adapters/pi/` as a Pi package and reconciles the registration so no stale entry survives.
 
-Inside Pi, `/voice-status` shows adapter configuration.
+Inside Pi, `/voice-status` shows adapter configuration. `/echo-mute` toggles the same machine-wide mute as `cli/echo mute`.
+
+To prove the install without launching Pi's TUI: `bash scripts/prove-pi.sh`. Checklist: [`../adapters/pi/README.md`](../adapters/pi/README.md#prove-pi).
 
 ## Add the oh-my-pi (omp) adapter
 
