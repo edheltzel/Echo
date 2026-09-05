@@ -1,18 +1,5 @@
 #!/usr/bin/env bun
 
-/**
- * Idempotent reconcile-and-prune for OpenCode `/echo-mute` (#77).
- *
- * Echo owns exactly one symlink under the OpenCode commands directory:
- *   $XDG_CONFIG_HOME/opencode/commands/echo-mute.md
- *   (default ~/.config/opencode/commands/echo-mute.md)
- *
- * Sibling command files are never rewritten or pruned. This adapter does not
- * register OpenCode lifecycle hooks or speak through /notify.
- *
- * --check: exit 0 current, 3 pending, 2 fatal ownership conflict.
- */
-
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -29,32 +16,23 @@ function fatal(message: string): never {
   process.exit(2);
 }
 
-function resolveCommandsDir(): string {
-  if (process.env.ECHO_OPENCODE_COMMANDS_DIR?.trim()) {
-    return process.env.ECHO_OPENCODE_COMMANDS_DIR.trim();
-  }
+function commandsDir(): string {
+  if (process.env.ECHO_OPENCODE_COMMANDS_DIR?.trim()) return process.env.ECHO_OPENCODE_COMMANDS_DIR.trim();
   const xdg = process.env.XDG_CONFIG_HOME?.trim();
-  if (xdg) return join(xdg, "opencode", "commands");
-  return join(homedir(), ".config", "opencode", "commands");
+  return xdg ? join(xdg, "opencode", "commands") : join(homedir(), ".config", "opencode", "commands");
 }
 
-function canonicalSource(): string {
-  try {
-    return realpathSync(SOURCE);
-  } catch {
-    fatal(`the OpenCode mute command is missing at ${SOURCE}`);
-  }
+let source: string;
+try {
+  source = realpathSync(SOURCE);
+} catch {
+  fatal(`the OpenCode mute command is missing at ${SOURCE}`);
 }
 
-function isEchoMuteSpelling(target: string): boolean {
-  return /(^|\/)adapters\/opencode\/commands\/echo-mute\.md$/.test(target);
-}
-
-const source = canonicalSource();
 const plan = planOwnedSymlink({
-  destination: join(resolveCommandsDir(), FILENAME),
+  destination: join(commandsDir(), FILENAME),
   source,
-  isEchoSpelling: isEchoMuteSpelling,
+  isEchoSpelling: (target) => /(^|\/)adapters\/opencode\/commands\/echo-mute\.md$/.test(target),
   fatal,
 });
 const changed = plan.kind !== "current";

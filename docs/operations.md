@@ -22,8 +22,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command. Grok, Codex, and OpenCode
-   register the same CLI when the host can surface it; Jcode uses the CLI directly.
+   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -211,19 +210,10 @@ you are actually in.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Hosts register `/echo-mute [on|off|toggle|status|duration]` when they
-can. Every registration runs `cli/echo mute` (empty args → `toggle`) and does not add a second
-mute path. Harnesses spawn bash on that CLI; they do not `Bun.spawn` it as a hard requirement
-(Pi has no Bun global) and they do not POST `/mute`.
-
-| Host | Surface | Live-proved here |
-| --- | --- | --- |
-| Claude Code | `~/.claude/commands/echo-mute.md` (bash) | yes |
-| Pi / omp | `registerCommand("echo-mute")` → bash `cli/echo mute` | Pi was the miss this change fixes; omp already shared the helper |
-| Grok | `~/.grok/skills/echo-mute` (user-invocable skill; lifecycle hook is not the mute path) | no — ship the registration |
-| Codex | `~/.codex/skills/echo-mute` (skill; hooks UI unproven) | no |
-| OpenCode | `~/.config/opencode/commands/echo-mute.md` | no — host may not start |
-| Jcode | no native slash; use `cli/echo mute` | n/a |
+**Host slash command.** Claude Code, Pi, and omp expose
+`/echo-mute [on|off|toggle|status|duration]`. Grok, Codex, and OpenCode register the same
+`cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
+POST `/mute`.
 
 ### The underlying script
 

@@ -3,14 +3,9 @@
 /**
  * Idempotent reconcile for the Codex host adapter.
  *
- * Echo owns:
- *   bun '<repo>/adapters/codex/hook.ts' inside the Codex hooks document
- *     (project `.codex/hooks.json` when present, else `~/.codex/hooks.json`)
- *   ~/.codex/skills/echo-mute/  (skill → bash cli/echo mute; not the bun hook)
- *
- * Other hooks (Firstmate turn-end, arm checks, foreign tools) are preserved.
- *
- * --check: exit 0 current, 3 pending, 2 fatal.
+ * Echo owns bun '<repo>/adapters/codex/hook.ts' in the Codex hooks document
+ * and ~/.codex/skills/echo-mute/ (bash cli/echo mute; not the bun hook).
+ * Other hooks are preserved. --check: exit 0 current, 3 pending, 2 fatal.
  */
 
 import {
@@ -40,29 +35,13 @@ function shellQuote(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
 }
 
-function resolveSkillsDir(): string {
-  if (process.env.ECHO_CODEX_SKILLS_DIR?.trim()) {
-    return process.env.ECHO_CODEX_SKILLS_DIR.trim();
-  }
-  // Isolate tests (and any ECHO_CODEX_HOOKS_FILE override) from ~/.codex/skills.
+function skillsDir(): string {
+  const override = process.env.ECHO_CODEX_SKILLS_DIR?.trim();
+  if (override) return override;
   if (process.env.ECHO_CODEX_HOOKS_FILE?.trim()) {
     return join(dirname(process.env.ECHO_CODEX_HOOKS_FILE.trim()), "skills");
   }
-  const home = process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
-  return join(home, "skills");
-}
-
-function canonicalMuteSkill(): string {
-  const skillDir = join(ADAPTER_DIR, "skills", "echo-mute");
-  try {
-    return realpathSync(skillDir);
-  } catch {
-    fatal(`the Codex mute skill is missing at ${skillDir}`);
-  }
-}
-
-function isEchoMuteSkillSpelling(target: string): boolean {
-  return /(^|\/)adapters\/codex\/skills\/echo-mute\/?$/.test(target);
+  return join(process.env.CODEX_HOME?.trim() || join(homedir(), ".codex"), "skills");
 }
 
 function resolveHooksFile(): string {
@@ -172,10 +151,17 @@ hooksChanged = ensureEvent(hooksRoot, "SessionStart", command, 10) || hooksChang
 hooksChanged = ensureEvent(hooksRoot, "Stop", command, 30) || hooksChanged;
 hooksChanged = pruneStaleEcho(hooksRoot, command) || hooksChanged;
 
+const muteSource = join(ADAPTER_DIR, "skills", "echo-mute");
+let muteSkillSource: string;
+try {
+  muteSkillSource = realpathSync(muteSource);
+} catch {
+  fatal(`the Codex mute skill is missing at ${muteSource}`);
+}
 const muteSkill = planOwnedSymlink({
-  destination: join(resolveSkillsDir(), "echo-mute"),
-  source: canonicalMuteSkill(),
-  isEchoSpelling: isEchoMuteSkillSpelling,
+  destination: join(skillsDir(), "echo-mute"),
+  source: muteSkillSource,
+  isEchoSpelling: (target) => /(^|\/)adapters\/codex\/skills\/echo-mute\/?$/.test(target),
   fatal,
 });
 log.push(ownedLinkLog(muteSkill, "skills/echo-mute"));

@@ -36,7 +36,8 @@ Project wins over `~/.grok/settings.json`, then env defaults
 
 ## Ownership
 
-Reconcile owns `echo-voice.json` under hooks and the `echo-mute` skill directory.
+Reconcile owns `echo-voice.json` under hooks and links `skills/echo-mute`
+(`/echo-mute` → bash `cli/echo mute`; the bun hook is not the mute path).
 Sibling hooks such as firstmate's `fm-turn-end.json` / `fm-turn-end.sh` are never
 rewritten or pruned. A foreign file already named `echo-voice.json` or a foreign
 `echo-mute` skill is a fatal ownership conflict (exit 2).
@@ -47,19 +48,7 @@ rewritten or pruned. A foreign file already named `echo-voice.json` or a foreign
 | --- | --- |
 | `GROK_HOME` | Grok config directory (default `~/.grok`) |
 | `ECHO_GROK_HOOKS_DIR` | Direct hooks directory override (wins over `GROK_HOME`) |
-| `ECHO_GROK_SKILLS_DIR` | Direct skills directory override for `/echo-mute` |
+| `ECHO_GROK_SKILLS_DIR` | Direct skills directory override |
 | `HOME` | Affects the default `~/.grok` resolution via `os.homedir()` |
 
 Never point tests at the operator's real `~/.grok`.
-
-## Mute from the host
-
-Grok's lifecycle hook still runs under `bun` and is **not** the mute path. Mute is a
-user-invocable skill at `~/.grok/skills/echo-mute` that runs `bash cli/echo mute`.
-
-```text
-/echo-mute [on|off|toggle|status|duration]
-```
-
-Empty args toggle. Same machine-wide mute as the CLI. Slash appearance depends on Grok
-surfacing user-invocable skills; this registration is shipped, not claimed live-proved here.

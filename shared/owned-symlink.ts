@@ -9,11 +9,7 @@ export type OwnedLinkPlan = {
   target?: string;
 };
 
-/**
- * Plan an Echo-owned symlink. Foreign occupants (real files, non-Echo links)
- * are fatal. Dead Echo-spelled links are replaced. Callers apply with
- * applyOwnedSymlink after --check.
- */
+/** Plan an Echo-owned symlink. Foreign occupants are fatal; dead Echo-spelled links are replaced. */
 export function planOwnedSymlink(opts: {
   destination: string;
   source: string;
@@ -48,8 +44,7 @@ export function planOwnedSymlink(opts: {
   }
 
   if (real === source) return { destination, source, kind: "current", target };
-  if (real === null && isEchoSpelling(target)) return { destination, source, kind: "replace", target };
-  if (real !== null && isEchoSpelling(target)) return { destination, source, kind: "replace", target };
+  if (isEchoSpelling(target)) return { destination, source, kind: "replace", target };
   fatal(`${destination} points to ${target}, which is not an Echo registration. Echo will not overwrite it.`);
 }
 

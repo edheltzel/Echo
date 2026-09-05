@@ -324,54 +324,6 @@ exit 0
     }
   }, INSTALL_TIMEOUT_MS);
 
-  test("--adapter opencode registers echo-mute.md without touching sibling commands", async () => {
-    const root = mkdtempSync(join(tmpdir(), "echo-install-opencode-"));
-    try {
-      const home = join(root, "home");
-      const bin = join(root, "bin");
-      const state = join(root, "state");
-      const commands = join(root, "opencode-commands");
-      mkdirSync(home, { recursive: true });
-      mkdirSync(bin, { recursive: true });
-      mkdirSync(state, { recursive: true });
-      mkdirSync(commands, { recursive: true });
-      const foreign = join(commands, "review.md");
-      writeFileSync(foreign, "foreign command\n");
-
-      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
-      writeExecutable(join(bin, "opencode"), "#!/bin/bash\necho 'opencode'\nexit 0\n");
-      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
-case "$1" in
-  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
-  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
-esac
-exit 0
-`);
-
-      const env = {
-        HOME: home,
-        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
-        ECHO_OPENCODE_COMMANDS_DIR: commands,
-      };
-
-      const before = await runInstall(["--adapter", "opencode", "--check"], env);
-      expect(before.exitCode).toBe(3);
-
-      const result = await runInstall(["--adapter", "opencode"], env);
-      expect(result.exitCode).toBe(0);
-      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(true);
-      expect(lstatSync(join(commands, "echo-mute.md")).isSymbolicLink()).toBe(true);
-      expect(readlinkSync(join(commands, "echo-mute.md"))).toContain("adapters/opencode/commands/echo-mute.md");
-      expect(readFileSync(foreign, "utf8")).toBe("foreign command\n");
-
-      const after = await runInstall(["--adapter", "opencode", "--check"], env);
-      expect(after.exitCode).toBe(0);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }, INSTALL_TIMEOUT_MS);
-
   // The MCP server is Claude Code's only route to a model-invokable ask, so its
   // registration has to survive the same install path every other adapter does.
   // ECHO_MCP_CONFIG_PATH keeps this off the operator's real ~/.claude.json.

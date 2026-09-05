@@ -3,14 +3,11 @@
 /**
  * Idempotent reconcile-and-prune for the Grok Build host adapter (#77).
  *
- * Echo owns two registrations:
- *   $GROK_HOME/hooks/echo-voice.json  (lifecycle voice hook — not the mute path)
- *   $GROK_HOME/skills/echo-mute/      (user-invocable /echo-mute → bash cli/echo mute)
+ * Echo owns:
+ *   $GROK_HOME/hooks/echo-voice.json  (lifecycle voice; not the mute path)
+ *   $GROK_HOME/skills/echo-mute/      (/echo-mute → bash cli/echo mute)
  *
- * Sibling files (e.g. firstmate's fm-turn-end.json / fm-turn-end.sh) are never
- * rewritten or pruned. Target directories are resolved from the environment so
- * tests can use a scratch home without touching the operator's real ~/.grok.
- *
+ * Sibling files are never rewritten or pruned.
  * --check: exit 0 current, 3 pending, 2 fatal ownership conflict.
  */
 
@@ -40,38 +37,19 @@ function fatal(message: string): never {
   process.exit(2);
 }
 
-function resolveGrokHome(): string {
+function grokHome(): string {
   return process.env.GROK_HOME?.trim() || join(homedir(), ".grok");
 }
 
 function resolveHooksDir(): string {
-  if (process.env.ECHO_GROK_HOOKS_DIR?.trim()) {
-    return process.env.ECHO_GROK_HOOKS_DIR.trim();
-  }
-  return join(resolveGrokHome(), "hooks");
+  return process.env.ECHO_GROK_HOOKS_DIR?.trim() || join(grokHome(), "hooks");
 }
 
-function resolveSkillsDir(): string {
-  if (process.env.ECHO_GROK_SKILLS_DIR?.trim()) {
-    return process.env.ECHO_GROK_SKILLS_DIR.trim();
-  }
-  if (process.env.ECHO_GROK_HOOKS_DIR?.trim()) {
-    return join(dirname(process.env.ECHO_GROK_HOOKS_DIR.trim()), "skills");
-  }
-  return join(resolveGrokHome(), "skills");
-}
-
-function canonicalMuteSkill(): string {
-  const skillDir = join(ADAPTER_DIR, "skills", "echo-mute");
-  try {
-    return realpathSync(skillDir);
-  } catch {
-    fatal(`the Grok mute skill is missing at ${skillDir}`);
-  }
-}
-
-function isEchoMuteSkillSpelling(target: string): boolean {
-  return /(^|\/)adapters\/grok\/skills\/echo-mute\/?$/.test(target);
+function skillsDir(): string {
+  const override = process.env.ECHO_GROK_SKILLS_DIR?.trim();
+  if (override) return override;
+  const hooks = process.env.ECHO_GROK_HOOKS_DIR?.trim();
+  return hooks ? join(dirname(hooks), "skills") : join(grokHome(), "skills");
 }
 
 function canonicalHookPath(): string {
@@ -179,10 +157,17 @@ if (existsSync(hooksDir)) {
   }
 }
 
+const muteSource = join(ADAPTER_DIR, "skills", "echo-mute");
+let muteSkillSource: string;
+try {
+  muteSkillSource = realpathSync(muteSource);
+} catch {
+  fatal(`the Grok mute skill is missing at ${muteSource}`);
+}
 const muteSkill = planOwnedSymlink({
-  destination: join(resolveSkillsDir(), "echo-mute"),
-  source: canonicalMuteSkill(),
-  isEchoSpelling: isEchoMuteSkillSpelling,
+  destination: join(skillsDir(), "echo-mute"),
+  source: muteSkillSource,
+  isEchoSpelling: (target) => /(^|\/)adapters\/grok\/skills\/echo-mute\/?$/.test(target),
   fatal,
 });
 if (muteSkill.kind !== "current") changed = true;
