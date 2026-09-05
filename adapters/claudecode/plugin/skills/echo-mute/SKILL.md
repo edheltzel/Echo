@@ -1,6 +1,6 @@
 ---
 name: echo-mute
-description: Mute Echo audio for every session on this machine (on/off/toggle/status/duration).
+description: Mute Echo audio for every session on this machine (on/off/toggle/status/duration). Use when the user types /echo-mute or /echo:echo-mute.
 argument-hint: [on|off|toggle|status|duration]
 allowed-tools: Bash
 ---

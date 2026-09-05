@@ -76,8 +76,9 @@ commands into both. Codex and OpenCode follow the same contract.
 
 Claude Code also ships a mute-only plugin at `adapters/claudecode/plugin/`. It is not a
 registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
-stay on `restore-hooks.ts`). `/echo-mute` shells to `cli/echo mute` via PATH or the current
-checkout.
+stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin command is
+`/echo:echo-mute`. Bare `/echo-mute` remains the installer slash command. Both shell to
+`cli/echo mute` via PATH or the current checkout.
 
 ## Native terminal visuals
 

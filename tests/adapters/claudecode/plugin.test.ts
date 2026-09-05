@@ -75,6 +75,8 @@ describe("Claude Code mute plugin", () => {
     expect(md).toContain("name: echo-mute");
     expect(md).toContain("argument-hint: [on|off|toggle|status|duration]");
     expect(md).toContain("every session on this machine");
+    expect(md).toContain("/echo-mute");
+    expect(md).toContain("/echo:echo-mute");
     expect(md).toContain('ARGS="$ARGUMENTS"');
     expect(md).toContain('[ -n "$ARGS" ] || ARGS=toggle');
     expect(md).toContain('bash "$CLI" mute "$ARGS"');
@@ -83,6 +85,16 @@ describe("Claude Code mute plugin", () => {
     expect(md).not.toMatch(/curl[^\n]*\/mute/);
     expect(md).not.toContain(".claude/commands");
     expect(md).not.toContain("realpath");
+  });
+
+  test("plugin skill is /echo:echo-mute; installer keeps bare /echo-mute", () => {
+    const manifest = JSON.parse(readFileSync(MANIFEST, "utf8")) as { name: string };
+    expect(manifest.name).toBe("echo");
+    expect(existsSync("adapters/claudecode/commands/echo-mute.md")).toBe(true);
+    const readme = readFileSync("adapters/claudecode/README.md", "utf8");
+    expect(readme).toContain("/echo:echo-mute");
+    expect(readme).toContain("Bare `/echo-mute`");
+    expect(readme).toContain("always namespaced");
   });
 
   test("resolves cli/echo from PATH, not a ~/.claude/commands symlink into a tmp worktree", () => {
