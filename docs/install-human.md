@@ -8,7 +8,8 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 
 - **Core only** - any process can POST to `/notify`.
 - **Claude Code adapter** - lifecycle hooks speak, with `/echo-voice` and `/echo-mute`
-  slash commands.
+  slash commands. A mute-only plugin at `adapters/claudecode/plugin/` is optional and
+  does not replace this install.
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
@@ -64,6 +65,12 @@ This installs the same core server, re-applies Claude Code hook registrations th
 symlinks in `~/.claude/commands/` through `adapters/claudecode/reconcile-commands.ts`.
 The reconciler preserves a non-Echo file or symlink occupying either command name and aborts
 the install instead of overwriting it.
+
+A mute-only Claude Code plugin also lives at `adapters/claudecode/plugin/`. It is not a
+substitute for this install: hooks stay on `restore-hooks.ts`, and the plugin does not
+write a LaunchAgent. Load it with `claude --plugin-dir adapters/claudecode/plugin` after
+`claude plugin validate adapters/claudecode/plugin --strict`. `/echo-mute` still runs
+`cli/echo mute`.
 
 ## Add the Pi adapter
 

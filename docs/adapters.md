@@ -74,6 +74,11 @@ regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapt
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
 commands into both. Codex and OpenCode follow the same contract.
 
+Claude Code also ships a mute-only plugin at `adapters/claudecode/plugin/`. It is not a
+registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
+stay on `restore-hooks.ts`). `/echo-mute` shells to `cli/echo mute` via PATH or the current
+checkout.
+
 ## Native terminal visuals
 
 Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery. Before the

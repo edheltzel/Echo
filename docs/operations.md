@@ -211,7 +211,9 @@ through its own audio path and keeps talking while Echo is muted; muting Echo re
 spoken completion line layered on top of it, not the live voice itself.
 
 **Host slash command.** Claude Code, Pi, and omp expose
-`/echo-mute [on|off|toggle|status|duration]`. Grok, Codex, and OpenCode register the same
+`/echo-mute [on|off|toggle|status|duration]`. Claude Code also has a mute-only plugin at
+`adapters/claudecode/plugin/` that runs the same CLI without walking `~/.claude/commands`.
+Grok, Codex, and OpenCode register the same
 `cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
 POST `/mute`.
 

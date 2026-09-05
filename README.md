@@ -87,6 +87,9 @@ The quickstart above installs the core only. To also wire a host adapter:
 
 ```bash
 cli/echo install --adapter claudecode   # Claude Code hooks
+# optional mute plugin (no hooks, no LaunchAgent):
+#   claude plugin validate adapters/claudecode/plugin --strict
+#   claude --plugin-dir adapters/claudecode/plugin
 cli/echo install --adapter pi           # Pi extension
 cli/echo install --adapter omp          # oh-my-pi extension
 cli/echo install --adapter jcode        # Jcode lifecycle hooks
