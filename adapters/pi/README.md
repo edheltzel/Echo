@@ -8,15 +8,20 @@ The adapter is a Pi package. It listens to Pi lifecycle events and translates th
 
 ## Install locally
 
-```bash
-pi install ./adapters/pi
-```
-
-Or let the repository installer do it:
+Canonical install (workspace link + daemon + Pi package + reconcile):
 
 ```bash
-bash scripts/install.sh --adapter pi
+cli/echo install --adapter pi
 ```
+
+The equivalent underlying command is `bash scripts/install.sh --adapter pi`.
+
+### Advanced: path-only package registration
+
+`pi install ./adapters/pi` registers the adapter path in Pi's settings. It does
+**not** start the Echo daemon, link `@echo/shared`, or prune stale clone paths.
+Use it only when the daemon is already installed and you need to re-register this
+checkout, then run `bun run adapters/pi/reconcile.ts`.
 
 For oh-my-pi, the installer reconciles a symlink registration instead (omp has no
 `pi install`):
@@ -24,6 +29,24 @@ For oh-my-pi, the installer reconciles a symlink registration instead (omp has n
 ```bash
 bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedicated omp adapter)
 ```
+
+## Prove (Pi)
+
+Do not launch Pi's TUI for this check. After `cli/echo install --adapter pi`:
+
+```bash
+bash scripts/prove-pi.sh
+```
+
+That wraps the same checklist and exits non-zero on the first failure:
+
+1. `bun test tests/adapters/pi`
+2. `bun run adapters/pi/reconcile.ts --check` (exit 0 = current; 3 = stale)
+3. `curl -fsS` against Echo `GET /health` on the configured port
+
+Inside Pi, `/voice-status` shows adapter configuration and `/echo-mute` toggles the
+same machine-wide mute as `cli/echo mute`. Those commands are not part of the
+script.
 
 ## Behavior
 
