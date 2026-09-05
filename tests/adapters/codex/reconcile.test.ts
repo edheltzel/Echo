@@ -42,6 +42,9 @@ describe("Codex reconcile", () => {
     expect(stopCommands.some((c: string) => c.includes("foreign-stop"))).toBe(true);
     expect(stopCommands.some((c: string) => c.includes("adapters/codex/hook.ts"))).toBe(true);
 
+    const muteSkill = join(dir, "skills", "echo-mute");
+    expect(readFileSync(join(muteSkill, "SKILL.md"), "utf8")).toContain("bash \"$CLI\" mute");
+
     const check = spawnSync("bun", ["run", reconcile, "--check"], {
       env: { ...process.env, ECHO_CODEX_HOOKS_FILE: hooksFile },
       encoding: "utf8",

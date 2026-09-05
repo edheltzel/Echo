@@ -31,14 +31,16 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, omp, and OpenCode adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
     expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]');
     expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?');
     expect(script).toContain("adapters/jcode/reconcile.ts");
     expect(script).toContain("adapters/grok/reconcile.ts");
     expect(script).toContain("adapters/codex/reconcile.ts");
+    expect(script).toContain("adapters/opencode/reconcile.ts");
+    expect(script).toContain('adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
@@ -313,6 +315,7 @@ exit 0
       const owned = readFileSync(join(hooksDir, "echo-voice.json"), "utf8");
       expect(owned).toContain("adapters/grok/hook.ts");
       expect(readFileSync(foreign, "utf8")).toBe(foreignBody);
+      expect(lstatSync(join(grokHome, "skills", "echo-mute")).isSymbolicLink()).toBe(true);
 
       const after = await runInstall(["--adapter", "grok", "--check"], env);
       expect(after.exitCode).toBe(0);

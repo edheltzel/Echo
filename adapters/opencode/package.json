@@ -1,0 +1,10 @@
+{
+  "name": "@echo/opencode-adapter",
+  "version": "0.1.0",
+  "description": "OpenCode /echo-mute registration for Echo (mute only; no lifecycle voice hooks)",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@echo/shared": "workspace:*"
+  }
+}

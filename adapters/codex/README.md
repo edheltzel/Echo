@@ -37,14 +37,16 @@ Project wins over `~/.codex/settings.json`, then env defaults
 
 ## Ownership
 
-Reconcile only adds/updates the Echo `adapters/codex/hook.ts` command entries.
-Other hooks (Firstmate turn-end guards, arm checks, foreign tools) are preserved.
+Reconcile adds/updates the Echo `adapters/codex/hook.ts` command entries and
+links `~/.codex/skills/echo-mute` (`/echo-mute` → bash `cli/echo mute`; the bun
+hook is not the mute path). Other hooks are preserved.
 
 ## Environment overrides (tests)
 
 | Variable | Purpose |
 | --- | --- |
 | `ECHO_CODEX_HOOKS_FILE` | Direct hooks.json path override |
+| `ECHO_CODEX_SKILLS_DIR` | Direct skills directory override |
 | `CODEX_HOME` | Codex home (default `~/.codex`) when no project hooks file exists |
 
 Never point tests at the operator's real `~/.codex/hooks.json` without a scratch file.

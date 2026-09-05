@@ -1,9 +1,11 @@
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EchoVoiceCommand, ScaffoldContext } from "./persona-scaffold.ts";
 
-// Host-neutral `/echo-mute` command. Adapters register this; mute itself stays
-// in `cli/echo mute`.
+// Host-neutral `/echo-mute`. Mute itself stays in `cli/echo mute` → `scripts/mute.sh`.
+// Harnesses spawn bash on that CLI via node:child_process (Pi has no Bun global).
+// No second TS mute path. No POST /mute from the harness.
 
 export const DEFAULT_ECHO_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "cli", "echo");
 
@@ -15,17 +17,28 @@ export function parseMuteArgs(args: string): string[] {
   return tokens.length === 0 ? ["toggle"] : tokens;
 }
 
-export async function runEchoMute(cliPath: string, muteArgs: string[]): Promise<MuteRunResult> {
-  const proc = Bun.spawn(["/bin/bash", cliPath, "mute", ...muteArgs], {
-    stdout: "pipe",
-    stderr: "pipe",
+function readText(stream: NodeJS.ReadableStream | null): Promise<string> {
+  if (!stream) return Promise.resolve("");
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    stream.on("data", (chunk: Buffer | string) => {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    stream.on("error", reject);
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  return { exitCode, stdout, stderr };
+}
+
+export function runEchoMute(cliPath: string, muteArgs: string[]): Promise<MuteRunResult> {
+  const child = spawn("/bin/bash", [cliPath, "mute", ...muteArgs], { stdio: ["ignore", "pipe", "pipe"] });
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    Promise.all([
+      readText(child.stdout),
+      readText(child.stderr),
+      new Promise<number>((done) => child.on("close", (code) => done(code ?? 1))),
+    ]).then(([stdout, stderr, exitCode]) => resolve({ exitCode, stdout, stderr }), reject);
+  });
 }
 
 export function createEchoMuteCommand(opts?: {

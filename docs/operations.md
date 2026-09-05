@@ -210,9 +210,10 @@ you are actually in.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp also expose
-`/echo-mute [on|off|toggle|status|duration]`. It runs `cli/echo mute` (empty args → `toggle`)
-and does not add a second mute path.
+**Host slash command.** Claude Code, Pi, and omp expose
+`/echo-mute [on|off|toggle|status|duration]`. Grok, Codex, and OpenCode register the same
+`cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
+POST `/mute`.
 
 ### The underlying script
 
@@ -241,7 +242,7 @@ To pick up daemon-source or config changes, re-stage:
 ```bash
 cli/echo update                          # re-stage the payload from this checkout + reload
 cli/echo install --adapter claudecode    # first install, or to (re)wire a host adapter
-# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp>
+# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode>
 ```
 
 - Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.

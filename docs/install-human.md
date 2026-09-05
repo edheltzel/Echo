@@ -12,9 +12,10 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
-- **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions.
-- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts.
+- **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions; `/echo-mute` is a skill.
+- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` is a skill.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
+- **OpenCode adapter** - mute-only `/echo-mute` command.
 
 ## Prerequisites
 

@@ -3,13 +3,9 @@
 /**
  * Idempotent reconcile for the Codex host adapter.
  *
- * Echo owns one identifiable command entry inside the Codex hooks document
- * (project `.codex/hooks.json` when present, else `~/.codex/hooks.json`):
- *   bun '<repo>/adapters/codex/hook.ts'
- *
- * Other hooks (Firstmate turn-end, arm checks, foreign tools) are preserved.
- *
- * --check: exit 0 current, 3 pending, 2 fatal.
+ * Echo owns bun '<repo>/adapters/codex/hook.ts' in the Codex hooks document
+ * and ~/.codex/skills/echo-mute/ (bash cli/echo mute; not the bun hook).
+ * Other hooks are preserved. --check: exit 0 current, 3 pending, 2 fatal.
  */
 
 import {
@@ -23,6 +19,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOwnedSymlink, ownedLinkLog, planOwnedSymlink } from "@echo/shared/owned-symlink.ts";
 
 const CHECK_ONLY = process.argv.includes("--check");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +33,15 @@ function fatal(message: string): never {
 
 function shellQuote(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
+}
+
+function skillsDir(): string {
+  const override = process.env.ECHO_CODEX_SKILLS_DIR?.trim();
+  if (override) return override;
+  if (process.env.ECHO_CODEX_HOOKS_FILE?.trim()) {
+    return join(dirname(process.env.ECHO_CODEX_HOOKS_FILE.trim()), "skills");
+  }
+  return join(process.env.CODEX_HOME?.trim() || join(homedir(), ".codex"), "skills");
 }
 
 function resolveHooksFile(): string {
@@ -140,29 +146,46 @@ if (existsSync(hooksFile)) {
 if (!doc.hooks || typeof doc.hooks !== "object") doc.hooks = {};
 
 const hooksRoot = doc.hooks as Record<string, any>;
-let changed = false;
-changed = ensureEvent(hooksRoot, "SessionStart", command, 10) || changed;
-changed = ensureEvent(hooksRoot, "Stop", command, 30) || changed;
-changed = pruneStaleEcho(hooksRoot, command) || changed;
+let hooksChanged = false;
+hooksChanged = ensureEvent(hooksRoot, "SessionStart", command, 10) || hooksChanged;
+hooksChanged = ensureEvent(hooksRoot, "Stop", command, 30) || hooksChanged;
+hooksChanged = pruneStaleEcho(hooksRoot, command) || hooksChanged;
+
+const muteSource = join(ADAPTER_DIR, "skills", "echo-mute");
+let muteSkillSource: string;
+try {
+  muteSkillSource = realpathSync(muteSource);
+} catch {
+  fatal(`the Codex mute skill is missing at ${muteSource}`);
+}
+const muteSkill = planOwnedSymlink({
+  destination: join(skillsDir(), "echo-mute"),
+  source: muteSkillSource,
+  isEchoSpelling: (target) => /(^|\/)adapters\/codex\/skills\/echo-mute\/?$/.test(target),
+  fatal,
+});
+log.push(ownedLinkLog(muteSkill, "skills/echo-mute"));
+const changed = hooksChanged || muteSkill.kind !== "current";
 
 if (CHECK_ONLY) {
   if (changed) {
-    console.log("pending: Codex Echo hook registration needs update");
+    console.log("pending: Codex Echo hook/mute registration needs update");
     process.exit(3);
   }
-  console.log("✓ preflight passed - Codex hooks already current");
+  console.log("✓ preflight passed - Codex hooks and mute skill already current");
   process.exit(0);
 }
 
-if (!changed) {
+if (hooksChanged) {
+  mkdirSync(dirname(hooksFile), { recursive: true });
+  const text = `${JSON.stringify(doc, null, 2)}\n`;
+  const tmp = `${hooksFile}.tmp-${process.pid}`;
+  writeFileSync(tmp, text, { mode: 0o644 });
+  renameSync(tmp, hooksFile);
+  console.log(`✓ Codex hooks updated → ${hooksFile}`);
+} else {
   console.log("= Codex Echo hooks already current");
-  process.exit(0);
 }
 
-mkdirSync(dirname(hooksFile), { recursive: true });
-const text = `${JSON.stringify(doc, null, 2)}\n`;
-const tmp = `${hooksFile}.tmp-${process.pid}`;
-writeFileSync(tmp, text, { mode: 0o644 });
-renameSync(tmp, hooksFile);
-console.log(`✓ Codex hooks updated → ${hooksFile}`);
+applyOwnedSymlink(muteSkill);
 for (const line of log) console.log(line);

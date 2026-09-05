@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -28,15 +28,24 @@ describe("runEchoMute", () => {
     roots.length = 0;
   });
 
-  test("spawns the given CLI with mute + args (never the live daemon)", async () => {
+  test("spawns bash cli/echo mute with the given args (never the live daemon)", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-mute-cli-"));
     roots.push(root);
     const cli = join(root, "echo");
     writeFileSync(cli, "#!/bin/bash\nprintf 'argv:%s\\n' \"$*\"\nexit 0\n", { mode: 0o755 });
-
     const result = await runEchoMute(cli, ["30m"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("argv:mute 30m");
+  });
+
+  test("source uses node:child_process.spawn and does not POST /mute", () => {
+    const src = readFileSync("shared/mute-command.ts", "utf8");
+    expect(src).toContain('from "node:child_process"');
+    expect(src).toContain("spawn(");
+    expect(src).toContain('"/bin/bash"');
+    expect(src).not.toContain("Bun.spawn");
+    expect(src).not.toMatch(/fetch\([^)]*\/mute/);
+    expect(src).not.toMatch(/\bcurl\b[^\n]*\/mute/);
   });
 });
 
