@@ -10,8 +10,29 @@ This adapter owns all Claude Code integration glue:
 - `restore-hooks.ts` - idempotent registration into Claude Code settings
 - `commands/echo-voice.md` / `commands/echo-mute.md` - slash commands, symlinked into
   `~/.claude/commands/` by the installer (`/echo-mute` runs `cli/echo mute`)
+- `plugin/` - mute-only Claude Code plugin. Claude namespaces plugin skills, so the
+  plugin form is `/echo:echo-mute`. Bare `/echo-mute` stays the installer command.
+  Neither registers Stop/SessionStart/VoiceGate hooks or installs the daemon.
 
 The universal server core must not import this adapter. The adapter sends HTTP requests to the core `/notify` endpoint.
+
+## Mute plugin
+
+Lifecycle hooks stay on `restore-hooks.ts`. Claude plugin skills are always namespaced
+(`/plugin-name:skill-name`), so this plugin's skill is `/echo:echo-mute`. Bare
+`/echo-mute` remains the installer slash command in `~/.claude/commands/` after
+`cli/echo install --adapter claudecode`. Type either; both run `cli/echo mute`.
+The plugin skill resolves `cli/echo` from PATH or the current Echo checkout and does
+not walk `~/.claude/commands` (that symlink may point at a stale worktree).
+
+```bash
+claude plugin validate adapters/claudecode/plugin --strict
+claude --plugin-dir adapters/claudecode/plugin
+```
+
+If `claude` is not installed, `bun test tests/adapters/claudecode/plugin.test.ts` is the
+in-repo equivalent: it checks the manifest, layout, both invocation names, and that the
+mute skill invokes `cli/echo mute`.
 
 ## Subagent voice policy
 

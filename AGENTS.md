@@ -164,7 +164,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona and mute commands, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
-| Claude Code hooks, slash commands + reconcilers | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts` |
+| Claude Code hooks, slash commands + reconcilers; mute-only plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |

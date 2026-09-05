@@ -42,7 +42,7 @@
 | Host | Path | Status | Install |
 | --- | --- | --- | --- |
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
-| Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
+| Claude Code | `adapters/claudecode/` | Reference adapter; mute-only plugin at `plugin/` | `bash scripts/install.sh --adapter claudecode` (hooks). Optional: `claude --plugin-dir adapters/claudecode/plugin` |
 | Jcode | `adapters/jcode/` | Native lifecycle-hook adapter | `bash scripts/install.sh --adapter jcode` |
 | Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) plus `/echo-mute` skill | `bash scripts/install.sh --adapter grok` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |

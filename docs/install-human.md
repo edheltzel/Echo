@@ -8,7 +8,9 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 
 - **Core only** - any process can POST to `/notify`.
 - **Claude Code adapter** - lifecycle hooks speak, with `/echo-voice` and `/echo-mute`
-  slash commands.
+  slash commands. A mute-only plugin at `adapters/claudecode/plugin/` is optional
+  (`/echo:echo-mute`; bare `/echo-mute` stays the installer command) and does not
+  replace this install.
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
@@ -65,6 +67,13 @@ symlinks in `~/.claude/commands/` through `adapters/claudecode/reconcile-command
 The reconciler preserves a non-Echo file or symlink occupying either command name and aborts
 the install instead of overwriting it.
 
+A mute-only Claude Code plugin also lives at `adapters/claudecode/plugin/`. It is not a
+substitute for this install: hooks stay on `restore-hooks.ts`, and the plugin does not
+write a LaunchAgent. Load it with `claude --plugin-dir adapters/claudecode/plugin` after
+`claude plugin validate adapters/claudecode/plugin --strict`. Claude namespaces plugin
+skills, so the plugin command is `/echo:echo-mute`. Bare `/echo-mute` stays the
+installer command from this step. Both run `cli/echo mute`.
+
 ## Add the Pi adapter
 
 ```bash
@@ -79,7 +88,9 @@ bash scripts/install.sh --adapter pi
 
 This installs the core server, then registers `adapters/pi/` as a Pi package and reconciles the registration so no stale entry survives.
 
-Inside Pi, `/voice-status` shows adapter configuration.
+Inside Pi, `/voice-status` shows adapter configuration. `/echo-mute` toggles the same machine-wide mute as `cli/echo mute`.
+
+To prove the install without launching Pi's TUI: `bash scripts/prove-pi.sh`. Checklist: [`../adapters/pi/README.md`](../adapters/pi/README.md#prove-pi).
 
 ## Add the oh-my-pi (omp) adapter
 
