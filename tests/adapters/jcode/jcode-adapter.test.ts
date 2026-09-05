@@ -21,6 +21,12 @@ afterEach(() => {
 });
 
 describe("Jcode lifecycle hook adapter", () => {
+  test("ECHO_VOICE_SAY_NAME from config env opts into named greetings", () => {
+    expect(loadJcodeVoiceConfig({}).sayName).toBe(false);
+    expect(loadJcodeVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" }).sayName).toBe(true);
+    expect(loadJcodeVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" }).startupCatchphrases)
+      .not.toEqual(loadJcodeVoiceConfig({}).startupCatchphrases);
+  });
   test("speaks an explicit final voice line on a successful turn", async () => {
     const payloads: unknown[] = [];
     globalThis.fetch = async (_input, init) => {

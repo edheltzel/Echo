@@ -269,12 +269,28 @@ describe("echo doctor", () => {
           ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
         };
 
+        // A live Echo clone hook (the FM-342 mess): install must rewrite it onto
+        // this checkout so doctor registrations are current, not DEGRADED.
+        const otherHook = join(root, "Atlas", "Echo", "adapters", "jcode", "hook.ts");
+        mkdirSync(dirname(otherHook), { recursive: true });
+        writeFileSync(join(dirname(otherHook), "package.json"), JSON.stringify({ name: "@echo/jcode-adapter" }));
+        writeFileSync(otherHook, "#!/usr/bin/env bun\n");
+        mkdirSync(join(home, ".jcode"), { recursive: true });
+        writeFileSync(
+          join(home, ".jcode/config.toml"),
+          `[hooks]\nturn_end = ${JSON.stringify(otherHook)}\nsession_start = ${JSON.stringify(otherHook)}\n`,
+        );
+
         // Stage the payload first (install.sh runs in the same temp HOME).
         const install = await runCli(["install", "--adapter", "none"], env);
         expect(install.exitCode).toBe(0);
+        const jcodeAfter = readFileSync(join(home, ".jcode/config.toml"), "utf8");
+        expect(jcodeAfter).not.toContain(otherHook);
+        expect(jcodeAfter).toContain("adapters/jcode/hook.ts");
 
         const r = await runCli(["doctor"], env);
         expect(r.stdout).toContain("Result: READY");
+        expect(r.stdout).toContain("plist + host adapter paths current");
         expect(r.exitCode).toBe(0);
       } finally {
         rmSync(root, { recursive: true, force: true });

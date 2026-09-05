@@ -18,6 +18,8 @@ const CONFIG_PATH = process.env.JCODE_CONFIG_PATH
 const HOOK_PATH = realpathSync(join(dirname(fileURLToPath(import.meta.url)), "hook.ts"));
 const HOOK_COMMAND = `'${HOOK_PATH.replaceAll("'", `'\\''`)}'`;
 const HOOK_KEYS = ["turn_end", "session_start"] as const;
+const ECHO_HOOK_SPELLING = /(^|\/)adapters\/jcode\/hook\.ts$/;
+const OWNERSHIP_MARKER = "@echo/jcode-adapter";
 const HOOKS_HEADER_RE = /^\s*\[(?:hooks|"hooks"|'hooks')\]\s*(?:#.*)?$/;
 const ANY_HEADER_RE = /^\s*\[\[?[^\]]+\]\]?\s*(?:#.*)?$/;
 
@@ -89,18 +91,37 @@ function singleProgram(command: string): string | null {
   return /\s/.test(trimmed) ? null : trimmed;
 }
 
-function hasOnlyEchoHookPath(command: string): boolean {
+function isEchoJcodePackage(dir: string): boolean {
   try {
-    if (realpathSync(command) === HOOK_PATH) return true;
-  } catch {
-    // Fall through to shell-command parsing for the canonical quoted form.
-  }
-  const program = singleProgram(command);
-  if (program === null) return false;
-  try {
-    return realpathSync(program) === HOOK_PATH;
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: unknown };
+    return pkg?.name === OWNERSHIP_MARKER;
   } catch {
     return false;
+  }
+}
+
+// Echo-owned, not merely "this checkout": a live hook from another clone, a dead
+// */adapters/jcode/hook.ts left by a rename/tmp worktree, or a path that already
+// realpaths here. Suffix matching alone is not ownership - a coincidental file
+// at that spelling is a foreign command and must stay fatal.
+function isEchoOwnedHook(command: string): boolean {
+  const program = singleProgram(command);
+  const candidates = [command.trim(), program].filter((value): value is string => Boolean(value));
+  for (const candidate of candidates) {
+    try {
+      if (realpathSync(candidate) === HOOK_PATH) return true;
+    } catch {
+      // Dead path or unquoted command with shell quoting - try the next spelling.
+    }
+  }
+
+  const path = program ?? command.trim();
+  if (!path || !ECHO_HOOK_SPELLING.test(path.replaceAll("\\", "/"))) return false;
+
+  try {
+    return isEchoJcodePackage(dirname(realpathSync(path)));
+  } catch {
+    return true;
   }
 }
 
@@ -181,7 +202,7 @@ function reconcileText(input: string): { output: string; changed: boolean; log: 
           log.push(`= hooks.${key} already current`);
           break;
         }
-        if (current && !hasOnlyEchoHookPath(current)) {
+        if (current && !isEchoOwnedHook(current)) {
           fatal(`[hooks].${key} already belongs to another command (${current}); Jcode supports one command per hook`);
         }
         lines[index] = `hooks.${key} = ${canonicalValue}`;
@@ -209,7 +230,7 @@ function reconcileText(input: string): { output: string; changed: boolean; log: 
         log.push(`= [hooks].${key} already current`);
         break;
       }
-      if (current && !hasOnlyEchoHookPath(current)) {
+      if (current && !isEchoOwnedHook(current)) {
         fatal(`[hooks].${key} already belongs to another command (${current}); Jcode supports one command per hook`);
       }
       lines[index] = `${key} = ${canonicalValue}`;

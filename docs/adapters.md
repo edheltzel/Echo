@@ -108,8 +108,11 @@ Jcode's lifecycle stream covers TUI, desktop, headless, and swarm workers. The a
 `JCODE_HOOK_SESSION_KIND` and `JCODE_HOOK_PARENT_SESSION_ID` to suppress child sessions.
 Startup greetings are disabled by default; when enabled they run only for root
 `session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
-is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
-overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
+is never read aloud. Jcode supports only one command per hook key; reconciliation rewrites
+Echo-owned `turn_end` / `session_start` commands (this checkout, another clone whose
+`package.json` is `@echo/jcode-adapter`, or a dead `*/adapters/jcode/hook.ts` from a
+rename or tmp worktree) to the install tree that ran reconcile, refuses to overwrite a
+non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
 fails closed on TOML table shapes it cannot preserve safely.
 
 ## Grok Build adapter - lifecycle hooks

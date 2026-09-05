@@ -20,6 +20,10 @@
     "ECHO_VOICE_ID": { "type": "string" },
     "ECHO_VOICE_TITLE": { "type": "string" },
     "ECHO_VOICE_CATCHPHRASE": { "type": "string" },
+    "ECHO_VOICE_SAY_NAME": {
+      "type": ["string", "boolean"],
+      "description": "Opt into announcing the persona name in the default startup greeting pool. Host daidentity.sayName still wins when set. Unset stays nameless."
+    },
     "ECHO_VOICE_ENABLED": { "type": ["string", "boolean"] },
     "ECHO_VOICE_GREET_ON_START": { "type": ["string", "boolean"] },
     "ECHO_VOICE_SPEAK_COMPLETIONS": { "type": ["string", "boolean"] },
