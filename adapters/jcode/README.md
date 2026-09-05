@@ -13,7 +13,9 @@ events whose lifecycle metadata identifies a child session. Startup greetings ar
 by default; when enabled with `ECHO_VOICE_GREET_ON_START=true`, only newly created root
 sessions greet (attach/resume and child sessions stay silent).
 
-Jcode currently supports one command per hook. Installation refuses to replace a non-Echo
-`session_start` or `turn_end` command. Hook commands are shell-quoted for checkout paths with
+Jcode currently supports one command per hook. Installation rewrites Echo-owned
+`session_start` / `turn_end` commands onto this checkout (including a live hook from
+another Echo clone, or a dead `*/adapters/jcode/hook.ts` left by a rename) and refuses
+to replace a non-Echo owner. Hook commands are shell-quoted for checkout paths with
 spaces. Unsupported TOML shapes fail closed rather than risking config corruption; convert an
 inline or array-form `hooks` value to the documented `[hooks]` table before retrying.

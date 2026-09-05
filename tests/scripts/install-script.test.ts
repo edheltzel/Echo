@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o755 });
@@ -548,6 +548,48 @@ exit 0
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("refresh-all rewrites a live Echo clone Jcode hook onto this install tree", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-jcode-clone-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".jcode"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      const otherHook = join(root, "Atlas", "Echo", "adapters", "jcode", "hook.ts");
+      mkdirSync(dirname(otherHook), { recursive: true });
+      writeFileSync(join(dirname(otherHook), "package.json"), JSON.stringify({ name: "@echo/jcode-adapter" }));
+      writeFileSync(otherHook, "#!/usr/bin/env bun\n");
+      const config = join(home, ".jcode/config.toml");
+      writeFileSync(config, `[hooks]\nturn_end = ${JSON.stringify(otherHook)}\nsession_start = ${JSON.stringify(otherHook)}\n`);
+
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--adapter", "none"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Refreshing Jcode lifecycle-hook registration");
+      const hook = realpathSync(resolve("adapters/jcode/hook.ts"));
+      const command = `'${hook.replaceAll("'", `'\\''`)}'`;
+      const parsed = Bun.TOML.parse(readFileSync(config, "utf8")) as any;
+      expect(parsed.hooks.turn_end).toBe(command);
+      expect(parsed.hooks.session_start).toBe(command);
+      expect(readFileSync(config, "utf8")).not.toContain(otherHook);
+
+      const check = await runInstall(["--check"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+      expect(check.exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
 
   test("refresh-all detects the canonical shell-quoted Jcode hook command", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-jcode-refresh-"));

@@ -112,7 +112,7 @@ at runtime; invalid values use the defaults below.
 
 | Group | Properties | Defaults / notes |
 | --- | --- | --- |
-| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
+| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_VOICE_SAY_NAME | 3246; the two JSON files next to core/server.ts; /usr/bin/say; Daniel (Enhanced) |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
 | Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE | Adapter defaults apply when unset |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
@@ -130,6 +130,10 @@ Settings whose behavior is not obvious from the name:
 - **ECHO_SAY_BIN** points the macOS `say` fallback provider at a different executable. It is
   the last rung of the provider chain, so this is the knob for wrapping it (a logging shim, a
   routed audio device, or a no-op for a run that must stay silent). Unset means `/usr/bin/say`.
+
+- **ECHO_VOICE_SAY_NAME** is the macOS `say -v` voice name. It overrides `providers.say.voice`
+  from `core/voices.json` (the daemon already uses that name as `macos_fallback_voice` on
+  `GET /health`). Unset keeps the voices.json value, shipped as `Daniel (Enhanced)`.
 
 - **ECHO_CONVERSE_STT_TIER** pins the transcriber to `yap` or `whisper`. When it is set, a
   missing binary reports itself rather than falling through to the other rung, so nobody is

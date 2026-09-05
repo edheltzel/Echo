@@ -60,6 +60,10 @@
       "type": "string",
       "description": "Executable the macOS say fallback provider spawns. Defaults to /usr/bin/say."
     },
+    "ECHO_VOICE_SAY_NAME": {
+      "type": "string",
+      "description": "Voice name passed to macOS say -v. Overrides providers.say.voice from voices.json when set. Unset uses Daniel (Enhanced)."
+    },
     "ECHO_CONVERSE_PORT": {
       "default": 32468,
       "description": "Port for the echo-converse coordinator. Core's TTS daemon keeps PORT (3246).",
