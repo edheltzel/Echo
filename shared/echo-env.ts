@@ -23,7 +23,7 @@ export const ECHO_CONFIG_PATH_PARTS = [".config", "echo", "config.json"] as cons
 export const ECHO_CONFIG_KEYS = new Set([
   "PORT", "VOICES_PATH", "PRONUNCIATIONS_PATH",
   "ECHO_VOICE_PERSONA_NAME", "ECHO_VOICE_ID", "ECHO_VOICE_TITLE", "ECHO_PYTHON3_PATH",
-  "ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_ENABLED", "ECHO_VOICE_GREET_ON_START",
+  "ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_SAY_NAME", "ECHO_VOICE_ENABLED", "ECHO_VOICE_GREET_ON_START",
   "ECHO_VOICE_SPEAK_COMPLETIONS", "ECHO_VOICE_SUPPRESS", "ECHO_VOICE_SUPPRESS_SUBAGENTS",
   "ECHO_DEFAULT_TITLE",
   "ECHO_EDGETTS_TIMEOUT_MS", "ECHO_EDGETTS_TIMEOUT_MAX_MS", "ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS",
@@ -36,8 +36,8 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_RESOLUTION_LOG", "ECHO_RESOLUTION_LOG_MAX_BYTES", "ECHO_VOICE_EVENTS_LOG",
   "ECHO_DAEMON_URL", "ECHO_NOTIFY_URL", "ECHO_VOICE_SURFACES",
   // The macOS fallback speaker, so the last rung of the provider chain can be
-  // pointed at a wrapper instead of /usr/bin/say, and the -v voice it speaks with.
-  "ECHO_SAY_BIN", "ECHO_VOICE_SAY_NAME",
+  // pointed at a wrapper instead of /usr/bin/say.
+  "ECHO_SAY_BIN",
   // echo-converse (one-shot voice ask). Only the coordinator reads PORT/URL and
   // the booking lock; the rest are read in the calling host's process, where the
   // capture actually happens.

@@ -115,12 +115,13 @@ export function loadGrokVoiceConfig(
   cwd: string | undefined = process.cwd(),
 ): GrokVoiceConfig {
   const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
+  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   const base: GrokVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Grok Notification",
-    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(false) : [catchphrase],
+    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Grok",
-    sayName: false,
+    sayName,
     voiceId: env.ECHO_VOICE_ID ?? "grok",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     // Grok fires SessionStart for every new TUI/headless session. Keep greetings

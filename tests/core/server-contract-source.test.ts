@@ -4,11 +4,6 @@ import { readFileSync } from "node:fs";
 describe("core server route contract source", () => {
   const server = readFileSync("core/server.ts", "utf8");
 
-  test("macOS say voice name honors ECHO_VOICE_SAY_NAME over voices.json", () => {
-    expect(server).toContain('resolveEchoEnv("ECHO_VOICE_SAY_NAME")');
-    expect(server).toContain("voicesConfig.providers.say.voice");
-  });
-
   test("the listen port is resolved through the import-pure env resolver", () => {
     // Core-wide enforcement of the no-process.env-writes rule lives in
     // architecture-invariants.test.ts (static) and import-purity.test.ts

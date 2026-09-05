@@ -7,7 +7,7 @@ import {
   pickStartupCatchphrase,
   shouldSuppressVoice,
 } from "../../../adapters/pi/config";
-import { NAMELESS_STARTUP_GREETINGS } from "../../../shared/greeting";
+import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 import { edgeRateFromSpeed } from "../../../core/edge-rate";
 import { loadEchoEnvironment } from "../../../shared/echo-env";
 
@@ -20,6 +20,12 @@ describe("Pi voice config", () => {
     expect(config.sayName).toBe(false);
     expect(config.voiceEnabled).toBe(true);
     expect(config.personaName).toBe("Pi");
+  });
+
+  test("ECHO_VOICE_SAY_NAME opts into the named default startup pool", () => {
+    const config = loadPiVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" });
+    expect(config.sayName).toBe(true);
+    expect(config.startupCatchphrases).toEqual(NAMED_STARTUP_GREETINGS);
   });
 
   test("default adapter reads config.json instead of process configuration", () => {

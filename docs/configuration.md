@@ -112,9 +112,9 @@ at runtime; invalid values use the defaults below.
 
 | Group | Properties | Defaults / notes |
 | --- | --- | --- |
-| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_VOICE_SAY_NAME | 3246; the two JSON files next to core/server.ts; /usr/bin/say; Daniel (Enhanced) |
+| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
-| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE | Adapter defaults apply when unset |
+| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME | Adapter defaults apply when unset; startup names stay nameless unless ECHO_VOICE_SAY_NAME / daidentity.sayName is true |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
@@ -131,9 +131,9 @@ Settings whose behavior is not obvious from the name:
   the last rung of the provider chain, so this is the knob for wrapping it (a logging shim, a
   routed audio device, or a no-op for a run that must stay silent). Unset means `/usr/bin/say`.
 
-- **ECHO_VOICE_SAY_NAME** is the macOS `say -v` voice name. It overrides `providers.say.voice`
-  from `core/voices.json` (the daemon already uses that name as `macos_fallback_voice` on
-  `GET /health`). Unset keeps the voices.json value, shipped as `Daniel (Enhanced)`.
+- **ECHO_VOICE_SAY_NAME** is the config.json form of `daidentity.sayName`: when true, adapters
+  use the named default startup pool and fill `{name}`. Unset or false stays nameless. A
+  host `daidentity.sayName` still wins when that file sets it.
 
 - **ECHO_CONVERSE_STT_TIER** pins the transcriber to `yap` or `whisper`. When it is set, a
   missing binary reports itself rather than falling through to the other rung, so nobody is

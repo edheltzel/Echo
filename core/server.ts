@@ -286,8 +286,6 @@ function loadVoicesConfig(): VoicesConfig {
 export const voicesConfig = loadVoicesConfig();
 
 function getMacOSFallbackVoice(): string {
-  const configured = resolveEchoEnv("ECHO_VOICE_SAY_NAME")?.trim();
-  if (configured) return configured;
   return voicesConfig.providers.say.voice || DEFAULT_MACOS_VOICE;
 }
 

@@ -20,6 +20,10 @@
     "ECHO_VOICE_ID": { "type": "string" },
     "ECHO_VOICE_TITLE": { "type": "string" },
     "ECHO_VOICE_CATCHPHRASE": { "type": "string" },
+    "ECHO_VOICE_SAY_NAME": {
+      "type": ["string", "boolean"],
+      "description": "Opt into announcing the persona name in the default startup greeting pool. Host daidentity.sayName still wins when set. Unset stays nameless."
+    },
     "ECHO_VOICE_ENABLED": { "type": ["string", "boolean"] },
     "ECHO_VOICE_GREET_ON_START": { "type": ["string", "boolean"] },
     "ECHO_VOICE_SPEAK_COMPLETIONS": { "type": ["string", "boolean"] },
@@ -59,10 +63,6 @@
     "ECHO_SAY_BIN": {
       "type": "string",
       "description": "Executable the macOS say fallback provider spawns. Defaults to /usr/bin/say."
-    },
-    "ECHO_VOICE_SAY_NAME": {
-      "type": "string",
-      "description": "Voice name passed to macOS say -v. Overrides providers.say.voice from voices.json when set. Unset uses Daniel (Enhanced)."
     },
     "ECHO_CONVERSE_PORT": {
       "default": 32468,

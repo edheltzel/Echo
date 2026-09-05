@@ -110,12 +110,13 @@ export function loadCodexVoiceConfig(
   cwd: string | undefined = process.cwd(),
 ): CodexVoiceConfig {
   const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
+  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   const base: CodexVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Codex Notification",
-    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(false) : [catchphrase],
+    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Codex",
-    sayName: false,
+    sayName,
     voiceId: env.ECHO_VOICE_ID ?? "codex",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),
