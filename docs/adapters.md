@@ -80,6 +80,88 @@ stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin comm
 `/echo:echo-mute`. Bare `/echo-mute` remains the installer slash command. Both shell to
 `cli/echo mute` via PATH or the current checkout.
 
+The shipped id list and feature register hooks live in [`../shared/extension.ts`](../shared/extension.ts).
+That catalog is the extension surface. It is not a second plugin loader: `install.sh` still
+calls each adapter's own reconciler, and the daemon still never imports a host.
+
+## Extension surface
+
+`shared/extension.ts` types the as-built seams so a new harness or feature does not fork
+`core/` or invent a parallel plugin system.
+
+| Kind | As-built hosts | How it plugs in |
+| --- | --- | --- |
+| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoVoice`, `registerEchoAskTool`. |
+| `hooks` | Claude Code, Jcode, Grok, Codex | Out-of-process lifecycle interceptors plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
+| `commands-only` | OpenCode | Mute-only owned symlink. |
+
+Feature register hooks (reuse these; do not add a second factory):
+
+| Feature | Register hook | Notes |
+| --- | --- | --- |
+| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
+| mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
+| persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
+| ask | `registerEchoAskTool` (`@echo/converse/host-tool.ts`) | Feature-detect the host tool API. |
+| greeting | `applyNameToken` / shared greeting pool | Adapter owns when to speak it. |
+| env | `loadEchoEnvironment` (`@echo/shared/echo-env.ts`) | `config.json` first; doctor reads the same keys. |
+
+`bun run scripts/harness-catalog.ts` prints the catalog. `tests/shared/extension.test.ts`
+fails if a catalog id is missing from workspaces, `install.sh`, or `cli/echo`.
+
+## How to add a harness
+
+Subtract first: copy the closest as-built adapter rather than a new runtime.
+
+1. Create `adapters/<id>/` as a workspace package that declares `@echo/shared`. Relative
+   imports stay inside the package. Talk to the daemon over HTTP, never by reading `core/`.
+2. Ship an idempotent reconciler with `--check` (exit 0 current, 3 pending, 2 fatal).
+3. Add a `HARNESSES` entry in `shared/extension.ts` (`id`, `kind`, `reconcile`, `features`).
+4. List the package in the root `workspaces` array.
+5. Wire `--adapter <id>` in `scripts/install.sh` (usage, unknown-id case, preflight,
+   `install_adapter`, `refresh_installed_adapters`, `check_installation`) and the
+   `cli/echo` usage line. Detection stays adapter-owned; do not add host names to `core/`.
+6. Add tests under `tests/adapters/<id>/` and a section on this page.
+7. Prove with the commands below. `tests/shared/extension.test.ts` lists every seam the
+   catalog still expects.
+
+Pi/omp is the plugin-first reference. Claude Code is the thin-plugin reference (hooks +
+slash commands, no in-process SDK). Jcode is the lifecycle-hook reference. OpenCode is the
+mute-only reference.
+
+## How to add a feature
+
+A feature is a register hook plus the adapters that opt in. Do not add it to `core/` unless
+every host needs a new HTTP contract.
+
+1. Put host-neutral behavior in `@echo/shared` (or `@echo/converse` for ask). Export a
+   register function, not a parallel plugin table.
+2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoVoice` /
+   `registerEchoAskTool` from the extension entry. Feature-detect host APIs; missing
+   surface must no-op without taking the adapter down.
+3. Slash-command / skill hosts: add a file that shells out to the existing CLI (mute is
+   `bash cli/echo mute`) and register it with `planOwnedSymlink` / the host reconciler.
+4. Name the feature on each opting-in harness in `HARNESSES[].features`.
+5. If the feature needs configuration, read it through `loadEchoEnvironment` so doctor/env
+   stay one surface.
+
+Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path.
+
+## Prove
+
+```bash
+bun test tests/shared/extension.test.ts tests/scripts/harness-catalog.test.ts
+bun test tests/shared/mute-command.test.ts
+bun test tests/adapters/pi/pi-echo-voice-command.test.ts tests/adapters/omp/omp-echo-voice-command.test.ts
+bun test tests/adapters/claudecode/echo-mute-command.test.ts tests/adapters/opencode/echo-mute-command.test.ts
+bun run scripts/harness-catalog.ts
+bun run scripts/harness-catalog.ts features
+bash scripts/install.sh --check     # or: cli/echo doctor
+```
+
+`--check` is read-only. Do not retarget the live LaunchAgent to prove a checkout.
+
 ## Native terminal visuals
 
 Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery. Before the
