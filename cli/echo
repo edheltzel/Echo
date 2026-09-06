@@ -35,6 +35,7 @@ Commands:
   install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
+                       Adapter ids: shared/extension.ts (HARNESS_IDS).
   doctor               Diagnose every degraded state with a concrete recovery command.
   status               Service + health snapshot with recent logs.
   mute on|off|toggle|status | <duration, e.g. 30m or 1h>

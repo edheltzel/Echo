@@ -41,6 +41,9 @@ GROK_HOOKS="${ECHO_GROK_HOOKS_DIR:-${GROK_HOME:-$HOME/.grok}/hooks}"
 OPENCODE_COMMANDS="${ECHO_OPENCODE_COMMANDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/commands}"
 ADAPTER="none"
 CHECK_ONLY=0
+# Adapter ids are owned by shared/extension.ts (HARNESS_IDS). Adding a harness
+# starts there; tests/shared/extension.test.ts fails if this case list, cli/echo
+# usage, or workspaces drift. Do not invent a second installer plugin loader.
 
 usage() {
   cat <<EOF
@@ -84,6 +87,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ADAPTER" in
+  # Keep in lockstep with shared/extension.ts harnessUsageIds().
   none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2

@@ -142,7 +142,7 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability settings | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
-| Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + package boundary + registration contract (#77) + extension surface (add harness / add feature) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
@@ -161,14 +161,14 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Universal daemon | `core/server.ts` |
 | Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
 | Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona and mute commands, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
+| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona and mute commands, harness catalog + feature register hooks, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks, slash commands + reconcilers; mute-only plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
-| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
+| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload · harness catalog CLI | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`, `harness-catalog.ts`) |
 | Port every lifecycle script + `cli/echo` talks to (config.json, deprecated process PORT, then 3246; never parses dotenv files) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
@@ -197,6 +197,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
+- Do not invent a second plugin loader beside the as-built adapter packages. New harnesses and features register through [`shared/extension.ts`](shared/extension.ts) (`HARNESSES`, `registerEchoMute`, `registerEchoVoice`) and the existing reconciler + `/notify` seams. `core/` stays host-neutral.
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
 - Do not let `echo_ask` reach capture without a live host-session consent grant. Pi and omp keep the grant only in their active extension instance; MCP keeps it only for its stdio process because the protocol publishes no narrower conversation lifecycle. Denials are sticky for that session, missing UI fails closed, and no consent state is persisted. Exact surfaces and expiry: `docs/converse.md`.

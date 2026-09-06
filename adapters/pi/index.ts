@@ -11,8 +11,8 @@ import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
-import { createEchoMuteCommand } from "@echo/shared/mute-command.ts";
-import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
+import { mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
+import { registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
@@ -266,9 +266,6 @@ export default function atlasVoicePiAdapter(
   // `/echo-voice [name] [voice]` - set THIS repo's persona (name + edge-tts voice)
   // in .pi/settings.json, merged so other settings are preserved. Cross-host analog
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
-  pi.registerCommand(
-    "echo-voice",
-    createEchoVoiceCommand({ configPath: [".pi", "settings.json"], merge: mergePersonaJson }),
-  );
-  pi.registerCommand("echo-mute", createEchoMuteCommand());
+  registerEchoVoice(pi, { configPath: [".pi", "settings.json"], merge: mergePersonaJson });
+  registerEchoMute(pi);
 }

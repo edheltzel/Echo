@@ -11,8 +11,8 @@ import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
-import { createEchoMuteCommand } from "@echo/shared/mute-command.ts";
-import { createEchoVoiceCommand, mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
+import { mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
+import { registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
@@ -321,9 +321,6 @@ export default function echoVoiceOmpAdapter(
   // `/echo-voice [name] [voice]` - set THIS repo's persona (name + edge-tts voice)
   // in .omp/config.yml (YAML), merged so other config is preserved. Cross-host analog
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
-  omp.registerCommand(
-    "echo-voice",
-    createEchoVoiceCommand({ configPath: [".omp", "config.yml"], merge: mergePersonaYaml }),
-  );
-  omp.registerCommand("echo-mute", createEchoMuteCommand());
+  registerEchoVoice(omp, { configPath: [".omp", "config.yml"], merge: mergePersonaYaml });
+  registerEchoMute(omp);
 }
