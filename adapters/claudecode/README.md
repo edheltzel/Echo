@@ -6,7 +6,9 @@ This adapter owns all Claude Code integration glue:
 
 - `hooks/VoiceGreeting.hook.ts` - session-start greeting
 - `hooks/VoiceGate.hook.ts` - subagent voice curl suppression
+- `hooks/VoiceHil.hook.ts` - needs-input / approval / attention (`PermissionRequest`, `Notification`)
 - `hooks/handlers/VoiceNotification.ts` - stop-phase `🗣️` completion speech
+- `hooks/handlers/VoiceHil.ts` - HIL notify path (transcript `AskUserQuestion` / `awaitingInput`)
 - `restore-hooks.ts` - idempotent registration into Claude Code settings
 - `commands/echo-voice.md` / `commands/echo-mute.md` - slash commands, symlinked into
   `~/.claude/commands/` by the installer (`/echo-mute` runs `cli/echo mute`)

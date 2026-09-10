@@ -24,6 +24,10 @@
       "type": ["string", "boolean"],
       "description": "Opt into announcing the persona name in the default startup greeting pool. Host daidentity.sayName still wins when set. Unset stays nameless."
     },
+    "ECHO_PREFERRED_NAME": {
+      "type": "string",
+      "description": "Preferred human name for needs-input / approval / attention announces. Unset stays nameless; Echo never guesses a name."
+    },
     "ECHO_VOICE_ENABLED": { "type": ["string", "boolean"] },
     "ECHO_VOICE_GREET_ON_START": { "type": ["string", "boolean"] },
     "ECHO_VOICE_SPEAK_COMPLETIONS": { "type": ["string", "boolean"] },

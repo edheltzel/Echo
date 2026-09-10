@@ -54,6 +54,8 @@ script.
   [The persona and voice guide](../../docs/voices.md#per-project-persona--voice) owns
   pool, `sayName`, and custom-line semantics. `ECHO_VOICE_CATCHPHRASE` pins one line.
 - `message_end` / `turn_end` → extracts the final `🗣️` line from assistant text and speaks it once.
+- `tool_approval_requested` / `ui_prompt_start` → one needs-approval / question / attention line
+  ([#107](https://github.com/edheltzel/Echo/issues/107)). Hosts that lack the event never emit it.
 - Registers the `echo_ask` tool (speak a question, return the spoken reply as text) when the
   runtime exposes a tool API; a runtime without one keeps its voice notifications. Contract:
   [docs/converse.md](../../docs/converse.md).
@@ -88,6 +90,7 @@ editing the file:
 | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | `true` | Suppress Pi subagent voices |
 | `ECHO_VOICE_SUPPRESS` | `false` | Global emergency suppression |
 | `ECHO_VOICE_PERSONA_NAME` | `Pi` | Spoken persona name in `🗣️` completions |
+| `ECHO_PREFERRED_NAME` | unset | Human name for needs-input lines; nameless when unset |
 
 ## Per-project persona & voice
 

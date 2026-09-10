@@ -66,7 +66,7 @@ describe("Claude Code mute plugin", () => {
     expect(files).not.toContain("com.echo");
     const text = pluginFiles().map((file) => readFileSync(file, "utf8")).join("\n");
     expect(text).not.toMatch(/LaunchAgent/);
-    expect(text).not.toMatch(/VoiceGate|VoiceCompletion|VoiceGreeting|SessionStart|restore-hooks/);
+    expect(text).not.toMatch(/VoiceGate|VoiceCompletion|VoiceGreeting|VoiceHil|SessionStart|restore-hooks/);
     expect(text).not.toContain(".tmp-fm337");
   });
 

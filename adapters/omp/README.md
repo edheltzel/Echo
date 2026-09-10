@@ -15,6 +15,11 @@ through the same shared implementation the Pi adapter uses, feature-detected so 
 without a tool API keeps its voice notifications. Contract:
 [docs/converse.md](../../docs/converse.md).
 
+On `tool_approval_requested` and `ui_prompt_start` it speaks one needs-approval / question /
+attention line ([#107](https://github.com/edheltzel/Echo/issues/107)). Live mode still
+suppresses `/notify`. Default omp `approvalMode` is often `yolo`, so the approval event
+never fires until that is changed.
+
 ## Configuration
 
 omp loads the same canonical `ECHO_VOICE_*` settings as the Pi adapter (the legacy
