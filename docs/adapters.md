@@ -290,7 +290,8 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   back to the provider default voice (audibly the identity voice on stock installs), logged
   as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
-  `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
+  `shouldSuppressVoice` check (`@echo/shared/persona.ts`) the speak side uses
+  (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`shared/voice-line.ts`) strips an optional leading
   `<Name>:` (mirroring the Claude Code adapter's `parseFinalVoiceLine` name grammar) so the persona name isn't
   spoken aloud.

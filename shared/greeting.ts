@@ -28,6 +28,14 @@ export function defaultStartupGreetings(sayName = false): string[] {
   return sayName ? NAMED_STARTUP_GREETINGS : NAMELESS_STARTUP_GREETINGS;
 }
 
+/** Random pick from the greeting pool; `random` is injectable for tests. */
+export function pickStartupCatchphrase(
+  pool: string[],
+  random: () => number = Math.random,
+): string {
+  return pool[Math.floor(random() * pool.length)];
+}
+
 export function resolvePersonaStartupGreetings(
   base: string[],
   override: string[] | undefined,
