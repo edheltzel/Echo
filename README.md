@@ -26,7 +26,7 @@ Prefer typing? Leave the adapter off. Already installed, and someone just sat do
 cli/echo mute on
 ```
 
-That silences Echo audio on the whole machine, not one session. Notifications still arrive and are logged. It does not stop Oh My Pi live chat, which speaks on its own path. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) for layers, timed mute, and what still makes sound.
+That silences Echo audio on the whole machine, not one session. Notifications still arrive and are logged. The daemon stays up. It does not stop Oh My Pi live chat, which speaks on its own path. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) for layers, timed mute, and what still makes sound. To unload LaunchAgent `com.echo`, see [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 
 ## Hosts
 
@@ -110,14 +110,14 @@ cli/echo install --adapter opencode    # mute only
 cli/echo install --adapter mcp        # optional one-shot voice ask for Claude Code
 ```
 
-Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute).
+Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 
 | I want to… | Read |
 | --- | --- |
 | Hear my first notification (tutorial) | [docs/getting-started.md](docs/getting-started.md) |
 | Understand what Echo does, when it speaks, and when it stays quiet | [docs/what-echo-does.md](docs/what-echo-does.md) |
 | Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
-| Start, stop, restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Start, stop, restart, mute vs daemon disable, update after a pull, read logs | [docs/operations.md](docs/operations.md#mute-vs-daemon-disable) |
 | Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |
 | Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
 | Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |

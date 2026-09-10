@@ -1,7 +1,8 @@
 # Operations
 
 How to run Echo day to day: start, stop, restart, status, logs, health, updating after a
-`git pull`, and recovering after a repo move. First sound is
+`git pull`, and recovering after a repo move. Mute vs taking the service down is
+[Mute vs daemon disable](#mute-vs-daemon-disable). First sound is
 [`getting-started.md`](getting-started.md). Why Echo speaks or stays quiet:
 [`what-echo-does.md`](what-echo-does.md). Installing a host is
 [`install-human.md`](install-human.md). A second instance for development:
@@ -15,6 +16,23 @@ Service identity:
 
 Run all commands from the repo root.
 
+## Mute vs daemon disable
+
+Runtime mute leaves the daemon up. **Daemon disable** takes LaunchAgent `com.echo` down.
+VoiceLayer **kill-switch** / **daemon-disable** (env `DISABLE_VOICELAYER`, or a flag file
+such as `/tmp/.voicelayer-daemon-disabled`) is that second thing, not mute. Echo has no
+disable-flag file.
+
+| You want | Echo name | Command | Effect |
+| --- | --- | --- | --- |
+| Speaker off, daemon still serving | Runtime mute | `cli/echo mute on` | Audio off. Notifications still accepted and logged. `/health` answers. |
+| Machine quiet because the service is down | Stop (unload) | `bash scripts/stop.sh` | Unloads LaunchAgent `com.echo`. Bring it back with `bash scripts/start.sh`. |
+| Remove the service | Uninstall | `cli/echo uninstall` | Unloads `com.echo` and deletes the staged payload. Logs and `~/.config/echo/config.json` stay. |
+
+`cli/echo` wraps mute, doctor, update, and uninstall. Start and stop are `scripts/start.sh`
+and `scripts/stop.sh`. `restart.sh` unloads and reloads; that is a bounce, not a disable.
+Never broad-kill whatever owns port `3246`.
+
 ## The everyday four
 
 `cli/echo` is the stable human surface; the scripts below it stay available and are what it
@@ -23,8 +41,8 @@ calls. In the order you need them:
 1. **Install or update** - `cli/echo update` after a `git pull`, `cli/echo install --adapter <host>`
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
-3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Optional scope `tts`, `mic`, or `all` (default `all`). Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
+   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -61,6 +79,10 @@ if the plist is missing it tells you to run `scripts/install.sh` first.
 ```bash
 bash scripts/stop.sh
 ```
+
+This unloads LaunchAgent `com.echo`. That is **daemon disable**: the machine is quiet because
+the service is down. Runtime mute is a different switch
+([Mute vs daemon disable](#mute-vs-daemon-disable)).
 
 Prints `OK echo stopped`. If Echo's port is still in use afterwards, the script warns and
 deliberately does **not** kill the owner - it may belong to another service. Never
@@ -187,7 +209,8 @@ were then restored. This counterfactual isolates host output masking from Echo s
 ## Mute
 
 Runtime mute turns the audio and/or the microphone booking off while notifications are still
-accepted, processed, and logged. Why the layers exist, including shared offices:
+accepted, processed, and logged. The daemon stays up. To unload `com.echo`, use
+[Stop](#stop). Why the layers exist, including shared offices:
 [`what-echo-does.md`](what-echo-does.md#silence-and-mute). `cli/echo mute` is the command:
 
 ```bash
@@ -331,8 +354,10 @@ exit-code contract lives in [`adapters.md`](adapters.md).
 bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews it)
 ```
 
-Removes the LaunchAgent **and the daemon payload**, preserving logs (`~/Library/Logs/echo.log`)
-and persona config (`~/.config/echo/config.json`). Adapter registrations are **not** removed:
+Durable daemon disable: removes the LaunchAgent **and the daemon payload**. Prefer
+[Stop](#stop) if you only want `com.echo` down until the next `scripts/start.sh`. Logs
+(`~/Library/Logs/echo.log`) and persona config (`~/.config/echo/config.json`) stay. Adapter
+registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
 symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
 `turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
