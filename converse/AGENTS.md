@@ -29,6 +29,14 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   Claude Code's MCP ancestry is unverified. Source checks in
   `../tests/converse/architecture-invariants.test.ts` do not enforce runtime ancestry or indirect
   dependency behavior.
+- **Silence modes are sox trailing-silence windows, not Silero/onnx.** `quick` 500ms /
+  `standard` 1500ms (default; today's timeout) / `thoughtful` 2500ms. Per-ask `silence_mode` on
+  `echo_ask` overlays the window. `ECHO_CONVERSE_SILENCE_MS` still overrides the numeric duration
+  when set.
+- **A stop token ends recording early and still transcribes.** The caller polls
+  `ECHO_CONVERSE_STOP_FILE` (default `~/.local/state/echo/converse/stop`). `POST /turn/:id/stop`
+  writes that file. Aborting the host tool call remains the cancel path. The coordinator never
+  opens the mic to honor a stop.
 - **Consent once per live host session, fail closed otherwise.** `runAskTool` must receive a
   `granted` decision before it can call `askOnce`. A host that already owns the microphone
   declines earlier still, through `unavailableReason` (`ask_unavailable`), which is resolved

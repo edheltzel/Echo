@@ -343,7 +343,9 @@ installed SDK rather than assumed, and each would have been a silent break:
   keeps its voice notifications, instead of taking the whole extension down on load.
 
 The adapters contribute only their host tag (`source`) and a per-call persona voice resolved from
-the host context, so a project-local persona still applies.
+the host context, so a project-local persona still applies. Optional `silence_mode` lives on the
+shared `echo_ask` schema in that module (`quick` / `standard` / `thoughtful`); adapters do not
+redefine it.
 
 ## oh-my-pi (omp) - sibling adapter, shared shape (issues #18, #109)
 
