@@ -282,6 +282,12 @@ reading; `state` is `idle` unless an external mic capture is live), the last-N s
 (`replay: {available, capacity, default_n, max_n}`), and the configuration
 audit below.
 
+The same `play_queue` seams also write `~/.local/state/echo/playback-state.json`
+(`{state: "idle"|"speaking", queue_depth, pid, updated_at}`) for out-of-process readers.
+`ECHO_PLAYBACK_STATE_PATH` overrides the path; an empty string disables publishing. A
+speaking file from a dead pid reads as idle. This file is not a `/health` field; knobs in
+[`configuration.md`](configuration.md).
+
 `config: {path, present, valid, ignored_keys, errors}` reports what
 `~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
 existed, and - because a key that fails validation is dropped on its own rather than

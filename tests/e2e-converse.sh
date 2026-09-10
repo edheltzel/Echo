@@ -61,10 +61,11 @@ CONVERSE_LOG="${SCRATCH}/converse.log"
 export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 
 # Every piece of daemon state redirected into scratch, so neither test process
-# can read or rewrite the operator's real mute state, capture state, caches,
-# lifecycle log or voice config.
+# can read or rewrite the operator's real mute state, capture state, playback
+# state, caches, lifecycle log or voice config.
 export ECHO_MUTE_STATE_PATH="${SCRATCH}/mute.json"
 export ECHO_CAPTURE_STATE_PATH="${SCRATCH}/recording-state.json"
+export ECHO_PLAYBACK_STATE_PATH="${SCRATCH}/playback-state.json"
 export ECHO_AUDIO_CACHE_DIR="${SCRATCH}/audio-cache"
 export ECHO_AUDIO_LIFECYCLE_LOG="${SCRATCH}/audio-lifecycle.jsonl"
 export ECHO_VOICE_EVENTS_LOG="${SCRATCH}/voice-events.jsonl"
@@ -141,6 +142,7 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "VOICES_PATH": "$VOICES_PATH",
   "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
   "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
+  "ECHO_PLAYBACK_STATE_PATH": "$ECHO_PLAYBACK_STATE_PATH",
   "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
   "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",
   "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",

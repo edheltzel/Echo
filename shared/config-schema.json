@@ -52,6 +52,7 @@
     "ECHO_AUDIO_CACHE_DIR": { "type": "string" },
     "ECHO_MUTE_STATE_PATH": { "type": "string" },
     "ECHO_CAPTURE_STATE_PATH": { "type": "string" },
+    "ECHO_PLAYBACK_STATE_PATH": { "type": "string" },
     "ECHO_AUDIO_LIFECYCLE_LOG": { "type": "string" },
     "ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES": { "type": ["string", "integer"], "minimum": 1024 },
     "ECHO_RESOLUTION_LOG": { "type": "string" },

@@ -118,6 +118,7 @@ not a review nit.
 | Universal daemon | `core/server.ts` | The entire TTS engine: config load, sanitization, voice resolution, the four providers, the HTTP handler. |
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
+| Playback state signal | `core/playback-state.ts` | Publishes `~/.local/state/echo/playback-state.json` (`idle`/`speaking`) from the play-queue seams `/health` already reads; pid-liveness for stale files (#106). |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` - instant replay for repeated lines (#202). |
 | Last-N speak ring | `core/speak-history.ts` | In-memory ring of lines that actually played; `POST /replay` re-speaks them (FM-449). |
 | Numeric config parsing | `core/env.ts` | `parseBoundedInt` validates numeric settings; `resolveEchoEnv` performs non-mutating config reads. |

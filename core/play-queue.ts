@@ -20,8 +20,11 @@
 // - Resilience (R6): player rejections are caught and reported; the consumer
 //   always advances. Callback failures are swallowed - reporting must never
 //   stall playback. When idle the consumer awaits a wake signal (no polling).
+// - Playback-state file (#106): consumer start → speaking, settle → idle,
+//   enqueue/drop → queue_depth. Best-effort; never stalls the queue.
 
 import { parseBoundedInt, resolveEchoEnv } from "./env";
+import { writePlaybackState } from "./playback-state";
 
 // Queue-side outcomes. `played` rows are written by the player itself.
 export type QueueDropDisposition = "dropped-stale" | "superseded";
@@ -101,6 +104,7 @@ export class PlayQueue<T> {
         const old = this.queue[i];
         this.queue[i] = job;
         this.report(old, "superseded", "newer-line-same-session");
+        this.publishPlayback();
         this.wakeConsumer();
         return;
       }
@@ -111,6 +115,7 @@ export class PlayQueue<T> {
       const oldest = this.queue.shift()!;
       this.report(oldest, "dropped-stale", "queue-depth-exceeded");
     }
+    this.publishPlayback();
     this.wakeConsumer();
   }
 
@@ -151,6 +156,17 @@ export class PlayQueue<T> {
     }
   }
 
+  private publishPlayback(): void {
+    try {
+      writePlaybackState({
+        state: this.inFlightSince !== null ? "speaking" : "idle",
+        queue_depth: this.queue.length,
+      });
+    } catch {
+      // Signal-file writes must never stall the queue.
+    }
+  }
+
   private async consume(): Promise<void> {
     while (true) {
       const next = this.queue.shift();
@@ -171,6 +187,7 @@ export class PlayQueue<T> {
           continue;
         }
         this.inFlightSince = this.opts.now?.() ?? Date.now();
+        this.publishPlayback();
         const playing = this.opts.player(next);
         // A player that outlives the watchdog is abandoned; keep its eventual
         // rejection handled so it can never surface as an unhandled rejection.
@@ -193,6 +210,7 @@ export class PlayQueue<T> {
       } finally {
         clearTimeout(watchdog);
         this.inFlightSince = null;
+        this.publishPlayback();
       }
     }
   }

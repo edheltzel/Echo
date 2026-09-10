@@ -101,14 +101,15 @@ of both creating and verifying the links, so `bun test` never relinks the checko
 **Never test against the running daemon.** It serves the operator's real notifications, so
 restarting it, retargeting it, or speaking through it is a live-system incident.
 `tests/e2e-adapters.sh` starts its own instance on its own port with every state path
-(mute, capture, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
+(mute, capture, playback state, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
 refuses to attach to a port it does not own, and prints an isolation proof before sending
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
 is unmistakably a test. `bun test` preloads `tests/preload.ts` (via `bunfig.toml`), which
 pins `ECHO_CONFIG_FILE` to a scratch path: config.json is authoritative over live process
 values, so without the pin the operator's real config.json would override the isolation env
-in-process tests set before importing the singleton server. A test that models config.json
-writes its own file and points `ECHO_CONFIG_FILE` at it.
+in-process tests set before importing the singleton server. The same preload sets
+`ECHO_PLAYBACK_STATE_PATH` to empty so PlayQueue cannot rewrite the operator's signal file.
+A test that models config.json writes its own file and points `ECHO_CONFIG_FILE` at it.
 
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
@@ -162,7 +163,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Purpose | Path |
 | --- | --- |
 | Universal daemon | `core/server.ts` |
-| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache · last-N speak ring | `core/play-queue.ts`, `core/tts-cache.ts`, `core/speak-history.ts` |
+| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · playback-state signal file · short-phrase TTS cache · last-N speak ring | `core/play-queue.ts`, `core/playback-state.ts`, `core/tts-cache.ts`, `core/speak-history.ts` |
 | Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
 | `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona overlay + scaffold, mute commands, harness catalog + feature register hooks, greetings, edge-tts voice grammar, notify speak-mode density, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |

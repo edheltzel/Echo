@@ -100,7 +100,8 @@ retargeting it, overwriting its config, or speaking through it is a live-system 
 a test.
 
 `tests/e2e-adapters.sh` is the safe path. It starts its own `core/server.ts` on its own port
-(`ECHO_E2E_PORT`, default `8899`) with every state path - mute, capture guard, audio cache,
+(`ECHO_E2E_PORT`, default `8899`) with every state path - mute, capture guard, playback state,
+audio cache,
 TTS cache, lifecycle log, and `VOICES_PATH` - redirected through a scratch config file,
 while exported copies exist only for inline test assertions. It kills only the pid it started. It **refuses to run**
 if the chosen port is `3246` or if anything is already listening there: it never attaches to a

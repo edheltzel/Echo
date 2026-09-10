@@ -75,6 +75,7 @@ function importCoreServer(): { added: string[]; changed: string[]; fileLayerProb
         VOICES_PATH: voices,
         ECHO_MUTE_STATE_PATH: join(scratch, "mute.json"),
         ECHO_CAPTURE_STATE_PATH: join(scratch, "recording-state.json"),
+        ECHO_PLAYBACK_STATE_PATH: join(scratch, "playback-state.json"),
         ECHO_AUDIO_CACHE_DIR: join(scratch, "audio-cache"),
         ECHO_AUDIO_LIFECYCLE_LOG: join(scratch, "audio-lifecycle.jsonl"),
         ECHO_VOICE_EVENTS_LOG: join(scratch, "voice-events.jsonl"),

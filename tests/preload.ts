@@ -13,3 +13,7 @@ process.env.ECHO_CONFIG_FILE = join(
   mkdtempSync(join(tmpdir(), "echo-test-config-")),
   "config.json",
 );
+// Disable the playback-state publisher unless a test opts in. PlayQueue writes
+// this file on every transition; without the pin, unit tests would rewrite the
+// operator's ~/.local/state/echo/playback-state.json.
+process.env.ECHO_PLAYBACK_STATE_PATH ??= "";
