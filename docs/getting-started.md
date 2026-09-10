@@ -75,7 +75,7 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Hello from Echo"}'
 ```
 
-You should hear the default Ava voice say "Hello from Echo" (if edge-tts is installed for `/opt/homebrew/bin/python3`) and see:
+Omitting `voice_id` resolves as `identity-default`. That is `voices.json` `identity`, edge `en-GB-RyanNeural`, not the provider `defaultVoice` (Ava). You should hear that identity voice say "Hello from Echo" (if edge-tts is installed for `/opt/homebrew/bin/python3`) and see:
 
 ```json
 {"status":"accepted","message":"Notification queued","request_id":"..."}
@@ -91,7 +91,7 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Themis here. Ready to coordinate.","voice_id":"themis"}'
 ```
 
-You should hear a different voice. When you omit `voice_id`, Echo uses the default Atlas identity you heard in step 4.
+You should hear a different voice. Themis maps to edge `en-US-MichelleNeural`. When you omit `voice_id`, Echo uses the identity mapping from step 4 (`identity-default`). There is no `atlas` agent key.
 
 ## If you hear nothing, or the wrong voice
 
@@ -119,14 +119,18 @@ Work through these checks in order.
 
    You should see JSON with a `provider` field and an `attempts` array.
 
-**Wrong voice, a British male voice ("Daniel") instead of Ava?** Echo fell back to the built-in macOS `say` voice. Read the latest `attempts[]`. Edge is skipped only when it is disabled or its circuit breaker is open. Otherwise a `failed` Edge attempt means real synthesis failed. A common cause is that edge-tts is not installed for Homebrew Python at `/opt/homebrew/bin/python3`:
+**Wrong voice on the no-`voice_id` smoke?** Check 3 should show `"resolution":"identity-default"` and `"voice":"en-GB-RyanNeural"`. Ryan is a British male. That is the identity voice, not a fallback.
+
+If `"resolution"` is `fallback` and the voice is `en-US-AvaNeural`, that is the edge provider `defaultVoice`, not identity. The smoke omitted `voice_id`, so that is the wrong path.
+
+If you hear macOS `say` ("Daniel") instead of Ryan, Echo fell back to the built-in macOS voice. Read the latest `attempts[]`. Edge is skipped only when it is disabled or its circuit breaker is open. Otherwise a `failed` Edge attempt means real synthesis failed. A common cause is that edge-tts is not installed for Homebrew Python at `/opt/homebrew/bin/python3`:
 
 ```bash
 /opt/homebrew/bin/python3 -m pip install edge-tts
 bash scripts/restart.sh
 ```
 
-If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the two commands above. Repeat step 4. You should now hear Ava.
+If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the two commands above. Repeat step 4. You should now hear Ryan (`en-GB-RyanNeural`).
 
 **No sound, but the curl returned `"status":"accepted"`?** Check the output device and the volume, then the resolution log in check 3. If the last line has `"success":false`, the `attempts` array tells you which provider failed.
 

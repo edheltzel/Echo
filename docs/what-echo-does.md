@@ -39,7 +39,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 - The play queue dropped a stale or superseded line. The request was accepted. The audio was not played.
 - Oh My Pi `/live` is talking on its own path. Muting Echo does not stop that live voice. It only stops Echo's completion line on top of it.
 
-Wrong voice is not silence. If you hear macOS `say` ("Daniel") instead of Ava, the provider chain fell back. That path is in the getting-started troubleshooting section and in [voices.md](voices.md).
+Wrong voice is not silence. A request with no `voice_id` uses the identity voice (edge `en-GB-RyanNeural`), logged as `identity-default`. If you hear macOS `say` ("Daniel"), or Ava (`en-US-AvaNeural`, the edge provider `defaultVoice`), the chain did not use identity. That path is in the getting-started troubleshooting section and in [voices.md](voices.md).
 
 ## States
 
