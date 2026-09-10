@@ -122,7 +122,7 @@ not a review nit.
 | Numeric config parsing | `core/env.ts` | `parseBoundedInt` validates numeric settings; `resolveEchoEnv` performs non-mutating config reads. |
 | `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `persona.ts` (daidentity overlay + headless suppression for Pi/omp), `mute-command.ts` (the `/echo-mute` factory that shells out to bash `cli/echo mute`), `extension.ts` (harness catalog + `registerEchoMute` / `registerEchoVoice`; not a second plugin loader and not imported by `core/`), `owned-symlink.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `speak-mode.ts` (notify density: announce/brief/consult/think), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
-| Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
+| Runtime mute state | `core/mute.ts` | Persisted scoped mute (`tts` / `mic` / `all`) with lazy expiry (#83, FM-446); `tts`/`all` gate the provider loop, `mic`/`all` gate converse capture. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
@@ -169,9 +169,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
 5. **Apply pronunciations** - `applyPronunciations` runs word-boundary regex replacements
    from `pronunciations.json` (re-applied per provider).
 6. **Speak with fallback** - `speakWithFallback` first checks the runtime mute state
-   (`core/mute.ts`, #83): while muted, speech is suppressed before the provider loop (one
+   (`core/mute.ts`, #83 / FM-446): `tts` and `all` suppress speech before the provider loop (one
    gate covers every provider including `say`) and the drop-off event is tagged `muted`.
-   Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
+   `mic` does not hold the speaker. Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
    disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
    the voice actually used (consumed by the drop-off log). A speaking `speak_mode` then
    multiplies the resolved speed (`announce` 1.10, `brief` 0.90, `consult` 1.05) without

@@ -262,6 +262,15 @@ describe("core preflight", () => {
     if (verdict.ok === false) expect(verdict.code).toBe("core_muted");
   });
 
+  test("refuses mic-scoped mute even though the speaker is still on", () => {
+    const verdict = assessCore(reads(health({ mute: { muted: false, muted_until: null, scope: "mic" } })));
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok === false) {
+      expect(verdict.code).toBe("core_muted");
+      expect(verdict.detail).toContain("microphone is muted");
+    }
+  });
+
   test("refuses when the capture guard is disabled, since nothing would hold core's speech", () => {
     for (const path of [null, ""]) {
       const verdict = assessCore(reads(health({ capture_guard: { path, state: "idle" } })));

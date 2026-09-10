@@ -37,6 +37,10 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   session end. Pi/omp bind it to extension session lifecycle; MCP can bind only to its stdio
   process because the protocol has no conversation lifecycle. Exact surfaces and expiry:
   `../docs/converse.md`.
+- **Runtime mic mute refuses the turn before booking.** `assessCore` reads `/health`
+  `mute.scope`. `tts`/`all` refuse because the question would not be heard; `mic` refuses so
+  `echo_ask` never opens the microphone. Core also 409s capture-reservation grant while mic
+  is muted. The coordinator still never captures.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
   the coordinator reports this request's playback completed and core grants the reservation, or
   core's own guard silences the question. Use `withCaptureHeld`, which returns to `idle` in its

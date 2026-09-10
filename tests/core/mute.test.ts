@@ -53,7 +53,7 @@ process.env.ECHO_MUTE_STATE_PATH = MUTE_PATH;
 process.env.ECHO_RESOLUTION_LOG = HTTP_LOG;
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 
-const { readMuteState, writeMuteState, setMuteState, toggleMuteState, resolveMuteStatePath } =
+const { readMuteState, writeMuteState, setMuteState, toggleMuteState, resolveMuteStatePath, isTtsMuted, isMicMuted } =
   await import("../../core/mute.ts");
 const { server, voicesConfig, drainNotifications } = await import("../../core/server.ts");
 const PORT = (server as any).port;
@@ -91,39 +91,39 @@ afterAll(() => {
 
 describe("mute state - tolerant reads", () => {
   test("missing state file → unmuted default", () => {
-    expect(readMuteState(join(TMP, "nope.json"))).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(join(TMP, "nope.json"))).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("corrupt JSON → unmuted, no crash", () => {
     const p = join(TMP, "corrupt.json");
     writeFileSync(p, "{not json!!");
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("wrong shape (non-boolean muted) → unmuted, no crash", () => {
     const p = join(TMP, "shape.json");
     writeFileSync(p, JSON.stringify({ muted: "yes" }));
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("non-string muted_until (hand-edited numeric epoch) → unmuted, never indefinite mute", () => {
     const p = join(TMP, "numts.json");
     writeFileSync(p, JSON.stringify({ muted: true, muted_until: 12345 }));
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("unparseable muted_until timestamp → unmuted, no crash", () => {
     const p = join(TMP, "badts.json");
     writeFileSync(p, JSON.stringify({ muted: true, muted_until: "not-a-date" }));
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 });
 
 describe("mute state - set / toggle / lazy expiry", () => {
   test("indefinite mute persists with null deadline", () => {
     const p = join(TMP, "set.json");
-    expect(setMuteState(true, undefined, p)).toEqual({ muted: true, muted_until: null });
-    expect(readMuteState(p)).toEqual({ muted: true, muted_until: null });
+    expect(setMuteState(true, undefined, p)).toEqual({ muted: true, muted_until: null, scope: "all" });
+    expect(readMuteState(p)).toEqual({ muted: true, muted_until: null, scope: "all" });
   });
 
   test("timed mute records a deadline ≈ now + duration", () => {
@@ -138,23 +138,23 @@ describe("mute state - set / toggle / lazy expiry", () => {
 
   test("muted_until in the past → unmuted (lazy expiry) and state cleaned up", () => {
     const p = join(TMP, "expired.json");
-    writeMuteState({ muted: true, muted_until: new Date(Date.now() - 60_000).toISOString() }, p);
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    writeMuteState({ muted: true, muted_until: new Date(Date.now() - 60_000).toISOString(), scope: "all" }, p);
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
     // Opportunistic cleanup: the file on disk no longer claims muted.
     expect(JSON.parse(readFileSync(p, "utf-8")).muted).toBe(false);
   });
 
   test("muted_until in the future → still muted", () => {
     const p = join(TMP, "future.json");
-    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString() }, p);
+    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString(), scope: "all" }, p);
     expect(readMuteState(p).muted).toBe(true);
   });
 
   test("unmute clears a timed deadline", () => {
     const p = join(TMP, "clear.json");
     setMuteState(true, 30, p);
-    expect(setMuteState(false, undefined, p)).toEqual({ muted: false, muted_until: null });
-    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null });
+    expect(setMuteState(false, undefined, p)).toEqual({ muted: false, muted_until: null, scope: "all" });
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("toggle flips on then off", () => {
@@ -166,7 +166,7 @@ describe("mute state - set / toggle / lazy expiry", () => {
   test("write is atomic: no temp-file leftovers, file always parses", () => {
     const p = join(TMP, "atomic", "mute.json");
     for (let i = 0; i < 20; i++) {
-      writeMuteState({ muted: i % 2 === 0, muted_until: null }, p);
+      writeMuteState({ muted: i % 2 === 0, muted_until: null, scope: "all" }, p);
       expect(() => JSON.parse(readFileSync(p, "utf-8"))).not.toThrow();
     }
     const leftovers = readdirSync(join(TMP, "atomic")).filter(f => f !== "mute.json");
@@ -175,6 +175,53 @@ describe("mute state - set / toggle / lazy expiry", () => {
 
   test("ECHO_MUTE_STATE_PATH env override is honored", () => {
     expect(resolveMuteStatePath()).toBe(MUTE_PATH);
+  });
+});
+
+describe("FM-446 - scoped mute (tts | mic | all)", () => {
+  test("legacy {muted:true} file without scope reads as all", () => {
+    const p = join(TMP, "legacy.json");
+    writeFileSync(p, JSON.stringify({ muted: true, muted_until: null }));
+    const state = readMuteState(p);
+    expect(state).toEqual({ muted: true, muted_until: null, scope: "all" });
+    expect(isTtsMuted(state)).toBe(true);
+    expect(isMicMuted(state)).toBe(true);
+  });
+
+  test("scope tts mutes speaker only", () => {
+    const p = join(TMP, "scope-tts.json");
+    const state = setMuteState(true, undefined, p, "tts");
+    expect(state).toEqual({ muted: true, muted_until: null, scope: "tts" });
+    expect(isTtsMuted(state)).toBe(true);
+    expect(isMicMuted(state)).toBe(false);
+  });
+
+  test("scope mic mutes capture only (speaker flag stays false)", () => {
+    const p = join(TMP, "scope-mic.json");
+    const state = setMuteState(true, undefined, p, "mic");
+    expect(state).toEqual({ muted: false, muted_until: null, scope: "mic" });
+    expect(isTtsMuted(state)).toBe(false);
+    expect(isMicMuted(state)).toBe(true);
+  });
+
+  test("scope all mutes both", () => {
+    const p = join(TMP, "scope-all.json");
+    const state = setMuteState(true, undefined, p, "all");
+    expect(state).toEqual({ muted: true, muted_until: null, scope: "all" });
+    expect(isTtsMuted(state)).toBe(true);
+    expect(isMicMuted(state)).toBe(true);
+  });
+
+  test("timed mic mute expires lazily", () => {
+    const p = join(TMP, "mic-expired.json");
+    writeMuteState({ muted: false, muted_until: new Date(Date.now() - 1000).toISOString(), scope: "mic" }, p);
+    expect(readMuteState(p)).toEqual({ muted: false, muted_until: null, scope: "all" });
+  });
+
+  test("toggle tts flips only the tts scope", () => {
+    const p = join(TMP, "toggle-tts.json");
+    expect(toggleMuteState(p, "tts")).toEqual({ muted: true, muted_until: null, scope: "tts" });
+    expect(toggleMuteState(p, "tts")).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 });
 
@@ -213,7 +260,7 @@ describe("issue #83 - speech-stage mute gate", () => {
     await drainNotifications();
 
     // Mute, then notify again.
-    writeMuteState({ muted: true, muted_until: null });
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
     if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
     spawnedCommands = [];
 
@@ -247,7 +294,7 @@ describe("issue #83 - speech-stage mute gate", () => {
 
   test("expired timed mute → speaks again (lazy expiry at the gate)", async () => {
     (voicesConfig.providers as any).say.enabled = true;
-    writeMuteState({ muted: true, muted_until: new Date(Date.now() - 1000).toISOString() });
+    writeMuteState({ muted: true, muted_until: new Date(Date.now() - 1000).toISOString(), scope: "all" });
 
     const res = await postNotify();
     expect(res.status).toBe(202);
@@ -257,7 +304,7 @@ describe("issue #83 - speech-stage mute gate", () => {
 
   test("future timed mute → suppressed", async () => {
     (voicesConfig.providers as any).say.enabled = true;
-    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString() });
+    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString(), scope: "all" });
 
     const res = await postNotify();
     expect(res.status).toBe(202);
@@ -268,6 +315,33 @@ describe("issue #83 - speech-stage mute gate", () => {
   test("corrupt state file → daemon speaks normally, never crashes", async () => {
     (voicesConfig.providers as any).say.enabled = true;
     writeFileSync(MUTE_PATH, "%%%corrupt%%%");
+
+    const res = await postNotify();
+    expect(res.status).toBe(202);
+    await drainNotifications();
+    expect(spawnedCommands).toContain("/usr/bin/say");
+  });
+});
+
+describe("FM-446 - speech-stage gate by scope", () => {
+  test("tts mute → 202, no say, drop-off tagged muted", async () => {
+    (voicesConfig.providers as any).say.enabled = true;
+    writeMuteState({ muted: true, muted_until: null, scope: "tts" });
+    if (existsSync(HTTP_LOG)) rmSync(HTTP_LOG);
+    spawnedCommands = [];
+
+    const res = await postNotify();
+    expect(res.status).toBe(202);
+    await drainNotifications();
+    expect(spawnedCommands).not.toContain("/usr/bin/say");
+    const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);
+    expect(JSON.parse(lines[0]).muted).toBe(true);
+  });
+
+  test("mic mute → 202 and say still spawns", async () => {
+    (voicesConfig.providers as any).say.enabled = true;
+    writeMuteState({ muted: false, muted_until: null, scope: "mic" });
+    spawnedCommands = [];
 
     const res = await postNotify();
     expect(res.status).toBe(202);

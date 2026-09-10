@@ -212,7 +212,8 @@ Refusals name their reason: `400 invalid_request | lease_too_short | lease_unsup
 `409 microphone_busy`, `503 core_unreachable | core_rate_limited | core_muted |
 capture_guard_disabled | question_not_spoken`,
 `404 unknown_turn`, `500 coordinator_error` (an unexpected failure before the booking was
-taken). Every refusal releases the booking, `404 unknown_turn` included: the turn
+taken). `core_muted` covers speaker mute (`tts`/`all`, the question would not be heard) and
+microphone mute (`mic`/`all`, capture will not start). Every refusal releases the booking, `404 unknown_turn` included: the turn
 table is in memory and the booking is on disk, so a caller whose turn the coordinator no longer
 remembers is still the one who has to hand the microphone back.
 

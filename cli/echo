@@ -38,8 +38,9 @@ Commands:
                        Adapter ids: shared/extension.ts (HARNESS_IDS).
   doctor               Diagnose every degraded state with a concrete recovery command.
   status               Service + health snapshot with recent logs.
-  mute on|off|toggle|status | <duration, e.g. 30m or 1h>
-                       Runtime mute (audio off; notifications still processed + logged).
+  mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]
+                       Runtime mute. Default scope `all` (speaker + mic). `tts` holds
+                       playback only; `mic` holds capture/converse; notifications still log.
   voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
                        Set the default persona and ask whether subagents may speak.
   update [--check]     Re-stage the payload from this checkout and reload the service.
@@ -67,7 +68,7 @@ cmd_mute() {
   local arg="${1:-}"
   case "$arg" in
     ""|-h|--help)
-      echo "Usage: echo mute on|off|toggle|status | <duration, e.g. 30m or 1h>" >&2
+      echo "Usage: echo mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]" >&2
       exit 2
       ;;
     on|off|toggle|status)
@@ -78,6 +79,10 @@ cmd_mute() {
       if ! minutes="$(parse_duration_minutes "$arg")"; then
         echo "Unrecognized duration: '$arg' - use 30m, 1h, or a positive number of minutes." >&2
         exit 2
+      fi
+      # `echo mute 30m tts` — duration first, optional scope after.
+      if [ -n "${2:-}" ]; then
+        exec bash "$SCRIPTS/mute.sh" on "$minutes" "$2"
       fi
       exec bash "$SCRIPTS/mute.sh" on "$minutes"
       ;;

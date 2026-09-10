@@ -32,8 +32,8 @@ bun install
 cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
-cli/echo mute on|off|toggle|status | 30m|1h
-/echo-mute [on|off|toggle|status|duration]  # bare toggles; affects every Echo session
+cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
+/echo-mute [on|off|toggle|status|duration]  # bare toggles `all`; affects every Echo session
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
@@ -42,8 +42,8 @@ cli/echo uninstall [--check]
 bash scripts/install.sh --adapter none        # or claudecode|jcode|grok|pi|omp|mcp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
-# Runtime mute (audio off; notifications still processed + logged)
-bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
+# Runtime mute (tts | mic | all; notifications still processed + logged)
+bash scripts/mute.sh on|off|toggle|status   # `on tts` / `on mic`; `on 30` = timed all; empty POST /mute toggles all
 
 # echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
 bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)

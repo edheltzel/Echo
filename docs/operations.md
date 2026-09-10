@@ -24,7 +24,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Mute and unmute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+   Optional scope `tts`, `mic`, or `all` (default `all`). Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -186,16 +186,19 @@ were then restored. This counterfactual isolates host output masking from Echo s
 
 ## Mute
 
-Runtime mute turns the audio off while notifications are still accepted, processed, and
-logged, across every provider. Why the layers exist, including shared offices:
+Runtime mute turns the audio and/or the microphone booking off while notifications are still
+accepted, processed, and logged. Why the layers exist, including shared offices:
 [`what-echo-does.md`](what-echo-does.md#silence-and-mute). `cli/echo mute` is the command:
 
 ```bash
-cli/echo mute status    # current state, e.g. {"mute":{"muted":false,"muted_until":null}}
-cli/echo mute on        # mute indefinitely
-cli/echo mute off       # unmute now
-cli/echo mute toggle    # flip state
-cli/echo mute 30m       # timed mute; `1h` and a bare number of minutes also work
+cli/echo mute status    # current state, e.g. {"mute":{"muted":false,"muted_until":null,"scope":"all"}}
+cli/echo mute on         # mute all (speaker + mic) indefinitely
+cli/echo mute on tts     # speaker only; notifications still accepted
+cli/echo mute on mic     # capture / converse / echo_ask only; TTS may still speak
+cli/echo mute off        # unmute now
+cli/echo mute toggle     # flip the all-scope switch
+cli/echo mute 30m        # timed all; `1h` and a bare number of minutes also work
+cli/echo mute 30m tts    # timed speaker mute
 ```
 
 Each command prints the resulting state as JSON. Mute state survives daemon restarts, deadline
@@ -204,10 +207,11 @@ included - the state-file location and its `ECHO_MUTE_STATE_PATH` override are i
 the next notification.
 
 **Mute is machine-wide, not per session.** One Echo daemon serves the whole machine on the
-configured port (default `:3246`), so muting it silences Echo audio for *every* agent, script,
-and terminal that speaks through it - not only the session you typed the command in. Any other
+configured port (default `:3246`), so muting it applies to *every* agent, script,
+and terminal that speaks or asks through it - not only the session you typed the command in. Any other
 agent can unmute it just as easily. `cli/echo mute status` is the way to find out which state
-you are actually in.
+you are actually in. There is one mute system: scopes `tts`, `mic`, and `all` are keys on
+that same switch, not a second mute path.
 
 **Mute only silences audio Echo produced.** In v0.10.0, live chat (Oh My Pi `/live`) speaks
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
@@ -227,10 +231,12 @@ takes minutes rather than a duration string, and remains available:
 
 ```bash
 bash scripts/mute.sh status
-bash scripts/mute.sh on        # indefinite
-bash scripts/mute.sh on 30     # 30 minutes
+bash scripts/mute.sh on        # indefinite all
+bash scripts/mute.sh on tts    # speaker only
+bash scripts/mute.sh on mic    # capture/converse only
+bash scripts/mute.sh on 30     # 30 minutes, all
 bash scripts/mute.sh off
-bash scripts/mute.sh toggle    # same as an empty POST /mute
+bash scripts/mute.sh toggle    # same as an empty POST /mute (all)
 ```
 
 For an isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config containing `PORT`.
