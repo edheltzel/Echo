@@ -266,6 +266,20 @@ For an isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config cont
 The `/mute` endpoint contract and one-keystroke hotkey bindings (Raycast, Apple Shortcuts,
 Stream Deck) are in [`http-api.md`](http-api.md).
 
+## Replay
+
+`cli/echo replay [n]` re-speaks the last N lines that actually played (default 1, max 10).
+Muted, capture-held, dropped, and voice-disabled lines are not stored. Replay uses the same
+play queue as `/notify` and does not fire a new banner.
+
+```bash
+cli/echo replay      # last spoken line
+cli/echo replay 3    # last three, oldest first
+bash scripts/replay.sh 2
+```
+
+The wire contract is [`http-api.md`](http-api.md#post-replay).
+
 ## Update after a `git pull`
 
 Bun runs the TypeScript sources directly - there is no build step. **But the daemon runs

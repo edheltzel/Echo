@@ -34,6 +34,7 @@ cli/echo doctor              # canonical "did my install work" check; recovery c
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
 /echo-mute [on|off|toggle|status|duration]  # bare toggles `all`; affects every Echo session
+cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
@@ -44,6 +45,7 @@ bash scripts/{status,start,stop,restart,uninstall}.sh
 
 # Runtime mute (tts | mic | all; notifications still processed + logged)
 bash scripts/mute.sh on|off|toggle|status   # `on tts` / `on mic`; `on 30` = timed all; empty POST /mute toggles all
+bash scripts/replay.sh [n]                 # last n spoken lines; default 1, max 10
 
 # echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
 bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)
@@ -160,7 +162,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Purpose | Path |
 | --- | --- |
 | Universal daemon | `core/server.ts` |
-| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
+| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache · last-N speak ring | `core/play-queue.ts`, `core/tts-cache.ts`, `core/speak-history.ts` |
 | Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
 | `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona overlay + scaffold, mute commands, harness catalog + feature register hooks, greetings, edge-tts voice grammar, notify speak-mode density, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |

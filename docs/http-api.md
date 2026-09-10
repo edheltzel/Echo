@@ -8,9 +8,10 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
 `429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with four carve-outs that each get their own:
+`localhost` bucket, with five carve-outs that each get their own:
 
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
+- `POST /replay` - operator re-hear during a flood; abusive `n` is rejected in the handler.
 - `GET /voices` - adapters read it once per turn immediately before that turn's `/notify`.
   On the shared bucket that would halve every host's notification budget and let the read
   starve the write it precedes.
@@ -243,6 +244,31 @@ curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json'
 In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
 `http://localhost:3246/mute` (leave the request body empty to toggle).
 
+## `POST /replay`
+
+Re-speak the last N notify lines that actually reached the speaker (FM-449). Default
+`n` is **1**; the ring holds at most **10**. `n` outside `1..10`, a non-integer, or a
+malformed body is `400`. An empty body is `n: 1`.
+
+Response when something is queued: `202 {"status":"accepted","message":"Replay queued","replayed":N,"available":M,"n":…,"request_id":"req-…","request_ids":[…]}`.
+When the ring is empty: `200 {"status":"ok","message":"Nothing to replay","replayed":0,"available":0,…}`.
+
+Replay does not fire a banner, does not coalesce with live sessions, and does not
+re-enter the ring. It re-enqueues through the same serial play queue, so a current TTS
+mute still suppresses audio. The TTS cache covers repeated synthesis; this ring is
+process-local and starts empty after a restart.
+
+Muted, capture-held, dropped, and voice-disabled lines are not stored — there is nothing
+later to replay. Same product truth as `/mute`: muted lines are not held for later replay.
+
+```bash
+curl -fsS -X POST http://localhost:3246/replay
+curl -fsS -X POST http://localhost:3246/replay -H 'Content-Type: application/json' \
+  -d '{"n": 3}'
+cli/echo replay      # last line
+cli/echo replay 3    # last three, oldest first
+```
+
 ## `GET /health`
 
 Returns `status`, `port`, `activeProvider` (= `defaultProvider`), `fallbackOrder`, provider
@@ -252,7 +278,8 @@ been playing (null when idle), and whether the consumer has outlived its own wat
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
 `reset_after_ms`), the current mute state (`mute: {muted, muted_until, scope}` — `muted` is the speaker flag; `scope` is `tts` | `mic` | `all`), the capture
 guard (`capture_guard: {path, state}` - the resolved recording-state file and its current
-reading; `state` is `idle` unless an external mic capture is live), and the configuration
+reading; `state` is `idle` unless an external mic capture is live), the last-N speak ring
+(`replay: {available, capacity, default_n, max_n}`), and the configuration
 audit below.
 
 `config: {path, present, valid, ignored_keys, errors}` reports what

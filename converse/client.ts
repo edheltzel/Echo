@@ -20,8 +20,9 @@
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { captureAndTranscribe, CaptureError, type CaptureEngine } from "./capture.ts";
-import { CONVERSE_LEASE_SLACK_MS, resolveConverseConfig, type ConverseConfig, type SttTier } from "./config.ts";
+import { CONVERSE_LEASE_SLACK_MS, resolveConverseConfig, withSilenceMode, type ConverseConfig, type SttTier } from "./config.ts";
 import { withCaptureHeld } from "./capture-state.ts";
+import type { SilenceMode } from "./silence-mode.ts";
 import type { SpokenQuestionReport, TurnGrant } from "./types.ts";
 
 const COORDINATOR_START_TIMEOUT_MS = 5_000;
@@ -35,6 +36,8 @@ export interface AskOptions {
   source?: string;
   voiceId?: string;
   title?: string;
+  /** Per-ask end-of-utterance window. Omitted keeps the configured / default `standard` (1500ms). */
+  silenceMode?: SilenceMode;
   /** A cancelled host turn closes the microphone immediately. */
   signal?: AbortSignal;
 }
@@ -48,6 +51,8 @@ export interface AskResult {
   spoke: SpokenQuestionReport;
   /** Process chain that opened the microphone, as TCC-attribution evidence. */
   ancestry: string[];
+  /** True when a stop token ended recording before silence or the capture cap. */
+  stopped?: boolean;
 }
 
 export class AskError extends Error {
@@ -191,7 +196,8 @@ export async function ensureCoordinator(
  * than leaving the operator silently muted.
  */
 export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<AskResult> {
-  const config = deps.config ?? resolveConverseConfig();
+  const resolved = deps.config ?? resolveConverseConfig();
+  const config = options.silenceMode ? withSilenceMode(resolved, options.silenceMode) : resolved;
   const fetchImpl = deps.fetchImpl ?? ((url: string, init?: RequestInit) => fetch(url, init));
   const captureEngine = deps.captureEngine ?? captureAndTranscribe;
 
@@ -284,6 +290,7 @@ export async function askOnce(options: AskOptions, deps: AskDeps = {}): Promise<
       capture_ms: captured.capture_ms,
       spoke: body.spoke,
       ancestry,
+      stopped: captured.stopped,
     };
   } catch (error) {
     if (error instanceof AskError) {

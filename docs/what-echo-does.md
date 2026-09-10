@@ -23,6 +23,7 @@ Typical spoken lines:
 - A turn-completion line from a wired host (the trailing `🗣️` line on Claude Code, Pi, oh-my-pi, Jcode, Grok Build, and Codex)
 - A session-start greeting, when that host has greetings on (Pi and oh-my-pi default on. Claude Code, Jcode, Grok, and Codex default off.)
 - Anything you POST yourself, including the "Hello from Echo" smoke
+- A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines are not held for later replay.
 
 Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode does not speak completions. It only exposes mute.
 

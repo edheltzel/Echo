@@ -123,7 +123,7 @@ at runtime; invalid values use the defaults below.
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL | Adapter-side endpoint settings; otherwise adapters use <http://localhost:3246> |
 | Reserved | ECHO_VOICE_SURFACES | Schema-reserved; current runtime code does not read it |
 | Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS, ECHO_CONVERSE_LOG_PATH | 32468 (keypad ECHOV; core keeps 3246), <http://localhost:32468>, ~/.local/state/echo/converse/booking.lock, capture + transcription budget plus slack (120000 at the shipped defaults), ~/Library/Logs/echo-converse.log |
-| Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, 1500, 60000, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
+| Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MODE, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_STOP_FILE, ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, standard (1500ms; today's timeout), 1500 when the numeric override is set, ~/.local/state/echo/converse/stop, 60000, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
 
 Settings whose behavior is not obvious from the name:
 
@@ -146,6 +146,15 @@ Settings whose behavior is not obvious from the name:
   finishes and core skips every voice line while that state is non-idle, so an unbounded
   transcriber would mute Echo silently. Raise it only if a large whisper model on a slow
   machine genuinely needs longer; the turn's lease is derived from it.
+
+- **ECHO_CONVERSE_SILENCE_MODE** is the VoiceLayer-named end-of-utterance window for `echo_ask`:
+  `quick` (0.5s), `standard` (1.5s, default, today's timeout), `thoughtful` (2.5s). Implemented
+  as sox trailing silence, not Silero/onnx. `echo_ask` may pass `silence_mode` per call.
+  **ECHO_CONVERSE_SILENCE_MS** still overrides the numeric window when set.
+
+- **ECHO_CONVERSE_STOP_FILE** is the stop token for an in-flight recording. Touch it, or POST
+  `/turn/:id/stop` on the coordinator, to SIGTERM the recorder and still transcribe. Default
+  `~/.local/state/echo/converse/stop`. This is not a mute scope and not a tool-call cancel.
 
 - **PORT** must be canonical decimal, from 1 to 65535 - `3246` or `"3246"`. Digits only: no
   sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an

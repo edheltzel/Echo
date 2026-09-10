@@ -206,7 +206,8 @@ only the filesystem-selected winner publishes capture, and only its core reserva
 | `POST /turn` | Book, speak, wait for this request's completion/reservation. `200` grants capture and returns `capture_state_path`, `spoke`, `lease`. |
 | `POST /turn/:id/complete` | Release the booking. Body is metadata only (`engine`, `capture_ms`, `transcript_chars`). |
 | `POST /turn/:id/abort` | Release the booking and record why. |
-| `GET /health` | Capability, port, booking holder, turn counters, configured core address. Does not probe core. |
+| `POST /turn/:id/stop` | End the current recording early. Writes the stop file the caller polls; does not release the booking. The audio is still transcribed. |
+| `GET /health` | Capability, port, booking holder, turn counters, configured core address, stop-file path. Does not probe core. |
 
 Refusals name their reason: `400 invalid_request | lease_too_short | lease_unsupported`,
 `409 microphone_busy`, `503 core_unreachable | core_rate_limited | core_muted |
@@ -227,6 +228,8 @@ words stay in the process that captured them.
 | --- | --- |
 | Speak | core `POST /notify` (whole existing TTS chain) |
 | Capture | `rec` (sox) with the `silence` effect for endpointing, at the device's native rate |
+| Silence modes | `quick` 0.5s / `standard` 1.5s (default; today's timeout) / `thoughtful` 2.5s. VoiceLayer names, sox trailing-silence windows. |
+| Stop token | Touch `~/.local/state/echo/converse/stop`, or `POST /turn/:id/stop`. SIGTERMs the recorder; the audio is transcribed. Not a cancel. |
 | Tier 1 transcribe | `yap transcribe` - Apple SpeechAnalyzer, on-device, no model download |
 | Tier 2 transcribe | `whisper-cli` - portable, needs a user-supplied ggml model (`ECHO_CONVERSE_WHISPER_MODEL`) |
 | Polish | none. The raw transcript is returned; the calling agent interprets it. |
@@ -252,6 +255,17 @@ created it: the `sox` package is now a Tier 1 dependency.
 
 No speech is a distinct outcome: sox writes a 44-byte header-only file when the endpointer hears
 nothing, and an empty transcript is reported as `no_speech` rather than as an empty answer.
+
+`echo_ask` accepts optional `silence_mode`: `quick`, `standard`, or `thoughtful`. Omitted keeps
+`standard` (1500ms), which is the trailing-silence window Echo already used. A host or operator
+ends an in-flight recording early by touching the stop file (path in `GET /health` →
+`capture.stop_file`) or posting `POST /turn/:id/stop`. That is a stop, not a cancel: sox
+finalizes the WAV and transcription still runs. Aborting the tool call remains the cancel path
+and discards the turn.
+
+The stop file lives next to the booking lock under `~/.local/state/echo/converse/` (user-owned,
+never `/tmp`). A new booking clears a leftover stop so a crashed previous turn cannot immediately
+end the next capture.
 
 ## Known limits in v1
 
@@ -279,7 +293,9 @@ for the complete precedence and migration contract.
 | `ECHO_CONVERSE_LOG_PATH` | `~/Library/Logs/echo-converse.log` | auto-start caller |
 | `ECHO_CONVERSE_CAPTURE_DIR` | `~/Library/Caches/echo/converse` | caller |
 | `ECHO_CONVERSE_MAX_CAPTURE_MS` | `30000` | caller |
-| `ECHO_CONVERSE_SILENCE_MS` | `1500` | caller |
+| `ECHO_CONVERSE_SILENCE_MODE` | `standard` | caller |
+| `ECHO_CONVERSE_SILENCE_MS` | mode window (`1500` for `standard`) | caller |
+| `ECHO_CONVERSE_STOP_FILE` | `~/.local/state/echo/converse/stop` | caller + coordinator |
 | `ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS` | `60000` | caller |
 | `ECHO_CONVERSE_LOCALE` | `en-US` | caller |
 | `ECHO_CONVERSE_STT_TIER` | auto (`yap`, else `whisper`) | caller |
