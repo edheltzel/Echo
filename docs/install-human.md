@@ -1,6 +1,9 @@
-# Human Install Guide
+# How to install Echo
 
-This guide installs `echo`, a local voice notification server for coding agents and scripts.
+This is the how-to for wiring Claude Code, Pi, oh-my-pi, and the other hosts after Echo
+already speaks. If you have not heard "Hello from Echo" yet, start with
+[Hear your first spoken notification](getting-started.md). Read [What Echo does](what-echo-does.md)
+for when it speaks and how mute works in a shared office.
 
 ## What gets installed
 
@@ -194,24 +197,15 @@ Any failing row prints its own recovery command underneath, and the run ends wit
 `Result: DEGRADED` and a non-zero exit. The `payload` row reports the staged daemon version; see
 [Doctor](operations.md#doctor) for the detailed check contract and current-release example.
 
-### Verify manually
+To hear a line, use the audible smoke in
+[Hear your first spoken notification](getting-started.md).
+A silent HTTP check is:
 
 ```bash
 curl -fsS http://localhost:3246/health
-curl -fsS -X POST http://localhost:3246/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from echo"}'
 ```
 
-The first command returns JSON containing `"status":"healthy"`. The second returns `"status":"success"` and speaks aloud.
-
-#### If you hear nothing, or the wrong voice
-
-- Check the service: `bash scripts/status.sh` shows load state, health, and the last log lines.
-- Tail the server log: `tail -20 ~/Library/Logs/echo.log`.
-- Read the voice-resolution log at `~/Library/Logs/echo/voice-resolution.jsonl` - it records how each notification's requested voice resolved, including fallbacks. An unexpected voice usually means the provider chain fell back (for example to macOS `say`); failed attempts include diagnostic fields such as `phase`, `reason`, `timeout_ms`, and `stderr`. `docs/voices.md` explains voice resolution; `docs/dependencies.md` lists what each provider needs.
-
-Day-to-day start/stop/restart/status procedures live in `docs/operations.md`.
+Day-to-day start, stop, restart, and status live in [operations.md](operations.md).
 
 ## Choose voices (audition)
 
@@ -224,12 +218,9 @@ cli/echo mute on         # also: off | toggle | status
 cli/echo mute 30m        # timed; `1h` works too. Voice resumes by itself.
 ```
 
-Notifications are still accepted, processed, and logged while muted; only the audio stops. Two
-things to know: mute is **machine-wide**, because one daemon on `:3246` serves everything that
-speaks through Echo, and it only silences audio **Echo produced** - in v0.10.0, live chat (Oh My
-Pi `/live`) speaks through its own path and keeps talking. Claude Code, Pi, and omp also expose
-`/echo-mute`, which runs this same CLI. Full behavior, including the `scripts/mute.sh` form and
-the state file, is in [`operations.md`](operations.md#mute).
+Audio off, notifications still accepted. Mute is machine-wide and only covers audio Echo
+produced. See [Silence and mute](what-echo-does.md#silence-and-mute) for layers and what
+still makes sound. Commands and the state file are in [operations.md](operations.md#mute).
 
 ## Give a project its own persona
 

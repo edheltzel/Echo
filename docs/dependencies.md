@@ -103,4 +103,4 @@ rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 | Fully local speech | Bun + edge-tts or Kokoro + macOS fallback |
 | Cloud premium voice | Bun + ElevenLabs key + ElevenLabs enabled in config |
 
-See `README.md` for architecture and `docs/install-agent.md` for command-by-command verification.
+See [`ARCHITECTURE.md`](../ARCHITECTURE.md) for the daemon layout and the [agent install checklist](install-agent.md) for command-by-command verification.

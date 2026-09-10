@@ -1,8 +1,10 @@
 # Operations
 
 How to run Echo day to day: start, stop, restart, status, logs, health, updating after a
-`git pull`, and recovering after a repo move. Installing is covered in
-[`install-human.md`](install-human.md); developing against a second instance in
+`git pull`, and recovering after a repo move. First sound is
+[`getting-started.md`](getting-started.md). Why Echo speaks or stays quiet:
+[`what-echo-does.md`](what-echo-does.md). Installing a host is
+[`install-human.md`](install-human.md). A second instance for development:
 [`development.md`](development.md).
 
 Service identity:
@@ -185,7 +187,8 @@ were then restored. This counterfactual isolates host output masking from Echo s
 ## Mute
 
 Runtime mute turns the audio off while notifications are still accepted, processed, and
-logged, across every provider. `cli/echo mute` is the command to use:
+logged, across every provider. Why the layers exist, including shared offices:
+[`what-echo-does.md`](what-echo-does.md#silence-and-mute). `cli/echo mute` is the command:
 
 ```bash
 cli/echo mute status    # current state, e.g. {"mute":{"muted":false,"muted_until":null}}

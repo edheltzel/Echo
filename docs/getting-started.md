@@ -1,28 +1,28 @@
 # Hear your first spoken notification
 
-In this tutorial, we'll install the Echo voice server on your Mac and hear it speak its
-first notification. By the end, you'll have a background service that speaks any message
-sent to it — from a script, a coding agent, or a plain `curl`.
+In this tutorial, we install Echo on your Mac and hear it speak. By the end, a background service on this machine will speak any JSON message sent to `localhost:3246`.
 
-This takes about 5 minutes.
+Turn the volume up before the last step. You should hear the words "Hello from Echo."
 
-## What you'll build
+## What you will build
 
-A voice daemon running as a macOS LaunchAgent that:
+A macOS LaunchAgent named `com.echo` that:
 
-- Speaks any JSON message POSTed to `localhost:3246/notify`
-- Starts automatically when you log in
-- Speaks in different persona voices when you ask for them
+- Speaks JSON POSTed to `localhost:3246/notify`
+- Starts when you log in
+- Can stay silent when you mute it
+
+We prove it with `curl`. Wiring Claude Code, Pi, or another host comes after you have heard the smoke.
 
 ## Prerequisites
 
-Before starting, make sure you have:
+You need:
 
-- A Mac (Echo installs as a macOS LaunchAgent)
-- [Bun](https://bun.sh/) — install it with `curl -fsSL https://bun.sh/install | bash`
+- A Mac. Echo installs as a LaunchAgent.
+- [Bun](https://bun.sh/). Install it with `curl -fsSL https://bun.sh/install | bash`.
 - `git`
 
-Verify Bun is available:
+Check Bun:
 
 ```bash
 bun --version
@@ -32,57 +32,42 @@ You should see a version number, for example `1.2.4`.
 
 ## Step 1: Get the code
 
-Clone the repository and move into it:
-
 ```bash
 git clone https://github.com/edheltzel/Echo.git
 cd Echo
 ```
 
-You should see the clone complete without errors, and `ls` shows `core/`, `scripts/`,
-and `adapters/` directories.
+The clone should finish without errors. `ls` should show `core/`, `scripts/`, and `adapters/`.
 
 ## Step 2: Install the core
-
-Run the installer. It registers Echo as the LaunchAgent `com.echo` and starts it:
 
 ```bash
 cli/echo install --adapter none
 ```
 
-The equivalent underlying command is:
-
-```bash
-bash scripts/install.sh --adapter none
-```
-
-The output ends with:
+This registers the LaunchAgent `com.echo` and starts it. The output should end with:
 
 ```
 OK echo is healthy on :3246
 ```
 
-If you instead see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`,
-open that log — the last few lines say what failed. Fix and rerun the installer; it is
-safe to run `cli/echo install --adapter none` repeatedly.
+If you see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`, open that log. The last few lines say what failed. Fix the cause and rerun the same install command. Running it again is safe.
 
-## Step 3: Verify it's healthy
-
-Ask the daemon how it's doing:
+## Step 3: Confirm it is healthy
 
 ```bash
 curl -fsS http://localhost:3246/health
 ```
 
-You should see a JSON response starting with:
+You should see JSON that starts like this:
 
 ```json
 {"status":"healthy","port":3246,...}
 ```
 
-## Step 4: Send your first spoken notification
+## Step 4: Hear Hello from Echo
 
-Turn your volume up, then run:
+Volume up. Then:
 
 ```bash
 curl -X POST http://localhost:3246/notify \
@@ -90,19 +75,15 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Hello from Echo"}'
 ```
 
-If edge-tts is installed for `/opt/homebrew/bin/python3`, you should hear the default
-"Ava" voice say *"Hello from Echo"* and see:
+Omitting `voice_id` resolves as `identity-default`. That is `voices.json` `identity`, edge `en-GB-RyanNeural`, not the provider `defaultVoice` (Ava). You should hear that identity voice say "Hello from Echo" (if edge-tts is installed for `/opt/homebrew/bin/python3`) and see:
 
 ```json
-{"status":"success","message":"Notification sent","request_id":"..."}
+{"status":"accepted","message":"Notification queued","request_id":"..."}
 ```
 
-That's it — Echo is working. Anything on your machine can now speak by POSTing to
-`localhost:3246/notify`.
+HTTP `202` means the daemon accepted the line. Your ear is the check that it spoke. Anything on this machine can now speak by POSTing to `localhost:3246/notify`.
 
-## Step 5: Try a persona voice
-
-Echo ships with named persona voices. Ask for one with `voice_id`:
+## Step 5: Try a named persona
 
 ```bash
 curl -X POST http://localhost:3246/notify \
@@ -110,91 +91,75 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Themis here. Ready to coordinate.","voice_id":"themis"}'
 ```
 
-You should hear a different female voice (Michelle) speak the line. When you omit
-`voice_id`, Echo uses the default Atlas identity voice you heard in Step 4.
+You should hear a different voice. Themis maps to edge `en-US-MichelleNeural`. When you omit `voice_id`, Echo uses the identity mapping from step 4 (`identity-default`). There is no `atlas` agent key.
 
-## If you hear nothing — or the wrong voice
+## If you hear nothing, or the wrong voice
 
-Work through these checks in order:
+Work through these checks in order.
 
-1. **Confirm the daemon is running:**
+1. Confirm the daemon is running:
 
    ```bash
    bash scripts/status.sh
    ```
 
-   You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows
-   `not loaded` or `Health: FAIL`, rerun `cli/echo install --adapter none`. Should the
-   installer refuse because port 3246 is occupied but not answering, run `cli/echo doctor` —
-   it names each degraded check and the command that fixes it.
+   You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows `not loaded` or `Health: FAIL`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
 
-2. **Check the daemon log for errors:**
+2. Check the daemon log:
 
    ```bash
    tail -20 ~/Library/Logs/echo.log
    ```
 
-3. **Ask Echo why it chose the voice it did.** Every spoken notification appends one
-   line to the voice-resolution log:
+3. Ask Echo why it chose the voice it did. Every spoken notification appends one line to the voice-resolution log:
 
    ```bash
    tail -3 ~/Library/Logs/echo/voice-resolution.jsonl
    ```
 
-   You should see JSON lines with a `provider` field (who spoke) and `attempts` (which
-   providers were tried and why they were skipped or failed). Failed attempts may include
-   diagnostic fields such as `phase`, `reason`, `timeout_ms`, `exit_code`, and `stderr`.
+   You should see JSON with a `provider` field and an `attempts` array.
 
-**Wrong voice — a British male voice ("Daniel") instead of Ava?** Echo fell back to the
-built-in macOS `say` voice. First read the latest `attempts[]`: Edge is skipped only when
-it is disabled or its circuit breaker is open; otherwise a `failed` Edge attempt means real
-synthesis failed and the diagnostic fields explain why. A common cause is that edge-tts is
-not installed for the Homebrew Python at `/opt/homebrew/bin/python3`. Install it and
-restart:
+**Wrong voice on the no-`voice_id` smoke?** Check 3 should show `"resolution":"identity-default"` and `"voice":"en-GB-RyanNeural"`. Ryan is a British male. That is the identity voice, not a fallback.
+
+If `"resolution"` is `fallback` and the voice is `en-US-AvaNeural`, that is the edge provider `defaultVoice`, not identity. The smoke omitted `voice_id`, so that is the wrong path.
+
+If you hear macOS `say` ("Daniel") instead of Ryan, Echo fell back to the built-in macOS voice. Read the latest `attempts[]`. Edge is skipped only when it is disabled or its circuit breaker is open. Otherwise a `failed` Edge attempt means real synthesis failed. A common cause is that edge-tts is not installed for Homebrew Python at `/opt/homebrew/bin/python3`:
 
 ```bash
 /opt/homebrew/bin/python3 -m pip install edge-tts
 bash scripts/restart.sh
 ```
 
-If `/opt/homebrew/bin/python3` doesn't exist, install Python first with
-`brew install python`, then rerun the two commands above.
+If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the two commands above. Repeat step 4. You should now hear Ryan (`en-GB-RyanNeural`).
 
-Repeat Step 4 — you should now hear Ava.
+**No sound, but the curl returned `"status":"accepted"`?** Check the output device and the volume, then the resolution log in check 3. If the last line has `"success":false`, the `attempts` array tells you which provider failed.
 
-**No sound at all, but the curl returned `"status":"success"`?** Check your output
-device and volume, then check the resolution log (check 3 above): if the last line has
-`"success":false`, the `attempts` array tells you which provider failed and how.
+## Mute it for a shared office
 
-## Step 6: Continue with the everyday workflow
+Echo is optional. If someone is in the room:
 
-Everything above used raw `curl` to prove Echo works. Day to day, follow the canonical order:
-install or update, run doctor, mute or unmute, then set a persona. The commands and current
-behavior live in the README's [Operation](../README.md#operation) section and
-[The everyday four](operations.md#the-everyday-four) in the operations guide.
+```bash
+cli/echo mute on
+```
 
-## What you've learned
+Send the same "Hello from Echo" request again. You should still get `"status":"accepted"`, and you should hear nothing. Then:
 
-In this tutorial, you:
+```bash
+cli/echo mute off
+```
 
-- Installed Echo as a self-starting macOS service
-- Verified its health over HTTP
-- Made it speak with a plain `curl` — no fields required beyond your message
-- Selected a persona voice with `voice_id`
-- Found the canonical install/update, doctor, mute, and persona workflow
-- Learned where the logs are when something sounds wrong
+Mute is machine-wide. It does not stop Oh My Pi live chat. Layers and states: [What Echo does](what-echo-does.md).
+
+## What you have done
+
+You installed Echo as a self-starting macOS service, confirmed `/health`, heard "Hello from Echo", picked a persona, and proved that mute stops the audio without rejecting the request.
 
 ## Next steps
 
-- **Wire up a host adapter** — have Claude Code, Jcode, Grok Build, Pi, or oh-my-pi speak automatically:
-  [install-human.md](install-human.md)
-- **Give the project its own persona after wiring Claude Code, Pi, or omp** - run
-  `/echo-voice [name] [voice]` inside the repo. For a global Pi/omp default, use
-  `cli/echo voice <name> <edge-tts-voice-id>`; configure Claude Code's global persona and voice in
-  `~/.claude/settings.json`. See [voices.md](voices.md#per-project-persona--voice-local-override).
-- **Change or add voices** — pick different persona voices by ear:
-  [voices.md](voices.md)
-- **Run Echo day to day**: start/stop/restart, mute, update after a pull, read logs:
-  [operations.md](operations.md)
-- **Look up the full HTTP API** — every `/notify` field:
-  [http-api.md](http-api.md)
+- Wire a host so Claude Code, Pi, oh-my-pi, Jcode, Grok Build, or Codex speaks on its own. [How to install Echo](install-human.md)
+- After wiring Claude Code, Pi, or omp, give this project a persona with `/echo-voice [name] [voice]` inside the repo. [Voices](voices.md#per-project-persona--voice-local-override)
+- Pick voices by ear in [voices.md](voices.md)
+- Start, stop, restart, and update after a pull in [operations.md](operations.md)
+- Look up `/notify` in [http-api.md](http-api.md)
+
+Want Echo to ask you a question out loud? That is a separate, opt-in capability. It needs `sox` (`rec`) and a local transcriber. The first ask needs macOS microphone permission, and on the measured Pi and omp path the prompt names your terminal application, not Echo. Read [converse.md](converse.md#before-you-enable-it) before you enable it. First-class speech-to-text as a standing product is [roadmap](https://github.com/edheltzel/Echo/issues/179).
