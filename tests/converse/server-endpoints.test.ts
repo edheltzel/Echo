@@ -452,6 +452,19 @@ describe("POST /turn", () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
+  test("refuses while core microphone is muted, so echo_ask does not open the mic", async () => {
+    const { base } = startServer(fakeCore({
+      health: coreHealth({ mute: { muted: false, muted_until: null, scope: "mic" } }),
+    }));
+
+    const { status, body } = await postTurn(base, askBody());
+
+    expect(status).toBe(503);
+    expect(body.error).toBe("core_muted");
+    expect(body.detail).toContain("microphone is muted");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
   test("refuses when core runs with the capture guard disabled", async () => {
     const { base } = startServer(fakeCore({ health: coreHealth({ capture_guard: { path: null, state: "idle" } }) }));
 

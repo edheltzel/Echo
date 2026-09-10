@@ -16,7 +16,7 @@ First-class speech-to-text is [roadmap (#179)](https://github.com/edheltzel/Echo
 
 ## When it speaks
 
-A request becomes speech only after it reaches the daemon with voice on, the runtime mute is off, and no live capture is holding the speaker.
+A request becomes speech only after it reaches the daemon with voice on, the runtime TTS mute is off, and no live capture is holding the speaker.
 
 Typical spoken lines:
 
@@ -31,7 +31,7 @@ Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or 
 Quiet is a feature. These are the usual reasons you hear nothing:
 
 - No adapter is installed, and nothing POSTed `/notify`
-- Runtime mute is on (`cli/echo mute on`)
+- Runtime mute is on for the speaker (`cli/echo mute on` or `on tts`)
 - The adapter has `ECHO_VOICE_SPEAK_COMPLETIONS` off, or greetings off
 - `ECHO_VOICE_ENABLED` is false, or this request sent `voice_enabled: false`
 - A subagent turn (suppressed by default)
@@ -49,7 +49,7 @@ These are the states a human can usefully ask about. They are not a second produ
 | --- | --- | --- |
 | Idle | Daemon up, nothing playing | `/health` is `"healthy"`. `play_queue.in_flight_ms` is null. Mute is off. |
 | Speaking | A line is in the speaker | `play_queue.in_flight_ms` is a number. The audio-lifecycle log later records `played`. |
-| Muted | Requests succeed, speaker stays off | `cli/echo mute status`. `/health` `mute.muted` is true. |
+| Muted | Requests succeed, speaker stays off | `cli/echo mute status`. `/health` `mute.muted` is true (`tts` or `all`). |
 | Held for capture | Banner may fire, speaker waits | `/health` `capture_guard.state` is not idle. Lifecycle disposition `held-for-capture`. |
 | Error | Health fails, or speech falls through the chain | `cli/echo doctor` ends `DEGRADED`. `~/Library/Logs/echo.log` and the voice-resolution log name the provider attempt. |
 
@@ -60,7 +60,7 @@ These are the states a human can usefully ask about. They are not a second produ
 Silence is layered. Use the smallest layer that matches the room.
 
 1. **Do not wire a host.** Core-only Echo speaks only when something POSTs. A shared office with no adapter is already quiet.
-2. **Runtime mute.** `cli/echo mute on`, `off`, `toggle`, `status`, or a duration such as `30m`. Audio off. Notifications still processed and logged. One daemon serves the machine, so this mutes every Echo session at once. `/echo-mute` on hosts that register it is the same command.
+2. **Runtime mute.** `cli/echo mute on`, `off`, `toggle`, `status`, or a duration such as `30m`. Default scope `all` (speaker + capture booking). `tts` holds playback only — notifications still processed and logged. `mic` holds capture / converse / `echo_ask` only; TTS may still speak. One daemon serves the machine, so this mutes every Echo session at once. `/echo-mute` on hosts that register it is the same command. Do not invent a second mute system.
 3. **Adapter policy.** `ECHO_VOICE_SPEAK_COMPLETIONS`, `ECHO_VOICE_GREET_ON_START`, `ECHO_VOICE_SUPPRESS`, and `ECHO_VOICE_SUPPRESS_SUBAGENTS` in `~/.config/echo/config.json`. This is "this host should not talk," not a meeting switch.
 4. **This request.** `"voice_enabled": false` is the silent smoke. Tests use it. You can too.
 5. **Capture hold.** While a live pid is recording or transcribing, Echo skips voice so the microphone does not hear the speaker.

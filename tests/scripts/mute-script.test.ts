@@ -48,7 +48,7 @@ describe("issue #83 - scripts/mute.sh", () => {
     const result = await runMute(["on"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('"muted":true');
-    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null, scope: "all" });
   });
 
   test("on 45 → duration passes through to a deadline", async () => {
@@ -63,25 +63,25 @@ describe("issue #83 - scripts/mute.sh", () => {
   });
 
   test("off → daemon unmuted", async () => {
-    writeMuteState({ muted: true, muted_until: null });
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
     const result = await runMute(["off"]);
     expect(result.exitCode).toBe(0);
-    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("toggle → flips current state", async () => {
-    writeMuteState({ muted: true, muted_until: null });
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
     const result = await runMute(["toggle"]);
     expect(result.exitCode).toBe(0);
     expect(readMuteState(MUTE_PATH).muted).toBe(false);
   });
 
   test("status → reports mute state from /health as parseable JSON", async () => {
-    writeMuteState({ muted: true, muted_until: null });
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
     const result = await runMute(["status"]);
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout.trim()); // machine-readable contract
-    expect(parsed.mute).toEqual({ muted: true, muted_until: null });
+    expect(parsed.mute).toEqual({ muted: true, muted_until: null, scope: "all" });
   });
 
   test("on 007 → leading zeros normalized, valid JSON body, 7-minute mute", async () => {
@@ -97,7 +97,7 @@ describe("issue #83 - scripts/mute.sh", () => {
   test("invalid minutes argument → usage error, no request", async () => {
     const result = await runMute(["on", "soon"]);
     expect(result.exitCode).not.toBe(0);
-    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 
   test("unknown command → usage error", async () => {
@@ -111,5 +111,29 @@ describe("issue #83 - scripts/mute.sh", () => {
     const result = await runMute(["status"], "1");
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("not reachable");
+  });
+});
+
+describe("FM-446 - scripts/mute.sh scopes", () => {
+  test("on tts → speaker mute", async () => {
+    const result = await runMute(["on", "tts"]);
+    expect(result.exitCode).toBe(0);
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null, scope: "tts" });
+  });
+
+  test("on mic → mic mute, speaker flag false", async () => {
+    const result = await runMute(["on", "mic"]);
+    expect(result.exitCode).toBe(0);
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null, scope: "mic" });
+  });
+
+  test("on tts 12 → timed tts mute", async () => {
+    const before = Date.now();
+    const result = await runMute(["on", "tts", "12"]);
+    expect(result.exitCode).toBe(0);
+    const state = readMuteState(MUTE_PATH);
+    expect(state.scope).toBe("tts");
+    expect(state.muted).toBe(true);
+    expect(Date.parse(state.muted_until!)).toBeGreaterThanOrEqual(before + 12 * 60_000);
   });
 });

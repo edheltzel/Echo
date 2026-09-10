@@ -191,20 +191,22 @@ session (one queue, one key).
 
 ## `POST /mute`
 
-Global runtime mute (#83). While muted, notifications are accepted, logged, and
-voice-resolved normally - audio alone is suppressed across **every** provider, including the
-macOS `say` fallback. Muted lines are not held for later replay: they flow through the play
-queue as usual and are suppressed at speak time; the `/notify` contract is unchanged.
-The resolution drop-off log tags suppressed events `"muted": true`.
+Runtime mute (#83, FM-446). Scopes:
 
-An explicit JSON body sets state; an **empty body toggles** (a one-keystroke hotkey needs no
-state knowledge). The response is always the resulting state:
+- `tts` — speaker/playback only. Notifications are accepted, logged, and voice-resolved; audio is suppressed across every provider, including macOS `say`.
+- `mic` — capture / converse / `echo_ask` booking only. TTS may still speak. The daemon does not open the microphone; this scope refuses the capture-reservation paths Echo already owns.
+- `all` — both. This is today's mute, and the default when `scope` is omitted.
+
+Muted TTS lines are not held for later replay: they flow through the play queue as usual and are suppressed at speak time; the `/notify` contract is unchanged. The resolution drop-off log tags suppressed events `"muted": true`. `mute.muted` in the response and in `/health` remains the speaker flag (`true` for `tts` and `all`). A mic-only mute reports `muted: false` with `"scope": "mic"`.
+
+An explicit JSON body sets state; an **empty body toggles `all`** (a one-keystroke hotkey needs no state knowledge). `{ "scope": "tts" }` without `muted` toggles that scope. The response is always the resulting state:
 
 ```json
-{ "muted": true, "muted_until": "2026-07-03T23:30:00.000Z" }
+{ "muted": true, "muted_until": "2026-07-03T23:30:00.000Z", "scope": "all" }
 ```
 
-- `muted` (boolean, required in a non-empty body) - target state.
+- `muted` (boolean, required in a non-empty body unless toggling by `scope` alone) - target state.
+- `scope` (`tts` | `mic` | `all`, optional) - omitted = `all`. Legacy `{ "muted": true }` files without `scope` read as `all`.
 - `duration_minutes` (positive number, optional) - timed mute; omitted = indefinite.
   The mute auto-expires **silently** at the deadline (lazy - voice simply resumes on the
   next notification). Invalid bodies return `400` and leave state untouched.
@@ -230,6 +232,10 @@ curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json'
   -d '{"muted": true, "duration_minutes": 30}'   # mute for 30 minutes
 curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
   -d '{"muted": false}'                           # unmute now
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
+  -d '{"muted": true, "scope": "tts"}'            # speaker only
+curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json' \
+  -d '{"muted": true, "scope": "mic"}'            # capture/converse only
 ```
 
 In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
@@ -242,7 +248,7 @@ status, `macos_fallback_voice`, pronunciation rule count, emotional preset count
 `play_queue` (`{depth, in_flight_ms, stalled}` - backlog, how long the current line has
 been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
-`reset_after_ms`), the current mute state (`mute: {muted, muted_until}`), the capture
+`reset_after_ms`), the current mute state (`mute: {muted, muted_until, scope}` — `muted` is the speaker flag; `scope` is `tts` | `mic` | `all`), the capture
 guard (`capture_guard: {path, state}` - the resolved recording-state file and its current
 reading; `state` is `idle` unless an external mic capture is live), and the configuration
 audit below.

@@ -109,6 +109,13 @@ export function assessCore(read: CoreHealthRead): CoreAssessment {
       detail: "core is muted, so the question would never be heard. Run `cli/echo mute off` first.",
     };
   }
+  if (health.mute?.scope === "mic") {
+    return {
+      ok: false,
+      code: "core_muted",
+      detail: "core microphone is muted, so echo_ask will not open the mic. Run `cli/echo mute off` first.",
+    };
+  }
   const capturePath = health.capture_guard?.path;
   if (typeof capturePath !== "string" || capturePath.length === 0) {
     return {

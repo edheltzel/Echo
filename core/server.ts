@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
-import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, toggleMuteState } from "./mute";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
 import {
@@ -1333,13 +1333,14 @@ export async function speakWithFallback(
   emotion?: string,
   speakMode?: SpeakMode,
 ): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
-  // Runtime mute gate (#83): sits before the provider loop so ONE check covers
-  // every provider including the macOS `say` fallback. Lazy expiry — a timed
-  // mute past its deadline reads as unmuted. Logging and voice resolution
-  // already happened upstream; the caller records the drop-off event tagged muted.
+  // Runtime mute gate (#83 / FM-446): sits before the provider loop so ONE
+  // check covers every provider including the macOS `say` fallback. `tts` and
+  // `all` hold the speaker; `mic` does not. Lazy expiry — a timed mute past its
+  // deadline reads as unmuted. Logging and voice resolution already happened
+  // upstream; the caller records the drop-off event tagged muted.
   const muteState = readMuteState();
-  if (muteState.muted) {
-    console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
+  if (isTtsMuted(muteState)) {
+    console.log(`🔇 Muted (${muteState.scope}) — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
     return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
   }
 
@@ -1767,6 +1768,9 @@ function acceptNotification(
   if (!opts.voiceEnabled && opts.captureReservation) {
     throw new Error("capture_reservation requires voice_enabled");
   }
+  if (opts.captureReservation && isMicMuted()) {
+    throw new Error("Invalid capture_reservation: microphone is muted");
+  }
 
   // Banner for every accepted notification, voice or not — decoupled from
   // the queue so it shows immediately and survives supersede/age-drop. The
@@ -1955,6 +1959,12 @@ export const server = serve({
     const reservationGrant = CAPTURE_RESERVATION_GRANT_PATH.exec(url.pathname);
     if (reservationGrant && req.method === "POST") {
       const reservationId = decodeURIComponent(reservationGrant[1]);
+      if (isMicMuted()) {
+        return new Response(JSON.stringify({ error: "muted", reservation_id: reservationId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
+        });
+      }
       const granted = grantCaptureReservation(reservationId);
       if (granted.granted === false) {
         return new Response(JSON.stringify({ error: granted.reason, reservation_id: reservationId }), {
@@ -2022,9 +2032,10 @@ export const server = serve({
       }
     }
 
-    // /mute — global runtime mute (#83). An explicit JSON body sets state;
-    // an EMPTY body toggles, so a one-keystroke hotkey needs no state
-    // knowledge. Response is always the resulting state {muted, muted_until}.
+    // /mute — runtime mute (#83 / FM-446). An explicit JSON body sets state;
+    // an EMPTY body toggles `all`, so a one-keystroke hotkey needs no state
+    // knowledge. `{scope}` without `muted` toggles that scope. Optional `scope`
+    // is tts | mic | all (default all). Response is always {muted, muted_until, scope}.
     if (url.pathname === "/mute" && req.method === "POST") {
       const reqId = generateRequestId();
       try {
@@ -2039,17 +2050,24 @@ export const server = serve({
           } catch {
             throw new Error("Invalid JSON body");
           }
-          if (typeof data?.muted !== "boolean") {
-            throw new Error("Invalid body: 'muted' must be a boolean");
+          if (data.scope !== undefined && !isMuteScope(data.scope)) {
+            throw new Error("Invalid body: 'scope' must be tts, mic, or all");
           }
-          if (data.duration_minutes !== undefined &&
-              (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
-            throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+          if (data.muted === undefined && isMuteScope(data.scope) && data.duration_minutes === undefined) {
+            state = toggleMuteState(undefined, data.scope);
+          } else {
+            if (typeof data?.muted !== "boolean") {
+              throw new Error("Invalid body: 'muted' must be a boolean");
+            }
+            if (data.duration_minutes !== undefined &&
+                (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
+              throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+            }
+            state = setMuteState(data.muted, data.duration_minutes, undefined, data.scope ?? "all");
           }
-          state = setMuteState(data.muted, data.duration_minutes);
         }
 
-        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
+        log('info', `🔇 Mute ${state.scope} ${isTtsMuted(state) || isMicMuted(state) ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
         return new Response(
           JSON.stringify(state),
           {

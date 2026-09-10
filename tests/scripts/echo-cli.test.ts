@@ -338,6 +338,20 @@ describe("echo mute", () => {
     }
   });
 
+  test("on tts and 30m tts pass scope through to mute.sh", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-scope-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "on", "tts"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "30m", "tts"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain('"scope": "tts"');
+      expect(logged).toContain('"duration_minutes": 30');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a bad duration and requires an argument", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-mute-bad-"));
     try {

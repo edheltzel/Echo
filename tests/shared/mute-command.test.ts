@@ -18,6 +18,8 @@ describe("parseMuteArgs", () => {
     expect(parseMuteArgs("  toggle  ")).toEqual(["toggle"]);
     expect(parseMuteArgs("30m")).toEqual(["30m"]);
     expect(parseMuteArgs("on 30")).toEqual(["on", "30"]);
+    expect(parseMuteArgs("on tts")).toEqual(["on", "tts"]);
+    expect(parseMuteArgs("toggle mic")).toEqual(["toggle", "mic"]);
   });
 });
 
