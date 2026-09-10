@@ -4,18 +4,25 @@ import { join } from "node:path";
 import {
   defaultStartupGreetings,
   personaGreetingFields,
-  resolvePersonaStartupGreetings,
+  pickStartupCatchphrase,
 } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
+import {
+  applyPersonaOverride,
+  booleanEnv,
+  shouldSuppressVoice,
+  type BaseVoiceConfig,
+  type EchoPersonaOverride,
+  type RunContext,
+} from "@echo/shared/persona.ts";
 
-export interface OmpVoiceConfig {
+export type { EchoPersonaOverride, RunContext };
+export { applyPersonaOverride, pickStartupCatchphrase, shouldSuppressVoice };
+
+export interface OmpVoiceConfig extends BaseVoiceConfig {
   endpoint: string;
   title: string;
-  startupCatchphrases: string[];
-  personaName: string;
-  sayName: boolean;
-  voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
@@ -23,22 +30,6 @@ export interface OmpVoiceConfig {
 }
 
 // Default greeting pool lives in @echo/shared/greeting.ts (nameless unless sayName).
-
-/** Random pick from the greeting pool; `random` is injectable for tests. */
-export function pickStartupCatchphrase(
-  pool: string[],
-  random: () => number = Math.random,
-): string {
-  return pool[Math.floor(random() * pool.length)];
-}
-
-function booleanEnv(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
-}
 
 export function loadOmpVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): OmpVoiceConfig {
   // Same canonical config.json values as the Pi adapter. Legacy ATLAS_VOICE_*
@@ -72,13 +63,6 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = loa
 //     startupCatchphrases: ["Echo online."]
 // Unset keys fall through to global config, then to the env-based config.
 
-export interface EchoPersonaOverride {
-  personaName?: string;
-  voiceId?: string;
-  startupCatchphrases?: string[];
-  sayName?: boolean;
-}
-
 function defaultReadFile(path: string): string | null {
   try {
     return existsSync(path) ? readFileSync(path, "utf8") : null;
@@ -110,12 +94,6 @@ function readDaidentity(
 }
 
 /**
- * Resolve a persona override from omp's native config layering:
- * project `<cwd>/.omp/config.yml` over global `~/.omp/agent/config.yml`,
- * project wins per key (same daidentity shape the Claude Code and Pi adapters read).
- * Returns null when neither file contributes a persona field.
- */
-/**
  * omp's global agent dir. Honors omp's own `PI_CODING_AGENT_DIR` override (it
  * relocates `~/.omp/agent`), so Echo reads the same global config omp does - and
  * so tests can point it at a scratch dir for hermetic isolation.
@@ -124,6 +102,12 @@ function ompAgentDir(home: string): string {
   return process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent");
 }
 
+/**
+ * Host-specific: omp's YAML `.omp/config.yml` paths, not a shared helper.
+ * Project `<cwd>/.omp/config.yml` over global `~/.omp/agent/config.yml`,
+ * project wins per key (same daidentity shape the Claude Code and Pi adapters read).
+ * Returns null when neither file contributes a persona field.
+ */
 export function loadProjectPersona(
   cwd: string | undefined,
   readFile: (path: string) => string | null = defaultReadFile,
@@ -148,43 +132,4 @@ export function loadProjectPersona(
   if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
 
   return Object.keys(override).length > 0 ? override : null;
-}
-
-/** Apply a project persona override onto a base config, per key (override wins when set). */
-export function applyPersonaOverride(
-  base: OmpVoiceConfig,
-  override: EchoPersonaOverride | null,
-): OmpVoiceConfig {
-  if (!override) return base;
-  const sayName = override.sayName ?? base.sayName;
-  const startupCatchphrases = resolvePersonaStartupGreetings(
-    base.startupCatchphrases,
-    override.startupCatchphrases,
-    sayName,
-  );
-  return {
-    ...base,
-    personaName: override.personaName ?? base.personaName,
-    voiceId: override.voiceId ?? base.voiceId,
-    sayName,
-    startupCatchphrases,
-  };
-}
-
-/** Subset of omp's ExtensionContext needed to decide suppression. */
-export interface RunContext {
-  mode?: string;
-  hasUI?: boolean;
-}
-
-export function shouldSuppressVoice(
-  ctx: RunContext = {},
-  env: Record<string, string | undefined> = loadEchoConfiguration(),
-): boolean {
-  if (booleanEnv(env.ECHO_VOICE_SUPPRESS ?? env.ATLAS_VOICE_SUPPRESS, false)) return true;
-  // omp spawns headless subagents (no user-facing UI, ctx.hasUI === false); speak only
-  // when a real UI is present. `tui` and `rpc` keep their UI.
-  if (ctx.hasUI === false) return true;
-  if (ctx.mode === "json" || ctx.mode === "print") return true;
-  return false;
 }

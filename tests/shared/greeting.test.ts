@@ -5,6 +5,7 @@ import {
   NAMED_STARTUP_GREETINGS,
   NAMELESS_STARTUP_GREETINGS,
   personaGreetingFields,
+  pickStartupCatchphrase,
   resolvePersonaStartupGreetings,
 } from "../../shared/greeting.ts";
 
@@ -74,5 +75,13 @@ describe("startup greeting pools", () => {
       .toBe(NAMED_STARTUP_GREETINGS);
     expect(resolvePersonaStartupGreetings(NAMED_STARTUP_GREETINGS, undefined, false))
       .toBe(NAMELESS_STARTUP_GREETINGS);
+  });
+
+  test("pickStartupCatchphrase selects uniformly by the injected random", () => {
+    const pool = ["a", "b", "c"];
+    expect(pickStartupCatchphrase(pool, () => 0)).toBe("a");
+    expect(pickStartupCatchphrase(pool, () => 0.5)).toBe("b");
+    expect(pickStartupCatchphrase(pool, () => 0.999)).toBe("c");
+    expect(pickStartupCatchphrase(["only"], Math.random)).toBe("only");
   });
 });
