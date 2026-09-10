@@ -4,7 +4,7 @@
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-Echo speaks the completion line when the turn ends. One local daemon on your Mac. Any host that can POST JSON.
+Echo speaks the completion line when the turn ends. One local daemon on your Mac. Any host that can POST JSON. A permission or approval UI that pauses *inside* a turn does not yet get its own ping. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
 
 open source · local daemon · macOS · Bun
 
@@ -17,7 +17,8 @@ Ambient completion audio, not a conversation loop.
 | Without Echo | With Echo |
 | --- | --- |
 | The turn ends and the room stays quiet. | The completion line is spoken when the agent is done. |
-| You notice the wait only when you look at the terminal. | You hear it from across the desk. |
+| You notice the wait only when you look at the terminal. | You hear that completion line from across the desk. |
+| The agent is blocked on a permission UI inside the turn. | Echo stays quiet until the turn ends. Dedicated pings: [#107](https://github.com/edheltzel/Echo/issues/107). |
 | Each host, if it notifies at all, does it a different way. | One daemon on `:3246` for Claude Code, Pi, oh-my-pi, Codex, and a `curl`. |
 
 Prefer typing? Leave the adapter off. Already installed, and someone just sat down nearby? Mute it:
@@ -64,11 +65,12 @@ You should hear "Hello from Echo" and see JSON with `"status":"accepted"`. A lin
 
 ```bash
 cli/echo doctor          # one row per check, ends in Result: READY
-cli/echo mute on         # also: off | toggle | status | 30m
+cli/echo mute on         # also: off | toggle | status | 30m | on tts | on mic
+cli/echo replay          # last spoken line; `replay 3` for last three
 curl -fsS http://localhost:3246/health
 ```
 
-`doctor` is the "did my install work" check. Mute is the shared-office switch. The same `curl` you just ran is the notify path every adapter uses.
+`doctor` is the "did my install work" check. Mute is the shared-office switch (`tts` speaker, `mic` capture, `all` both). Replay re-speaks lines that actually played. The same `curl` you just ran is the notify path every adapter uses.
 
 ## Architecture
 
@@ -116,6 +118,7 @@ Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/ec
 | --- | --- |
 | Hear my first notification (tutorial) | [docs/getting-started.md](docs/getting-started.md) |
 | Understand what Echo does, when it speaks, and when it stays quiet | [docs/what-echo-does.md](docs/what-echo-does.md) |
+| Know when the agent is waiting on me | [docs/what-echo-does.md#when-an-agent-needs-you](docs/what-echo-does.md#when-an-agent-needs-you) |
 | Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
 | Start, stop, restart, mute vs daemon disable, update after a pull, read logs | [docs/operations.md](docs/operations.md#mute-vs-daemon-disable) |
 | Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |

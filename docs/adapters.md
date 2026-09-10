@@ -17,6 +17,7 @@ Adapters should:
 4. POST to the daemon's `/notify`, resolved via `shared/daemon-endpoints.ts`.
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
+7. Do not invent a needs-input / approval / attention notify. Completions that happen to be questions still POST `/notify`; `speak_mode` `consult` is density, not a lifecycle event. Product intent: [#107](https://github.com/edheltzel/Echo/issues/107). Current human truth: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you).
 
 ## Package boundary - self-contained, HTTP-only
 
