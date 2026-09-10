@@ -130,6 +130,7 @@ describe("GET /health", () => {
     expect(body.booking.held).toBe(false);
     expect(body.core.base_url).toBe("http://core.test");
     expect(body.capture.owner).toBe("caller");
+    expect(typeof body.capture.stop_file).toBe("string");
     // core/health shares core's /notify bucket; a status check must not spend it.
     expect(core.calls).toEqual([]);
   });
@@ -589,6 +590,36 @@ describe("finishing a turn", () => {
   });
 });
 
+describe("POST /turn/:id/stop", () => {
+  test("writes the stop file and leaves the booking held", async () => {
+    const { base, handle } = startServer();
+    const { body: grant } = await postTurn(base, askBody());
+    const stopPath = resolveConverseConfig({}, scratch).stopFilePath;
+
+    const response = await fetch(`${base}/turn/${grant.turn_id}/stop`, { method: "POST" });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("stop_requested");
+    expect(readFileSync(stopPath, "utf8")).toBe("");
+    expect(existsSync(lockPath)).toBe(true);
+    expect(handle.activeTurns()).toHaveLength(1);
+  });
+
+  test("an unknown turn does not write a stop file", async () => {
+    const { base } = startServer();
+    const { body: grant } = await postTurn(base, askBody());
+    const stopPath = resolveConverseConfig({}, scratch).stopFilePath;
+
+    const response = await fetch(`${base}/turn/t-nonexistent/stop`, { method: "POST" });
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("unknown_turn");
+    expect(existsSync(stopPath)).toBe(false);
+    expect(readBooking(lockPath)?.turn_id).toBe(grant.turn_id);
+  });
+});
+
 describe("unsupported requests", () => {
   test("an unknown endpoint lists what the capability supports", async () => {
     const { base } = startServer();
@@ -598,5 +629,6 @@ describe("unsupported requests", () => {
 
     expect(response.status).toBe(404);
     expect(body.supported_endpoints).toContain("POST /turn");
+    expect(body.supported_endpoints).toContain("POST /turn/:id/stop");
   });
 });

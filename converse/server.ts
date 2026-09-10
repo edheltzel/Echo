@@ -38,6 +38,7 @@ import {
   type FetchLike,
   type SleepLike,
 } from "./playback.ts";
+import { clearStopSignal, requestStop } from "./stop-signal.ts";
 import type { ConverseError, ConverseErrorCode, TurnGrant, TurnRequest } from "./types.ts";
 
 const MAX_QUESTION_CHARS = 1_000;
@@ -253,6 +254,8 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       }
       bookingAcquired = true;
       if (booking.reaped) log(`reaped abandoned booking ${booking.reaped.turn_id} (pid ${booking.reaped.owner_pid})`);
+      // A leftover stop from a crashed previous turn must not immediately end this capture.
+      clearStopSignal(config.stopFilePath);
 
       const assessment = assessCore(await readCoreHealth(config.coreBaseUrl, fetchImpl));
       if (!assessment.ok) {
@@ -374,11 +377,19 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
     } finally {
       if (bookingAcquired && !handedOff) {
         await releaseCoreReservation(reservationId, `turn ${turnId} failing before capture`);
-        releaseBooking(config.bookingLockPath, turnId);
+        releaseOwnBooking(turnId);
       }
     }
   }
 
+  /**
+   * Release this turn's booking and drop a leftover stop so the next capture is not
+   * immediately ended. A lock held by a different turn is left alone, stop file included.
+   */
+  function releaseOwnBooking(turnId: string): void {
+    const outcome = releaseBooking(config.bookingLockPath, turnId);
+    if (outcome.released) clearStopSignal(config.stopFilePath);
+  }
   /**
    * A release that never lands is the one failure the operator cannot see: core
    * keeps holding the reservation, every notification is held for capture until
@@ -405,13 +416,13 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       // refuses when the holder is a different turn, so this cannot take a lock
       // away from a live one.
       await releaseCoreReservation(turnId, `finishing unknown turn ${turnId}`);
-      releaseBooking(config.bookingLockPath, turnId);
+      releaseOwnBooking(turnId);
       return fail("unknown_turn", `no active turn ${turnId}`, 404);
     }
 
     await releaseCoreReservation(turn.capture_reservation_id, `turn ${turnId} ${outcome}`);
     active.delete(turnId);
-    releaseBooking(config.bookingLockPath, turnId);
+    releaseOwnBooking(turnId);
     if (outcome === "completed") counts.completed++;
     else counts.aborted++;
     log(`turn ${turnId} ${outcome}${detail ? `: ${detail}` : ""}`);
@@ -434,6 +445,7 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         // Capture is the caller's job; the coordinator never opens the microphone.
         owner: "caller",
         booking_lock: config.bookingLockPath,
+        stop_file: config.stopFilePath,
       },
     });
   }
@@ -449,6 +461,16 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       if (url.pathname === "/health" && req.method === "GET") return health();
 
       if (url.pathname === "/turn" && req.method === "POST") return handleTurn(req);
+
+      const stop = /^\/turn\/([^/]+)\/stop$/.exec(url.pathname);
+      if (stop && req.method === "POST") {
+        const turnId = stop[1];
+        const turn = active.get(turnId);
+        if (!turn) return fail("unknown_turn", `no active turn ${turnId}`, 404);
+        requestStop(config.stopFilePath);
+        log(`turn ${turnId} stop requested`);
+        return json({ turn_id: turnId, state: "stop_requested" });
+      }
 
       const finish = /^\/turn\/([^/]+)\/(complete|abort)$/.exec(url.pathname);
       if (finish && req.method === "POST") {
@@ -467,7 +489,13 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
         {
           error: "not_found",
           detail: `Unsupported endpoint: ${req.method} ${url.pathname}`,
-          supported_endpoints: ["POST /turn", "POST /turn/:id/complete", "POST /turn/:id/abort", "GET /health"],
+          supported_endpoints: [
+            "POST /turn",
+            "POST /turn/:id/complete",
+            "POST /turn/:id/abort",
+            "POST /turn/:id/stop",
+            "GET /health",
+          ],
         },
         404,
       );
