@@ -55,6 +55,7 @@ describe("Codex lifecycle hook adapter", () => {
       voice_id: "codex",
       session_id: "sess-1",
       source: "codex",
+      speak_mode: "announce",
     }));
   });
 

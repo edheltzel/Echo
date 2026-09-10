@@ -11,7 +11,9 @@ Adapters should:
 
 1. Observe host lifecycle events.
 2. Extract a short user-facing message (for Pi/Claude Code, the final `🗣️` line).
-3. Add `source` and `session_id` metadata when available.
+3. Add `source` and `session_id` metadata when available. The shared notify client
+   fills `speak_mode` (`announce`/`brief`/`consult`) from that message; `think` is
+   explicit-only.
 4. POST to the daemon's `/notify`, resolved via `shared/daemon-endpoints.ts`.
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.

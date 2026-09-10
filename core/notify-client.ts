@@ -16,6 +16,7 @@ export function normalizeNotifyPayload(payload: NotifyPayload): NotifyPayload {
   if (payload.session_id) normalized.session_id = payload.session_id;
   if (payload.source) normalized.source = payload.source;
   if (payload.visual_delivery === "native") normalized.visual_delivery = "native";
+  if (payload.speak_mode) normalized.speak_mode = payload.speak_mode;
 
   return normalized;
 }

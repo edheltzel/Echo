@@ -56,6 +56,7 @@ describe("Grok lifecycle hook adapter", () => {
       voice_id: "grok",
       session_id: fixture.sessionId,
       source: "grok",
+      speak_mode: "announce",
     }));
   });
 

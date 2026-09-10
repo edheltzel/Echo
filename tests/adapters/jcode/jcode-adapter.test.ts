@@ -50,6 +50,7 @@ describe("Jcode lifecycle hook adapter", () => {
       voice_id: "jcode",
       session_id: "ses-1",
       source: "jcode",
+      speak_mode: "announce",
     }));
 
     const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
