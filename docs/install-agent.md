@@ -55,7 +55,7 @@ curl -fsS -X POST http://localhost:3246/notify \
   -d '{"message":"install verification","voice_enabled":false}'
 ```
 
-Expected: JSON with `"status":"success"`.
+Expected: JSON with `"status":"accepted"` (HTTP 202). Voice is off, so you should hear nothing.
 
 If FAIL: check rate limit and server logs.
 

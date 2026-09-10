@@ -1,25 +1,74 @@
 ![Echo - a voice for any agent](assets/echo-banner-riso.jpg)
 
-# Echo
+# Hear your agents.
 
-Standalone, multi-provider TTS notification server for coding agents, terminals, and scripts.
+Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-The server core accepts JSON on `localhost:3246` by default and speaks through a provider chain (`edge-tts → ElevenLabs → Kokoro → macOS say`). Host-specific lifecycle behavior now lives in adapters:
+Echo speaks the completion line when the turn ends. One local daemon on your Mac. Any host that can POST JSON.
 
-- `adapters/claudecode/` - Claude Code hook integration.
-- `adapters/jcode/` - Jcode lifecycle-hook integration.
-- `adapters/grok/` - Grok Build lifecycle-hook integration.
-- `adapters/pi/` - Pi extension package integration.
-- `adapters/omp/` - oh-my-pi (omp) extension package integration.
-- `adapters/mcp/` - Claude Code MCP voice-ask tool integration.
-- direct HTTP - any process can POST to `/notify`.
+open source · local daemon · macOS · Bun
 
-Echo can also ask: `converse/` speaks one question, records one spoken reply, transcribes it
-locally and hands the text back to the agent. It is a one-shot exchange, not a continuing
-conversation. Pi and omp expose it as a tool from their existing adapters; Claude Code gets it
-from the MCP server in `adapters/mcp/`. On the measured Pi/omp path the macOS microphone prompt
-names your terminal application rather than Echo; conditions and full detail:
-[docs/converse.md](docs/converse.md#before-you-enable-it).
+Echo binds `localhost:3246`. The default voice provider is Microsoft edge-tts, an online service. Kokoro and macOS `say` stay on the machine. Read [What Echo does](docs/what-echo-does.md) for when it speaks and when it stays quiet.
+
+## Without Echo / with Echo
+
+Ambient completion audio, not a conversation loop.
+
+| Without Echo | With Echo |
+| --- | --- |
+| The turn ends and the room stays quiet. | The completion line is spoken when the agent is done. |
+| You notice the wait only when you look at the terminal. | You hear it from across the desk. |
+| Each host, if it notifies at all, does it a different way. | One daemon on `:3246` for Claude Code, Pi, oh-my-pi, Codex, and a `curl`. |
+
+Prefer typing? Leave the adapter off. Already installed, and someone just sat down nearby? Mute it:
+
+```bash
+cli/echo mute on
+```
+
+That silences Echo audio on the whole machine, not one session. Notifications still arrive and are logged. It does not stop Oh My Pi live chat, which speaks on its own path. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) for layers, timed mute, and what still makes sound.
+
+## Hosts
+
+Claude Code, Pi, oh-my-pi, Jcode, Grok Build, Codex, and a raw HTTP caller can speak through Echo. OpenCode gets mute. Wiring a host is optional. The three steps below use `curl` only.
+
+First-class speech-to-text is [roadmap](https://github.com/edheltzel/Echo/issues/179), not this README. Echo can already ask one question and transcribe one reply. That is an opt-in extra, not the reason to install.
+
+## Three steps
+
+Requires macOS and [Bun](https://bun.sh/). The guided tutorial, including "I heard nothing," is [Hear your first spoken notification](docs/getting-started.md).
+
+**1. Install the core**
+
+```bash
+git clone https://github.com/edheltzel/Echo.git
+cd Echo
+cli/echo install --adapter none
+```
+
+The output ends with `OK echo is healthy on :3246`.
+
+**2. Turn the volume up**
+
+**3. Hear "Hello from Echo"**
+
+```bash
+curl -X POST http://localhost:3246/notify \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Hello from Echo"}'
+```
+
+You should hear "Hello from Echo" and see JSON with `"status":"accepted"`. A line went in. Speech came out. `202` means the daemon took the line, not that playback has finished.
+
+## Commands after that
+
+```bash
+cli/echo doctor          # one row per check, ends in Result: READY
+cli/echo mute on         # also: off | toggle | status | 30m
+curl -fsS http://localhost:3246/health
+```
+
+`doctor` is the "did my install work" check. Mute is the shared-office switch. The same `curl` you just ran is the notify path every adapter uses.
 
 ## Architecture
 
@@ -42,311 +91,41 @@ flowchart LR
   Providers --> Say[macOS say]
 ```
 
-The universal core is in `core/`. It should not import host adapters or assume PAI, Pi, or any other harness.
+The universal core is in `core/`. Host lifecycle lives in an adapter that calls `POST /notify`. The core does not import Claude Code, Pi, or any other host.
 
-## Quickstart
+## Next
 
-Requires macOS and [Bun](https://bun.sh/). New to Echo? Follow the guided tutorial
-instead: **[docs/getting-started.md](docs/getting-started.md)**.
+New to Echo? Stay in [Hear your first spoken notification](docs/getting-started.md). Want a coding agent to do the setup? Point it at [docs/install-agent.md](docs/install-agent.md).
 
-```bash
-cli/echo install --adapter none
-```
-
-The equivalent underlying command is:
-
-```bash
-bash scripts/install.sh --adapter none
-```
-
-The installer output ends with:
-
-```
-OK echo is healthy on :3246
-```
-
-Send your first spoken notification:
-
-```bash
-curl -X POST http://localhost:3246/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from Echo"}'
-```
-
-You should hear "Hello from Echo" spoken aloud and see:
-
-```json
-{ "status": "success", "message": "Notification sent", "request_id": "..." }
-```
-
-Hear nothing, or an unexpected voice? See [If you hear nothing - or the wrong voice](docs/getting-started.md#if-you-hear-nothing--or-the-wrong-voice).
-
-## Install
-
-The quickstart above installs the core only. To also wire a host adapter:
+Wire a host (after you have heard the smoke):
 
 ```bash
 cli/echo install --adapter claudecode   # Claude Code hooks
-# optional mute plugin (no hooks, no LaunchAgent):
-#   claude plugin validate adapters/claudecode/plugin --strict
-#   claude --plugin-dir adapters/claudecode/plugin
 cli/echo install --adapter pi           # Pi extension
-cli/echo install --adapter omp          # oh-my-pi extension
-cli/echo install --adapter jcode        # Jcode lifecycle hooks
-cli/echo install --adapter grok         # Grok Build lifecycle hooks
-cli/echo install --adapter codex        # Codex lifecycle hooks
-cli/echo install --adapter mcp          # Claude Code voice-ask tool
+cli/echo install --adapter omp          # oh-my-pi
+cli/echo install --adapter jcode
+cli/echo install --adapter grok
+cli/echo install --adapter codex
+cli/echo install --adapter opencode    # mute only
+cli/echo install --adapter mcp        # optional one-shot voice ask for Claude Code
 ```
 
-These stable CLI commands delegate to the equivalent underlying commands:
-
-```bash
-bash scripts/install.sh --adapter claudecode
-bash scripts/install.sh --adapter pi
-bash scripts/install.sh --adapter omp
-bash scripts/install.sh --adapter jcode
-bash scripts/install.sh --adapter grok
-bash scripts/install.sh --adapter codex
-bash scripts/install.sh --adapter mcp
-```
-
-Voice ask requires one package that notifications do not: `sox`, which provides the hard-required
-`rec` recorder. Install it before trying an ask. You also need one local transcriber; the default
-on-device path uses `yap` on macOS 26:
-
-```bash
-brew install sox
-brew install yap
-```
-
-A Pi, omp, or MCP adapter install checks `sox` and `rec` but only warns when they are missing,
-because ordinary notifications do not need them; the Claude Code hook adapter runs no such check.
-Treat voice ask as not installed until that check passes; a missing recorder is refused before
-capture begins. A local `whisper-cli` plus a model is the alternative to `yap`; see
-[docs/converse.md](docs/converse.md#the-capture-pipeline).
-
-The first ask needs macOS microphone permission, and on the measured Pi/omp path the prompt names
-your terminal application rather than Echo. Permission and attribution conditions, Echo's lack of a
-per-question prompt, where reply audio lives and when it is deleted, and what still leaves the
-machine: [docs/converse.md](docs/converse.md#before-you-enable-it).
-
-Full install guide for humans (adapters, moved repos, uninstall): [docs/install-human.md](docs/install-human.md).
-
-Want a coding agent to do the setup? Ask it to **install Echo by following
-[docs/install-agent.md](docs/install-agent.md) for your host**. Agent-led installation is a
-supported route, not a workaround; that checklist gives the agent an assertion after each step.
-
-## Operation
-
-`cli/echo` is the stable wrapper over the scripts and the daemon API. These four steps are the
-whole everyday surface, in the order you need them:
-
-```bash
-# 1. Install or update. `update` re-stages the daemon from this checkout; restarting alone
-#    keeps the old payload running. Use `install` the first time, or to (re)wire an adapter.
-cli/echo update
-cli/echo install --adapter claudecode   # none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode
-
-# 2. Check health. Prints one row per check and ends in `Result: READY`.
-cli/echo doctor
-
-# 3. Mute and unmute. Audio off; notifications are still accepted, processed, and logged.
-cli/echo mute on          # also: off | toggle | status
-cli/echo mute 30m         # timed; `1h` works too. Voice resumes by itself.
-/echo-mute                # same CLI, from hosts that register it (on|off|toggle|status|30m)
-
-# 4. Set this project's persona (name + voice). Run it inside the repo, in your host.
-/echo-voice [name] [voice]
-```
-
-A healthy `cli/echo doctor` ends with:
-
-```
-Result: READY
-```
-
-Any failing row prints its own recovery command underneath, and the run ends with
-`Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor` and a non-zero exit.
-
-**Mute is machine-wide.** One Echo daemon serves the whole machine on `:3246`, so
-`cli/echo mute on` silences Echo audio for *every* agent, script, and terminal speaking through
-it, not just the session you ran it from. `cli/echo mute status` tells you the current state and
-any pending deadline.
-
-**Mute does not silence audio Echo did not produce.** In v0.10.0, live chat (Oh My Pi `/live`)
-generates its own speech and keeps talking while Echo is muted. Muting Echo removes only the
-spoken completion line on top of it. `/echo-mute` is the same `cli/echo mute` command on every
-host that can register it, not a second mute system.
-
-`/echo-voice` scaffolds a project-local persona for Claude Code, Pi, and omp without hand-editing
-the host's JSON or YAML config. For a global Pi/omp default instead of one repo's, use
-`cli/echo voice <name> <edge-tts-voice-id>`. Claude Code ignores those persona values; configure
-its global persona and voice in `~/.claude/settings.json`. Both paths are covered in
-[docs/voices.md](docs/voices.md#per-project-persona--voice-local-override).
-
-The underlying scripts stay available:
-
-```bash
-bash scripts/status.sh
-bash scripts/restart.sh
-bash scripts/stop.sh
-bash scripts/start.sh
-bash scripts/mute.sh status    # runtime mute: on [minutes] | off | toggle | status
-```
-
-Manual health check:
-
-```bash
-curl -fsS http://localhost:3246/health
-```
-
-Silent smoke request:
-
-```bash
-curl -fsS -X POST http://localhost:3246/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"smoke","voice_enabled":false}'
-```
-
-Host adapters also provide native terminal visuals: Herdr first, then a safe terminal TTY
-(Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9), with the macOS notification fallback
-last. The exact native-success marker suppresses the duplicate fallback banner. Limits,
-headless/tmux behavior, and a direct verification command are in
-[Native terminal visual delivery](docs/http-api.md#native-terminal-visual-delivery).
-
-Update-after-pull, repo moves, logs, and uninstall caveats: [docs/operations.md](docs/operations.md).
-
-## API
-
-The everyday endpoints are below; the voice ask adds opt-in playback-status and
-capture-reservation routes on top of them. Full contract: [docs/http-api.md](docs/http-api.md).
-
-### `POST /notify`
-
-```json
-{
-  "message": "Task complete",
-  "voice_id": "themis",
-  "title": "Voice Notification",
-  "voice_enabled": true
-}
-```
-
-All fields are optional - a missing `message` defaults to `"Task completed"`.
-`voice_enabled: false` keeps the notification path silent for smoke tests.
-
-`voice_id` takes a persona **name key** from `voices.json` (e.g. `kai`, `themis`). Omit it
-to get the default Atlas identity voice; an unrecognized value falls back to the active
-provider's default. See **Voices** below for resolution order.
-
-### `POST /notify/personality`
-
-Compatibility endpoint for callers that only provide a `message`.
-
-### `POST /mute`
-
-Global runtime mute: audio off while notifications are still accepted, processed, and
-logged. An empty body toggles (one-keystroke hotkey friendly);
-`{"muted": true, "duration_minutes": 30}` sets a timed mute. Day-to-day usage via
-`scripts/mute.sh`: [docs/operations.md](docs/operations.md); endpoint contract + hotkey
-bindings: [docs/http-api.md](docs/http-api.md).
-
-### `GET /health`
-
-Returns provider status, fallback order, circuit-breaker state, pronunciation rule count,
-and emotional preset count. Each provider entry includes an egress audit; note that the
-default provider, `edge-tts`, is an **online** Microsoft service. Edge's health probe is
-status-only: `/notify` still tries real Edge synthesis unless Edge is disabled or its
-circuit breaker is open. Details: [docs/http-api.md](docs/http-api.md),
-[docs/providers-observability.md](docs/providers-observability.md), and
-[docs/reliability.md](docs/reliability.md).
-
-### `GET /voices`
-
-Read-only projection of the configured personas: `{"agents": [...], "default_provider": "..."}`.
-This is how a caller checks whether a `voice_id` name key will resolve without reading the
-daemon's `voices.json` off disk. Contract: [docs/http-api.md](docs/http-api.md).
-
-### Voice-resolution drop-off log
-
-To make it observable *why* a `/notify` used the voice it did, the daemon appends one
-structured JSONL event per voice-enabled `/notify` to
-`~/Library/Logs/echo/voice-resolution.jsonl` - separate from the human-readable daemon log
-(`~/Library/Logs/echo.log`). Failed attempts include diagnostics such as `phase`, `reason`,
-`elapsed_ms`, `timeout_ms`, `exit_code`, and `stderr`, so Edge failures distinguish health
-status, synthesis, playback, and circuit-breaker paths. Fields, retention, and overrides:
-[docs/providers-observability.md](docs/providers-observability.md).
-
-## Voices
-
-Voices are configured per agent in `core/voices.json`. The `identity` mapping is the
-default ("Atlas") voice - it speaks whenever `voice_id` is omitted. Every entry under
-`agents` is a named persona keyed by a short lowercase name (`engineer`, `architect`,
-`themis`, `clauderesearcher`, …). Select one by sending `"voice_id": "<key>"`.
-
-**Resolution order** (`getVoiceMapping` in `core/server.ts`): the `voice_id` is matched against (1) an `agents` **name key**, then (2) any agent's `elevenlabs.voice_id`, then (3) the `identity` voice; no match falls back to the active provider's default voice. So callers should send the **name key** (e.g. `"themis"`), not a raw provider voice id.
-
-For the default `edge-tts` provider, each agent maps to a Microsoft neural voice with an optional `speed` (a multiplier converted to edge-tts's `--rate`, e.g. `1.08 → +8%`, `0.94 → -6%`). A `speed` of `1.0` (or no `edgetts` block) uses the global `providers.edgetts.rate`.
-
-```json
-"engineer": {
-  "edgetts": { "voice": "en-GB-ThomasNeural", "speed": 0.94 }
-}
-```
-
-Changing a persona's voice, adding a new persona, and the per-turn persona voice spoken
-by the Claude Code Stop hook are covered in [docs/voices.md](docs/voices.md).
-
-### Gotchas: wrong voice or silence
-
-- Sending a raw ElevenLabs voice id instead of the `voices.json` name key won't resolve
-  while ElevenLabs is disabled - it speaks in the active provider's **default voice**
-  instead of the persona you meant.
-- Unexpected macOS `say` usually means Edge is disabled, the Edge circuit is open, or real
-  Edge synthesis failed. Check `attempts[]` in the resolution log; the diagnostic health
-  probe alone no longer forces `say` fallback.
-- Port `31337` causes silence - voice traffic is `:3246`.
-
-### Auditioning edge voices
-
-Choose voices by ear with `bun scripts/preview-voices.ts` before editing `core/voices.json`. Commands and the full flag table live in [docs/voices.md](docs/voices.md).
-
-## Configuration
-
-Persistent settings live in `~/.config/echo/config.json`, including persona identity, port,
-timeouts, cache limits, and log paths. JSON values are typed and validated against
-[`shared/config-schema.json`](shared/config-schema.json). JSON wins; non-secret process and
-dotenv values remain one-release warning fallbacks. Installing migrates an existing
-`~/.config/echo/.env` into the JSON
-file and leaves the old one in place, since `ELEVENLABS_API_KEY` - the only secret, never
-accepted in JSON - keeps living there. See [docs/configuration.md](docs/configuration.md).
-
-## Documentation
+Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute).
 
 | I want to… | Read |
 | --- | --- |
-| Hear my first notification (guided tutorial) | [docs/getting-started.md](docs/getting-started.md) |
+| Hear my first notification (tutorial) | [docs/getting-started.md](docs/getting-started.md) |
+| Understand what Echo does, when it speaks, and when it stays quiet | [docs/what-echo-does.md](docs/what-echo-does.md) |
 | Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
-| Start/stop/restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
+| Start, stop, restart, mute, update after a pull, read logs | [docs/operations.md](docs/operations.md) |
 | Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |
 | Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
 | Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
-| Change or add voices; per-turn persona voice | [docs/voices.md](docs/voices.md) |
-| Understand provider egress + the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
-| Tune reliability / the circuit breaker | [docs/reliability.md](docs/reliability.md) |
+| Change or add voices | [docs/voices.md](docs/voices.md) |
+| Understand provider egress and the resolution log | [docs/providers-observability.md](docs/providers-observability.md) |
+| Tune reliability and the circuit breaker | [docs/reliability.md](docs/reliability.md) |
 | See required and optional dependencies | [docs/dependencies.md](docs/dependencies.md) |
 | Write or wire a host adapter | [docs/adapters.md](docs/adapters.md) |
-| Ask the human a question out loud and read their answer; decide whether to enable it | [docs/converse.md](docs/converse.md) |
-
-## Development
-
-See `docs/development.md`.
-
-```bash
-bun test
-PORT=8889 tests/smoke-core.sh  # isolated test-harness injection, not user configuration
-```
-
-## Contributing
-
-See `CONTRIBUTING.md`, especially the "Adding a Host Adapter" section.
+| Ask one question out loud and read the spoken reply | [docs/converse.md](docs/converse.md) |
+| Develop against a second instance | [docs/development.md](docs/development.md) |
+| Contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
