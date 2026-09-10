@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   REPLAY_DEFAULT_N,
   REPLAY_MAX_N,
@@ -14,6 +14,11 @@ import {
 function line(message: string): SpokenLine {
   return { message, voiceId: "kai", voiceSettings: { speed: 1 }, speakMode: "announce" };
 }
+
+beforeEach(() => {
+  // The ring is process-global (same singleton the daemon records into).
+  clearSpeakHistory();
+});
 
 afterEach(() => {
   clearSpeakHistory();
