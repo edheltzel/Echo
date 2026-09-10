@@ -4,7 +4,9 @@
 
 `docs/` owns Echo's durable project knowledge: operating guides, design decisions, agent
 workflows, implementation plans, and session handoffs that must remain available to future
-contributors.
+contributors. Human operating guides (`getting-started.md`, `what-echo-does.md`,
+`install-human.md`, `operations.md`) document shipped behavior, including when Echo does
+and does not announce that an agent is waiting.
 
 ## Ownership
 

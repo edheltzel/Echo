@@ -4,7 +4,7 @@ Echo is ambient completion audio for coding agents. When a turn ends, a short li
 
 It is a local daemon on your Mac. Hosts do not import it. They POST JSON to `localhost:3246/notify`. A `curl` is a valid host.
 
-This page says what Echo is, when it speaks, when it stays quiet, and how to keep a shared office quiet. Install and first sound live in [Hear your first spoken notification](getting-started.md). Commands live in [operations.md](operations.md). The wire contract is [http-api.md](http-api.md).
+This page says what Echo is, when it speaks, when it stays quiet, and how to keep a shared office quiet. When an agent is waiting on you is [When an agent needs you](#when-an-agent-needs-you). Install and first sound live in [Hear your first spoken notification](getting-started.md). Commands live in [operations.md](operations.md). The wire contract is [http-api.md](http-api.md).
 
 ## What it is not
 
@@ -25,7 +25,25 @@ Typical spoken lines:
 - Anything you POST yourself, including the "Hello from Echo" smoke
 - A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines are not held for later replay.
 
+If that completion line is a question, it still speaks. `speak_mode` (`announce` / `brief` / `consult` / `think`) is notify density on that line, not a new lifecycle event. `consult` is the slightly faster density for a `?` or "about to" line. Adapters never infer `think` (silence is already `voice_enabled: false`).
+
 Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode does not speak completions. It only exposes mute.
+
+## When an agent needs you
+
+[#107](https://github.com/edheltzel/Echo/issues/107) is the product intent: hear it from across the desk when an agent cannot continue without you (a question, an approval, or an explicit pause). That event layer is not shipped.
+
+Today you hear a waiting agent only when a **turn ends** and an adapter POSTs a completion line. There is no preferred-name addressing, no permission-prompt hook, and no approval-state ping. Adapters observe Stop / `message_end` / `turn_end` (and session-start greetings). They do not subscribe to host permission, AskUserQuestion, or `tool_approval_requested` events.
+
+| Situation | What you hear |
+| --- | --- |
+| The turn ended with a spoken question in the `🗣️` line | That line, at `consult` density if it contains `?` or "about to". `cli/echo replay` can re-speak it if it actually played. |
+| The host is sitting on a permission, AskUserQuestion, or approval UI **inside** a turn | Nothing Echo-produced, until Stop / `turn_end` fires with a `🗣️` line. |
+| Claude Code's transcript parser labels `AskUserQuestion` as `awaitingInput` | That label is not sent to the daemon. It does not speak. |
+| OpenCode | Nothing. Mute only. |
+| You want Echo to ask *you* a question out loud | That is opt-in [`echo_ask`](converse.md), the other direction. Silence modes `quick` / `standard` / `thoughtful` and `POST /turn/:id/stop` apply there only. |
+
+Mute, scoped mute (`tts` | `mic` | `all`), and [daemon disable](operations.md#mute-vs-daemon-disable) apply to these lines the same as any other notify. A muted or capture-held line is not stored for replay.
 
 ## When it stays quiet
 
@@ -39,6 +57,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 - A subagent turn (suppressed by default)
 - A capture is in progress. Echo will not talk over an open microphone. The banner can still appear.
 - The play queue dropped a stale or superseded line. The request was accepted. The audio was not played.
+- The host is waiting on a permission or approval UI inside a turn. Completions fire at turn end, not at that prompt. [When an agent needs you](#when-an-agent-needs-you).
 - Oh My Pi `/live` is talking on its own path. Muting Echo does not stop that live voice. It only stops Echo's completion line on top of it.
 
 Wrong voice is not silence. A request with no `voice_id` uses the identity voice (edge `en-GB-RyanNeural`), logged as `identity-default`. If you hear macOS `say` ("Daniel"), or Ava (`en-US-AvaNeural`, the edge provider `defaultVoice`), the chain did not use identity. That path is in the getting-started troubleshooting section and in [voices.md](voices.md).

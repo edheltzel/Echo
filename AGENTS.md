@@ -150,8 +150,8 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
-| What Echo does (when it speaks, when it stays quiet, mute layers, states) | [docs/what-echo-does.md](docs/what-echo-does.md) |
-| Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| What Echo does (when it speaks, when it stays quiet, mute layers, states, HIL current truth) | [docs/what-echo-does.md](docs/what-echo-does.md) |
+| Operations (start/stop/restart/status · runtime mute vs daemon disable · replay · update · repo moves) | [docs/operations.md](docs/operations.md) |
 | Configuration (`~/.config/echo/config.json`, schema, migration, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
