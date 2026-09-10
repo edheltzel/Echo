@@ -42,6 +42,13 @@ describe("core server route contract source", () => {
     expect(server).toContain("edgeRateFromSpeed(settings?.speed, voicesConfig.providers.edgetts?.rate)");
   });
 
+  test("speak-mode density is applied after settings resolution via shared helpers", () => {
+    expect(server).toContain('from "../shared/speak-mode"');
+    expect(server).toContain("applySpeakModeSpeed");
+    expect(server).toContain("parseSpeakMode");
+    expect(server).toContain("voiceEnabledForSpeakMode");
+  });
+
   // --- issue #25: edge-tts fallback tuning (retry + attribution + env knobs) ---
 
   test("edge-tts synth timeout is env-configurable (ECHO_EDGETTS_TIMEOUT_MS, default 15000)", () => {

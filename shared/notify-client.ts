@@ -3,6 +3,10 @@
 // daemon records for context ("pi", "omp", "claudecode").
 
 import {
+  withDetectedSpeakMode,
+  type SpeakMode,
+} from "./speak-mode.ts";
+import {
   tryNativeVisual,
   type NativeVisualResult,
   type TerminalNotificationContext,
@@ -29,6 +33,8 @@ export interface NotifyPayload {
   visual_delivery?: "native";
   voice_settings?: Record<string, unknown>;
   volume?: number;
+  /** Notify density. Omitted at the daemon keeps today's rate; adapters fill one. */
+  speak_mode?: SpeakMode;
   [key: string]: unknown;
 }
 
@@ -51,6 +57,7 @@ export function buildNotifyPayload(
     title: config.title,
     voice_enabled: config.voiceEnabled,
     source,
+    speak_mode: withDetectedSpeakMode({ message }).speak_mode,
   };
   if (config.voiceId) payload.voice_id = config.voiceId;
   if (sessionId) payload.session_id = sessionId;
@@ -102,9 +109,10 @@ async function postNotification(
     // failure must never prevent the daemon from receiving the notification.
   }
 
+  const shaped = withDetectedSpeakMode(payload);
   const requestPayload = nativeResult?.status === "shown"
-    ? { ...payload, visual_delivery: "native" as const }
-    : payload;
+    ? { ...shaped, visual_delivery: "native" as const }
+    : shaped;
 
   const response = await fetch(config.endpoint, {
     method: "POST",

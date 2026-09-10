@@ -20,4 +20,13 @@ describe("notify client payload normalization", () => {
       source: "pi",
     });
   });
+
+  test("passes speak_mode through when adapters set density", () => {
+    const payload = normalizeNotifyPayload({
+      message: "Want me to go ahead?",
+      speak_mode: "consult",
+      source: "pi",
+    });
+    expect(payload.speak_mode).toBe("consult");
+  });
 });

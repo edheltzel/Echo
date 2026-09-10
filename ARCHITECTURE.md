@@ -120,7 +120,7 @@ not a review nit.
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` - instant replay for repeated lines (#202). |
 | Numeric config parsing | `core/env.ts` | `parseBoundedInt` validates numeric settings; `resolveEchoEnv` performs non-mutating config reads. |
-| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `persona.ts` (daidentity overlay + headless suppression for Pi/omp), `mute-command.ts` (the `/echo-mute` factory that shells out to bash `cli/echo mute`), `extension.ts` (harness catalog + `registerEchoMute` / `registerEchoVoice`; not a second plugin loader and not imported by `core/`), `owned-symlink.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `persona.ts` (daidentity overlay + headless suppression for Pi/omp), `mute-command.ts` (the `/echo-mute` factory that shells out to bash `cli/echo mute`), `extension.ts` (harness catalog + `registerEchoMute` / `registerEchoVoice`; not a second plugin loader and not imported by `core/`), `owned-symlink.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `speak-mode.ts` (notify density: announce/brief/consult/think), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
@@ -149,7 +149,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** - `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
-   input is a 4xx **before** anything is queued.
+   input is a 4xx **before** anything is queued. Optional `speak_mode`
+   (`announce`/`brief`/`consult`/`think`) is parsed here: invalid is 4xx, omitted keeps
+   today's density, `think` skips TTS like `voice_enabled: false`.
 3. **Banner + enqueue + ack `202`** - the macOS banner fires immediately at accept
    (outside the queue; a superseded/dropped line keeps its banner, and a
    `voice_enabled: false` request is banner-only and never queued), unless the request's
@@ -171,7 +173,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    gate covers every provider including `say`) and the drop-off event is tagged `muted`.
    Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
    disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
-   the voice actually used (consumed by the drop-off log).
+   the voice actually used (consumed by the drop-off log). A speaking `speak_mode` then
+   multiplies the resolved speed (`announce` 1.10, `brief` 0.90, `consult` 1.05) without
+   stuffing speed into caller `voice_settings` (that path is full pass-through).
 
 Full endpoint contract and request body: [`docs/http-api.md`](docs/http-api.md).
 Voice config and the per-turn persona voice: [`docs/voices.md`](docs/voices.md).

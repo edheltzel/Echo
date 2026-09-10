@@ -1,3 +1,5 @@
+import type { SpeakMode } from "../shared/speak-mode";
+
 export interface VoiceSettings {
   stability?: number;
   similarity_boost?: number;
@@ -17,6 +19,8 @@ export interface NotifyPayload {
   source?: string;
   /** Set only after an adapter has completed native visual delivery. */
   visual_delivery?: "native";
+  /** Notify density. Omitted keeps today's rate. */
+  speak_mode?: SpeakMode;
 }
 
 export interface NotifyResult {

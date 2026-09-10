@@ -45,6 +45,12 @@ import {
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
+  applySpeakModeSpeed,
+  parseSpeakMode,
+  voiceEnabledForSpeakMode,
+  type SpeakMode,
+} from "../shared/speak-mode";
+import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
   classifyPlaybackError,
@@ -1325,6 +1331,7 @@ export async function speakWithFallback(
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
+  speakMode?: SpeakMode,
 ): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
   // Runtime mute gate (#83): sits before the provider loop so ONE check covers
   // every provider including the macOS `say` fallback. Lazy expiry — a timed
@@ -1467,6 +1474,16 @@ export async function speakWithFallback(
       console.log(`🎭 Emotion overlay: ${emotion} (stability: ${providerSettings.stability}, boost: ${providerSettings.similarity_boost})`);
     }
 
+    // Speak-mode density: multiply the resolved speed. Do not stuff speed into
+    // caller voice_settings (that path is full pass-through and would drop
+    // persona stability/similarity). think never reaches here.
+    if (speakMode && speakMode !== "think") {
+      providerSettings = {
+        ...providerSettings,
+        speed: applySpeakModeSpeed(providerSettings.speed ?? 1.0, speakMode),
+      };
+    }
+
     let success = false;
     try {
       success = await provider.speak(text, providerVoice, providerSettings);
@@ -1517,6 +1534,7 @@ async function speakNotification(
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   sessionId: string | null = null,
   requestId: string | null = null,
+  speakMode?: SpeakMode,
 ) {
   const messageValidation = validateInput(message);
   if (!messageValidation.valid) {
@@ -1545,7 +1563,7 @@ async function speakNotification(
   // /notify requests.
   const audioSlot: AudioCaptureSlot = {};
   const result = await audioCapture.run(audioSlot, () =>
-    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion));
+    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion, speakMode));
 
   if (result.muted) {
     console.log('🔇 Speech suppressed (muted)');
@@ -1646,13 +1664,14 @@ interface NotifyJobPayload {
   sessionId: string | null;
   requestId: string;
   messageChars: number; // sanitized length, for disposition rows that never play
+  speakMode?: SpeakMode;
 }
 
 const playQueue = new PlayQueue<NotifyJobPayload>({
   player: async (job) => {
     const p = job.payload;
     markPlaybackPlaying(p.requestId);
-    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId, p.speakMode);
     // Name the actual cause: a caller waiting on completion reports this string
     // verbatim, and telling a muted operator that a provider failed sends them
     // to the wrong fix.
@@ -1734,6 +1753,7 @@ function acceptNotification(
     sessionId: string | null;
     nativeVisualShown: boolean;
     captureReservation?: CaptureReservationRequest;
+    speakMode?: SpeakMode;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1776,6 +1796,7 @@ function acceptNotification(
       sessionId: opts.sessionId,
       requestId: reqId,
       messageChars: messageValidation.sanitized!.length,
+      speakMode: opts.speakMode,
     },
   });
 }
@@ -1848,7 +1869,12 @@ export const server = serve({
         const data = await req.json();
         const title = data.title || DEFAULT_NOTIFICATION_TITLE;
         const message = data.message || "Task completed";
-        const voiceEnabled = data.voice_enabled !== false;
+        const parsedSpeakMode = parseSpeakMode(data.speak_mode);
+        if (!parsedSpeakMode.ok) {
+          throw new Error("Invalid speak_mode");
+        }
+        const speakMode = parsedSpeakMode.mode;
+        const voiceEnabled = voiceEnabledForSpeakMode(speakMode, data.voice_enabled !== false);
         const voiceId = data.voice_id || data.voice_name || null;
         const voiceSettings = data.voice_settings || null;
         const sessionId = data.session_id || null;
@@ -1887,7 +1913,7 @@ export const server = serve({
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
         acceptNotification(reqId, {
           title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
-          captureReservation,
+          captureReservation, speakMode,
         });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);

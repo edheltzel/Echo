@@ -42,6 +42,7 @@ Primary host-neutral endpoint. Body (every field optional):
   },
   "session_id": "host-session-id",
   "source": "pi",
+  "speak_mode": "announce",
   "visual_delivery": "native",
   "capture_reservation": {
     "reservation_id": "t-client-known-token",
@@ -59,6 +60,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_id` | - (identity voice) | Short persona **name key** (e.g. `"themis"`), not a raw provider voice id - resolution order and traps in [`voices.md`](voices.md). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
 | `voice_settings` | - | Pass-through override, see below |
 | `session_id`, `source` | - | Echoed into the daemon log for correlation |
+| `speak_mode` | - (today's density) | Optional notify density borrowed from VoiceLayer's speak names, not a fifth TTS taxonomy. `announce` (short ping, speed ×1.10), `brief` (longer explanation, ×0.90), `consult` (checkpoint/question, ×1.05), `think` (banner only, no TTS). Omitted keeps the resolved persona speed. Invalid is `400`. Adapters fill a mode when they shape a notify; they never infer `think` (silence is already `voice_enabled: false`). Converse stays out of this field. |
 | `visual_delivery` | - | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence - see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner - raw HTTP callers are unaffected |
 | `capture_reservation` | - | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms` (at most 300000, five minutes - a completed reservation holds every later voice line, so the daemon rejects a lease that could silence it indefinitely). It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
