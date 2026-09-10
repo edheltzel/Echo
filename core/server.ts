@@ -30,6 +30,15 @@ import { isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, toggl
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
 import {
+  lastSpokenLines,
+  parseReplayBody,
+  recordSpokenLine,
+  REPLAY_DEFAULT_N,
+  REPLAY_MAX_N,
+  SPEAK_HISTORY_CAPACITY,
+  spokenLineCount,
+} from "./speak-history";
+import {
   captureReservationHeld,
   captureReservationView,
   grantCaptureReservation,
@@ -1666,6 +1675,8 @@ interface NotifyJobPayload {
   requestId: string;
   messageChars: number; // sanitized length, for disposition rows that never play
   speakMode?: SpeakMode;
+  // Replay jobs re-speak a stored line and must not re-enter the ring.
+  recordSpoken?: boolean;
 }
 
 const playQueue = new PlayQueue<NotifyJobPayload>({
@@ -1673,6 +1684,16 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
     const p = job.payload;
     markPlaybackPlaying(p.requestId);
     const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId, p.speakMode);
+    // Only lines that actually reached the speaker are replayable. Muted,
+    // capture-held, and failed plays stay out of the ring (http-api).
+    if (p.recordSpoken !== false && result.success && !result.muted && !result.held_for_capture) {
+      recordSpokenLine({
+        message: p.message,
+        voiceId: p.voiceId,
+        voiceSettings: p.voiceSettings,
+        speakMode: p.speakMode,
+      });
+    }
     // Name the actual cause: a caller waiting on completion reports this string
     // verbatim, and telling a muted operator that a provider failed sends them
     // to the wrong fix.
@@ -1851,8 +1872,13 @@ export const server = serve({
     //
     // POST /notify/personality is deliberately NOT in either bucket. It produces
     // speech, so it shares the notification bucket the flood guard exists for.
+    //
+    // POST /replay is operator control (re-hear during a notify flood) so it
+    // has its own bucket, same reason as /mute. Abusive N is rejected in the
+    // handler; this bucket only bounds how often a caller may ask.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
+      : url.pathname === "/replay" ? `replay:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
       : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
       : CAPTURE_RESERVATION_PATH.test(url.pathname) ? `capture-reservation:${clientIp}`
@@ -2032,6 +2058,83 @@ export const server = serve({
       }
     }
 
+    // /replay — re-speak the last N lines that actually played (FM-449).
+    // Empty body = N=1. Does not fire a banner. Does not record into the ring.
+    if (url.pathname === "/replay" && req.method === "POST") {
+      const reqId = generateRequestId();
+      try {
+        const text = await req.text();
+        const parsed = parseReplayBody(text);
+        if (!parsed.ok) {
+          throw new Error(`Invalid body: ${parsed.message}`);
+        }
+        const lines = lastSpokenLines(parsed.n);
+        if (lines.length === 0) {
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              message: "Nothing to replay",
+              replayed: 0,
+              available: 0,
+              n: parsed.n,
+              request_id: reqId,
+            }),
+            {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        const requestIds: string[] = [];
+        for (const line of lines) {
+          const replayId = generateRequestId();
+          requestIds.push(replayId);
+          playQueue.enqueue({
+            id: replayId,
+            sessionId: null,
+            receivedAt: Date.now(),
+            payload: {
+              message: line.message,
+              voiceId: line.voiceId,
+              voiceSettings: line.voiceSettings,
+              sessionId: null,
+              requestId: replayId,
+              messageChars: line.message.length,
+              speakMode: line.speakMode,
+              recordSpoken: false,
+            },
+          });
+        }
+
+        log('info', `🔁 Replay queued (${lines.length} of last ${parsed.n})`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({
+            status: "accepted",
+            message: "Replay queued",
+            replayed: lines.length,
+            available: spokenLineCount(),
+            n: parsed.n,
+            request_id: reqId,
+            request_ids: requestIds,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 202,
+          },
+        );
+      } catch (error: any) {
+        log('error', `Replay error: ${error.message || error}`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({ status: "error", message: error.message || "Internal server error", request_id: reqId }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: error.message?.includes('Invalid') ? 400 : 500,
+          },
+        );
+      }
+    }
+
     // /mute — runtime mute (#83 / FM-446). An explicit JSON body sets state;
     // an EMPTY body toggles `all`, so a one-keystroke hotkey needs no state
     // knowledge. `{scope}` without `muted` toggles that scope. Optional `scope`
@@ -2143,6 +2246,12 @@ export const server = serve({
             in_flight_ms: playQueue.inFlightMs,
             stalled: playQueue.inFlightMs !== null && playQueue.inFlightMs > playQueue.playerTimeoutMs,
           },
+          replay: {
+            available: spokenLineCount(),
+            capacity: SPEAK_HISTORY_CAPACITY,
+            default_n: REPLAY_DEFAULT_N,
+            max_n: REPLAY_MAX_N,
+          },
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,
@@ -2174,6 +2283,7 @@ export const server = serve({
       "POST /notify/capture-reservations/:reservation_id/release",
       "POST /notify/personality",
       "POST /mute",
+      "POST /replay",
       "GET /health",
       "GET /voices",
     ];
@@ -2191,7 +2301,7 @@ export const server = serve({
       );
     }
 
-    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status, GET /voices for configured personas", {
+    return new Response("Voice Server - POST to /notify, /notify/personality, /mute, or /replay; GET /health for status, GET /voices for configured personas", {
       headers: corsHeaders,
       status: 404
     });
@@ -2217,5 +2327,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, GET /health, GET /voices`);
+log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, POST /replay, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);
