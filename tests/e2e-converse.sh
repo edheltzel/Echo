@@ -101,6 +101,7 @@ export ECHO_CONVERSE_URL="http://localhost:${CONVERSE_PORT}"
 export ECHO_CONVERSE_BOOKING_LOCK="${SCRATCH}/booking.lock"
 export ECHO_CONVERSE_CAPTURE_DIR="${SCRATCH}/captures"
 export ECHO_CONVERSE_MAX_CAPTURE_MS=4000
+export ECHO_CONVERSE_STOP_FILE="${SCRATCH}/stop"
 
 # Stand-in capture binaries. The recorder writes audio-shaped bytes to the WAV
 # path it is given; the transcriber prints a fixed line. No microphone, no
@@ -151,6 +152,7 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "ECHO_CONVERSE_BOOKING_LOCK": "$ECHO_CONVERSE_BOOKING_LOCK",
   "ECHO_CONVERSE_CAPTURE_DIR": "$ECHO_CONVERSE_CAPTURE_DIR",
   "ECHO_CONVERSE_MAX_CAPTURE_MS": $ECHO_CONVERSE_MAX_CAPTURE_MS,
+  "ECHO_CONVERSE_STOP_FILE": "$ECHO_CONVERSE_STOP_FILE",
   "ECHO_CONVERSE_REC_BIN": "$ECHO_CONVERSE_REC_BIN",
   "ECHO_CONVERSE_YAP_BIN": "$ECHO_CONVERSE_YAP_BIN"
 }
@@ -364,6 +366,84 @@ bun -e '
   }
   console.log(`  crashed booking owner -> reaped (HTTP ${response.status}), microphone recovered`);
 ' || fail "a stale booking owner was not reaped"
+
+# ---------------------------------------------------------------------------
+# 7. Silence-mode windows: sox trailing-silence durations, no microphone.
+#    standard is today's 1500ms default.
+# ---------------------------------------------------------------------------
+bun -e '
+  const { recorderArgv } = await import(`${process.env.ROOT}/converse/capture.ts`);
+  const { resolveConverseConfig, withSilenceMode } = await import(`${process.env.ROOT}/converse/config.ts`);
+  const config = resolveConverseConfig();
+  if (config.silenceMode !== "standard" || config.silenceMs !== 1500) {
+    throw new Error(`default silence mode is ${config.silenceMode}/${config.silenceMs}, expected standard/1500`);
+  }
+  const windows = { quick: "0.50", standard: "1.50", thoughtful: "2.50" };
+  for (const [mode, seconds] of Object.entries(windows)) {
+    const argv = recorderArgv(withSilenceMode(config, mode), "/out/reply.wav").join(" ");
+    const expected = `silence 1 0.1 2% 1 ${seconds} 2%`;
+    if (!argv.includes(expected)) throw new Error(`${mode} argv missing ${expected}: ${argv}`);
+  }
+  console.log("  silence modes -> quick 0.50s / standard 1.50s (today) / thoughtful 2.50s");
+' || fail "silence-mode windows did not match VoiceLayer durations"
+
+# ---------------------------------------------------------------------------
+# 8. A stop token ends the current recording early and still transcribes.
+# ---------------------------------------------------------------------------
+cat >"${SCRATCH}/fake-rec" <<'REC'
+#!/bin/bash
+out=""
+for arg in "$@"; do case "$arg" in *.wav) out="$arg";; esac; done
+[ -n "$out" ] || exit 1
+head -c 8192 /dev/zero > "$out"
+sleep 30
+REC
+chmod +x "${SCRATCH}/fake-rec"
+
+bun -e '
+  const { askOnce } = await import(`${process.env.ROOT}/converse/client.ts`);
+  const { resolveConverseConfig } = await import(`${process.env.ROOT}/converse/config.ts`);
+  const { readBooking } = await import(`${process.env.ROOT}/converse/booking.ts`);
+  const { readCaptureState } = await import(`${process.env.ROOT}/core/capture-guard.ts`);
+  const config = resolveConverseConfig();
+  const capturePath = process.env.ECHO_CAPTURE_STATE_PATH;
+
+  const pending = askOnce({ question: process.env.TEST_QUESTION, source: "e2e-stop" }, { config });
+
+  let stopped = false;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const { readdirSync } = await import("node:fs");
+    const wavs = (() => {
+      try {
+        return readdirSync(config.captureDir).filter((name) => name.endsWith(".wav"));
+      } catch {
+        return [];
+      }
+    })();
+    if (readCaptureState(capturePath, () => true) === "recording" && wavs.length > 0) {
+      const booking = readBooking(config.bookingLockPath);
+      if (booking === null) throw new Error("capture is recording but no booking is held");
+      const response = await fetch(`${config.baseUrl}/turn/${booking.turn_id}/stop`, { method: "POST" });
+      if (response.status !== 200) {
+        throw new Error(`stop returned HTTP ${response.status}: ${await response.text()}`);
+      }
+      stopped = true;
+      break;
+    }
+    await Bun.sleep(25);
+  }
+  if (!stopped) throw new Error("capture never reached recording, so the stop token was never sent");
+
+  const result = await pending;
+  if (result.text !== process.env.TRANSCRIPT) {
+    throw new Error(`expected transcript ${JSON.stringify(process.env.TRANSCRIPT)}, got ${JSON.stringify(result.text)}`);
+  }
+  if (result.stopped !== true) throw new Error("the ask completed without reporting stopped");
+  if (result.capture_ms >= config.maxCaptureMs) {
+    throw new Error(`stop did not end recording before the ${config.maxCaptureMs}ms cap (${result.capture_ms}ms)`);
+  }
+  console.log(`  POST /turn/:id/stop -> ended capture in ${result.capture_ms}ms, transcript kept`);
+' || fail "the stop token did not end recording early"
 
 echo
 echo "PASS: one-shot voice ask end to end (core :${PORT}, coordinator :${CONVERSE_PORT})"
