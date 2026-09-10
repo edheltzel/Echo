@@ -216,7 +216,9 @@ location and the `ECHO_MUTE_STATE_PATH` override are in [`configuration.md`](con
 A missing or corrupt state file means unmuted - never a crash.
 
 Day-to-day mute usage - the `scripts/mute.sh` wrapper - lives in
-[`operations.md`](operations.md).
+[`operations.md`](operations.md#mute). This is runtime mute. It does not unload LaunchAgent
+`com.echo`. That is `bash scripts/stop.sh`
+([Mute vs daemon disable](operations.md#mute-vs-daemon-disable)).
 
 ### Hotkey bindings
 

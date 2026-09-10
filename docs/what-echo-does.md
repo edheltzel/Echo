@@ -30,6 +30,7 @@ Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or 
 
 Quiet is a feature. These are the usual reasons you hear nothing:
 
+- LaunchAgent `com.echo` is not loaded (`bash scripts/stop.sh` or uninstall). That is daemon disable, not mute. [operations.md](operations.md#mute-vs-daemon-disable)
 - No adapter is installed, and nothing POSTed `/notify`
 - Runtime mute is on for the speaker (`cli/echo mute on` or `on tts`)
 - The adapter has `ECHO_VOICE_SPEAK_COMPLETIONS` off, or greetings off
@@ -50,8 +51,9 @@ These are the states a human can usefully ask about. They are not a second produ
 | Idle | Daemon up, nothing playing | `/health` is `"healthy"`. `play_queue.in_flight_ms` is null. Mute is off. |
 | Speaking | A line is in the speaker | `play_queue.in_flight_ms` is a number. The audio-lifecycle log later records `played`. |
 | Muted | Requests succeed, speaker stays off | `cli/echo mute status`. `/health` `mute.muted` is true (`tts` or `all`). |
+| Stopped | `/health` does not connect. Nothing Echo-produced speaks. | `bash scripts/status.sh` shows `com.echo` not loaded. Daemon disable, not mute. |
 | Held for capture | Banner may fire, speaker waits | `/health` `capture_guard.state` is not idle. Lifecycle disposition `held-for-capture`. |
-| Error | Health fails, or speech falls through the chain | `cli/echo doctor` ends `DEGRADED`. `~/Library/Logs/echo.log` and the voice-resolution log name the provider attempt. |
+| Error | Daemon is up but degraded, or speech falls through the chain | `cli/echo doctor` ends `DEGRADED`. `~/Library/Logs/echo.log` and the voice-resolution log name the provider attempt. |
 
 `202` on `/notify` means accepted, not finished speaking. A muted or capture-held line can still return success or accepted. Prove speech with your ear, then the lifecycle log if you need a machine record.
 
@@ -64,6 +66,7 @@ Silence is layered. Use the smallest layer that matches the room.
 3. **Adapter policy.** `ECHO_VOICE_SPEAK_COMPLETIONS`, `ECHO_VOICE_GREET_ON_START`, `ECHO_VOICE_SUPPRESS`, and `ECHO_VOICE_SUPPRESS_SUBAGENTS` in `~/.config/echo/config.json`. This is "this host should not talk," not a meeting switch.
 4. **This request.** `"voice_enabled": false` is the silent smoke. Tests use it. You can too.
 5. **Capture hold.** While a live pid is recording or transcribing, Echo skips voice so the microphone does not hear the speaker.
+6. **Daemon disable.** `bash scripts/stop.sh` unloads LaunchAgent `com.echo`. Quiet because the service is down, not because mute is on. `cli/echo uninstall` is the durable form. Commands: [operations.md](operations.md#mute-vs-daemon-disable).
 
 Mute survives daemon restarts, deadline included. A timed mute expires on the next notification. There is no per-session mute. Any local process can unmute, because `/mute` is unauthenticated localhost, same as `/notify`.
 
@@ -71,14 +74,14 @@ The state file and hotkey bindings live in [operations.md](operations.md#mute) a
 
 ## Shared offices
 
-Echo is optional per install. Disable it the way that matches how long the room is shared.
+Echo is optional per install. Use runtime mute or daemon disable depending on how long the room is shared.
 
 - Someone sat down for a meeting. Run `cli/echo mute on`. Unmute when they leave. `30m` if you know the length.
-- This machine should not talk at all today. Mute indefinitely, or stop the LaunchAgent with the commands in [operations.md](operations.md).
+- This machine should not talk at all today. Runtime mute indefinitely, or daemon disable: `bash scripts/stop.sh` unloads `com.echo`. Bring it back with `bash scripts/start.sh`.
 - This project should not speak. Do not install an adapter in that checkout, or turn completions off in config.
-- Uninstalling removes the LaunchAgent and the staged payload. Adapter registrations are not removed. See [install-human.md](install-human.md#uninstall).
+- Uninstall (`cli/echo uninstall`) removes the LaunchAgent and the staged payload. That is removing the service, not mute. Adapter registrations are not removed. See [install-human.md](install-human.md#uninstall).
 
-Mute is the product answer for a shared office. Do not reach for a second mute system.
+Mute is the product answer for a shared office. Daemon disable is taking the service down. Do not reach for a second mute system.
 
 ## What a host actually sends
 

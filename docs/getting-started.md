@@ -152,14 +152,14 @@ Mute is machine-wide. It does not stop Oh My Pi live chat. Layers and states: [W
 
 ## What you have done
 
-You installed Echo as a self-starting macOS service, confirmed `/health`, heard "Hello from Echo", picked a persona, and proved that mute stops the audio without rejecting the request.
+You installed Echo as a self-starting macOS service, confirmed `/health`, heard "Hello from Echo", picked a persona, and proved that runtime mute turns the audio off without rejecting the request.
 
 ## Next steps
 
 - Wire a host so Claude Code, Pi, oh-my-pi, Jcode, Grok Build, or Codex speaks on its own. [How to install Echo](install-human.md)
 - After wiring Claude Code, Pi, or omp, give this project a persona with `/echo-voice [name] [voice]` inside the repo. [Voices](voices.md#per-project-persona--voice-local-override)
 - Pick voices by ear in [voices.md](voices.md)
-- Start, stop, restart, and update after a pull in [operations.md](operations.md)
+- Start, stop, restart, mute vs daemon disable, and update after a pull in [operations.md](operations.md#mute-vs-daemon-disable)
 - Look up `/notify` in [http-api.md](http-api.md)
 
 Want Echo to ask you a question out loud? That is a separate, opt-in capability. It needs `sox` (`rec`) and a local transcriber. The first ask needs macOS microphone permission, and on the measured Pi and omp path the prompt names your terminal application, not Echo. Read [converse.md](converse.md#before-you-enable-it) before you enable it. First-class speech-to-text as a standing product is [roadmap](https://github.com/edheltzel/Echo/issues/179).

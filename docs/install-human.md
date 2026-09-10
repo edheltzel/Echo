@@ -219,8 +219,9 @@ cli/echo mute 30m        # timed; `1h` works too. Voice resumes by itself.
 ```
 
 Audio off, notifications still accepted. Mute is machine-wide and only covers audio Echo
-produced. See [Silence and mute](what-echo-does.md#silence-and-mute) for layers and what
-still makes sound. Commands and the state file are in [operations.md](operations.md#mute).
+produced. The daemon stays up. To unload `com.echo` (daemon disable), `bash scripts/stop.sh`.
+See [Silence and mute](what-echo-does.md#silence-and-mute) for layers and what
+still makes sound. Commands: [operations.md](operations.md#mute-vs-daemon-disable).
 
 ## Give a project its own persona
 
@@ -243,15 +244,18 @@ ignores those persona values; configure its global persona and voice in
 bash scripts/uninstall.sh          # or: cli/echo uninstall  (--check previews it)
 ```
 
-This removes the neutral LaunchAgent and the staged daemon payload, preserving logs, your persona config, and repo files.
+This removes the neutral LaunchAgent and the staged daemon payload (durable daemon disable),
+preserving logs, your persona config, and repo files. Prefer `bash scripts/stop.sh` if you
+only want `com.echo` down until the next `scripts/start.sh`.
 
 It does **not** remove adapter registrations - they survive uninstall, and there is no deregistration tool, so remove them by hand before deleting the repo directory. Which entries, and where: `docs/operations.md`.
 
 ## Operations
 
 After a `git pull`, run `cli/echo update` to re-stage the daemon payload from the checkout;
-restarting alone keeps the old payload running. Start, stop, restart, status, logs, mute, and
-repo-move recovery are covered in `docs/operations.md`.
+restarting alone keeps the old payload running. Start, stop, restart, status, logs, mute vs
+daemon disable, and repo-move recovery are covered in
+[`operations.md`](operations.md#mute-vs-daemon-disable).
 
 ## Development
 
