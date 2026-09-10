@@ -49,6 +49,12 @@ describe("core server route contract source", () => {
     expect(server).toContain("voiceEnabledForSpeakMode");
   });
 
+  test("POST /replay re-speaks from the in-memory speak ring", () => {
+    expect(server).toContain('pathname === "/replay"');
+    expect(server).toContain("recordSpoken");
+    expect(server).toContain("lastSpokenLines");
+  });
+
   // --- issue #25: edge-tts fallback tuning (retry + attribution + env knobs) ---
 
   test("edge-tts synth timeout is env-configurable (ECHO_EDGETTS_TIMEOUT_MS, default 15000)", () => {

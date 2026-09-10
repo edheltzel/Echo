@@ -38,7 +38,7 @@ describe("echo CLI dispatch", () => {
   test("no args prints usage listing every subcommand", async () => {
     const r = await runCli([], { HOME: "/tmp", PATH: `${bunDir}:/bin:/usr/bin` });
     expect(r.exitCode).toBe(0);
-    for (const cmd of ["install", "doctor", "status", "mute", "voice", "update", "uninstall"]) {
+    for (const cmd of ["install", "doctor", "status", "mute", "replay", "voice", "update", "uninstall"]) {
       expect(r.stdout).toContain(cmd);
     }
   });
@@ -358,6 +358,44 @@ describe("echo mute", () => {
       const { env } = muteEnv(root);
       expect((await runCli(["mute", "banana"], env)).exitCode).toBe(2);
       expect((await runCli(["mute"], env)).exitCode).toBe(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("echo replay", () => {
+  function replayEnv(root: string): { env: Record<string, string>; log: string } {
+    const bin = join(root, "bin");
+    mkdirSync(bin, { recursive: true });
+    const log = join(root, "curl-args.log");
+    writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(log)}\necho '{"status":"accepted","replayed":1}'\nexit 0\n`);
+    return { env: { HOME: join(root, "home"), PATH: `${bin}:${bunDir}:/bin:/usr/bin` }, log };
+  }
+
+  test("default and explicit n POST /replay (never the live daemon)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-replay-"));
+    try {
+      const { env, log } = replayEnv(root);
+      expect((await runCli(["replay"], env)).exitCode).toBe(0);
+      expect((await runCli(["replay", "3"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/replay");
+      expect(logged).toContain('"n": 1');
+      expect(logged).toContain('"n": 3');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects abusive n before touching the daemon", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-replay-bad-"));
+    try {
+      const { env, log } = replayEnv(root);
+      expect((await runCli(["replay", "0"], env)).exitCode).toBe(2);
+      expect((await runCli(["replay", "11"], env)).exitCode).toBe(2);
+      expect((await runCli(["replay", "banana"], env)).exitCode).toBe(2);
+      expect(existsSync(log) ? readFileSync(log, "utf8") : "").not.toContain("/replay");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
