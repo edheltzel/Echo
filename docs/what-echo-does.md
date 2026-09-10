@@ -21,6 +21,7 @@ A request becomes speech only after it reaches the daemon with voice on, the run
 Typical spoken lines:
 
 - A turn-completion line from a wired host (the trailing `🗣️` line on Claude Code, Pi, oh-my-pi, Jcode, Grok Build, and Codex)
+- A needs-input, approval, or needs-attention line from Claude Code, Pi, or oh-my-pi ([When an agent needs you](#when-an-agent-needs-you))
 - A session-start greeting, when that host has greetings on (Pi and oh-my-pi default on. Claude Code, Jcode, Grok, and Codex default off.)
 - Anything you POST yourself, including the "Hello from Echo" smoke
 - A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines are not held for later replay.
@@ -31,17 +32,18 @@ Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or 
 
 ## When an agent needs you
 
-[#107](https://github.com/edheltzel/Echo/issues/107) is the product intent: hear it from across the desk when an agent cannot continue without you (a question, an approval, or an explicit pause). That event layer is not shipped.
+[#107](https://github.com/edheltzel/Echo/issues/107) is shipped for Claude Code, Pi, and oh-my-pi: Echo speaks once when the host cannot continue without you. The daemon stays host-neutral. Adapters detect the wait and POST `/notify`. Completions that happen to be questions still speak as the turn-end `🗣️` line.
 
-Today you hear a waiting agent only when a **turn ends** and an adapter POSTs a completion line. There is no preferred-name addressing, no permission-prompt hook, and no approval-state ping. Adapters observe Stop / `message_end` / `turn_end` (and session-start greetings). They do not subscribe to host permission, AskUserQuestion, or `tool_approval_requested` events.
+The line uses `ECHO_PREFERRED_NAME` from `~/.config/echo/config.json` when set (`Ed, …`). Unset stays nameless. Echo never guesses a name. Persona and voice come from the requesting agent. Retries and duplicate host events for the same pending request do not speak again.
 
 | Situation | What you hear |
 | --- | --- |
-| The turn ended with a spoken question in the `🗣️` line | That line, at `consult` density if it contains `?` or "about to". `cli/echo replay` can re-speak it if it actually played. |
-| The host is sitting on a permission, AskUserQuestion, or approval UI **inside** a turn | Nothing Echo-produced, until Stop / `turn_end` fires with a `🗣️` line. |
-| Claude Code's transcript parser labels `AskUserQuestion` as `awaitingInput` | That label is not sent to the daemon. It does not speak. |
-| OpenCode | Nothing. Mute only. |
-| You want Echo to ask *you* a question out loud | That is opt-in [`echo_ask`](converse.md), the other direction. Silence modes `quick` / `standard` / `thoughtful` and `POST /turn/:id/stop` apply there only. |
+| Claude Code `AskUserQuestion`, or a permission dialog (and the delayed `permission_prompt` if the PermissionRequest already spoke) | One question or approval line. `AskUserQuestion` uses the host question text. |
+| Claude Code `idle_prompt` / `agent_needs_input` | `{persona} is paused and needs your attention: …` |
+| Pi / omp `tool_approval_requested`, or a blocking `ui_prompt_start` | Approval, question, or attention from the host title. Echo's own microphone-consent prompt stays quiet. |
+| The turn ended with a spoken question in the `🗣️` line | That completion line, at `consult` density if it contains `?` or "about to". Independent of the HIL ping. |
+| OpenCode, Jcode, Grok, Codex | No dedicated wait ping. Completions still speak at turn end where those adapters are wired. |
+| You want Echo to ask *you* a question out loud | That is opt-in [`echo_ask`](converse.md), the other direction. |
 
 Mute, scoped mute (`tts` | `mic` | `all`), and [daemon disable](operations.md#mute-vs-daemon-disable) apply to these lines the same as any other notify. A muted or capture-held line is not stored for replay.
 
@@ -57,7 +59,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 - A subagent turn (suppressed by default)
 - A capture is in progress. Echo will not talk over an open microphone. The banner can still appear.
 - The play queue dropped a stale or superseded line. The request was accepted. The audio was not played.
-- The host is waiting on a permission or approval UI inside a turn. Completions fire at turn end, not at that prompt. [When an agent needs you](#when-an-agent-needs-you).
+- The host is waiting on a permission or approval UI inside a turn, and that host is not Claude Code, Pi, or omp. Completions still fire at turn end. [When an agent needs you](#when-an-agent-needs-you).
 - Oh My Pi `/live` is talking on its own path. Muting Echo does not stop that live voice. It only stops Echo's completion line on top of it.
 
 Wrong voice is not silence. A request with no `voice_id` uses the identity voice (edge `en-GB-RyanNeural`), logged as `identity-default`. If you hear macOS `say` ("Daniel"), or Ava (`en-US-AvaNeural`, the edge provider `defaultVoice`), the chain did not use identity. That path is in the getting-started troubleshooting section and in [voices.md](voices.md).

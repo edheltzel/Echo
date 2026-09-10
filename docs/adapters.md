@@ -17,7 +17,7 @@ Adapters should:
 4. POST to the daemon's `/notify`, resolved via `shared/daemon-endpoints.ts`.
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
-7. Do not invent a needs-input / approval / attention notify. Completions that happen to be questions still POST `/notify`; `speak_mode` `consult` is density, not a lifecycle event. Product intent: [#107](https://github.com/edheltzel/Echo/issues/107). Current human truth: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you).
+7. Detect needs-input / approval / attention in the adapter and POST `/notify` with a dedicated line. Completions that happen to be questions still speak as completions; `speak_mode` `consult` stays density on that line. Product: [#107](https://github.com/edheltzel/Echo/issues/107). Shipped hosts and wording: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you).
 
 ## Package boundary - self-contained, HTTP-only
 
@@ -303,6 +303,18 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
+
+## Needs-input announce (#107)
+
+Claude Code, Pi, and omp detect a wait in the adapter and POST ordinary `/notify`.
+Wording and one-announce-per-request live in `shared/hil.ts`. Detection:
+
+| Host | Question | Approval | Attention |
+| --- | --- | --- | --- |
+| Claude Code | `PermissionRequest` `AskUserQuestion`, plus transcript `awaitingInput` on `permission_prompt` | `PermissionRequest` (other tools) | `Notification` `idle_prompt` / `agent_needs_input` |
+| Pi / omp | `ui_prompt_start` select/input/editor | `tool_approval_requested` (omp; Pi when the host emits it) | `ui_prompt_start` custom |
+
+Jcode, Grok, Codex, and OpenCode are unchanged.
 
 ## MCP adapter - Claude Code's route to a model-invokable tool
 
