@@ -1,6 +1,18 @@
-![Echo - a voice for any agent](assets/echo-banner-riso.jpg)
+```
+███████╗ ██████╗██╗  ██╗ ██████╗
+██╔════╝██╔════╝██║  ██║██╔═══██╗
+█████╗  ██║     ███████║██║   ██║
+██╔══╝  ██║     ██╔══██║██║   ██║
+███████╗╚██████╗██║  ██║╚██████╔╝
+╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝
+```
 
-# Hear your agents.
+# Echo
+
+> [!NOTE]
+> EdHeltzel's Voice for Agents
+
+Hear your agents.
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
