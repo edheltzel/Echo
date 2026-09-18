@@ -14,7 +14,8 @@ Service identity:
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
 
-Run all commands from the repo root.
+Run all commands from the repo root (`cli/echo …`). A PATH-installable `do-echo` wrapper is
+the next thin follow-up; a checkout symlink works until then (see [Mute](#mute)).
 
 ## Mute vs daemon disable
 
@@ -214,20 +215,37 @@ accepted, processed, and logged. The daemon stays up. To unload `com.echo`, use
 [`what-echo-does.md`](what-echo-does.md#silence-and-mute). `cli/echo mute` is the command:
 
 ```bash
-cli/echo mute status    # current state, e.g. {"mute":{"muted":false,"muted_until":null,"scope":"all"}}
+cli/echo mute status     # Mute: ON|OFF plus Targets (speaker / microphone)
 cli/echo mute on         # mute all (speaker + mic) indefinitely
 cli/echo mute on tts     # speaker only; notifications still accepted
 cli/echo mute on mic     # capture / converse / echo_ask only; TTS may still speak
 cli/echo mute off        # unmute now
 cli/echo mute toggle     # flip the all-scope switch
+cli/echo mute toggle all # same as toggle; empty POST /mute so older payloads still accept it
 cli/echo mute 30m        # timed all; `1h` and a bare number of minutes also work
 cli/echo mute 30m tts    # timed speaker mute
 ```
 
-Each command prints the resulting state as JSON. Mute state survives daemon restarts, deadline
-included - the state-file location and its `ECHO_MUTE_STATE_PATH` override are in
-[`configuration.md`](configuration.md). A timed mute expires silently: voice simply resumes on
-the next notification.
+Each command prints an unambiguous status (`Mute: ON` or `Mute: OFF`) and the targets that
+are held. Mic-only mute still prints `Mute: ON` / `Targets: microphone` even though
+`/health.mute.muted` stays `false` (that flag is speaker-only). A timed mute adds an `Until:`
+line. Mute state survives daemon restarts, deadline included - the state-file location and
+its `ECHO_MUTE_STATE_PATH` override are in [`configuration.md`](configuration.md). A timed
+mute expires silently: voice simply resumes on the next notification.
+
+If the daemon is down or the configured port is wrong, the CLI says so in plain language
+(connection refused vs HTTP 4xx/5xx), names `:PORT` and `~/.config/echo/config.json`, and
+prints a recovery: `cli/echo doctor`, `bash scripts/start.sh`, or `cli/echo update` when
+the running payload rejected the body.
+
+The CLI still lives in the checkout (`cli/echo …`). A PATH-installable `do-echo` wrapper
+(no `cd` into the repo) is a follow-up; until then:
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf /path/to/Echo/cli/echo ~/.local/bin/do-echo
+# then: do-echo mute on
+```
 
 **Mute is machine-wide, not per session.** One Echo daemon serves the whole machine on the
 configured port (default `:3246`), so muting it applies to *every* agent, script,

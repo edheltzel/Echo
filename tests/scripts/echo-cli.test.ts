@@ -352,6 +352,19 @@ describe("echo mute", () => {
     }
   });
 
+  test("toggle all POSTs an empty body (legacy #83 toggle), not {scope:all}", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-toggle-all-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "toggle", "all"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/mute");
+      expect(logged).not.toContain('"scope": "all"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a bad duration and requires an argument", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-mute-bad-"));
     try {

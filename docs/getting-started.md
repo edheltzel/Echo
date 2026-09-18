@@ -142,13 +142,15 @@ Echo is optional. If someone is in the room:
 cli/echo mute on
 ```
 
-Send the same "Hello from Echo" request again. You should still get `"status":"accepted"`, and you should hear nothing. Then:
+You should see `Mute: ON` and `Targets: speaker, microphone`. Send the same "Hello from Echo"
+request again. You should still get `"status":"accepted"`, and you should hear nothing. Then:
 
 ```bash
 cli/echo mute off
 ```
 
-Mute is machine-wide. It does not stop Oh My Pi live chat. Layers and states: [What Echo does](what-echo-does.md).
+That prints `Mute: OFF`. Mute is machine-wide. It does not stop Oh My Pi live chat. Layers and
+states: [What Echo does](what-echo-does.md).
 
 ## What you have done
 
