@@ -46,7 +46,9 @@ print_mute_human() {
   muted="$(mute_bool "$obj" muted)"
   scope="$(mute_str "$obj" scope)"
   until="$(mute_str "$obj" muted_until)"
-  [ -z "$scope" ] && scope="all"
+  if [ -z "$scope" ]; then
+    scope="all"
+  fi
 
   case "$scope" in
     mic) microphone=on ;;
