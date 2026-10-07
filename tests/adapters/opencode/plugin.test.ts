@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPortFromClient } from "../../../adapters/opencode/plugin.ts";
+import * as pluginModule from "../../../adapters/opencode/plugin.ts";
+import { sessionPortFromClient } from "../../../adapters/opencode/session-port.ts";
+
+// OpenCode invokes every exported function as a plugin; a second export would
+// register a second event hook and speak every line twice.
+test("plugin entry exports exactly one plugin function", () => {
+  expect(Object.keys(pluginModule)).toEqual(["EchoVoice"]);
+});
 
 // Fakes follow @opencode-ai/sdk v1: `{ path: { id } }` in, `{ data, error }` out, no throw.
 describe("OpenCode plugin session client", () => {
