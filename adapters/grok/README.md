@@ -36,9 +36,11 @@ Project wins over `~/.grok/settings.json`, then env defaults
 
 ## Ownership
 
-Reconcile owns **only** `echo-voice.json`. Sibling hooks such as firstmate's
-`fm-turn-end.json` / `fm-turn-end.sh` are never rewritten or pruned. A foreign
-file already named `echo-voice.json` is a fatal ownership conflict (exit 2).
+Reconcile owns `echo-voice.json` under hooks and links `skills/echo-mute`
+(`/echo-mute` → bash `cli/echo mute`; the bun hook is not the mute path).
+Sibling hooks such as firstmate's `fm-turn-end.json` / `fm-turn-end.sh` are never
+rewritten or pruned. A foreign file already named `echo-voice.json` or a foreign
+`echo-mute` skill is a fatal ownership conflict (exit 2).
 
 ## Environment overrides (tests)
 
@@ -46,6 +48,7 @@ file already named `echo-voice.json` is a fatal ownership conflict (exit 2).
 | --- | --- |
 | `GROK_HOME` | Grok config directory (default `~/.grok`) |
 | `ECHO_GROK_HOOKS_DIR` | Direct hooks directory override (wins over `GROK_HOME`) |
+| `ECHO_GROK_SKILLS_DIR` | Direct skills directory override |
 | `HOME` | Affects the default `~/.grok` resolution via `os.homedir()` |
 
 Never point tests at the operator's real `~/.grok`.

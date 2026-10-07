@@ -106,6 +106,11 @@ localhost, and unrelated coding-agent features.
 
 ## Adding a host adapter
 
+The extension surface is [`shared/extension.ts`](shared/extension.ts): types, the harness
+catalog, and the feature register hooks (`registerEchoMute`, `registerEchoVoice`).
+Step-by-step: [How to add a harness](docs/adapters.md#how-to-add-a-harness) and
+[How to add a feature](docs/adapters.md#how-to-add-a-feature).
+
 1. Create `adapters/<host>/` as a workspace package: its own `package.json` declaring
    `@echo/shared`, listed in the root `workspaces` array. Relative imports stay inside
    the package. The daemon's config is read over HTTP, never off disk. Contract:
@@ -113,14 +118,16 @@ localhost, and unrelated coding-agent features.
 2. Translate host lifecycle events into `/notify` payloads.
 3. Include `source` and `session_id` when available.
 4. Keep host-specific settings and paths inside the adapter.
-5. Add install support in `scripts/install.sh --adapter <host>`. Registration must be
-   an idempotent reconcile-and-prune (set the canonical path, remove stale variants,
-   support `--check`) - never append-only. The contract lives in
-   [`docs/adapters.md`](docs/adapters.md) (#77).
-6. Add tests and a docs section in [`docs/dependencies.md`](docs/dependencies.md).
+5. Register the harness in `shared/extension.ts` (`HARNESSES`). Then add install support
+   in `scripts/install.sh --adapter <host>`. Registration must be an idempotent
+   reconcile-and-prune (set the canonical path, remove stale variants, support `--check`) -
+   never append-only. `tests/shared/extension.test.ts` fails if the catalog, workspaces,
+   installer, or CLI drift. Contract: [`docs/adapters.md`](docs/adapters.md) (#77).
+6. Add tests and a docs section in [`docs/adapters.md`](docs/adapters.md).
+7. Reuse feature register hooks instead of a second factory. Mute stays `cli/echo mute`.
 
 Copy `adapters/pi/` as the first non-Claude-Code reference, then `adapters/omp/` for
-the extension-symlink pattern.
+the extension-symlink pattern. Claude Code is the thin-plugin reference.
 
 ## Code of conduct
 

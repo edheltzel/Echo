@@ -265,8 +265,8 @@ if (isNamedAgent && agentType) {
 // ── DA greeting (main session) ────────────────────────────────────────────────
 try {
   // Resolve identity through identity.ts (the single source of truth), layered
-  // project → global → default. Inside a repo with a project persona, name +
-  // voice + catchphrases come from the project; everywhere else, global stands.
+  // project → global → default per key, so unset project persona fields keep
+  // their inherited global or default values.
   const identity = getIdentity();
   const daName = identity.displayName;
 

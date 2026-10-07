@@ -38,7 +38,7 @@ describe("echo CLI dispatch", () => {
   test("no args prints usage listing every subcommand", async () => {
     const r = await runCli([], { HOME: "/tmp", PATH: `${bunDir}:/bin:/usr/bin` });
     expect(r.exitCode).toBe(0);
-    for (const cmd of ["install", "doctor", "status", "mute", "voice", "update", "uninstall"]) {
+    for (const cmd of ["install", "doctor", "status", "mute", "replay", "voice", "update", "uninstall"]) {
       expect(r.stdout).toContain(cmd);
     }
   });
@@ -269,12 +269,28 @@ describe("echo doctor", () => {
           ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
         };
 
+        // A live Echo clone hook (the FM-342 mess): install must rewrite it onto
+        // this checkout so doctor registrations are current, not DEGRADED.
+        const otherHook = join(root, "Atlas", "Echo", "adapters", "jcode", "hook.ts");
+        mkdirSync(dirname(otherHook), { recursive: true });
+        writeFileSync(join(dirname(otherHook), "package.json"), JSON.stringify({ name: "@echo/jcode-adapter" }));
+        writeFileSync(otherHook, "#!/usr/bin/env bun\n");
+        mkdirSync(join(home, ".jcode"), { recursive: true });
+        writeFileSync(
+          join(home, ".jcode/config.toml"),
+          `[hooks]\nturn_end = ${JSON.stringify(otherHook)}\nsession_start = ${JSON.stringify(otherHook)}\n`,
+        );
+
         // Stage the payload first (install.sh runs in the same temp HOME).
         const install = await runCli(["install", "--adapter", "none"], env);
         expect(install.exitCode).toBe(0);
+        const jcodeAfter = readFileSync(join(home, ".jcode/config.toml"), "utf8");
+        expect(jcodeAfter).not.toContain(otherHook);
+        expect(jcodeAfter).toContain("adapters/jcode/hook.ts");
 
         const r = await runCli(["doctor"], env);
         expect(r.stdout).toContain("Result: READY");
+        expect(r.stdout).toContain("plist + host adapter paths current");
         expect(r.exitCode).toBe(0);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -308,12 +324,91 @@ describe("echo mute", () => {
     }
   });
 
+  test("toggle, status, and off dispatch to mute.sh (never the live daemon)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-verbs-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "toggle"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "status"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "off"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/mute");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("on tts and 30m tts pass scope through to mute.sh", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-scope-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "on", "tts"], env)).exitCode).toBe(0);
+      expect((await runCli(["mute", "30m", "tts"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain('"scope": "tts"');
+      expect(logged).toContain('"duration_minutes": 30');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("toggle all POSTs an empty body (legacy #83 toggle), not {scope:all}", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-mute-toggle-all-"));
+    try {
+      const { env, log } = muteEnv(root);
+      expect((await runCli(["mute", "toggle", "all"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/mute");
+      expect(logged).not.toContain('"scope": "all"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a bad duration and requires an argument", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-mute-bad-"));
     try {
       const { env } = muteEnv(root);
       expect((await runCli(["mute", "banana"], env)).exitCode).toBe(2);
       expect((await runCli(["mute"], env)).exitCode).toBe(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("echo replay", () => {
+  function replayEnv(root: string): { env: Record<string, string>; log: string } {
+    const bin = join(root, "bin");
+    mkdirSync(bin, { recursive: true });
+    const log = join(root, "curl-args.log");
+    writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(log)}\necho '{"status":"accepted","replayed":1}'\nexit 0\n`);
+    return { env: { HOME: join(root, "home"), PATH: `${bin}:${bunDir}:/bin:/usr/bin` }, log };
+  }
+
+  test("default and explicit n POST /replay (never the live daemon)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-replay-"));
+    try {
+      const { env, log } = replayEnv(root);
+      expect((await runCli(["replay"], env)).exitCode).toBe(0);
+      expect((await runCli(["replay", "3"], env)).exitCode).toBe(0);
+      const logged = readFileSync(log, "utf8");
+      expect(logged).toContain("/replay");
+      expect(logged).toContain('"n": 1');
+      expect(logged).toContain('"n": 3');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects abusive n before touching the daemon", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-replay-bad-"));
+    try {
+      const { env, log } = replayEnv(root);
+      expect((await runCli(["replay", "0"], env)).exitCode).toBe(2);
+      expect((await runCli(["replay", "11"], env)).exitCode).toBe(2);
+      expect((await runCli(["replay", "banana"], env)).exitCode).toBe(2);
+      expect(existsSync(log) ? readFileSync(log, "utf8") : "").not.toContain("/replay");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

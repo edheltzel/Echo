@@ -1,81 +1,99 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_PERSONA_GREETINGS, pickStartupCatchphrase } from "../../shared/greeting.ts";
 import {
   applyPersonaOverride,
   booleanEnv,
-  mergeDaidentity,
-  parseJsonDaidentity,
   shouldSuppressVoice,
-  type PersonaFields,
+  type BaseVoiceConfig,
 } from "../../shared/persona.ts";
+import {
+  NAMED_STARTUP_GREETINGS,
+  NAMELESS_STARTUP_GREETINGS,
+} from "../../shared/greeting.ts";
+
+function base(overrides: Partial<BaseVoiceConfig> = {}): BaseVoiceConfig {
+  return {
+    personaName: "Pi",
+    sayName: false,
+    voiceId: "pi",
+    startupCatchphrases: NAMELESS_STARTUP_GREETINGS,
+    ...overrides,
+  };
+}
 
 describe("booleanEnv", () => {
-  test("accepts common truthy and falsey spellings", () => {
-    expect(booleanEnv("true", false)).toBe(true);
-    expect(booleanEnv("1", false)).toBe(true);
-    expect(booleanEnv("yes", false)).toBe(true);
-    expect(booleanEnv("off", true)).toBe(false);
+  test("undefined keeps the fallback", () => {
     expect(booleanEnv(undefined, true)).toBe(true);
-    expect(booleanEnv("maybe", true)).toBe(true);
-  });
-});
-
-describe("mergeDaidentity", () => {
-  test("project wins per key; unset keys fall through", () => {
-    expect(mergeDaidentity(
-      { voices: { main: { voiceId: "project-voice" } } },
-      { name: "Global", voiceId: "global-voice", startupCatchphrases: ["Hi."] },
-    )).toEqual({
-      personaName: "Global",
-      voiceId: "project-voice",
-      startupCatchphrases: ["Hi."],
-    });
+    expect(booleanEnv(undefined, false)).toBe(false);
   });
 
-  test("null + null is null", () => {
-    expect(mergeDaidentity(null, null)).toBeNull();
+  test("accepts the adapter true/false spellings", () => {
+    expect(booleanEnv("1", false)).toBe(true);
+    expect(booleanEnv("true", false)).toBe(true);
+    expect(booleanEnv("yes", false)).toBe(true);
+    expect(booleanEnv("on", false)).toBe(true);
+    expect(booleanEnv("0", true)).toBe(false);
+    expect(booleanEnv("false", true)).toBe(false);
+    expect(booleanEnv("no", true)).toBe(false);
+    expect(booleanEnv("off", true)).toBe(false);
   });
-});
 
-describe("parseJsonDaidentity", () => {
-  test("returns the daidentity object or null", () => {
-    expect(parseJsonDaidentity('{"daidentity":{"name":"X"}}')).toEqual({ name: "X" });
-    expect(parseJsonDaidentity("{")).toBeNull();
-    expect(parseJsonDaidentity(null)).toBeNull();
+  test("unknown strings keep the fallback (narrower than parseEchoBoolean)", () => {
+    expect(booleanEnv("y", false)).toBe(false);
+    expect(booleanEnv("n", true)).toBe(true);
+    expect(booleanEnv("", true)).toBe(true);
   });
 });
 
 describe("applyPersonaOverride", () => {
-  const base: PersonaFields = {
-    personaName: "Base",
-    voiceId: "base",
-    startupCatchphrases: ["Base ready."],
-  };
-
-  test("null override returns the same reference", () => {
-    expect(applyPersonaOverride(base, null)).toBe(base);
+  test("null override returns the same object", () => {
+    const cfg = base();
+    expect(applyPersonaOverride(cfg, null)).toBe(cfg);
   });
 
-  test("name without catchphrases switches to the name pool", () => {
-    const out = applyPersonaOverride(base, { personaName: "Libby" });
-    expect(out.personaName).toBe("Libby");
-    expect(out.voiceId).toBe("base");
-    expect(out.startupCatchphrases).toBe(DEFAULT_PERSONA_GREETINGS);
+  test("set keys win; unset keys keep the base", () => {
+    const cfg = base();
+    const out = applyPersonaOverride(cfg, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
+    expect(out.personaName).toBe("Echo");
+    expect(out.voiceId).toBe("en-US-AndrewNeural");
+    expect(out.sayName).toBe(false);
+    expect(out.startupCatchphrases).toBe(NAMELESS_STARTUP_GREETINGS);
+  });
+
+  test("sayName switches only the shared default greeting pools", () => {
+    const out = applyPersonaOverride(base(), { sayName: true });
+    expect(out.sayName).toBe(true);
+    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
+  });
+
+  test("custom greetings stay when sayName flips", () => {
+    const custom = ["Base ready."];
+    const out = applyPersonaOverride(base({ startupCatchphrases: custom }), { sayName: true });
+    expect(out.startupCatchphrases).toBe(custom);
+  });
+
+  test("preserves extra adapter fields on T", () => {
+    const cfg = { ...base(), endpoint: "http://localhost:3246/notify", title: "Pi Notification" };
+    const out = applyPersonaOverride(cfg, { personaName: "Echo" });
+    expect(out.endpoint).toBe(cfg.endpoint);
+    expect(out.title).toBe("Pi Notification");
+    expect(out.personaName).toBe("Echo");
   });
 });
 
 describe("shouldSuppressVoice", () => {
-  test("suppresses headless and json/print runs", () => {
+  test("suppresses headless, json, and print runs", () => {
     expect(shouldSuppressVoice({ hasUI: false }, {})).toBe(true);
     expect(shouldSuppressVoice({ mode: "json" }, {})).toBe(true);
-    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, {})).toBe(false);
-    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, { ECHO_VOICE_SUPPRESS: "true" })).toBe(true);
+    expect(shouldSuppressVoice({ mode: "print" }, {})).toBe(true);
   });
-});
 
-describe("pickStartupCatchphrase", () => {
-  test("selects by injected random", () => {
-    expect(pickStartupCatchphrase(["a", "b", "c"], () => 0)).toBe("a");
-    expect(pickStartupCatchphrase(["a", "b", "c"], () => 0.999)).toBe("c");
+  test("speaks in interactive run modes with a real UI", () => {
+    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, {})).toBe(false);
+    expect(shouldSuppressVoice({ mode: "rpc", hasUI: true }, {})).toBe(false);
+  });
+
+  test("emergency suppression wins over an interactive UI", () => {
+    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, { ECHO_VOICE_SUPPRESS: "true" })).toBe(true);
+    expect(shouldSuppressVoice({ mode: "tui", hasUI: true }, { ATLAS_VOICE_SUPPRESS: "true" })).toBe(true);
   });
 });

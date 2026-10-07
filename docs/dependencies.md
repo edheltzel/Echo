@@ -42,13 +42,13 @@
 | Host | Path | Status | Install |
 | --- | --- | --- | --- |
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
-| Claude Code | `adapters/claudecode/` | Reference adapter | `bash scripts/install.sh --adapter claudecode` |
+| Claude Code | `adapters/claudecode/` | Reference adapter; mute-only plugin at `plugin/` | `bash scripts/install.sh --adapter claudecode` (hooks). Optional: `claude --plugin-dir adapters/claudecode/plugin` |
 | Jcode | `adapters/jcode/` | Native lifecycle-hook adapter | `bash scripts/install.sh --adapter jcode` |
-| Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) | `bash scripts/install.sh --adapter grok` |
+| Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) plus `/echo-mute` skill | `bash scripts/install.sh --adapter grok` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
 | oh-my-pi (omp) | `adapters/omp/` | Supported - sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | MCP (Claude Code voice ask) | `adapters/mcp/` | Supported - serves the `echo_ask` tool over stdio | `bash scripts/install.sh --adapter mcp` |
-| OpenCode | TBD | Planned | Future adapter |
+| OpenCode | `adapters/opencode/` | Mute-only `/echo-mute` command | `bash scripts/install.sh --adapter opencode` |
 
 ### Terminal visual capabilities
 
@@ -103,4 +103,4 @@ rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 | Fully local speech | Bun + edge-tts or Kokoro + macOS fallback |
 | Cloud premium voice | Bun + ElevenLabs key + ElevenLabs enabled in config |
 
-See `README.md` for architecture and `docs/install-agent.md` for command-by-command verification.
+See [`ARCHITECTURE.md`](../ARCHITECTURE.md) for the daemon layout and the [agent install checklist](install-agent.md) for command-by-command verification.

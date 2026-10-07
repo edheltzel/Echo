@@ -82,3 +82,106 @@ port_occupied_advice() {
   echo "If this is Echo's own daemon it may be wedged or crash-looping - check ${LOG_PATH:-$HOME/Library/Logs/echo.log}, then: bash ${ECHO_SCRIPTS_DIR}/restart.sh"
   echo "If another process owns the port, stop it and rerun - Echo never kills the port owner."
 }
+
+# --- daemon HTTP -----------------------------------------------------------
+# curl -f used to collapse every 4xx/5xx into "HTTP error" and discard the
+# body, so `mute toggle all` against an older payload (or a foreign listener)
+# looked identical to a mystery reject. These helpers keep the status + body
+# and print a recovery that names the port, config path, and start/doctor cmds.
+#
+# ECHO_HTTP_CODE is set on every call (000 when curl never got an HTTP status).
+
+ECHO_HTTP_CODE=""
+
+_echo_config_path() {
+  printf '%s' "${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}"
+}
+
+# $1 curl_rc  $2 http_code  $3 response body  $4 curl stderr  $5 url
+diagnose_echo_http() {
+  local rc="$1" code="$2" body="$3" curl_err="${4:-}" url="${5:-}"
+  local config_path
+  config_path="$(_echo_config_path)"
+
+  if [ "$code" -ge 400 ] 2>/dev/null; then
+    echo "echo daemon rejected the request (HTTP ${code} on :${ECHO_PORT})" >&2
+    if [ -n "$body" ]; then
+      echo "$body" >&2
+    fi
+    echo "The daemon answered on :${ECHO_PORT}, so this is not a down service." >&2
+    echo "If this checkout is newer than the running payload, re-stage: cli/echo update" >&2
+    echo "Health: curl -fsS ${HEALTH_URL}" >&2
+    echo "Config: ${config_path}" >&2
+    return 0
+  fi
+
+  echo "echo daemon not reachable on :${ECHO_PORT}" >&2
+  case "$rc" in
+    7) echo "Nothing accepted a TCP connection (connection refused)." >&2 ;;
+    28) echo "Timed out waiting for the daemon." >&2 ;;
+    6) echo "Could not resolve the daemon host." >&2 ;;
+    *)
+      if [ -n "$curl_err" ]; then
+        echo "$curl_err" >&2
+      fi
+      ;;
+  esac
+  echo "Is the service running?  cli/echo doctor" >&2
+  echo "Start it:                bash ${ECHO_SCRIPTS_DIR}/start.sh" >&2
+  echo "Or install/re-stage:     cli/echo install" >&2
+  echo "Port ${ECHO_PORT} comes from ${config_path} (else default 3246)." >&2
+  if [ -n "$url" ]; then
+    echo "Tried: ${url}" >&2
+  fi
+}
+
+# echo_http METHOD URL [json_body]
+# Prints the response body to stdout on 2xx. On transport or HTTP error, prints
+# diagnose_echo_http to stderr and returns 1. A stub curl that ignores -w and
+# exits 0 is treated as HTTP 200 (cli tests).
+echo_http() {
+  local method="$1" url="$2"
+  local have_data=0 data=""
+  if [ "$#" -ge 3 ]; then
+    have_data=1
+    data="$3"
+  fi
+
+  local errfile curl_out curl_err curl_rc=0
+  errfile="$(mktemp "${TMPDIR:-/tmp}/echo-curl.XXXXXX")"
+  if [ "$have_data" -eq 1 ]; then
+    curl_out="$(curl --connect-timeout 2 --max-time 5 -sS -w '\n%{http_code}' \
+      -X "$method" "$url" -H 'Content-Type: application/json' -d "$data" \
+      2>"$errfile")" || curl_rc=$?
+  else
+    curl_out="$(curl --connect-timeout 2 --max-time 5 -sS -w '\n%{http_code}' \
+      -X "$method" "$url" 2>"$errfile")" || curl_rc=$?
+  fi
+  curl_err="$(cat "$errfile" 2>/dev/null || true)"
+  rm -f "$errfile"
+
+  local code body
+  code="$(printf '%s\n' "$curl_out" | tail -n 1)"
+  body="$(printf '%s\n' "$curl_out" | sed '$d')"
+  # Real curl always appends a 3-digit status. Stub curls in tests echo a JSON
+  # body and ignore -w; treat a successful run without a status as 200.
+  if ! [[ "$code" =~ ^[0-9]{3}$ ]]; then
+    if [ "$curl_rc" -eq 0 ]; then
+      code="200"
+      body="$curl_out"
+    else
+      code="000"
+      body=""
+    fi
+  fi
+  ECHO_HTTP_CODE="$code"
+
+  if [ "$curl_rc" -eq 0 ] && [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ]; then
+    # $(...) strips a trailing newline; restore one so callers match `echo`.
+    printf '%s\n' "$body"
+    return 0
+  fi
+
+  diagnose_echo_http "$curl_rc" "$code" "$body" "$curl_err" "$url"
+  return 1
+}

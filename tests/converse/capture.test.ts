@@ -10,7 +10,9 @@ import {
   selectSttTier,
   transcribeFile,
 } from "../../converse/capture.ts";
-import { resolveConverseConfig, type ConverseConfig } from "../../converse/config.ts";
+import { resolveConverseConfig, withSilenceMode, type ConverseConfig } from "../../converse/config.ts";
+import { SILENCE_MODE_MS } from "../../converse/silence-mode.ts";
+import { requestStop } from "../../converse/stop-signal.ts";
 
 // No test here opens a microphone. The recorder and the transcriber are both
 // subprocesses, so a stand-in script exercises the real argv handling, exit
@@ -68,6 +70,41 @@ describe("recorder invocation", () => {
     // devices at unusual rates. The whisper rung converts offline instead.
     expect(recorderArgv(config(), "/out/reply.wav")).not.toContain("-r");
   });
+
+  test.each([
+    ["quick", "0.50"],
+    ["standard", "1.50"],
+    ["thoughtful", "2.50"],
+  ] as const)("silence mode %s sets a %s second sox window", (mode, seconds) => {
+    const argv = recorderArgv(withSilenceMode(config(), mode), "/out/reply.wav");
+
+    expect(argv.join(" ")).toContain(`silence 1 0.1 2% 1 ${seconds} 2%`);
+  });
+});
+
+describe("silence mode defaults", () => {
+  test("default silence mode is standard, matching today's 1500ms timeout", () => {
+    const cfg = resolveConverseConfig({}, scratch);
+
+    expect(cfg.silenceMode).toBe("standard");
+    expect(cfg.silenceMs).toBe(1_500);
+    expect(cfg.silenceMs).toBe(SILENCE_MODE_MS.standard);
+  });
+
+  test("ECHO_CONVERSE_SILENCE_MODE selects the VoiceLayer window", () => {
+    expect(resolveConverseConfig({ ECHO_CONVERSE_SILENCE_MODE: "quick" }, scratch).silenceMs).toBe(500);
+    expect(resolveConverseConfig({ ECHO_CONVERSE_SILENCE_MODE: "thoughtful" }, scratch).silenceMs).toBe(2_500);
+  });
+
+  test("ECHO_CONVERSE_SILENCE_MS still overrides the named window", () => {
+    const cfg = resolveConverseConfig(
+      { ECHO_CONVERSE_SILENCE_MODE: "quick", ECHO_CONVERSE_SILENCE_MS: "2000" },
+      scratch,
+    );
+
+    expect(cfg.silenceMode).toBe("quick");
+    expect(cfg.silenceMs).toBe(2_000);
+  });
 });
 
 describe("recording", () => {
@@ -94,7 +131,48 @@ describe("recording", () => {
     const report = await recordReply(config({ recBin, maxCaptureMs: 300 }), join(scratch, "reply.wav"));
 
     expect(report.timed_out).toBe(true);
+    expect(report.stopped).toBe(false);
     expect(report.bytes).toBe(2_048);
+  });
+
+  test("a stop file ends recording without treating it as a timeout or cancel", async () => {
+    const recBin = fakeRecorder(2_048, "sleep 30");
+    const stopFilePath = join(scratch, "stop");
+    const wav = join(scratch, "stopped.wav");
+    const pending = recordReply(config({ recBin, maxCaptureMs: 8_000, stopFilePath }), wav);
+
+    for (let attempt = 0; attempt < 100 && !existsSync(wav); attempt++) await Bun.sleep(10);
+    expect(existsSync(wav)).toBe(true);
+    requestStop(stopFilePath);
+
+    const report = await pending;
+    expect(report.stopped).toBe(true);
+    expect(report.timed_out).toBe(false);
+    expect(report.bytes).toBe(2_048);
+    expect(existsSync(stopFilePath)).toBe(false);
+  });
+
+  test("a stop token still transcribes the captured audio", async () => {
+    const recBin = fakeRecorder(8_192, "sleep 30");
+    const stopFilePath = join(scratch, "stop-and-transcribe");
+    const cfg = config({
+      recBin,
+      yapBin: fakeBinary("fake-yap", 'echo "stopped and transcribed"'),
+      maxCaptureMs: 8_000,
+      stopFilePath,
+    });
+    const pending = captureAndTranscribe(cfg);
+
+    for (let attempt = 0; attempt < 100 && readdirSync(cfg.captureDir).length === 0; attempt++) {
+      await Bun.sleep(10);
+    }
+    requestStop(stopFilePath);
+
+    const result = await pending;
+    expect(result.text).toBe("stopped and transcribed");
+    expect(result.stopped).toBe(true);
+    expect(result.timed_out).toBe(false);
+    expect(readdirSync(cfg.captureDir)).toEqual([]);
   });
 
   test("forces recorded audio files to owner-only permissions", async () => {
@@ -226,6 +304,7 @@ describe("capture and transcribe together", () => {
 
     expect(result.text).toBe("merge it into dev");
     expect(result.engine).toBe("yap");
+    expect(result.stopped).toBe(false);
     // The human's voice is not left lying around; the transcript is the product.
     expect(readdirSync(cfg.captureDir)).toEqual([]);
   });

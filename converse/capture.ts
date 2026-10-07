@@ -29,6 +29,7 @@
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ConverseConfig, SttTier } from "./config.ts";
+import { consumeStopSignal } from "./stop-signal.ts";
 
 /** A capture shorter than this cannot hold speech; sox writes a header-only file when it hears nothing. */
 const MIN_AUDIBLE_WAV_BYTES = 1_024;
@@ -39,6 +40,8 @@ export interface CaptureEngineResult {
   engine: SttTier;
   capture_ms: number;
   timed_out: boolean;
+  /** True when a stop token ended the recorder before silence or the cap. */
+  stopped?: boolean;
 }
 
 /** The seam the client is built against, so tests can drive a turn without a microphone. */
@@ -169,6 +172,9 @@ const OUTPUT_GRACE_MS = 500;
 /** Grace between SIGTERM and SIGKILL for a child whose cap must be hard. */
 const HARD_KILL_GRACE_MS = 2_000;
 
+/** VoiceLayer polls the stop file on this interval; keep the same cadence. */
+const STOP_POLL_MS = 50;
+
 interface RunOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -178,13 +184,15 @@ interface RunOptions {
    * the recorder and the wrong one for the transcriber (see the call sites).
    */
   hardKillAfterMs?: number;
+  /** When this file appears, SIGTERM the child and treat the capture as a stop, not a cancel. */
+  stopFilePath?: string;
 }
 
 async function run(
   cmd: string[],
   options: RunOptions = {},
-): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-  const { timeoutMs, signal, hardKillAfterMs } = options;
+): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; stopped: boolean }> {
+  const { timeoutMs, signal, hardKillAfterMs, stopFilePath } = options;
   // The recorder creates the WAV itself. Give every capture child a private
   // umask at creation time; recordReply also chmods the finished artifact to
   // close the gap for a child that deliberately changes its own umask.
@@ -207,7 +215,9 @@ async function run(
   const outCollector = drainPipe(child.stdout);
   const errCollector = drainPipe(child.stderr);
   let timedOut = false;
+  let stopped = false;
   let hardTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopTimer: ReturnType<typeof setInterval> | undefined;
   const timer = timeoutMs === undefined
     ? undefined
     : setTimeout(() => {
@@ -221,6 +231,20 @@ async function run(
         }
       }, timeoutMs);
 
+  const checkStop = () => {
+    if (stopFilePath === undefined || stopped) return;
+    if (consumeStopSignal(stopFilePath)) {
+      stopped = true;
+      timedOut = false;
+      child.kill("SIGTERM");
+    }
+  };
+  if (stopFilePath !== undefined) {
+    checkStop();
+    stopTimer = setInterval(checkStop, STOP_POLL_MS);
+    stopTimer.unref();
+  }
+
   // A cancelled host turn must close the microphone now, not when the cap
   // expires. Nothing else would stop the recorder.
   const onAbort = () => child.kill("SIGTERM");
@@ -233,10 +257,11 @@ async function run(
       collectWithin(outCollector, OUTPUT_GRACE_MS),
       collectWithin(errCollector, OUTPUT_GRACE_MS),
     ]);
-    return { code, stdout, stderr, timedOut };
+    return { code, stdout, stderr, timedOut, stopped };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (hardTimer !== undefined) clearTimeout(hardTimer);
+    if (stopTimer !== undefined) clearInterval(stopTimer);
     signal?.removeEventListener("abort", onAbort);
   }
 }
@@ -245,6 +270,7 @@ export interface RecordingReport {
   wav_path: string;
   capture_ms: number;
   timed_out: boolean;
+  stopped: boolean;
   bytes: number;
 }
 
@@ -266,6 +292,7 @@ export async function recordReply(
   const result = await run([config.recBin, ...recorderArgv(config, wavPath)], {
     timeoutMs: config.maxCaptureMs,
     signal,
+    stopFilePath: config.stopFilePath,
   });
   if (existsSync(wavPath)) {
     try {
@@ -295,7 +322,7 @@ export async function recordReply(
       `${config.recBin} produced no audio (exit ${result.code}): ${result.stderr.trim() || "no error output"}`,
     );
   }
-  return { wav_path: wavPath, capture_ms, timed_out: result.timedOut, bytes };
+  return { wav_path: wavPath, capture_ms, timed_out: result.timedOut, stopped: result.stopped, bytes };
 }
 
 /**
@@ -433,7 +460,13 @@ export const captureAndTranscribe: CaptureEngine = async (config, signal) => {
     if (text.length === 0) {
       throw new CaptureError("no_speech", "the recording contained no speech");
     }
-    return { text, engine: tier, capture_ms: recording.capture_ms, timed_out: recording.timed_out };
+    return {
+      text,
+      engine: tier,
+      capture_ms: recording.capture_ms,
+      timed_out: recording.timed_out,
+      stopped: recording.stopped,
+    };
   } finally {
     rmSync(wavPath, { force: true });
   }

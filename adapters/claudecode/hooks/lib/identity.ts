@@ -20,6 +20,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { parseEchoBoolean } from '@echo/shared/echo-env.ts';
 
 const HOME = process.env.HOME!;
 
@@ -79,6 +80,8 @@ export interface Identity {
   personaFromProject?: boolean;
   /** True when a project-scope layer set its own startupCatchphrases array. */
   catchphrasesFromProject?: boolean;
+  /** Opt-in: announce the persona name in the default startup greeting. */
+  sayName?: boolean;
 }
 
 export interface Principal {
@@ -168,7 +171,7 @@ function loadSettings(projectDir?: string, home: string = HOME): Settings {
 /**
  * The daidentity block from the PROJECT-scope layers only (project → project.local),
  * with no global layer. Used to tell what a repo set for itself, so a project persona
- * name can override an inherited global `displayName` and drive the startup greeting.
+ * name can override an inherited global `displayName` while preserving per-key fallback.
  */
 function loadProjectDaidentity(projectDir?: string, home: string = HOME): Record<string, any> {
   const dir = resolveProjectDir(projectDir);
@@ -217,6 +220,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
     startupCatchphrase: (daidentity as any).startupCatchphrase as string | undefined,
     personaFromProject,
     catchphrasesFromProject,
+    sayName: parseEchoBoolean((daidentity as { sayName?: unknown }).sayName, false),
   };
 }
 

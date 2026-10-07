@@ -114,7 +114,7 @@ at runtime; invalid values use the defaults below.
 | --- | --- | --- |
 | Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
-| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE | Adapter defaults apply when unset |
+| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; startup names stay nameless unless ECHO_VOICE_SAY_NAME / daidentity.sayName is true; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
@@ -123,13 +123,21 @@ at runtime; invalid values use the defaults below.
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL | Adapter-side endpoint settings; otherwise adapters use <http://localhost:3246> |
 | Reserved | ECHO_VOICE_SURFACES | Schema-reserved; current runtime code does not read it |
 | Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS, ECHO_CONVERSE_LOG_PATH | 32468 (keypad ECHOV; core keeps 3246), <http://localhost:32468>, ~/.local/state/echo/converse/booking.lock, capture + transcription budget plus slack (120000 at the shipped defaults), ~/Library/Logs/echo-converse.log |
-| Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, 1500, 60000, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
+| Voice ask (capture, read in the calling host) | ECHO_CONVERSE_CAPTURE_DIR, ECHO_CONVERSE_MAX_CAPTURE_MS, ECHO_CONVERSE_SILENCE_MODE, ECHO_CONVERSE_SILENCE_MS, ECHO_CONVERSE_STOP_FILE, ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, ECHO_CONVERSE_LOCALE, ECHO_CONVERSE_STT_TIER, ECHO_CONVERSE_REC_BIN, ECHO_CONVERSE_SOX_BIN, ECHO_CONVERSE_YAP_BIN, ECHO_CONVERSE_WHISPER_BIN, ECHO_CONVERSE_WHISPER_MODEL | ~/Library/Caches/echo/converse, 30000, standard (1500ms; today's timeout), 1500 when the numeric override is set, ~/.local/state/echo/converse/stop, 60000, en-US, auto (yap then whisper), binaries resolved on PATH, no default model |
 
 Settings whose behavior is not obvious from the name:
 
 - **ECHO_SAY_BIN** points the macOS `say` fallback provider at a different executable. It is
   the last rung of the provider chain, so this is the knob for wrapping it (a logging shim, a
   routed audio device, or a no-op for a run that must stay silent). Unset means `/usr/bin/say`.
+
+- **ECHO_VOICE_SAY_NAME** is the config.json form of `daidentity.sayName`: when true, adapters
+  use the named default startup pool and fill `{name}`. Unset or false stays nameless. A
+  host `daidentity.sayName` still wins when that file sets it.
+
+- **ECHO_PREFERRED_NAME** is the human name Claude Code, Pi, and omp put at the front of a
+  needs-input / approval / attention line (`Ed, …`). Unset or blank stays nameless. Echo
+  never guesses a name.
 
 - **ECHO_CONVERSE_STT_TIER** pins the transcriber to `yap` or `whisper`. When it is set, a
   missing binary reports itself rather than falling through to the other rung, so nobody is
@@ -142,6 +150,15 @@ Settings whose behavior is not obvious from the name:
   finishes and core skips every voice line while that state is non-idle, so an unbounded
   transcriber would mute Echo silently. Raise it only if a large whisper model on a slow
   machine genuinely needs longer; the turn's lease is derived from it.
+
+- **ECHO_CONVERSE_SILENCE_MODE** is the VoiceLayer-named end-of-utterance window for `echo_ask`:
+  `quick` (0.5s), `standard` (1.5s, default, today's timeout), `thoughtful` (2.5s). Implemented
+  as sox trailing silence, not Silero/onnx. `echo_ask` may pass `silence_mode` per call.
+  **ECHO_CONVERSE_SILENCE_MS** still overrides the numeric window when set.
+
+- **ECHO_CONVERSE_STOP_FILE** is the stop token for an in-flight recording. Touch it, or POST
+  `/turn/:id/stop` on the coordinator, to SIGTERM the recorder and still transcribe. Default
+  `~/.local/state/echo/converse/stop`. This is not a mute scope and not a tool-call cancel.
 
 - **PORT** must be canonical decimal, from 1 to 65535 - `3246` or `"3246"`. Digits only: no
   sign, no leading zero, no whitespace inside the quotes. Anything else is dropped as an

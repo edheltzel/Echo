@@ -14,6 +14,7 @@ const REPO_HOOKS_DIR = join(ADAPTER_DIR, "hooks");
 const VOICE_GATE_CMD = join(REPO_HOOKS_DIR, "VoiceGate.hook.ts");
 const VOICE_GREETING_CMD = join(REPO_HOOKS_DIR, "VoiceGreeting.hook.ts");
 const VOICE_COMPLETION_CMD = join(REPO_HOOKS_DIR, "VoiceCompletion.hook.ts");
+const VOICE_HIL_CMD = join(REPO_HOOKS_DIR, "VoiceHil.hook.ts");
 
 // A standalone install can wire the Stop hook directly at ~/.claude/hooks/VoiceCompletion.hook.ts.
 // Treat it as the same registration so we replace it in place with the adapter copy rather than
@@ -37,6 +38,8 @@ settings.hooks ??= {};
 settings.hooks.PreToolUse ??= [];
 settings.hooks.SessionStart ??= [];
 settings.hooks.Stop ??= [];
+settings.hooks.PermissionRequest ??= [];
+settings.hooks.Notification ??= [];
 
 let changed = false;
 const log: string[] = [];
@@ -153,6 +156,41 @@ if (completionMatches.length === 0) {
   }
 }
 
+function reconcileMatcherlessEvent(event: string, canonical: string, hookFile: string): void {
+  const entries = settings.hooks[event] ?? [];
+  settings.hooks[event] = entries;
+  const matches: { entry: MatcherEntry; hook: HookEntry }[] = [];
+  for (const entry of entries) {
+    for (const hook of entry.hooks) {
+      if (hook.command === canonical) matches.push({ entry, hook });
+    }
+  }
+  if (matches.length === 0) {
+    let defaultEntry = entries.find((entry) => entry.matcher === undefined || entry.matcher === "");
+    if (!defaultEntry) {
+      defaultEntry = { hooks: [] };
+      entries.push(defaultEntry);
+      log.push(`+ ${event} += { hooks: [] }`);
+    }
+    defaultEntry.hooks.push({ type: "command", command: canonical });
+    changed = true;
+    log.push(`+ ${event} += ${hookFile}`);
+    return;
+  }
+  if (matches.length === 1) {
+    log.push(`= ${event} already has ${hookFile}`);
+  }
+  for (const { entry, hook } of matches.slice(1)) {
+    entry.hooks.splice(entry.hooks.indexOf(hook), 1);
+    changed = true;
+    log.push(`- ${event}: removed duplicate ${hookFile}`);
+  }
+}
+
+// 4) PermissionRequest + Notification: observe-only HIL announce (#107).
+reconcileMatcherlessEvent("PermissionRequest", VOICE_HIL_CMD, "VoiceHil.hook.ts");
+reconcileMatcherlessEvent("Notification", VOICE_HIL_CMD, "VoiceHil.hook.ts");
+
 if (CHECK_ONLY) {
   // Exit 3 = changes pending (machine-checkable stale signal); 0 = already current.
   log.push(changed ? "✓ preflight passed - settings.json would be updated" : "✓ preflight passed - settings.json already current");
@@ -175,7 +213,7 @@ if (changed) {
   log.push("✓ settings.json already current - no write");
 }
 
-// 4) Enforce mode 0600.
+// 5) Enforce mode 0600.
 const mode = statSync(SETTINGS_PATH).mode & 0o777;
 if (mode !== 0o600) {
   chmodSync(SETTINGS_PATH, 0o600);

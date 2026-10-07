@@ -29,11 +29,26 @@ v1 limits: **[../docs/converse.md](../docs/converse.md)**.
   Claude Code's MCP ancestry is unverified. Source checks in
   `../tests/converse/architecture-invariants.test.ts` do not enforce runtime ancestry or indirect
   dependency behavior.
+- **Silence modes are sox trailing-silence windows, not Silero/onnx.** `quick` 500ms /
+  `standard` 1500ms (default; today's timeout) / `thoughtful` 2500ms. Per-ask `silence_mode` on
+  `echo_ask` overlays the window. `ECHO_CONVERSE_SILENCE_MS` still overrides the numeric duration
+  when set.
+- **A stop token ends recording early and still transcribes.** The caller polls
+  `ECHO_CONVERSE_STOP_FILE` (default `~/.local/state/echo/converse/stop`). `POST /turn/:id/stop`
+  writes that file. Aborting the host tool call remains the cancel path. The coordinator never
+  opens the mic to honor a stop.
 - **Consent once per live host session, fail closed otherwise.** `runAskTool` must receive a
-  `granted` decision before it can call `askOnce`. `SessionConsent` keeps one grant or denial in
-  memory, shares concurrent prompts, and invalidates late answers at session end. Pi/omp bind it
-  to extension session lifecycle; MCP can bind only to its stdio process because the protocol has
-  no conversation lifecycle. Exact surfaces and expiry: `../docs/converse.md`.
+  `granted` decision before it can call `askOnce`. A host that already owns the microphone
+  declines earlier still, through `unavailableReason` (`ask_unavailable`), which is resolved
+  before consent so no grant is requested that the host could not honor. `SessionConsent` keeps
+  one grant or denial in memory, shares concurrent prompts, and invalidates late answers at
+  session end. Pi/omp bind it to extension session lifecycle; MCP can bind only to its stdio
+  process because the protocol has no conversation lifecycle. Exact surfaces and expiry:
+  `../docs/converse.md`.
+- **Runtime mic mute refuses the turn before booking.** `assessCore` reads `/health`
+  `mute.scope`. `tts`/`all` refuse because the question would not be heard; `mic` refuses so
+  `echo_ask` never opens the microphone. Core also 409s capture-reservation grant while mic
+  is muted. The coordinator still never captures.
 - **Speak while idle, capture after completion.** The capture state flips to `recording` only after
   the coordinator reports this request's playback completed and core grants the reservation, or
   core's own guard silences the question. Use `withCaptureHeld`, which returns to `idle` in its

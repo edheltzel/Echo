@@ -1,12 +1,20 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadPiVoiceConfig, loadProjectPersona, type PiVoiceConfig } from "./config.ts";
+import {
+  applyPersonaOverride,
+  loadPiVoiceConfig,
+  loadProjectPersona,
+  pickStartupCatchphrase,
+  shouldSuppressVoice,
+  type PiVoiceConfig,
+} from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
-import { createEchoVoiceCommand, mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
-import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
-import { applyPersonaOverride, shouldSuppressVoice } from "@echo/shared/persona.ts";
+import { mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
+import { registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
+import { applyNameToken } from "@echo/shared/greeting.ts";
+import { maybeSpeakHil, preferredHumanName, HilDedupe } from "@echo/shared/hil.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
 
@@ -167,6 +175,20 @@ export default function atlasVoicePiAdapter(
     }
   }
 
+  const hilDedupe = new HilDedupe();
+  async function speakHil(event: unknown, eventName: string, ctx: ExtensionContext): Promise<void> {
+    const cfg = resolveConfig(resolveCwd(ctx));
+    await maybeSpeakHil({
+      event,
+      eventName,
+      sessionId: resolveSessionId(ctx) ?? "ephemeral",
+      personaName: cfg.personaName,
+      preferredName: preferredHumanName(loadEchoEnvironment()),
+      dedupe: hilDedupe,
+      speak: (message) => speak(message, ctx),
+    });
+  }
+
   // Inject the 🗣️ convention into Pi's system prompt so the model emits the
   // spoken line that message_end/turn_end then voices. Gated on the same flags
   // as the speak side so disabled/suppressed contexts neither emit nor speak it.
@@ -204,7 +226,7 @@ export default function atlasVoicePiAdapter(
     const cfg = resolveConfig(resolveCwd(ctx));
     if (!cfg.greetOnSessionStart) return;
     if (!sessionStartIsUserVisible(event)) return;
-    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName), ctx);
+    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName, cfg.sayName), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {
@@ -214,6 +236,13 @@ export default function atlasVoicePiAdapter(
   pi.on("turn_end", async (event, ctx) => {
     await speakAssistantCompletion(event, ctx);
   });
+
+  const onHil = pi.on.bind(pi) as unknown as (
+    event: string,
+    handler: (event: unknown, ctx: ExtensionContext) => unknown,
+  ) => void;
+  onHil("tool_approval_requested", (event, ctx) => speakHil(event, "tool_approval_requested", ctx));
+  onHil("ui_prompt_start", (event, ctx) => speakHil(event, "ui_prompt_start", ctx));
 
   pi.on("session_shutdown", () => {
     askConsent.end();
@@ -259,8 +288,6 @@ export default function atlasVoicePiAdapter(
   // `/echo-voice [name] [voice]` - set THIS repo's persona (name + edge-tts voice)
   // in .pi/settings.json, merged so other settings are preserved. Cross-host analog
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
-  pi.registerCommand(
-    "echo-voice",
-    createEchoVoiceCommand({ configPath: [".pi", "settings.json"], merge: mergePersonaJson }),
-  );
+  registerEchoVoice(pi, { configPath: [".pi", "settings.json"], merge: mergePersonaJson });
+  registerEchoMute(pi);
 }

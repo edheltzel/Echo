@@ -8,15 +8,20 @@ The adapter is a Pi package. It listens to Pi lifecycle events and translates th
 
 ## Install locally
 
-```bash
-pi install ./adapters/pi
-```
-
-Or let the repository installer do it:
+Canonical install (workspace link + daemon + Pi package + reconcile):
 
 ```bash
-bash scripts/install.sh --adapter pi
+cli/echo install --adapter pi
 ```
+
+The equivalent underlying command is `bash scripts/install.sh --adapter pi`.
+
+### Advanced: path-only package registration
+
+`pi install ./adapters/pi` registers the adapter path in Pi's settings. It does
+**not** start the Echo daemon, link `@echo/shared`, or prune stale clone paths.
+Use it only when the daemon is already installed and you need to re-register this
+checkout, then run `bun run adapters/pi/reconcile.ts`.
 
 For oh-my-pi, the installer reconciles a symlink registration instead (omp has no
 `pi install`):
@@ -25,13 +30,32 @@ For oh-my-pi, the installer reconciles a symlink registration instead (omp has n
 bash scripts/install.sh --adapter omp   # runs adapters/omp/reconcile.ts (dedicated omp adapter)
 ```
 
+## Prove (Pi)
+
+Do not launch Pi's TUI for this check. After `cli/echo install --adapter pi`:
+
+```bash
+bash scripts/prove-pi.sh
+```
+
+That wraps the same checklist and exits non-zero on the first failure:
+
+1. `bun test tests/adapters/pi`
+2. `bun run adapters/pi/reconcile.ts --check` (exit 0 = current; 3 = stale)
+3. `curl -fsS` against Echo `GET /health` on the configured port
+
+Inside Pi, `/voice-status` shows adapter configuration and `/echo-mute` toggles the
+same machine-wide mute as `cli/echo mute`. Those commands are not part of the
+script.
+
 ## Behavior
 
-- `session_start` → speaks a greeting once for user-visible session starts. With a project
-  persona **name** set (below), the greeting **announces that name** (e.g. "Echo online and
-  standing by."); otherwise it's a neutral line from a small pool. A project's own
-  `startupCatchphrases` still win, and `ECHO_VOICE_CATCHPHRASE` pins the greeting to one line.
+- `session_start` → speaks a greeting once for user-visible session starts.
+  [The persona and voice guide](../../docs/voices.md#per-project-persona--voice) owns
+  pool, `sayName`, and custom-line semantics. `ECHO_VOICE_CATCHPHRASE` pins one line.
 - `message_end` / `turn_end` → extracts the final `🗣️` line from assistant text and speaks it once.
+- `tool_approval_requested` / `ui_prompt_start` → one needs-approval / question / attention line
+  ([#107](https://github.com/edheltzel/Echo/issues/107)). Hosts that lack the event never emit it.
 - Registers the `echo_ask` tool (speak a question, return the spoken reply as text) when the
   runtime exposes a tool API; a runtime without one keeps its voice notifications. Contract:
   [docs/converse.md](../../docs/converse.md).
@@ -66,6 +90,7 @@ editing the file:
 | `ECHO_VOICE_SUPPRESS_SUBAGENTS` | `true` | Suppress Pi subagent voices |
 | `ECHO_VOICE_SUPPRESS` | `false` | Global emergency suppression |
 | `ECHO_VOICE_PERSONA_NAME` | `Pi` | Spoken persona name in `🗣️` completions |
+| `ECHO_PREFERRED_NAME` | unset | Human name for needs-input lines; nameless when unset |
 
 ## Per-project persona & voice
 
@@ -110,6 +135,14 @@ edge-tts name, then **deep-merges** the `daidentity` block into `<project>/.pi/s
 preserving every other setting. A present-but-unparseable `settings.json` **aborts** rather
 than clobbering it. The command ships with the adapter (no installer step, unlike Claude
 Code's symlinked markdown command). Takes effect on the next Pi session in that repo.
+
+### Mute from the host
+
+```text
+/echo-mute [on|off|toggle|status|duration]
+```
+
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
 
 ## Status command
 

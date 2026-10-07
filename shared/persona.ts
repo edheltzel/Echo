@@ -1,5 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { DEFAULT_PERSONA_GREETINGS } from "./greeting.ts";
+// Host-neutral persona overlay + subagent suppression, shared by Pi and omp.
+// Host config paths and file formats stay in each adapter.
+
+import { resolvePersonaStartupGreetings } from "./greeting.ts";
 import { loadEchoConfiguration } from "./echo-env.ts";
 
 /** Project/global daidentity fields that can overlay env-based adapter config. */
@@ -7,15 +9,22 @@ export interface EchoPersonaOverride {
   personaName?: string;
   voiceId?: string;
   startupCatchphrases?: string[];
+  sayName?: boolean;
 }
 
 /** Adapter config fields `applyPersonaOverride` is allowed to replace. */
-export interface PersonaFields {
+export interface BaseVoiceConfig {
   personaName: string;
+  sayName: boolean;
   voiceId?: string;
   startupCatchphrases: string[];
 }
 
+/**
+ * Adapter env-string boolean grammar. Narrower than `parseEchoBoolean`
+ * (string | undefined only; no y/n/empty/boolean), kept distinct so the
+ * move is not a behavior change.
+ */
 export function booleanEnv(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
   const normalized = value.trim().toLowerCase();
@@ -24,84 +33,37 @@ export function booleanEnv(value: string | undefined, fallback: boolean): boolea
   return fallback;
 }
 
-/**
- * Overlay a daidentity onto env-based adapter config. Set override keys win;
- * unset keys keep the base (env / adapter default).
- */
-export function applyPersonaOverride<T extends PersonaFields>(
+/** Overlay a daidentity onto env-based adapter config. Set override keys win. */
+export function applyPersonaOverride<T extends BaseVoiceConfig>(
   base: T,
   override: EchoPersonaOverride | null,
 ): T {
   if (!override) return base;
-  const startupCatchphrases = override.startupCatchphrases
-    ?? (override.personaName ? DEFAULT_PERSONA_GREETINGS : base.startupCatchphrases);
+  const sayName = override.sayName ?? base.sayName;
+  const startupCatchphrases = resolvePersonaStartupGreetings(
+    base.startupCatchphrases,
+    override.startupCatchphrases,
+    sayName,
+  );
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
     voiceId: override.voiceId ?? base.voiceId,
+    sayName,
     startupCatchphrases,
   };
 }
 
-export function readTextFile(path: string): string | null {
-  try {
-    return existsSync(path) ? readFileSync(path, "utf8") : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Parse a JSON settings file and return its `daidentity` object, or null. */
-export function parseJsonDaidentity(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    const json = JSON.parse(raw) as Record<string, unknown>;
-    const d = json?.daidentity;
-    return d && typeof d === "object" && !Array.isArray(d) ? d as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
-function voiceOf(d: Record<string, unknown> | null): unknown {
-  if (!d) return undefined;
-  const voices = d.voices;
-  if (voices && typeof voices === "object" && !Array.isArray(voices)) {
-    const main = (voices as Record<string, unknown>).main;
-    if (main && typeof main === "object" && !Array.isArray(main)) {
-      const nested = (main as Record<string, unknown>).voiceId;
-      if (nested != null) return nested;
-    }
-  }
-  return d.voiceId;
-}
-
-/** Project daidentity wins per key over global; empty result is null. */
-export function mergeDaidentity(
-  project: Record<string, unknown> | null,
-  global: Record<string, unknown> | null,
-): EchoPersonaOverride | null {
-  if (!global && !project) return null;
-  const name = project?.name ?? global?.name;
-  const voiceId = voiceOf(project) ?? voiceOf(global);
-  const rawPhrases = project?.startupCatchphrases ?? global?.startupCatchphrases;
-  const phrases = Array.isArray(rawPhrases)
-    ? rawPhrases.filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-    : undefined;
-
-  const override: EchoPersonaOverride = {};
-  if (typeof name === "string" && name.trim()) override.personaName = name.trim();
-  if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-  if (phrases && phrases.length > 0) override.startupCatchphrases = phrases;
-  return Object.keys(override).length > 0 ? override : null;
-}
-
-/** Headless / json / print runs stay silent. Used by Pi and omp. */
+/** Subset of a host ExtensionContext needed to decide suppression. */
 export interface RunContext {
   mode?: string;
   hasUI?: boolean;
 }
 
+/**
+ * Headless / json / print runs stay silent so child agents do not flood audio.
+ * Hosts that spawn children without UI set hasUI=false; tui and rpc keep UI.
+ */
 export function shouldSuppressVoice(
   ctx: RunContext = {},
   env: Record<string, string | undefined> = loadEchoConfiguration(),

@@ -16,15 +16,20 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "./poll";
+import { edgeRateFromSpeed } from "../../core/edge-rate";
+import { applySpeakModeSpeed } from "../../shared/speak-mode";
+import { clearSpeakHistory, spokenLineCount } from "../../core/speak-history";
 
 const PLAY_MS = 120;
 
 const realSpawn = realChildProcess.spawn;
 let spawnedCommands: string[] = [];
+let spawnedArgv: string[][] = [];
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
-function stubSpawn(command: string): any {
+function stubSpawn(command: string, args: unknown = []): any {
   spawnedCommands.push(String(command));
+  spawnedArgv.push([String(command), ...(Array.isArray(args) ? args.map(String) : [])]);
   const child: any = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -54,9 +59,10 @@ const MUTE_PATH = join(TMP, "mute.json");
 process.env.ECHO_AUDIO_LIFECYCLE_LOG = LOG;
 process.env.ECHO_RESOLUTION_LOG ??= join(TMP, "resolution.jsonl");
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
+process.env.ECHO_TTS_CACHE_DIR ??= join(TMP, "tts-cache");
 process.env.ECHO_MUTE_STATE_PATH = MUTE_PATH;
 
-const { server, voicesConfig } = await import("../../core/server.ts");
+const { server, voicesConfig, drainNotifications } = await import("../../core/server.ts");
 const PORT = (server as any).port;
 
 let savedEnabled: Record<string, boolean>;
@@ -72,6 +78,7 @@ beforeEach(() => {
   }
   (voicesConfig.providers as any).edgetts.enabled = true;
   spawnedCommands = [];
+  spawnedArgv = [];
   if (existsSync(LOG)) rmSync(LOG);
   if (existsSync(MUTE_PATH)) rmSync(MUTE_PATH);
   HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `notify-queue-test-${bucket++}` };
@@ -94,6 +101,14 @@ afterAll(() => {
 function readRows(): any[] {
   if (!existsSync(LOG)) return [];
   return readFileSync(LOG, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+}
+
+function edgeRateFromSpawns(): string | undefined {
+  for (const argv of spawnedArgv) {
+    const i = argv.indexOf("--rate");
+    if (i >= 0) return argv[i + 1];
+  }
+  return undefined;
 }
 
 async function waitForRows(count: number, timeoutMs = 5000): Promise<any[]> {
@@ -298,5 +313,161 @@ describe("/notify acks on receipt (R2)", () => {
     const health = await res.json();
     expect(typeof health.play_queue.depth).toBe("number");
     expect(health.play_queue.depth).toBeGreaterThanOrEqual(0);
+  });
+
+  test("invalid speak_mode fails 4xx before enqueue", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "bad mode line",
+        voice_enabled: true,
+        speak_mode: "converse",
+        session_id: "sess-speak-bad",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.status).toBe("error");
+    expect(body.message).toContain("Invalid speak_mode");
+    await Bun.sleep(150);
+    expect(readRows().filter((r) => r.session_id === "sess-speak-bad")).toEqual([]);
+  });
+
+  test("think is banner-only even when voice_enabled is true", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "silent insight line",
+        voice_enabled: true,
+        speak_mode: "think",
+        session_id: "sess-think",
+      }),
+    });
+    expect(res.status).toBe(202);
+    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await Bun.sleep(150);
+    expect(readRows().filter((r) => r.session_id === "sess-think")).toEqual([]);
+    expect(spawnedArgv.some((argv) => argv.includes("--rate"))).toBe(false);
+  });
+
+  test("omitted speak_mode keeps identity rate; announce multiplies it", async () => {
+    const identitySpeed = voicesConfig.identity.edgetts.speed as number;
+    const omitted = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "omitted density line unique",
+        voice_enabled: true,
+        session_id: "sess-density-omit",
+      }),
+    });
+    expect(omitted.status).toBe(202);
+    await waitForRows(1);
+    expect(edgeRateFromSpawns()).toBe(edgeRateFromSpeed(identitySpeed));
+
+    spawnedArgv = [];
+    spawnedCommands = [];
+    if (existsSync(LOG)) rmSync(LOG);
+    HEADERS = { "Content-Type": "application/json", "x-forwarded-for": `notify-queue-test-${bucket++}` };
+
+    const announced = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "announce density line unique",
+        voice_enabled: true,
+        speak_mode: "announce",
+        session_id: "sess-density-announce",
+      }),
+    });
+    expect(announced.status).toBe(202);
+    await waitForRows(1);
+    expect(edgeRateFromSpawns()).toBe(edgeRateFromSpeed(applySpeakModeSpeed(identitySpeed, "announce")));
+  });
+});
+
+describe("FM-449 - replay last N spoken lines", () => {
+  beforeEach(async () => {
+    await drainNotifications();
+    clearSpeakHistory();
+  });
+
+  test("replays the last N spoken lines oldest-first without a banner or re-record", async () => {
+    const first = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "replay alpha line", voice_enabled: true, session_id: "sess-replay-a" }),
+    });
+    expect(first.status).toBe(202);
+    const second = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "replay beta line", voice_enabled: true, session_id: "sess-replay-b" }),
+    });
+    expect(second.status).toBe(202);
+    await waitForRows(2);
+    expect(spokenLineCount()).toBe(2);
+
+    spawnedCommands = [];
+    const replay = await fetch(`http://localhost:${PORT}/replay`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ n: 10 }),
+    });
+    expect(replay.status).toBe(202);
+    const body = await replay.json();
+    expect(body.status).toBe("accepted");
+    expect(body.n).toBe(10);
+    expect(body.replayed).toBe(2);
+    expect(body.available).toBe(2);
+    expect(body.request_ids).toHaveLength(2);
+
+    const rows = await waitForRows(4);
+    const replayRows = rows.filter((r) => body.request_ids.includes(r.request_id));
+    expect(replayRows).toHaveLength(2);
+    expect(replayRows.every((r) => r.disposition === "played")).toBe(true);
+    expect(replayRows.every((r) => r.session_id === null)).toBe(true);
+    expect(spawnedCommands).not.toContain("/usr/bin/osascript");
+    // Replays do not re-enter the ring.
+    expect(spokenLineCount()).toBe(2);
+  });
+
+  test("muted lines are not held for later replay", async () => {
+    writeFileSync(MUTE_PATH, JSON.stringify({ muted: true, muted_until: null, scope: "all" }));
+    const muted = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "muted not replayable", voice_enabled: true, session_id: "sess-replay-mute" }),
+    });
+    expect(muted.status).toBe(202);
+    const rows = await waitForRows(1);
+    expect(rows[0].muted).toBe(true);
+    expect(spokenLineCount()).toBe(0);
+
+    rmSync(MUTE_PATH);
+    const replay = await fetch(`http://localhost:${PORT}/replay`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ n: 1 }),
+    });
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).replayed).toBe(0);
+  });
+
+  test("voice-disabled and think lines are not stored", async () => {
+    await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "silent banner", voice_enabled: false, session_id: "sess-replay-off" }),
+    });
+    await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "think skip", voice_enabled: true, speak_mode: "think", session_id: "sess-replay-think" }),
+    });
+    await Bun.sleep(150);
+    expect(spokenLineCount()).toBe(0);
   });
 });

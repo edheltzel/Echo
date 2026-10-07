@@ -1,40 +1,35 @@
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  defaultStartupGreetings,
+  personaGreetingFields,
+  pickStartupCatchphrase,
+} from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 import {
+  applyPersonaOverride,
   booleanEnv,
-  mergeDaidentity,
-  parseJsonDaidentity,
-  readTextFile,
+  shouldSuppressVoice,
+  type BaseVoiceConfig,
   type EchoPersonaOverride,
+  type RunContext,
 } from "@echo/shared/persona.ts";
 
-export interface PiVoiceConfig {
+export type { EchoPersonaOverride, RunContext };
+export { applyPersonaOverride, pickStartupCatchphrase, shouldSuppressVoice };
+
+export interface PiVoiceConfig extends BaseVoiceConfig {
   endpoint: string;
   title: string;
-  startupCatchphrases: string[];
-  personaName: string;
-  voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
   suppressInSubagents: boolean;
 }
 
-// Default greeting pool, mirroring the Claude Code adapter's startupCatchphrases
-// mechanism (VoiceGreeting.hook.ts): short neutral session-ready lines, random
-// pick per session_start. No hardcoded persona/DA name - Pi and omp share this
-// adapter (neutral-default-identity rule). A catchphrase env override replaces
-// the pool with that single line, pinning the greeting.
-export const DEFAULT_STARTUP_CATCHPHRASES: string[] = [
-  "Session ready.",
-  "Ready when you are.",
-  "Online and standing by.",
-  "Let's get to work.",
-  "Up and listening.",
-];
-
+// Default greeting pool lives in @echo/shared/greeting.ts (nameless unless sayName).
 
 export function loadPiVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): PiVoiceConfig {
   // Canonical config.json values are read first; legacy ATLAS_VOICE_* process
@@ -42,11 +37,13 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = load
   // endpoint is resolved by @echo/shared, so
   // ECHO_DAEMON_URL retargets it.
   const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
+  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "Pi Notification",
-    startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : DEFAULT_STARTUP_CATCHPHRASES,
+    startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : defaultStartupGreetings(sayName),
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "Pi",
+    sayName,
     voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? "pi",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED ?? env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
@@ -67,13 +64,58 @@ export function loadPiVoiceConfig(env: Record<string, string | undefined> = load
 //                     "startupCatchphrases": ["Echo online."] } }
 // Unset keys fall through to global settings, then to the env-based config.
 
-/** Project `.pi/settings.json` over `~/.pi/agent/settings.json`, then env. */
+function defaultReadFile(path: string): string | null {
+  try {
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Parse a settings.json file and return its `daidentity` block (or null). */
+function readDaidentity(
+  path: string,
+  readFile: (path: string) => string | null,
+): Record<string, any> | null {
+  const raw = readFile(path);
+  if (!raw) return null;
+  try {
+    const json = JSON.parse(raw) as Record<string, any>;
+    const d = json?.daidentity;
+    return d && typeof d === "object" ? (d as Record<string, any>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Host-specific: Pi's JSON `.pi/settings.json` paths, not a shared helper.
+ * Project `<cwd>/.pi/settings.json` over global `~/.pi/agent/settings.json`,
+ * project wins per key (the same daidentity shape the Claude Code adapter reads).
+ * Returns null when neither file contributes a persona field.
+ */
 export function loadProjectPersona(
   cwd: string | undefined,
-  readFile: (path: string) => string | null = readTextFile,
+  readFile: (path: string) => string | null = defaultReadFile,
   home: string = homedir(),
 ): EchoPersonaOverride | null {
-  const global = parseJsonDaidentity(readFile(join(home, ".pi", "agent", "settings.json")));
-  const project = cwd ? parseJsonDaidentity(readFile(join(cwd, ".pi", "settings.json"))) : null;
-  return mergeDaidentity(project, global);
+  const global = readDaidentity(join(home, ".pi", "agent", "settings.json"), readFile);
+  const project = cwd ? readDaidentity(join(cwd, ".pi", "settings.json"), readFile) : null;
+  if (!global && !project) return null;
+
+  // Per-key resolution: project wins, else global. Voice supports the nested
+  // `voices.main.voiceId` shape (and a flat `voiceId`), matching Claude Code.
+  const voiceOf = (d: Record<string, any> | null): unknown =>
+    d?.voices?.main?.voiceId ?? d?.voiceId;
+  const name = project?.name ?? global?.name;
+  const voiceId = voiceOf(project) ?? voiceOf(global);
+  const greeting = personaGreetingFields(project, global);
+
+  const override: EchoPersonaOverride = {};
+  if (typeof name === "string" && name.trim()) override.personaName = name.trim();
+  if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
+  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
+  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
+
+  return Object.keys(override).length > 0 ? override : null;
 }

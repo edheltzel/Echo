@@ -1,39 +1,70 @@
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PERSONA_GREETINGS } from "@echo/shared/greeting.ts";
+import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
-import {
-  applyPersonaOverride,
-  booleanEnv,
-  mergeDaidentity,
-  parseJsonDaidentity,
-  readTextFile,
-  type EchoPersonaOverride,
-} from "@echo/shared/persona.ts";
+import { applyPersonaOverride, booleanEnv, type EchoPersonaOverride } from "@echo/shared/persona.ts";
 
 export interface CodexVoiceConfig {
   endpoint: string;
   title: string;
   startupCatchphrases: string[];
   personaName: string;
+  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
 }
 
+function defaultReadFile(path: string): string | null {
+  try {
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+
+function readDaidentity(
+  path: string,
+  readFile: (path: string) => string | null,
+): Record<string, any> | null {
+  const raw = readFile(path);
+  if (!raw) return null;
+  try {
+    const json = JSON.parse(raw) as Record<string, any>;
+    const d = json?.daidentity;
+    return d && typeof d === "object" ? (d as Record<string, any>) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Project `<cwd>/.codex/settings.json` over global `~/.codex/settings.json`.
- * Not `config.toml`. Project wins per key, then env / adapter defaults.
+ * Same daidentity shape as Claude Code / Pi / Grok.
  */
 export function loadProjectPersona(
   cwd: string | undefined,
-  readFile: (path: string) => string | null = readTextFile,
+  readFile: (path: string) => string | null = defaultReadFile,
   home: string = homedir(),
 ): EchoPersonaOverride | null {
-  const global = parseJsonDaidentity(readFile(join(home, ".codex", "settings.json")));
-  const project = cwd ? parseJsonDaidentity(readFile(join(cwd, ".codex", "settings.json"))) : null;
-  return mergeDaidentity(project, global);
+  const global = readDaidentity(join(home, ".codex", "settings.json"), readFile);
+  const project = cwd ? readDaidentity(join(cwd, ".codex", "settings.json"), readFile) : null;
+  if (!global && !project) return null;
+
+  const voiceOf = (d: Record<string, any> | null): unknown =>
+    d?.voices?.main?.voiceId ?? d?.voiceId;
+  const name = project?.name ?? global?.name;
+  const voiceId = voiceOf(project) ?? voiceOf(global);
+  const greeting = personaGreetingFields(project, global);
+
+  const override: EchoPersonaOverride = {};
+  if (typeof name === "string" && name.trim()) override.personaName = name.trim();
+  if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
+  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
+  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
+  return Object.keys(override).length > 0 ? override : null;
 }
 
 export function loadCodexVoiceConfig(
@@ -41,11 +72,13 @@ export function loadCodexVoiceConfig(
   cwd: string | undefined = process.cwd(),
 ): CodexVoiceConfig {
   const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
+  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   const base: CodexVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Codex Notification",
-    startupCatchphrases: catchphrase === undefined ? DEFAULT_PERSONA_GREETINGS : [catchphrase],
+    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Codex",
+    sayName,
     voiceId: env.ECHO_VOICE_ID ?? "codex",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),

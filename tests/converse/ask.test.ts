@@ -121,6 +121,25 @@ describe("one-shot ask", () => {
     expect(sawState).toEqual(["recording"]);
   });
 
+  test("a per-ask silence_mode overlays the capture window", async () => {
+    const { config } = startCoordinator();
+    let seenMs: number | undefined;
+    let seenMode: string | undefined;
+    const engine: CaptureEngine = async (cfg) => {
+      seenMs = cfg.silenceMs;
+      seenMode = cfg.silenceMode;
+      return { text: "ok", engine: "yap", capture_ms: 1, timed_out: false };
+    };
+
+    await askOnce(
+      { question: "Ready?", source: "test", silenceMode: "quick" },
+      { config, captureEngine: engine, fetchImpl: (url, init) => fetch(url, init) },
+    );
+
+    expect(seenMode).toBe("quick");
+    expect(seenMs).toBe(500);
+  });
+
   test("does not open capture while core still reports the question playing", async () => {
     let reservationId = "";
     let completionRead!: () => void;

@@ -142,6 +142,44 @@ describe("Jcode hook registration reconcile", () => {
     }
   });
 
+  test("rewrites a live Echo clone hook onto this install tree", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-jcode-other-clone-"));
+    try {
+      const otherHook = join(root, "Atlas", "Echo", "adapters", "jcode", "hook.ts");
+      mkdirSync(dirname(otherHook), { recursive: true });
+      writeFileSync(join(dirname(otherHook), "package.json"), JSON.stringify({ name: "@echo/jcode-adapter" }));
+      writeFileSync(otherHook, "#!/usr/bin/env bun\n");
+      const path = join(root, "config.toml");
+      writeFileSync(path, `[hooks]\nturn_end = ${JSON.stringify(otherHook)}\nsession_start = ${JSON.stringify(otherHook)}\n`);
+
+      const check = await run(path, ["--check"]);
+      expect(check.exitCode).toBe(3);
+      expect(readFileSync(path, "utf8")).toContain(otherHook);
+
+      expect((await run(path)).exitCode).toBe(0);
+      const parsed = Bun.TOML.parse(readFileSync(path, "utf8")) as any;
+      expect(parsed.hooks.turn_end).toBe(HOOK_COMMAND);
+      expect(parsed.hooks.session_start).toBe(HOOK_COMMAND);
+      expect(readFileSync(path, "utf8")).not.toContain(otherHook);
+      expect((await run(path, ["--check"])).exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rewrites a dead Echo-spelled hook left by a renamed clone", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-jcode-dead-clone-"));
+    try {
+      const dead = join(root, "tmp-fm337-echo", "adapters", "jcode", "hook.ts");
+      const path = join(root, "config.toml");
+      writeFileSync(path, `[hooks]\nturn_end = ${JSON.stringify(dead)}\nsession_start = ""\n`);
+      expect((await run(path)).exitCode).toBe(0);
+      expect((Bun.TOML.parse(readFileSync(path, "utf8")) as any).hooks.turn_end).toBe(HOOK_COMMAND);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("check mode is read-only and reports pending changes", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-jcode-check-"));
     try {

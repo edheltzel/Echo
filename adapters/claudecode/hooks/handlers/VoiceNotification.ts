@@ -14,12 +14,14 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody } from '../lib/identity';
+import { findStartupCatchphraseMatch } from '../lib/greeting';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
 import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoints.ts';
 import { loadEchoConfiguration, type EchoEnvironment } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
+import { detectSpeakMode, type SpeakMode } from '@echo/shared/speak-mode.ts';
 import { createHookNativeVisualContext } from '../lib/native-terminal';
 
 // ElevenLabs voice notification payload
@@ -38,6 +40,7 @@ interface ElevenLabsNotificationPayload {
   volume?: number;
   session_id?: string;
   source?: string;
+  speak_mode?: SpeakMode;
 }
 
 // 'aborted' = the 12s client AbortController fired after the POST was already
@@ -113,25 +116,6 @@ export function logVoiceEvent(event: VoiceEvent): void {
   } catch {
     // Silent fail
   }
-}
-
-function normalizeSpokenText(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-// Resolve the startup catchphrase pool from a (layered) identity, applying the
-// `{name}` substitution so the dedup compares against exactly what VoiceGreeting
-// spoke. Project persona → project's phrases; otherwise the global pool.
-function resolvedCatchphrases(identity: Identity): string[] {
-  const daName = identity.displayName;
-  const phrases = [
-    identity.startupCatchphrase,
-    ...(identity.startupCatchphrases ?? []),
-  ];
-
-  return phrases
-    .filter((phrase): phrase is string => typeof phrase === 'string' && phrase.trim().length > 0)
-    .map((phrase) => phrase.replace(/\{name\}/gi, daName));
 }
 
 async function sendNotification(
@@ -327,6 +311,7 @@ export function buildVoicePayload(
     voice_id: voiceId,
     session_id: sessionId,
     source: 'claudecode',
+    speak_mode: detectSpeakMode(message),
     voice_settings: voiceSettings ? {
       stability: voiceSettings.stability ?? 0.5,
       similarity_boost: voiceSettings.similarity_boost ?? 0.75,
@@ -368,14 +353,12 @@ export async function handleVoice(
   // Skip startup catchphrase - already spoken by VoiceGreeting.hook.ts at SessionStart.
   // Without this, the AI's first 🗣️ line echoing the greeting causes a double-fire.
   // Uses the same layered identity VoiceGreeting resolves, so a project persona's
-  // catchphrases are deduped in that repo (not the global pool).
-  const normalized = normalizeSpokenText(voiceCompletion);
-  for (const catchphrase of resolvedCatchphrases(identity)) {
-    const catchNormalized = normalizeSpokenText(catchphrase);
-    if (catchNormalized && (normalized === catchNormalized || normalized.includes(catchNormalized))) {
-      console.error(`[Voice] Skipping - matches startup catchphrase: "${catchphrase}"`);
-      return;
-    }
+  // catchphrases are deduped in that repo (not the global pool). Only normalized
+  // full-line equality counts; ordinary speech may contain generic greeting fragments.
+  const matchingCatchphrase = findStartupCatchphraseMatch(voiceCompletion, identity);
+  if (matchingCatchphrase) {
+    console.error(`[Voice] Skipping - matches startup catchphrase: "${matchingCatchphrase}"`);
+    return;
   }
 
   // Resolve the speaker for this turn: an active main-session persona speaks in
