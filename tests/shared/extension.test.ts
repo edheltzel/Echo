@@ -87,6 +87,7 @@ describe("harness catalog", () => {
       if (harness.kind === "extension") {
         const source = read(harness.entry!);
         expect(source).toContain("registerEchoMute");
+        if (harness.features.includes("mode")) expect(source).toContain("registerEchoMode");
         expect(source).toContain("registerEchoVoice");
         expect(source).toContain("registerEchoAskTool");
         expect(source).toContain("sendNotification");

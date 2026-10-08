@@ -73,6 +73,11 @@ describe("install stages a clone-independent payload", () => {
       expect(statSync(join(verDir, "core")).isDirectory()).toBe(true);
       expect(existsSync(join(verDir, "core", "server.ts"))).toBe(true);
       expect(existsSync(join(verDir, "core", "voices.json"))).toBe(true);
+      // Bundled notification sounds ship with the payload, or sounds-only mode silently
+      // falls back to macOS system sounds on every install.
+      for (const slot of ["request", "done", "generic"]) {
+        expect(existsSync(join(verDir, "core", "sounds", `${slot}.wav`))).toBe(true);
+      }
       // core/server.ts imports ../shared/echo-env - the sibling layout must be preserved.
       expect(existsSync(join(verDir, "shared", "echo-env.ts"))).toBe(true);
 
