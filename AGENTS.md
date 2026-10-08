@@ -76,7 +76,7 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 `com.echo`). Do not resurrect the old services.
 
 ## Development workflow
-This checkout is a GitButler workspace (`but`). Fetch target is `origin/master` (`but pull`). That does **not** change PR policy: still do not push `master`; work on `dev` and open PRs from `dev` to `master`. Use `but` for git writes.
+This checkout is a GitButler workspace (`but`). Fetch target is `origin/dev` (`but pull`), so feature branches stack on `dev` and their PRs go into `dev`; `dev` → `master` is the promotion PR. Never push `master`. Use `but` for git writes.
 
 
 ```bash
