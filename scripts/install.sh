@@ -39,6 +39,7 @@ OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 # adapters/grok/reconcile.ts honors GROK_HOME / ECHO_GROK_HOOKS_DIR the same way.
 GROK_HOOKS="${ECHO_GROK_HOOKS_DIR:-${GROK_HOME:-$HOME/.grok}/hooks}"
 OPENCODE_COMMANDS="${ECHO_OPENCODE_COMMANDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/commands}"
+OPENCODE_PLUGINS="${ECHO_OPENCODE_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins}"
 ADAPTER="none"
 CHECK_ONLY=0
 # Adapter ids are owned by shared/extension.ts (HARNESS_IDS). Adding a harness
@@ -281,7 +282,7 @@ codex_installed() {
 }
 
 opencode_installed() {
-  [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
+  [ -L "$OPENCODE_PLUGINS/echo-voice.ts" ] || [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
 }
 
 # Materialize the workspace links every adapter depends on. Each adapter package
@@ -390,7 +391,7 @@ preflight() {
         echo "OpenCode CLI is required for --adapter opencode" >&2
         exit 1
       fi
-      echo "> Preflighting OpenCode mute-command registration"
+      echo "> Preflighting OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
@@ -560,7 +561,7 @@ install_adapter() {
       bun run "$REPO_ROOT/adapters/codex/reconcile.ts"
       ;;
     opencode)
-      echo "> Reconciling OpenCode mute-command registration"
+      echo "> Reconciling OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts"
       ;;
   esac
@@ -613,7 +614,7 @@ refresh_installed_adapters() {
       || echo "WARN: Codex registration refresh failed - run adapters/codex/reconcile.ts manually" >&2
   fi
   if [ "$ADAPTER" != "opencode" ] && opencode_installed; then
-    echo "> Refreshing OpenCode mute-command registration"
+    echo "> Refreshing OpenCode plugin + mute-command registration"
     bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" \
       || echo "WARN: OpenCode registration refresh failed - run adapters/opencode/reconcile.ts manually" >&2
   fi
@@ -851,7 +852,7 @@ check_installation() {
     if [ "$ADAPTER" = "opencode" ] || opencode_installed; then
       rc=0
       out="$(bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check)" || rc=$?
-      apply_adapter_check "Mute command" "$rc" "$out" "OpenCode mute-command check failed"
+      apply_adapter_check "Adapter registration" "$rc" "$out" "OpenCode registration check failed"
     fi
   fi
 

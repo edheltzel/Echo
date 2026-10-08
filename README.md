@@ -120,7 +120,7 @@ cli/echo install --adapter omp          # oh-my-pi
 cli/echo install --adapter jcode
 cli/echo install --adapter grok
 cli/echo install --adapter codex
-cli/echo install --adapter opencode    # mute only
+cli/echo install --adapter opencode
 cli/echo install --adapter mcp        # optional one-shot voice ask for Claude Code
 ```
 

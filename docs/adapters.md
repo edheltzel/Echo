@@ -97,9 +97,8 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
 | `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoVoice`, `registerEchoAskTool`. |
-| `hooks` | Claude Code, Jcode, Grok, Codex | Out-of-process lifecycle interceptors plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
-| `commands-only` | OpenCode | Mute-only owned symlink. |
 
 Feature register hooks (reuse these; do not add a second factory):
 
@@ -229,10 +228,13 @@ Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
 `grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
 surface wins.
 
-## OpenCode adapter - mute only
+## OpenCode adapter - plugin (#17, #129)
 
-`adapters/opencode/` registers `/echo-mute` (`~/.config/opencode/commands/echo-mute.md` →
-bash `cli/echo mute`). No lifecycle voice hooks.
+`adapters/opencode/plugin.ts` is loaded from an owned `~/.config/opencode/plugins/echo-voice.ts`
+symlink; `/echo-mute` is an owned `commands/echo-mute.md` symlink. It speaks on `session.idle`,
+greets on `session.created` only when `ECHO_VOICE_GREET_ON_START` is set, and stays silent for
+subagents (`parentID`) and for sessions the v1 SDK client cannot read. Persona: `daidentity`
+in `opencode.jsonc` / `opencode.json`. Detail: [`adapters/opencode/README.md`](../adapters/opencode/README.md).
 
 ## Live-session voice suppression - omp and Codex
 
