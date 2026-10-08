@@ -105,7 +105,7 @@ of both creating and verifying the links, so `bun test` never relinks the checko
 **Never test against the running daemon.** It serves the operator's real notifications, so
 restarting it, retargeting it, or speaking through it is a live-system incident.
 `tests/e2e-adapters.sh` starts its own instance on its own port with every state path
-(mute, capture, audio cache, TTS cache, lifecycle log, `VOICES_PATH`) redirected to scratch,
+(mute, output mode, capture, audio cache, TTS cache, lifecycle log, resolution log, `VOICES_PATH`) redirected to scratch,
 refuses to attach to a port it does not own, and prints an isolation proof before sending
 anything. Spoken test lines begin `Echo Test engaged. Beep, boop, bop.` so anything audible
 is unmistakably a test. `bun test` preloads `tests/preload.ts` (via `bunfig.toml`), which
