@@ -403,5 +403,12 @@ pointing at dead paths.
 ## Legacy services
 
 The installer migrates the old `com.pai.voice-server` and `com.atlas.voicesystem`
-LaunchAgents onto `com.echo` (it unloads them and quarantines their plists). Do not
-reload them; if `status.sh` warns that one is still loaded, rerun the installer.
+LaunchAgents onto `com.echo` (it unloads them and quarantines their plists as
+`~/Library/LaunchAgents/<label>.plist.migrated-<timestamp>`), then prints a summary of what it
+migrated, the new log path, and each quarantined plist. Do not reload them; if `status.sh`
+warns that one is still loaded, rerun the installer.
+
+The legacy services are retired, not a rollback target: the quarantined plists are kept for
+reference only and must never be reloaded. To back out of Echo itself, run `cli/echo uninstall`
+(see [Uninstall](#uninstall)). A failed install or update already restores the previous Echo
+payload on its own when the new one does not pass its health check.

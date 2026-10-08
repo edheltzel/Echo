@@ -29,6 +29,9 @@ PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 # Payload copy that was live before this run; `current` is restored to it when the
 # reload cannot prove the newly staged one healthy. Empty on a first install.
 PAYLOAD_ROLLBACK=""
+# Legacy labels this run migrated, and where their plists were kept.
+MIGRATED_LEGACY=()
+MIGRATED_BACKUPS=()
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 CLAUDE_COMMANDS_DIR="${ECHO_CLAUDE_COMMANDS_DIR:-$HOME/.claude/commands}"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
@@ -468,6 +471,7 @@ migrate_legacy_service() {
   for legacy in "${LEGACY_SERVICE_NAMES[@]}"; do
     local legacy_plist="$HOME/Library/LaunchAgents/${legacy}.plist"
 
+    local migrated=0
     if is_loaded "$legacy"; then
       echo "> Unloading legacy voice service ($legacy)"
       launchctl unload "$legacy_plist" 2>/dev/null || true
@@ -476,6 +480,7 @@ migrate_legacy_service() {
         echo "Legacy service is still loaded after unload: $legacy" >&2
         exit 1
       fi
+      migrated=1
     fi
 
     if [ -f "$legacy_plist" ]; then
@@ -484,7 +489,10 @@ migrate_legacy_service() {
       backup="${legacy_plist}.migrated-${stamp}"
       echo "> Quarantining legacy LaunchAgent plist: $backup"
       mv "$legacy_plist" "$backup"
+      MIGRATED_BACKUPS+=("$backup")
+      migrated=1
     fi
+    if [ "$migrated" -eq 1 ]; then MIGRATED_LEGACY+=("$legacy"); fi
   done
 }
 
@@ -543,6 +551,16 @@ install_adapter() {
       # survive beside the fresh one (#77).
       echo "> Reconciling Pi adapter registration"
       bun run "$REPO_ROOT/adapters/pi/reconcile.ts"
+      # pi install exits 0 even when Pi cannot load the path; confirm Pi lists it (#12).
+      local pi_entry pi_listed
+      pi_entry="$(cd "$REPO_ROOT/adapters/pi" && pwd -P)"
+      # Captured, not piped: under pipefail an early-exiting grep -q would SIGPIPE the producer.
+      pi_listed="$(pi list 2>/dev/null || true)"
+      if ! grep -Fxq -- "$pi_entry" <<<"$(sed 's/^[[:space:]]*//' <<<"$pi_listed")"; then
+        echo "Pi does not list the Echo adapter ($pi_entry) after install. Check: pi list" >&2
+        exit 1
+      fi
+      echo "✓ Pi lists the Echo adapter: $pi_entry"
       ;;
     omp)
       echo "> Reconciling oh-my-pi adapter registration"
@@ -862,6 +880,33 @@ check_installation() {
   fi
 }
 
+# The daemon runs from a copied payload, but adapter registrations point at
+# $REPO_ROOT. From a linked worktree they break the moment it is removed (#12).
+warn_if_linked_worktree() {
+  local dirs git_dir common_dir
+  dirs="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-dir --git-common-dir 2>/dev/null)" || return 0
+  { read -r git_dir; read -r common_dir; } <<<"$dirs"
+  [ "$git_dir" = "$common_dir" ] && return 0
+  echo "WARN: $REPO_ROOT is a linked git worktree. Adapter registrations will point into it and" >&2
+  echo "      break when it is removed. Install from the main checkout: $(dirname "$common_dir")" >&2
+}
+
+# Closing summary after a legacy service was migrated (#12). Legacy services are
+# retired (AGENTS.md); the way out is uninstalling com.echo, never reloading them.
+print_migration_summary() {
+  [ "${#MIGRATED_LEGACY[@]}" -eq 0 ] && return 0
+  echo "Migrated ${MIGRATED_LEGACY[*]} onto $SERVICE_NAME"
+  echo "  service: $SERVICE_NAME ($PLIST_PATH)"
+  echo "  log:     $LOG_PATH"
+  local backup
+  for backup in ${MIGRATED_BACKUPS[@]+"${MIGRATED_BACKUPS[@]}"}; do
+    echo "  kept:    $backup"
+  done
+  echo "  kept for reference only; never reload a legacy service. To stop Echo: cli/echo uninstall"
+}
+
+warn_if_linked_worktree
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! command -v bun >/dev/null 2>&1; then
     echo "Bun is required. Install it from https://bun.sh/" >&2
@@ -882,3 +927,4 @@ fi
 discard_rollback_copy
 install_adapter
 refresh_installed_adapters
+print_migration_summary
