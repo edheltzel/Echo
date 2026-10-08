@@ -313,6 +313,17 @@
         "voice": "en-GB-ThomasNeural",
         "speed": 0.98
       }
+    },
+    "opencode": {
+      "description": "opencode host voice",
+      "kokoro": {
+        "voice": "af_nova",
+        "speed": 1.0
+      },
+      "edgetts": {
+        "voice": "en-US-AvaNeural",
+        "speed": 1.0
+      }
     }
   }
 }

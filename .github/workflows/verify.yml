@@ -54,9 +54,9 @@ jobs:
       - name: Build Codex adapter
         id: codex
         run: bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
-      - name: Build OpenCode mute adapter
+      - name: Build OpenCode adapter
         id: opencode
-        run: bun build adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
+        run: bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
       - name: Fail closed unless every check ran
         if: always() && !cancelled()
         env:

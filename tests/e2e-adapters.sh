@@ -162,7 +162,40 @@ ECHO_DAEMON_URL="http://localhost:${PORT}" \
 echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the voice line"
 
 # ---------------------------------------------------------------------------
-# 5. Optional audible pass - only after isolation is proven above.
+# 5. OpenCode plugin: the real entry, driven by a client shaped like the v1 SDK
+#    OpenCode passes (`{ path: { id } }` in, `{ data }` out). A root turn
+#    reaches the daemon once; a repeat and a subagent stay quiet.
+# ---------------------------------------------------------------------------
+HOME="$SCRATCH" ECHO_VOICE_ENABLED=false bun -e '
+  const { EchoVoice } = await import(`${process.env.ROOT}/adapters/opencode/plugin.ts`);
+  const sessions = { ses_root: {}, ses_child: { parentID: "ses_root" } };
+  const client = { session: {
+    get: async ({ path }) => ({ data: { id: path.id, ...sessions[path.id] } }),
+    messages: async () => ({ data: [{ info: { role: "assistant" },
+      parts: [{ type: "text", text: "🗣️ OpenCode: Echo Test engaged. Beep, boop, bop. OpenCode path silent." }] }] }),
+  } };
+  const notified = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const res = await realFetch(url, init);
+    if (String(url).endsWith("/notify")) notified.push({ status: res.status, body: JSON.parse(init.body) });
+    return res;
+  };
+  const hooks = await EchoVoice({ client, directory: process.env.HOME });
+  for (const id of ["ses_root", "ses_root", "ses_child"]) {
+    await hooks.event({ event: { type: "session.idle", properties: { sessionID: id } } });
+  }
+  if (notified.length !== 1) throw new Error(`expected exactly 1 notify, got ${notified.length}`);
+  const [{ status, body }] = notified;
+  if (status !== 202) throw new Error(`expected 202, got ${status}`);
+  if (body.source !== "opencode" || body.session_id !== "ses_root" || body.voice_enabled !== false) {
+    throw new Error(`bad wire body ${JSON.stringify(body)}`);
+  }
+  console.log("  opencode plugin -> 202 once (silent); repeat deduped, subagent suppressed");
+' || fail "OpenCode plugin did not notify the isolated daemon exactly once"
+
+# ---------------------------------------------------------------------------
+# 6. Optional audible pass - only after isolation is proven above.
 # ---------------------------------------------------------------------------
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""
