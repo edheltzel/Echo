@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -7,13 +7,14 @@ const RECONCILE = resolve("adapters/opencode/reconcile.ts");
 const MUTE_SOURCE = resolve("adapters/opencode/commands/echo-mute.md");
 const PLUGIN_SOURCE = resolve("adapters/opencode/plugin.ts");
 
-// Both OpenCode dirs live under `root`, never the operator's ~/.config/opencode.
+// Every OpenCode path lives under `root`, never the operator's ~/.config/opencode.
 function runReconcile(root: string, check = false) {
   const result = Bun.spawnSync([process.execPath, RECONCILE, ...(check ? ["--check"] : [])], {
     env: {
       ...process.env,
       ECHO_OPENCODE_COMMANDS_DIR: join(root, "commands"),
       ECHO_OPENCODE_PLUGINS_DIR: join(root, "plugins"),
+      ECHO_OPENCODE_CONFIG: join(root, "opencode.json"),
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -71,5 +72,47 @@ describe("OpenCode registration", () => {
         expect(readFileSync(foreign, "utf8")).toBe("third-party\n");
       });
     }
+  });
+
+  test("prunes Echo plugin entries from a symlinked JSON config, keeping everything else", () => {
+    withRoot((root) => {
+      const dotfiles = join(root, "dotfiles");
+      mkdirSync(dotfiles);
+      const real = join(dotfiles, "opencode.json");
+      writeFileSync(real, JSON.stringify({
+        daidentity: { name: "Neo" },
+        plugin: ["file:///old/clone/Echo/adapters/opencode/plugin.ts", "opencode-wakatime"],
+      }));
+      symlinkSync(real, join(root, "opencode.json"));
+
+      const check = runReconcile(root, true);
+      expect(check.exitCode).toBe(3);
+      expect(JSON.parse(readFileSync(real, "utf8")).plugin).toHaveLength(2);
+
+      expect(runReconcile(root).exitCode).toBe(0);
+      expect(lstatSync(join(root, "opencode.json")).isSymbolicLink()).toBe(true);
+      expect(JSON.parse(readFileSync(real, "utf8"))).toEqual({
+        daidentity: { name: "Neo" },
+        plugin: ["opencode-wakatime"],
+      });
+      expect(readdirSync(dotfiles).some((name) => name.startsWith("opencode.json.bak-"))).toBe(true);
+
+      const before = readFileSync(real, "utf8");
+      expect(runReconcile(root, true).exitCode).toBe(0);
+      expect(runReconcile(root).exitCode).toBe(0);
+      expect(readFileSync(real, "utf8")).toBe(before);
+    });
+  });
+
+  test("refuses to rewrite a JSONC config that lists Echo, leaving it untouched", () => {
+    withRoot((root) => {
+      const text = '{\n  // my plugins\n  "plugin": ["/Echo/adapters/opencode/plugin.ts"],\n}\n';
+      writeFileSync(join(root, "opencode.json"), text);
+      const result = runReconcile(root);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain("Remove that \"plugin\" entry by hand");
+      expect(readFileSync(join(root, "opencode.json"), "utf8")).toBe(text);
+      expect(existsSync(join(root, "plugins"))).toBe(false);
+    });
   });
 });
