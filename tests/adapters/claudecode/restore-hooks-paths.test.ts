@@ -75,6 +75,12 @@ describe("Claude Code restore-hooks registration", () => {
       expect(settings.hooks.SessionStart[0].hooks).toEqual([
         { type: "command", command: join(expectedHooksDir, "VoiceGreeting.hook.ts") },
       ]);
+      expect(settings.hooks.PermissionRequest[0].hooks).toEqual([
+        { type: "command", command: join(expectedHooksDir, "VoiceHil.hook.ts") },
+      ]);
+      expect(settings.hooks.Notification[0].hooks).toEqual([
+        { type: "command", command: join(expectedHooksDir, "VoiceHil.hook.ts") },
+      ]);
       expect(second.stdout).toContain("already current");
     } finally {
       rmSync(root, { recursive: true, force: true });

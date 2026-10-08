@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -46,6 +47,9 @@ describe("Grok hook registration reconcile", () => {
       const owned = join(hooksDir, "echo-voice.json");
       expect(readFileSync(owned, "utf8")).toContain("adapters/grok/hook.ts");
       expect(readFileSync(owned, "utf8")).toContain(HOOK);
+      const muteSkill = join(root, "skills", "echo-mute");
+      expect(lstatSync(muteSkill).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(muteSkill)).toContain("adapters/grok/skills/echo-mute");
       // Foreign firstmate files must be byte-identical.
       expect(readFileSync(foreignJson, "utf8")).toBe(foreignBody);
       expect(readFileSync(foreignSh, "utf8")).toBe(foreignScript);
@@ -96,6 +100,7 @@ describe("Grok hook registration reconcile", () => {
       } catch (error) {
         expect((error as NodeJS.ErrnoException).code).toBe("ENOENT");
       }
+      expect(existsSync(join(root, "skills", "echo-mute"))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -161,6 +166,7 @@ describe("Grok hook registration reconcile", () => {
       expect(exitCode).toBe(0);
       const owned = readFileSync(join(grokHome, "hooks", "echo-voice.json"), "utf8");
       expect(owned).toContain("adapters/grok/hook.ts");
+      expect(lstatSync(join(grokHome, "skills", "echo-mute")).isSymbolicLink()).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

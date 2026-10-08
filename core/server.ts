@@ -26,9 +26,18 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
-import { readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, toggleMuteState } from "./mute";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
+import {
+  lastSpokenLines,
+  parseReplayBody,
+  recordSpokenLine,
+  REPLAY_DEFAULT_N,
+  REPLAY_MAX_N,
+  SPEAK_HISTORY_CAPACITY,
+  spokenLineCount,
+} from "./speak-history";
 import {
   captureReservationHeld,
   captureReservationView,
@@ -44,6 +53,12 @@ import {
 } from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
+import {
+  applySpeakModeSpeed,
+  parseSpeakMode,
+  voiceEnabledForSpeakMode,
+  type SpeakMode,
+} from "../shared/speak-mode";
 import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
@@ -1325,14 +1340,16 @@ export async function speakWithFallback(
   voiceId?: string,
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
+  speakMode?: SpeakMode,
 ): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
-  // Runtime mute gate (#83): sits before the provider loop so ONE check covers
-  // every provider including the macOS `say` fallback. Lazy expiry — a timed
-  // mute past its deadline reads as unmuted. Logging and voice resolution
-  // already happened upstream; the caller records the drop-off event tagged muted.
+  // Runtime mute gate (#83 / FM-446): sits before the provider loop so ONE
+  // check covers every provider including the macOS `say` fallback. `tts` and
+  // `all` hold the speaker; `mic` does not. Lazy expiry — a timed mute past its
+  // deadline reads as unmuted. Logging and voice resolution already happened
+  // upstream; the caller records the drop-off event tagged muted.
   const muteState = readMuteState();
-  if (muteState.muted) {
-    console.log(`🔇 Muted — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
+  if (isTtsMuted(muteState)) {
+    console.log(`🔇 Muted (${muteState.scope}) — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
     return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
   }
 
@@ -1467,6 +1484,16 @@ export async function speakWithFallback(
       console.log(`🎭 Emotion overlay: ${emotion} (stability: ${providerSettings.stability}, boost: ${providerSettings.similarity_boost})`);
     }
 
+    // Speak-mode density: multiply the resolved speed. Do not stuff speed into
+    // caller voice_settings (that path is full pass-through and would drop
+    // persona stability/similarity). think never reaches here.
+    if (speakMode && speakMode !== "think") {
+      providerSettings = {
+        ...providerSettings,
+        speed: applySpeakModeSpeed(providerSettings.speed ?? 1.0, speakMode),
+      };
+    }
+
     let success = false;
     try {
       success = await provider.speak(text, providerVoice, providerSettings);
@@ -1517,6 +1544,7 @@ async function speakNotification(
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   sessionId: string | null = null,
   requestId: string | null = null,
+  speakMode?: SpeakMode,
 ) {
   const messageValidation = validateInput(message);
   if (!messageValidation.valid) {
@@ -1545,7 +1573,7 @@ async function speakNotification(
   // /notify requests.
   const audioSlot: AudioCaptureSlot = {};
   const result = await audioCapture.run(audioSlot, () =>
-    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion));
+    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion, speakMode));
 
   if (result.muted) {
     console.log('🔇 Speech suppressed (muted)');
@@ -1646,13 +1674,26 @@ interface NotifyJobPayload {
   sessionId: string | null;
   requestId: string;
   messageChars: number; // sanitized length, for disposition rows that never play
+  speakMode?: SpeakMode;
+  // Replay jobs re-speak a stored line and must not re-enter the ring.
+  recordSpoken?: boolean;
 }
 
 const playQueue = new PlayQueue<NotifyJobPayload>({
   player: async (job) => {
     const p = job.payload;
     markPlaybackPlaying(p.requestId);
-    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId);
+    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId, p.speakMode);
+    // Only lines that actually reached the speaker are replayable. Muted,
+    // capture-held, and failed plays stay out of the ring (http-api).
+    if (p.recordSpoken !== false && result.success && !result.muted && !result.held_for_capture) {
+      recordSpokenLine({
+        message: p.message,
+        voiceId: p.voiceId,
+        voiceSettings: p.voiceSettings,
+        speakMode: p.speakMode,
+      });
+    }
     // Name the actual cause: a caller waiting on completion reports this string
     // verbatim, and telling a muted operator that a provider failed sends them
     // to the wrong fix.
@@ -1734,6 +1775,7 @@ function acceptNotification(
     sessionId: string | null;
     nativeVisualShown: boolean;
     captureReservation?: CaptureReservationRequest;
+    speakMode?: SpeakMode;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1746,6 +1788,9 @@ function acceptNotification(
   }
   if (!opts.voiceEnabled && opts.captureReservation) {
     throw new Error("capture_reservation requires voice_enabled");
+  }
+  if (opts.captureReservation && isMicMuted()) {
+    throw new Error("Invalid capture_reservation: microphone is muted");
   }
 
   // Banner for every accepted notification, voice or not — decoupled from
@@ -1776,6 +1821,7 @@ function acceptNotification(
       sessionId: opts.sessionId,
       requestId: reqId,
       messageChars: messageValidation.sanitized!.length,
+      speakMode: opts.speakMode,
     },
   });
 }
@@ -1826,8 +1872,13 @@ export const server = serve({
     //
     // POST /notify/personality is deliberately NOT in either bucket. It produces
     // speech, so it shares the notification bucket the flood guard exists for.
+    //
+    // POST /replay is operator control (re-hear during a notify flood) so it
+    // has its own bucket, same reason as /mute. Abusive N is rejected in the
+    // handler; this bucket only bounds how often a caller may ask.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
+      : url.pathname === "/replay" ? `replay:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
       : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
       : CAPTURE_RESERVATION_PATH.test(url.pathname) ? `capture-reservation:${clientIp}`
@@ -1848,7 +1899,12 @@ export const server = serve({
         const data = await req.json();
         const title = data.title || DEFAULT_NOTIFICATION_TITLE;
         const message = data.message || "Task completed";
-        const voiceEnabled = data.voice_enabled !== false;
+        const parsedSpeakMode = parseSpeakMode(data.speak_mode);
+        if (!parsedSpeakMode.ok) {
+          throw new Error("Invalid speak_mode");
+        }
+        const speakMode = parsedSpeakMode.mode;
+        const voiceEnabled = voiceEnabledForSpeakMode(speakMode, data.voice_enabled !== false);
         const voiceId = data.voice_id || data.voice_name || null;
         const voiceSettings = data.voice_settings || null;
         const sessionId = data.session_id || null;
@@ -1887,7 +1943,7 @@ export const server = serve({
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
         acceptNotification(reqId, {
           title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
-          captureReservation,
+          captureReservation, speakMode,
         });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
@@ -1929,6 +1985,12 @@ export const server = serve({
     const reservationGrant = CAPTURE_RESERVATION_GRANT_PATH.exec(url.pathname);
     if (reservationGrant && req.method === "POST") {
       const reservationId = decodeURIComponent(reservationGrant[1]);
+      if (isMicMuted()) {
+        return new Response(JSON.stringify({ error: "muted", reservation_id: reservationId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
+        });
+      }
       const granted = grantCaptureReservation(reservationId);
       if (granted.granted === false) {
         return new Response(JSON.stringify({ error: granted.reason, reservation_id: reservationId }), {
@@ -1996,9 +2058,87 @@ export const server = serve({
       }
     }
 
-    // /mute — global runtime mute (#83). An explicit JSON body sets state;
-    // an EMPTY body toggles, so a one-keystroke hotkey needs no state
-    // knowledge. Response is always the resulting state {muted, muted_until}.
+    // /replay — re-speak the last N lines that actually played (FM-449).
+    // Empty body = N=1. Does not fire a banner. Does not record into the ring.
+    if (url.pathname === "/replay" && req.method === "POST") {
+      const reqId = generateRequestId();
+      try {
+        const text = await req.text();
+        const parsed = parseReplayBody(text);
+        if (!parsed.ok) {
+          throw new Error(`Invalid body: ${parsed.message}`);
+        }
+        const lines = lastSpokenLines(parsed.n);
+        if (lines.length === 0) {
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              message: "Nothing to replay",
+              replayed: 0,
+              available: 0,
+              n: parsed.n,
+              request_id: reqId,
+            }),
+            {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        const requestIds: string[] = [];
+        for (const line of lines) {
+          const replayId = generateRequestId();
+          requestIds.push(replayId);
+          playQueue.enqueue({
+            id: replayId,
+            sessionId: null,
+            receivedAt: Date.now(),
+            payload: {
+              message: line.message,
+              voiceId: line.voiceId,
+              voiceSettings: line.voiceSettings,
+              sessionId: null,
+              requestId: replayId,
+              messageChars: line.message.length,
+              speakMode: line.speakMode,
+              recordSpoken: false,
+            },
+          });
+        }
+
+        log('info', `🔁 Replay queued (${lines.length} of last ${parsed.n})`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({
+            status: "accepted",
+            message: "Replay queued",
+            replayed: lines.length,
+            available: spokenLineCount(),
+            n: parsed.n,
+            request_id: reqId,
+            request_ids: requestIds,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 202,
+          },
+        );
+      } catch (error: any) {
+        log('error', `Replay error: ${error.message || error}`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({ status: "error", message: error.message || "Internal server error", request_id: reqId }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: error.message?.includes('Invalid') ? 400 : 500,
+          },
+        );
+      }
+    }
+
+    // /mute — runtime mute (#83 / FM-446). An explicit JSON body sets state;
+    // an EMPTY body toggles `all`, so a one-keystroke hotkey needs no state
+    // knowledge. `{scope}` without `muted` toggles that scope. Optional `scope`
+    // is tts | mic | all (default all). Response is always {muted, muted_until, scope}.
     if (url.pathname === "/mute" && req.method === "POST") {
       const reqId = generateRequestId();
       try {
@@ -2013,17 +2153,24 @@ export const server = serve({
           } catch {
             throw new Error("Invalid JSON body");
           }
-          if (typeof data?.muted !== "boolean") {
-            throw new Error("Invalid body: 'muted' must be a boolean");
+          if (data.scope !== undefined && !isMuteScope(data.scope)) {
+            throw new Error("Invalid body: 'scope' must be tts, mic, or all");
           }
-          if (data.duration_minutes !== undefined &&
-              (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
-            throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+          if (data.muted === undefined && isMuteScope(data.scope) && data.duration_minutes === undefined) {
+            state = toggleMuteState(undefined, data.scope);
+          } else {
+            if (typeof data?.muted !== "boolean") {
+              throw new Error("Invalid body: 'muted' must be a boolean");
+            }
+            if (data.duration_minutes !== undefined &&
+                (typeof data.duration_minutes !== "number" || !Number.isFinite(data.duration_minutes) || data.duration_minutes <= 0)) {
+              throw new Error("Invalid body: 'duration_minutes' must be a positive number");
+            }
+            state = setMuteState(data.muted, data.duration_minutes, undefined, data.scope ?? "all");
           }
-          state = setMuteState(data.muted, data.duration_minutes);
         }
 
-        log('info', `🔇 Mute ${state.muted ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
+        log('info', `🔇 Mute ${state.scope} ${isTtsMuted(state) || isMicMuted(state) ? 'ON' : 'OFF'}${state.muted_until ? ` until ${state.muted_until}` : ''}`, { requestId: reqId });
         return new Response(
           JSON.stringify(state),
           {
@@ -2099,6 +2246,12 @@ export const server = serve({
             in_flight_ms: playQueue.inFlightMs,
             stalled: playQueue.inFlightMs !== null && playQueue.inFlightMs > playQueue.playerTimeoutMs,
           },
+          replay: {
+            available: spokenLineCount(),
+            capacity: SPEAK_HISTORY_CAPACITY,
+            default_n: REPLAY_DEFAULT_N,
+            max_n: REPLAY_MAX_N,
+          },
           circuit_breakers: {
             edgetts: {
               open: circuitBreakers.edgetts.isOpen,
@@ -2130,6 +2283,7 @@ export const server = serve({
       "POST /notify/capture-reservations/:reservation_id/release",
       "POST /notify/personality",
       "POST /mute",
+      "POST /replay",
       "GET /health",
       "GET /voices",
     ];
@@ -2147,7 +2301,7 @@ export const server = serve({
       );
     }
 
-    return new Response("Voice Server - POST to /notify or /notify/personality, GET /health for status, GET /voices for configured personas", {
+    return new Response("Voice Server - POST to /notify, /notify/personality, /mute, or /replay; GET /health for status, GET /voices for configured personas", {
       headers: corsHeaders,
       status: 404
     });
@@ -2173,5 +2327,5 @@ log('info', `🍎 macOS fallback voice: ${getMacOSFallbackVoice()}`);
 log('info', `📖 Pronunciation rules: ${pronunciationRules.length}`);
 log('info', `🎭 Emotional presets: ${Object.keys(EMOTIONAL_PRESETS).length}`);
 log('info', `⚡ Circuit breaker: ${CIRCUIT_BREAKER_THRESHOLD} failures → ${CIRCUIT_BREAKER_RESET_MS / 1000}s cooldown`);
-log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, GET /health, GET /voices`);
+log('info', `📡 Endpoints: POST /notify, GET /notify/:request_id/completion, POST /notify/capture-reservations/:reservation_id/{grant,release}, POST /notify/personality, POST /mute, POST /replay, GET /health, GET /voices`);
 log('info', `🔒 Security: CORS restricted to localhost, rate limiting enabled`);

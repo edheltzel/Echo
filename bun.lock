@@ -56,6 +56,13 @@
         "@oh-my-pi/pi-coding-agent",
       ],
     },
+    "adapters/opencode": {
+      "name": "@echo/opencode-adapter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@echo/shared": "workspace:*",
+      },
+    },
     "adapters/pi": {
       "name": "@echo/pi-adapter",
       "version": "0.1.0",
@@ -96,6 +103,8 @@
     "@echo/mcp-adapter": ["@echo/mcp-adapter@workspace:adapters/mcp"],
 
     "@echo/omp-adapter": ["@echo/omp-adapter@workspace:adapters/omp"],
+
+    "@echo/opencode-adapter": ["@echo/opencode-adapter@workspace:adapters/opencode"],
 
     "@echo/pi-adapter": ["@echo/pi-adapter@workspace:adapters/pi"],
 

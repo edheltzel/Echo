@@ -20,6 +20,7 @@ const config: CodexVoiceConfig = {
   title: "Codex Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Codex",
+  sayName: true,
   voiceId: "codex",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -54,6 +55,7 @@ describe("Codex lifecycle hook adapter", () => {
       voice_id: "codex",
       session_id: "sess-1",
       source: "codex",
+      speak_mode: "announce",
     }));
   });
 
@@ -96,12 +98,6 @@ describe("Codex lifecycle hook adapter", () => {
     expect(extractFallbackSummary("Short enough line here.")).toBe("Short enough line here.");
   });
 
-  test("defaults to the Codex persona when no daidentity is present", () => {
-    const resolved = loadCodexVoiceConfig({}, undefined);
-    expect(resolved.personaName).toBe("Codex");
-    expect(resolved.voiceId).toBe("codex");
-  });
-
   test("project daidentity overrides env defaults", () => {
     const files: Record<string, string> = {
       "/proj/.codex/settings.json": JSON.stringify({
@@ -123,32 +119,8 @@ describe("Codex lifecycle hook adapter", () => {
     expect(resolved.voiceId).toBe("en-GB-LibbyNeural");
   });
 
-  test("global-only daidentity applies when no project file", () => {
-    const override = loadProjectPersona("/proj", (path) => (
-      path === "/home/.codex/settings.json"
-        ? JSON.stringify({ daidentity: { name: "GlobalCodex", voiceId: "en-US-AvaNeural" } })
-        : null
-    ), "/home");
-    expect(override).toEqual({ personaName: "GlobalCodex", voiceId: "en-US-AvaNeural" });
-  });
-
-  test("project wins per key; unset project keys fall through to global", () => {
-    const files: Record<string, string> = {
-      "/home/.codex/settings.json": JSON.stringify({
-        daidentity: {
-          name: "GlobalCodex",
-          voices: { main: { voiceId: "global-voice" } },
-          startupCatchphrases: ["Global line."],
-        },
-      }),
-      "/proj/.codex/settings.json": JSON.stringify({
-        daidentity: { voices: { main: { voiceId: "en-GB-ThomasNeural" } } },
-      }),
-    };
-    expect(loadProjectPersona("/proj", (path) => files[path] ?? null, "/home")).toEqual({
-      personaName: "GlobalCodex",
-      voiceId: "en-GB-ThomasNeural",
-      startupCatchphrases: ["Global line."],
-    });
+  test("project persona preserves a custom base greeting", () => {
+    const resolved = applyPersonaOverride(config, { personaName: "Themis", sayName: false });
+    expect(resolved.startupCatchphrases).toBe(config.startupCatchphrases);
   });
 });

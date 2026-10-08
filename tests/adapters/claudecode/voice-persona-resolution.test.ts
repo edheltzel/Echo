@@ -249,6 +249,7 @@ describe("buildVoicePayload - the exact payload sent to the voice server", () =>
     expect(payload.source).toBe("claudecode");
     expect(payload.session_id).toBe("sess-1");
     expect(payload.message).toBe("Dispatching the worker.");
+    expect(payload.speak_mode).toBe("announce");
   });
 
   test("DA selection → mainDAVoiceID, Atlas title, prosody applied", () => {
@@ -266,6 +267,7 @@ describe("buildVoicePayload - the exact payload sent to the voice server", () =>
       speed: 1.0,
       use_speaker_boost: true,
     });
+    expect(payload.speak_mode).toBe("announce");
   });
 });
 

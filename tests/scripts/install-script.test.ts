@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o755 });
@@ -31,12 +31,16 @@ async function runInstall(args: string[], env: Record<string, string>) {
 describe("install script adapter support", () => {
   const script = readFileSync("scripts/install.sh", "utf8");
 
-  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, and omp adapter modes", () => {
-    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp");
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, omp, and OpenCode adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode");
     expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?');
     expect(script).toContain("adapters/jcode/reconcile.ts");
     expect(script).toContain("adapters/grok/reconcile.ts");
     expect(script).toContain("adapters/codex/reconcile.ts");
+    expect(script).toContain("adapters/opencode/reconcile.ts");
+    expect(script).toContain('adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
     expect(script).toContain("pi install");
     expect(script).toContain("adapters/omp/reconcile.ts");
     // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
@@ -125,6 +129,43 @@ exit 0
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Pi CLI is required");
+      expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
+      expect(existsSync(launchctlLog)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude Code preflight preserves a foreign slash command before mutating host state", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-claude-command-fatal-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const claude = join(home, ".claude");
+      const commands = join(claude, "commands");
+      const launchctlLog = join(root, "launchctl.log");
+      mkdirSync(commands, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(
+        join(claude, "settings.json"),
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }, null, 2) + "\n",
+      );
+      const foreign = join(commands, "echo-mute.md");
+      writeFileSync(foreign, "third-party command\n");
+
+      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
+
+      const result = await runInstall(["--adapter", "claudecode"], {
+        HOME: home,
+        PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("FATAL");
+      expect(result.stderr).toContain("will not overwrite");
+      expect(readFileSync(foreign, "utf8")).toBe("third-party command\n");
+      expect(existsSync(join(commands, "echo-voice.md"))).toBe(false);
       expect(existsSync(join(home, "Library/LaunchAgents/com.echo.plist"))).toBe(false);
       expect(existsSync(launchctlLog)).toBe(false);
     } finally {
@@ -274,6 +315,7 @@ exit 0
       const owned = readFileSync(join(hooksDir, "echo-voice.json"), "utf8");
       expect(owned).toContain("adapters/grok/hook.ts");
       expect(readFileSync(foreign, "utf8")).toBe(foreignBody);
+      expect(lstatSync(join(grokHome, "skills", "echo-mute")).isSymbolicLink()).toBe(true);
 
       const after = await runInstall(["--adapter", "grok", "--check"], env);
       expect(after.exitCode).toBe(0);
@@ -352,6 +394,7 @@ exit 0
 
       // Registrations left behind by a renamed repo directory: markers present, paths dead.
       const claudeSettings = join(home, ".claude/settings.json");
+      const claudeCommands = join(home, ".claude/commands");
       const piSettings = join(home, ".pi/agent/settings.json");
       writeFileSync(
         claudeSettings,
@@ -391,6 +434,8 @@ exit 0
       expect(piAfterFirst).not.toContain("/old/clone/");
       expect(claudeAfterFirst).toContain("adapters/claudecode/hooks/VoiceGate.hook.ts");
       expect(piAfterFirst).toContain("adapters/pi");
+      expect(readlinkSync(join(claudeCommands, "echo-mute.md"))).toBe(realpathSync(resolve("adapters/claudecode/commands/echo-mute.md")));
+      expect(readlinkSync(join(claudeCommands, "echo-voice.md"))).toBe(realpathSync(resolve("adapters/claudecode/commands/echo-voice.md")));
 
       // Rerunning is a no-op: settings bytes unchanged.
       const second = await runInstall(["--adapter", "none"], env);
@@ -504,6 +549,48 @@ exit 0
     }
   });
 
+  test("refresh-all rewrites a live Echo clone Jcode hook onto this install tree", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-jcode-clone-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".jcode"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+
+      const otherHook = join(root, "Atlas", "Echo", "adapters", "jcode", "hook.ts");
+      mkdirSync(dirname(otherHook), { recursive: true });
+      writeFileSync(join(dirname(otherHook), "package.json"), JSON.stringify({ name: "@echo/jcode-adapter" }));
+      writeFileSync(otherHook, "#!/usr/bin/env bun\n");
+      const config = join(home, ".jcode/config.toml");
+      writeFileSync(config, `[hooks]\nturn_end = ${JSON.stringify(otherHook)}\nsession_start = ${JSON.stringify(otherHook)}\n`);
+
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; esac\nexit 0\n');
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      const bunDir = join(Bun.which("bun")!, "..");
+      const result = await runInstall(["--adapter", "none"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Refreshing Jcode lifecycle-hook registration");
+      const hook = realpathSync(resolve("adapters/jcode/hook.ts"));
+      const command = `'${hook.replaceAll("'", `'\\''`)}'`;
+      const parsed = Bun.TOML.parse(readFileSync(config, "utf8")) as any;
+      expect(parsed.hooks.turn_end).toBe(command);
+      expect(parsed.hooks.session_start).toBe(command);
+      expect(readFileSync(config, "utf8")).not.toContain(otherHook);
+
+      const check = await runInstall(["--check"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin:/usr/sbin:/sbin`,
+      });
+      expect(check.exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
+
   test("refresh-all detects the canonical shell-quoted Jcode hook command", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-jcode-refresh-"));
     try {
@@ -576,6 +663,7 @@ exit 0
       const launchctlLog = join(root, "launchctl.log");
       mkdirSync(launchAgents, { recursive: true });
       mkdirSync(join(home, ".claude"), { recursive: true });
+      mkdirSync(join(home, ".claude/commands"), { recursive: true });
       mkdirSync(join(home, ".pi/agent"), { recursive: true });
       mkdirSync(bin, { recursive: true });
 
@@ -614,6 +702,8 @@ exit 0
         ) + "\n";
       const piOriginal = JSON.stringify({ packages: ["/old/clone/adapters/pi"] }, null, 2) + "\n";
       writeFileSync(claudeSettings, claudeOriginal);
+      symlinkSync("/old/clone/adapters/claudecode/commands/echo-mute.md", join(home, ".claude/commands/echo-mute.md"));
+      symlinkSync("/old/clone/adapters/claudecode/commands/echo-voice.md", join(home, ".claude/commands/echo-voice.md"));
       writeFileSync(piSettings, piOriginal);
 
       writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "$@" >> ${JSON.stringify(launchctlLog)}\nexit 0\n`);
@@ -633,12 +723,15 @@ exit 0
       expect(result.stdout).toContain("Checking Claude Code");
       expect(result.stdout).toContain("Checking Pi");
       expect(result.stdout).toContain("[\\] Adapter registration");
+      expect(result.stdout).toContain("[\\] Slash commands");
       expect(result.stdout).toContain("[\\] LaunchAgent");
       expect(result.stdout).not.toContain("\x1b");
       expect(result.stdout).toContain("would be updated");
       // Nothing was mutated and no service was touched.
       expect(readFileSync(plistPath, "utf8")).toBe(plist);
       expect(readFileSync(claudeSettings, "utf8")).toBe(claudeOriginal);
+      expect(readlinkSync(join(home, ".claude/commands/echo-mute.md"))).toContain("/old/clone/");
+      expect(readlinkSync(join(home, ".claude/commands/echo-voice.md"))).toContain("/old/clone/");
       expect(readFileSync(piSettings, "utf8")).toBe(piOriginal);
       expect(existsSync(launchctlLog)).toBe(false);
     } finally {

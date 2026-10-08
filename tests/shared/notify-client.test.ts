@@ -21,6 +21,7 @@ describe("shared native-before-POST notification client", () => {
     );
     expect(result.status).toBe(202);
     expect(payload?.visual_delivery).toBe("native");
+    expect(payload?.speak_mode).toBe("announce");
   });
 
   test("omits the marker when native delivery is unavailable and still POSTs", async () => {
@@ -36,6 +37,25 @@ describe("shared native-before-POST notification client", () => {
       undefined,
       { env: {} },
     );
-    expect(payload).toEqual({ message: "Body", title: "Title", source: "raw-compatible" });
+    expect(payload).toEqual({
+      message: "Body",
+      title: "Title",
+      source: "raw-compatible",
+      speak_mode: "announce",
+    });
+  });
+
+  test("keeps an explicit think instead of detecting announce", async () => {
+    let payload: Record<string, unknown> | undefined;
+    globalThis.fetch = async (_input, init) => {
+      payload = JSON.parse(String(init?.body));
+      return new Response("accepted", { status: 202 });
+    };
+
+    await sendNotificationPayload(
+      { endpoint: "http://echo.test/notify", title: "Title" },
+      { message: "insight: race in auth", title: "Title", source: "pi", speak_mode: "think" },
+    );
+    expect(payload?.speak_mode).toBe("think");
   });
 });

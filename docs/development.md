@@ -87,6 +87,7 @@ bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
 bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
+bun build adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
 ```
 
 CI runs exactly that set headlessly on every PR into `dev`/`master` and every push to those

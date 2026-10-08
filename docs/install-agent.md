@@ -55,7 +55,7 @@ curl -fsS -X POST http://localhost:3246/notify \
   -d '{"message":"install verification","voice_enabled":false}'
 ```
 
-Expected: JSON with `"status":"success"`.
+Expected: JSON with `"status":"accepted"` (HTTP 202). Voice is off, so you should hear nothing.
 
 If FAIL: check rate limit and server logs.
 
@@ -65,11 +65,31 @@ If FAIL: check rate limit and server logs.
 bash scripts/install.sh --adapter claudecode
 ```
 
-Expected: restore-hooks output reports existing or added Claude Code hook registrations.
+Expected: restore-hooks output reports existing or added Claude Code hook registrations, then
+the command reconcile reports `echo-voice.md` and `echo-mute.md` as created, repointed, or
+already current.
 
-This wires the repo-owned per-turn voice **Stop** hook (`adapters/claudecode/hooks/VoiceCompletion.hook.ts`) into `settings.json`. Registration is idempotent: re-running the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates), so an uninstall→reinstall cycle always converges to exactly one Stop entry.
+This wires the repo-owned per-turn voice **Stop** hook
+(`adapters/claudecode/hooks/VoiceCompletion.hook.ts`) into `settings.json` and reconciles both
+slash-command symlinks in `~/.claude/commands/`. Registration is idempotent: re-running
+the installer replaces any prior VoiceCompletion Stop entry in place (no duplicates) and
+repoints stale Echo-owned command links to this checkout.
 
-If FAIL: confirm the Claude Code settings file exists and is writable.
+Optional mute plugin (does not replace this step; no hooks, no LaunchAgent):
+
+```bash
+claude plugin validate adapters/claudecode/plugin --strict
+claude --plugin-dir adapters/claudecode/plugin
+```
+
+Expected: validate exits 0. Plugin skill is `/echo:echo-mute` (Claude namespaces plugin
+skills as `/plugin-name:skill-name`). Bare `/echo-mute` remains the installer command from
+this step. Both shell to `cli/echo mute` via PATH or the current checkout, never via
+walking `~/.claude/commands` from the plugin skill.
+
+If FAIL: confirm the Claude Code settings file and command directory are writable. A foreign
+file or symlink occupying either command name is preserved and reported as a fatal ownership
+conflict; inspect it manually rather than replacing it blindly.
 
 ## 6. Install Pi adapter when needed
 
@@ -154,6 +174,6 @@ bash scripts/uninstall.sh --check  # preview: prints what would be removed, muta
 bash scripts/uninstall.sh
 ```
 
-Expected: exits 0; the LaunchAgent and the staged daemon payload are removed. Logs and `~/.config/echo/config.json` are preserved.
+Expected: exits 0; the LaunchAgent and the staged daemon payload are removed. Logs and `~/.config/echo/config.json` are preserved. To leave the install in place but not running, `bash scripts/stop.sh` unloads `com.echo` (daemon disable). Uninstall is the durable form.
 
 Caveat: adapter registrations are **not** removed and no deregistration tooling exists; remove them manually before deleting the repo directory. The full list is in `docs/operations.md`.

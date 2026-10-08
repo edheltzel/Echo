@@ -68,8 +68,8 @@ describe("issue #83 - POST /mute explicit set", () => {
   test('{"muted": true} → indefinite mute, response reflects state', async () => {
     const res = await postMute(JSON.stringify({ muted: true }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ muted: true, muted_until: null });
-    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null });
+    expect(await res.json()).toEqual({ muted: true, muted_until: null, scope: "all" });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null, scope: "all" });
   });
 
   test('{"muted": true, "duration_minutes": 30} → deadline ≈ now+30m', async () => {
@@ -84,11 +84,11 @@ describe("issue #83 - POST /mute explicit set", () => {
   });
 
   test('{"muted": false} while timed-muted → unmuted, deadline cleared', async () => {
-    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString() });
+    writeMuteState({ muted: true, muted_until: new Date(Date.now() + 60_000).toISOString(), scope: "all" });
     const res = await postMute(JSON.stringify({ muted: false }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ muted: false, muted_until: null });
-    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null });
+    expect(await res.json()).toEqual({ muted: false, muted_until: null, scope: "all" });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null, scope: "all" });
   });
 });
 
@@ -117,13 +117,13 @@ describe("issue #83 - POST /mute invalid bodies → 400, state untouched", () =>
 
   for (const [name, body] of cases) {
     test(name, async () => {
-      writeMuteState({ muted: true, muted_until: null }); // pre-existing state
+      writeMuteState({ muted: true, muted_until: null, scope: "all" }); // pre-existing state
       const res = await postMute(body);
       expect(res.status).toBe(400);
       const err = await res.json();
       expect(err.status).toBe("error");
       // State untouched by the rejected request.
-      expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null });
+      expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null, scope: "all" });
     });
   }
 });
@@ -189,11 +189,11 @@ describe("issue #83 - /health mute block", () => {
   test("shows mute state in both states; existing fields unchanged", async () => {
     const unmuted = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
     expect(unmuted.status).toBe("healthy");
-    expect(unmuted.mute).toEqual({ muted: false, muted_until: null });
+    expect(unmuted.mute).toEqual({ muted: false, muted_until: null, scope: "all" });
 
-    writeMuteState({ muted: true, muted_until: null });
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
     const muted = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
-    expect(muted.mute).toEqual({ muted: true, muted_until: null });
+    expect(muted.mute).toEqual({ muted: true, muted_until: null, scope: "all" });
 
     // Additive only: every pre-mute field is still present.
     for (const key of ["status", "port", "providers", "fallbackOrder", "circuit_breakers", "activeProvider"]) {
@@ -209,5 +209,76 @@ describe("issue #83 - persistence across module re-read", () => {
     const onDisk = readMuteState(MUTE_PATH);
     expect(onDisk.muted).toBe(true);
     expect(typeof onDisk.muted_until).toBe("string");
+  });
+});
+
+describe("FM-446 - POST /mute scopes", () => {
+  test('{"muted": true, "scope": "tts"} → speaker mute, muted stays true', async () => {
+    const res = await postMute(JSON.stringify({ muted: true, scope: "tts" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ muted: true, muted_until: null, scope: "tts" });
+    const health = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
+    expect(health.mute).toEqual({ muted: true, muted_until: null, scope: "tts" });
+  });
+
+  test('{"muted": true, "scope": "mic"} → mic mute, muted stays false', async () => {
+    const res = await postMute(JSON.stringify({ muted: true, scope: "mic" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ muted: false, muted_until: null, scope: "mic" });
+    const health = await (await fetch(`http://localhost:${PORT}/health`, { headers: HEADERS })).json();
+    expect(health.mute.muted).toBe(false);
+    expect(health.mute.scope).toBe("mic");
+  });
+
+  test('{"scope": "tts"} without muted toggles tts', async () => {
+    const first = await postMute(JSON.stringify({ scope: "tts" }));
+    expect(first.status).toBe(200);
+    expect((await first.json()).scope).toBe("tts");
+    const second = await postMute(JSON.stringify({ scope: "tts" }));
+    expect((await second.json()).muted).toBe(false);
+  });
+
+  test("invalid scope → 400, state untouched", async () => {
+    writeMuteState({ muted: true, muted_until: null, scope: "all" });
+    const res = await postMute(JSON.stringify({ muted: true, scope: "speaker" }));
+    expect(res.status).toBe(400);
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: null, scope: "all" });
+  });
+
+  test("mic mute refuses capture_reservation on /notify (400) and grant (409)", async () => {
+    await postMute(JSON.stringify({ muted: true, scope: "mic" }));
+    const notify = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({
+        message: "ask",
+        voice_enabled: true,
+        capture_reservation: {
+          reservation_id: `t-${crypto.randomUUID()}`,
+          owner_pid: process.pid,
+          lease_ms: 5_000,
+        },
+      }),
+    });
+    expect(notify.status).toBe(400);
+    const notifyBody = await notify.json();
+    expect(notifyBody.message).toContain("microphone is muted");
+
+    const grant = await fetch(`http://localhost:${PORT}/notify/capture-reservations/nope/grant`, {
+      method: "POST",
+      headers: HEADERS,
+    });
+    expect(grant.status).toBe(409);
+    expect((await grant.json()).error).toBe("muted");
+  });
+
+  test("mic mute still accepts ordinary /notify (202)", async () => {
+    await postMute(JSON.stringify({ muted: true, scope: "mic" }));
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "still spoken", voice_enabled: false }),
+    });
+    expect(res.status).toBe(202);
   });
 });

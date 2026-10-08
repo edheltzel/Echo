@@ -119,21 +119,23 @@ not a review nit.
 | Provider circuit breaker | `core/circuit-breaker.ts` | Host-neutral per-provider failure tracking (see Cross-cutting). |
 | Serial play queue | `core/play-queue.ts` | Global one-at-a-time playback (Phase 2): newest-per-session coalescing, age/depth caps, player watchdog, injected player. |
 | TTS synthesis cache | `core/tts-cache.ts` | Short-phrase disk cache keyed by `(voice, rate, text)` - instant replay for repeated lines (#202). |
+| Last-N speak ring | `core/speak-history.ts` | In-memory ring of lines that actually played; `POST /replay` re-speaks them (FM-449). |
 | Numeric config parsing | `core/env.ts` | `parseBoundedInt` validates numeric settings; `resolveEchoEnv` performs non-mutating config reads. |
-| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `daemon-endpoints.ts` (where the daemon lives). |
+| `@echo/shared` workspace package | `shared/` | Everything the daemon and the adapters both need, owned once. Sits below both: `core/` imports it, adapters declare it as a dependency, and it imports neither. Members: `echo-env.ts` (config.json first, then one-release process/dotenv compatibility fallbacks), `notify-client.ts`, `terminal-notify.ts` (host-neutral native terminal visual routing: Herdr `notification.show` first, then a safe adapter-owned TTY writer for Ghostty/WezTerm OSC 777, Kitty OSC 99, or iTerm2 OSC 9 - Alacritty stays unsupported), `voice-line.ts`, `persona-scaffold.ts`, `persona.ts` (daidentity overlay + headless suppression for Pi/omp), `mute-command.ts` (the `/echo-mute` factory that shells out to bash `cli/echo mute`), `extension.ts` (harness catalog + `registerEchoMute` / `registerEchoVoice`; not a second plugin loader and not imported by `core/`), `owned-symlink.ts`, `greeting.ts`, `edge-voice.ts` (the edge-tts voice grammar `core/server.ts` also enforces), `speak-mode.ts` (notify density: announce/brief/consult/think), `daemon-endpoints.ts` (where the daemon lives). |
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
-| Runtime mute state | `core/mute.ts` | Persisted global mute with lazy expiry (#83); gates the provider loop. |
+| Runtime mute state | `core/mute.ts` | Persisted scoped mute (`tts` / `mic` / `all`) with lazy expiry (#83, FM-446); `tts`/`all` gate the provider loop, `mic`/`all` gate converse capture. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
-| Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks + a hook registrar. |
+| Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks, `/echo-voice` and `/echo-mute` commands, their reconcilers, and a mute-only plugin at `plugin/` (`/echo:echo-mute`; Claude namespaces plugin skills. Bare `/echo-mute` stays the installer command. No plugin hooks; Stop/SessionStart/VoiceGate stay on `restore-hooks.ts`). |
 | Jcode adapter | `adapters/jcode/` | Jcode lifecycle hooks (`session_start` / `turn_end`) speaking explicit completion lines. |
-| Grok Build adapter | `adapters/grok/` | Grok Build lifecycle hooks (`SessionStart` / `Stop`) via a single global `~/.grok/hooks/echo-voice.json` registration. |
+| Grok Build adapter | `adapters/grok/` | Grok Build lifecycle hooks (`SessionStart` / `Stop`) via a single global `~/.grok/hooks/echo-voice.json` registration, plus `~/.grok/skills/echo-mute`. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
+| OpenCode adapter | `adapters/opencode/` | Mute-only `/echo-mute` command at `~/.config/opencode/commands/echo-mute.md`. |
 | `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for that request's exact playback completion, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
-| Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute}.sh` | Service install/lifecycle + runtime mute (#83); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
+| Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute,replay}.sh` | Service install/lifecycle + runtime mute (#83) + last-N replay (FM-449); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: config.json port first, deprecated process PORT second, then 3246; also owns the shared occupied-port report. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
@@ -148,7 +150,9 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
    per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** - `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
-   input is a 4xx **before** anything is queued.
+   input is a 4xx **before** anything is queued. Optional `speak_mode`
+   (`announce`/`brief`/`consult`/`think`) is parsed here: invalid is 4xx, omitted keeps
+   today's density, `think` skips TTS like `voice_enabled: false`.
 3. **Banner + enqueue + ack `202`** - the macOS banner fires immediately at accept
    (outside the queue; a superseded/dropped line keeps its banner, and a
    `voice_enabled: false` request is banner-only and never queued), unless the request's
@@ -166,11 +170,13 @@ A `POST /notify` runs through `core/server.ts` roughly in this order:
 5. **Apply pronunciations** - `applyPronunciations` runs word-boundary regex replacements
    from `pronunciations.json` (re-applied per provider).
 6. **Speak with fallback** - `speakWithFallback` first checks the runtime mute state
-   (`core/mute.ts`, #83): while muted, speech is suppressed before the provider loop (one
+   (`core/mute.ts`, #83 / FM-446): `tts` and `all` suppress speech before the provider loop (one
    gate covers every provider including `say`) and the drop-off event is tagged `muted`.
-   Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
+   `mic` does not hold the speaker. Otherwise it walks `[defaultProvider, ...fallbackOrder]`, skipping any provider that is
    disabled, unhealthy, or circuit-open, and returns the per-provider `attempts` trail plus
-   the voice actually used (consumed by the drop-off log).
+   the voice actually used (consumed by the drop-off log). A speaking `speak_mode` then
+   multiplies the resolved speed (`announce` 1.10, `brief` 0.90, `consult` 1.05) without
+   stuffing speed into caller `voice_settings` (that path is full pass-through).
 
 Full endpoint contract and request body: [`docs/http-api.md`](docs/http-api.md).
 Voice config and the per-turn persona voice: [`docs/voices.md`](docs/voices.md).
@@ -272,6 +278,6 @@ The authoritative copy of the invariant list and the DOX rail lives in [`AGENTS.
 | Understand egress / observability | [`docs/providers-observability.md`](docs/providers-observability.md) |
 | Tune reliability / circuit breaker | [`docs/reliability.md`](docs/reliability.md) |
 | Add a voice or persona | [`docs/voices.md`](docs/voices.md) |
-| Write or wire an adapter | [`docs/adapters.md`](docs/adapters.md) |
+| Write or wire an adapter | [`docs/adapters.md`](docs/adapters.md) (extension surface, add-a-harness, add-a-feature) |
 | Read the security model | [`SECURITY.md`](SECURITY.md) |
 | See shipped design decisions | [`docs/design-docs/index.md`](docs/design-docs/index.md) |

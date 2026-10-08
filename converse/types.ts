@@ -23,7 +23,7 @@ export type CaptureState = "idle" | "recording" | "transcribing";
 
 /** The subset of core's GET /health that converse depends on. */
 export interface CoreHealthSnapshot {
-  mute: { muted: boolean; muted_until: string | null };
+  mute: { muted: boolean; muted_until: string | null; scope?: "tts" | "mic" | "all" };
   capture_guard: { path: string | null; state: CaptureState };
   capture_reservation?: { held: boolean; request_id?: string };
   play_queue: { depth: number; in_flight_ms: number | null; stalled: boolean };

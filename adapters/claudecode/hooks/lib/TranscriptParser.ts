@@ -43,6 +43,11 @@ export interface StructuredResponse {
 
 export type ResponseState = 'awaitingInput' | 'completed' | 'error';
 
+export interface PendingAskUserQuestion {
+  question: string;
+  header?: string;
+}
+
 export interface ParsedTranscript {
   /** Raw transcript content */
   raw: string;
@@ -389,12 +394,11 @@ export function extractStructuredSections(text: string): StructuredResponse {
 // ============================================================================
 
 /**
- * Detect response state for tab coloring.
- * Takes parsed content to avoid re-reading file.
+ * Last-turn AskUserQuestion tool_use, when the assistant is waiting on the
+ * user. Used by `--state` and by the HIL notify path (#107).
  */
-export function detectResponseState(lastMessage: string, transcriptContent: string): ResponseState {
+export function extractPendingAskUserQuestion(transcriptContent: string): PendingAskUserQuestion | null {
   try {
-    // Check if the LAST assistant message used AskUserQuestion
     const lines = transcriptContent.trim().split('\n');
     let lastAssistantEntry: any = null;
 
@@ -407,19 +411,32 @@ export function detectResponseState(lastMessage: string, transcriptContent: stri
       } catch {}
     }
 
-    if (lastAssistantEntry?.message?.content) {
-      const content = Array.isArray(lastAssistantEntry.message.content)
-        ? lastAssistantEntry.message.content
-        : [];
-      for (const block of content) {
-        if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
-          return 'awaitingInput';
-        }
-      }
+    if (!lastAssistantEntry?.message?.content) return null;
+    const content = Array.isArray(lastAssistantEntry.message.content)
+      ? lastAssistantEntry.message.content
+      : [];
+    for (const block of content) {
+      if (block.type !== 'tool_use' || block.name !== 'AskUserQuestion') continue;
+      const questions = Array.isArray(block.input?.questions) ? block.input.questions : [];
+      const first = questions[0];
+      const question = typeof first?.question === 'string' ? first.question.trim() : '';
+      const header = typeof first?.header === 'string' ? first.header.trim() : undefined;
+      if (question) return { question, header: header || undefined };
+      if (header) return { question: header, header };
+      return { question: 'a question needs your answer' };
     }
   } catch (err) {
-    console.error('[TranscriptParser] Error detecting response state:', err);
+    console.error('[TranscriptParser] Error extracting AskUserQuestion:', err);
   }
+  return null;
+}
+
+/**
+ * Detect response state for tab coloring.
+ * Takes parsed content to avoid re-reading file.
+ */
+export function detectResponseState(lastMessage: string, transcriptContent: string): ResponseState {
+  if (extractPendingAskUserQuestion(transcriptContent)) return 'awaitingInput';
 
   // Check for error indicators
   if (/📊\s*STATUS:.*(?:error|failed|broken|problem|issue)/i.test(lastMessage)) {

@@ -48,6 +48,7 @@ describe("registering the ask tool", () => {
     // dependency added to either adapter package.
     expect(tool.parameters).toEqual(ECHO_ASK_PARAMETERS);
     expect(ECHO_ASK_PARAMETERS.required).toEqual(["question"]);
+    expect(ECHO_ASK_PARAMETERS.properties.silence_mode.enum).toEqual(["quick", "standard", "thoughtful"]);
   });
 
   test("a runtime without registerTool loses the tool, not the whole adapter", () => {
@@ -205,5 +206,35 @@ describe("tool outcomes", () => {
     });
 
     expect(spoken).toBe("Ready to ship?");
+  });
+
+  test("silence_mode reaches the turn", async () => {
+    let mode: string | undefined;
+    await runAskTool({ question: "Ready?", silence_mode: "quick" }, {
+      source: "pi",
+      ensureConsent: consentGranted,
+      ask: async (options) => {
+        mode = options.silenceMode;
+        return (await askThatReturns("yes")())!;
+      },
+    });
+
+    expect(mode).toBe("quick");
+  });
+
+  test("an unknown silence_mode is reported without starting a turn", async () => {
+    let asked = 0;
+    const outcome = await runAskTool({ question: "Ready?", silence_mode: "instant" }, {
+      source: "pi",
+      ensureConsent: consentGranted,
+      ask: async () => {
+        asked++;
+        return (await askThatReturns("never")())!;
+      },
+    });
+
+    expect(outcome.isError).toBe(true);
+    expect(outcome.text).toContain("silence_mode");
+    expect(asked).toBe(0);
   });
 });

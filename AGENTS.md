@@ -29,10 +29,12 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 bun install
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp] [--check]
+cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
-cli/echo mute on|off|toggle|status | 30m|1h
+cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
+/echo-mute [on|off|toggle|status|duration]  # bare toggles `all`; affects every Echo session
+cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
@@ -41,8 +43,9 @@ cli/echo uninstall [--check]
 bash scripts/install.sh --adapter none        # or claudecode|jcode|grok|pi|omp|mcp
 bash scripts/{status,start,stop,restart,uninstall}.sh
 
-# Runtime mute (audio off; notifications still processed + logged)
-bash scripts/mute.sh on|off|toggle|status   # `on 30` = timed; empty POST /mute toggles
+# Runtime mute (tts | mic | all; notifications still processed + logged)
+bash scripts/mute.sh on|off|toggle|status   # `on tts` / `on mic`; `on 30` = timed all; empty POST /mute toggles all
+bash scripts/replay.sh [n]                 # last n spoken lines; default 1, max 10
 
 # echo-converse (one-shot voice ask) - coordinator only; hosts call the echo_ask tool
 bun converse/main.ts                     # start the coordinator on :32468 (no LaunchAgent by design)
@@ -71,6 +74,8 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 `com.echo`). Do not resurrect the old services.
 
 ## Development workflow
+This checkout is a GitButler workspace (`but`). Fetch target is `origin/master` (`but pull`). That does **not** change PR policy: still do not push `master`; work on `dev` and open PRs from `dev` to `master`. Use `but` for git writes.
+
 
 ```bash
 git checkout dev
@@ -85,6 +90,7 @@ bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
 bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
 bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
+bun build adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -140,13 +146,14 @@ squashed anyway, immediately resync with a real merge commit: `git merge origin/
 | Provider egress gating + drop-off log (#24) | [docs/providers-observability.md](docs/providers-observability.md) |
 | Circuit breaker + reliability settings | [docs/reliability.md](docs/reliability.md) |
 | Voices, audition, per-turn persona voice (Stop hook) + the `voices.json` / `pronunciations.json` reference | [docs/voices.md](docs/voices.md) |
-| Adapter rules + package boundary + registration contract (#77) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
+| Adapter rules + package boundary + registration contract (#77) + extension surface (add harness / add feature) + Pi #15 + oh-my-pi #18/#109 | [docs/adapters.md](docs/adapters.md) |
 | One-shot voice ask: TCC process topology, the turn, endpoints, capture tiers, v1 limits | [docs/converse.md](docs/converse.md) |
 | Shipped design decisions | [docs/design-docs/index.md](docs/design-docs/index.md) |
 | Implementation plans · session handoffs | [docs/plans/](docs/plans/) · [docs/handoffs/](docs/handoffs/) |
 | Documentation ownership contract · DOX procedure | [docs/AGENTS.md](docs/AGENTS.md) · [docs/dox.md](docs/dox.md) |
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
-| Operations (start/stop/restart/status · runtime mute · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| What Echo does (when it speaks, when it stays quiet, mute layers, states, HIL current truth) | [docs/what-echo-does.md](docs/what-echo-does.md) |
+| Operations (start/stop/restart/status · runtime mute vs daemon disable · replay · update · repo moves) | [docs/operations.md](docs/operations.md) |
 | Configuration (`~/.config/echo/config.json`, schema, migration, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
@@ -157,16 +164,16 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Purpose | Path |
 | --- | --- |
 | Universal daemon | `core/server.ts` |
-| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache | `core/play-queue.ts`, `core/tts-cache.ts` |
+| Serial play-queue (202 no-overlap, coalescing, age cap, watchdog) · short-phrase TTS cache · last-N speak ring | `core/play-queue.ts`, `core/tts-cache.ts`, `core/speak-history.ts` |
 | Circuit breaker · numeric config parsing | `core/circuit-breaker.ts`, `core/env.ts` |
-| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona scaffold, greetings, edge-tts voice grammar, daemon endpoints) | `shared/` |
+| `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona overlay + scaffold, mute commands, harness catalog + feature register hooks, greetings, edge-tts voice grammar, notify speak-mode density, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
-| Claude Code hooks + Stop-hook voice + registrar | `adapters/claudecode/hooks/` (incl. `VoiceCompletion.hook.ts`), `adapters/claudecode/restore-hooks.ts` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/` |
+| Claude Code hooks, slash commands + reconcilers; mute-only plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
-| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`) |
+| Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload · harness catalog CLI | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`, `harness-catalog.ts`) |
 | Port every lifecycle script + `cli/echo` talks to (config.json, deprecated process PORT, then 3246; never parses dotenv files) | `scripts/echo-port.sh` |
 | Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
@@ -195,6 +202,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
+- Do not invent a second plugin loader beside the as-built adapter packages. New harnesses and features register through [`shared/extension.ts`](shared/extension.ts) (`HARNESSES`, `registerEchoMute`, `registerEchoVoice`) and the existing reconciler + `/notify` seams. `core/` stays host-neutral.
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
 - Do not let `echo_ask` reach capture without a live host-session consent grant. Pi and omp keep the grant only in their active extension instance; MCP keeps it only for its stdio process because the protocol publishes no narrower conversation lifecycle. Denials are sticky for that session, missing UI fails closed, and no consent state is persisted. Exact surfaces and expiry: `docs/converse.md`.

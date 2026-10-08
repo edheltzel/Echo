@@ -11,10 +11,13 @@ Adapters should:
 
 1. Observe host lifecycle events.
 2. Extract a short user-facing message (for Pi/Claude Code, the final `🗣️` line).
-3. Add `source` and `session_id` metadata when available.
+3. Add `source` and `session_id` metadata when available. The shared notify client
+   fills `speak_mode` (`announce`/`brief`/`consult`) from that message; `think` is
+   explicit-only.
 4. POST to the daemon's `/notify`, resolved via `shared/daemon-endpoints.ts`.
 5. Treat notify failures as non-fatal host-session warnings.
 6. Suppress child/subagent contexts to avoid audio floods.
+7. Detect needs-input / approval / attention in the adapter and POST `/notify` with a dedicated line. Completions that happen to be questions still speak as completions; `speak_mode` `consult` stays density on that line. Product: [#107](https://github.com/edheltzel/Echo/issues/107). Shipped hosts and wording: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you).
 
 ## Package boundary - self-contained, HTTP-only
 
@@ -40,8 +43,8 @@ of a path string, not an import - so the guard pairs an import check with a stri
 
 `@echo/shared` is also the single owner of invariants both sides enforce: the edge-tts voice
 grammar lives in `shared/edge-voice.ts` and `core/server.ts` imports it, rather than each
-keeping a copy in sync. Persona overlay helpers (`applyPersonaOverride`, `mergeDaidentity`,
-`booleanEnv`, `shouldSuppressVoice`) live in `shared/persona.ts`; greeting pick lives in
+keeping a copy in sync. Persona overlay helpers (`applyPersonaOverride`, `booleanEnv`,
+`shouldSuppressVoice`) live in `shared/persona.ts`; greeting pick lives in
 `shared/greeting.ts`. `shared/` may never import `core/` - core imports shared, so the
 dependency runs one way only.
 
@@ -67,13 +70,102 @@ A conforming registration:
    repo), write by atomically replacing the resolved real file, never the symlink itself.
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
-`~/.claude/settings.json`), `adapters/pi/reconcile.ts` (packages entry in
-`~/.pi/agent/settings.json`), and `adapters/omp/reconcile.ts` (the `echo-voice` symlink in
-`~/.omp/agent/extensions/`, #18/#109). `scripts/install.sh` re-reconciles **every installed
-adapter on every run** regardless of `--adapter`, and `scripts/install.sh --check` aggregates
-the adapters' check modes plus the LaunchAgent plist paths - a new adapter must plug its
-reconcile and check commands into both. Future hosts (Codex/OpenCode #30) inherit this
-contract.
+`~/.claude/settings.json`) and `adapters/claudecode/reconcile-commands.ts` (the
+`echo-voice.md` and `echo-mute.md` symlinks in `~/.claude/commands/`),
+`adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
+`adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`,
+#18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
+regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
+modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
+commands into both. Codex and OpenCode follow the same contract.
+
+Claude Code also ships a mute-only plugin at `adapters/claudecode/plugin/`. It is not a
+registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
+stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin command is
+`/echo:echo-mute`. Bare `/echo-mute` remains the installer slash command. Both shell to
+`cli/echo mute` via PATH or the current checkout.
+
+The shipped id list and feature register hooks live in [`../shared/extension.ts`](../shared/extension.ts).
+That catalog is the extension surface. It is not a second plugin loader: `install.sh` still
+calls each adapter's own reconciler, and the daemon still never imports a host.
+
+## Extension surface
+
+`shared/extension.ts` types the as-built seams so a new harness or feature does not fork
+`core/` or invent a parallel plugin system.
+
+| Kind | As-built hosts | How it plugs in |
+| --- | --- | --- |
+| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoVoice`, `registerEchoAskTool`. |
+| `hooks` | Claude Code, Jcode, Grok, Codex | Out-of-process lifecycle interceptors plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
+| `commands-only` | OpenCode | Mute-only owned symlink. |
+
+Feature register hooks (reuse these; do not add a second factory):
+
+| Feature | Register hook | Notes |
+| --- | --- | --- |
+| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
+| mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
+| persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
+| ask | `registerEchoAskTool` (`@echo/converse/host-tool.ts`) | Feature-detect the host tool API. |
+| greeting | `applyNameToken` / shared greeting pool | Adapter owns when to speak it. |
+| env | `loadEchoEnvironment` (`@echo/shared/echo-env.ts`) | `config.json` first; doctor reads the same keys. |
+
+`bun run scripts/harness-catalog.ts` prints the catalog. `tests/shared/extension.test.ts`
+fails if a catalog id is missing from workspaces, `install.sh`, or `cli/echo`.
+
+## How to add a harness
+
+Subtract first: copy the closest as-built adapter rather than a new runtime.
+
+1. Create `adapters/<id>/` as a workspace package that declares `@echo/shared`. Relative
+   imports stay inside the package. Talk to the daemon over HTTP, never by reading `core/`.
+2. Ship an idempotent reconciler with `--check` (exit 0 current, 3 pending, 2 fatal).
+3. Add a `HARNESSES` entry in `shared/extension.ts` (`id`, `kind`, `reconcile`, `features`).
+4. List the package in the root `workspaces` array.
+5. Wire `--adapter <id>` in `scripts/install.sh` (usage, unknown-id case, preflight,
+   `install_adapter`, `refresh_installed_adapters`, `check_installation`) and the
+   `cli/echo` usage line. Detection stays adapter-owned; do not add host names to `core/`.
+6. Add tests under `tests/adapters/<id>/` and a section on this page.
+7. Prove with the commands below. `tests/shared/extension.test.ts` lists every seam the
+   catalog still expects.
+
+Pi/omp is the plugin-first reference. Claude Code is the thin-plugin reference (hooks +
+slash commands, no in-process SDK). Jcode is the lifecycle-hook reference. OpenCode is the
+mute-only reference.
+
+## How to add a feature
+
+A feature is a register hook plus the adapters that opt in. Do not add it to `core/` unless
+every host needs a new HTTP contract.
+
+1. Put host-neutral behavior in `@echo/shared` (or `@echo/converse` for ask). Export a
+   register function, not a parallel plugin table.
+2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoVoice` /
+   `registerEchoAskTool` from the extension entry. Feature-detect host APIs; missing
+   surface must no-op without taking the adapter down.
+3. Slash-command / skill hosts: add a file that shells out to the existing CLI (mute is
+   `bash cli/echo mute`) and register it with `planOwnedSymlink` / the host reconciler.
+4. Name the feature on each opting-in harness in `HARNESSES[].features`.
+5. If the feature needs configuration, read it through `loadEchoEnvironment` so doctor/env
+   stay one surface.
+
+Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path.
+
+## Prove
+
+```bash
+bun test tests/shared/extension.test.ts tests/scripts/harness-catalog.test.ts
+bun test tests/shared/mute-command.test.ts
+bun test tests/adapters/pi/pi-echo-voice-command.test.ts tests/adapters/omp/omp-echo-voice-command.test.ts
+bun test tests/adapters/claudecode/echo-mute-command.test.ts tests/adapters/opencode/echo-mute-command.test.ts
+bun run scripts/harness-catalog.ts
+bun run scripts/harness-catalog.ts features
+bash scripts/install.sh --check     # or: cli/echo doctor
+```
+
+`--check` is read-only. Do not retarget the live LaunchAgent to prove a checkout.
 
 ## Native terminal visuals
 
@@ -103,8 +195,11 @@ Jcode's lifecycle stream covers TUI, desktop, headless, and swarm workers. The a
 `JCODE_HOOK_SESSION_KIND` and `JCODE_HOOK_PARENT_SESSION_ID` to suppress child sessions.
 Startup greetings are disabled by default; when enabled they run only for root
 `session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
-is never read aloud. Jcode supports only one command per hook key; reconciliation refuses to
-overwrite a non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
+is never read aloud. Jcode supports only one command per hook key; reconciliation rewrites
+Echo-owned `turn_end` / `session_start` commands (this checkout, another clone whose
+`package.json` is `@echo/jcode-adapter`, or a dead `*/adapters/jcode/hook.ts` from a
+rename or tmp worktree) to the install tree that ran reconcile, refuses to overwrite a
+non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
 fails closed on TOML table shapes it cannot preserve safely.
 
 ## Grok Build adapter - lifecycle hooks
@@ -125,14 +220,53 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
   through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
   payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
-- **Registration:** one Echo-owned file `~/.grok/hooks/echo-voice.json` via
-  `adapters/grok/reconcile.ts`. Sibling files (for example firstmate's `fm-turn-end.json`) are
-  never rewritten or pruned. `GROK_HOME` / `ECHO_GROK_HOOKS_DIR` redirect the target for tests.
-  Wired into `install.sh` as `--adapter grok`.
+- **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
+  (`/echo-mute` → bash `cli/echo mute`) via `adapters/grok/reconcile.ts`. Sibling files (for
+  example firstmate's `fm-turn-end.json`) are never rewritten or pruned. `GROK_HOME` /
+  `ECHO_GROK_HOOKS_DIR` redirect the target for tests. Wired into `install.sh` as `--adapter grok`.
 
 Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
 `grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
 surface wins.
+
+## OpenCode adapter - mute only
+
+`adapters/opencode/` registers `/echo-mute` (`~/.config/opencode/commands/echo-mute.md` →
+bash `cli/echo mute`). No lifecycle voice hooks.
+
+## Live-session voice suppression - omp and Codex
+
+Live mode is an adapter-local suppression state, not a daemon mute. omp marks only the
+session whose public custom message has `role: "custom"` and
+`customType: "live-delegation"`. While marked it suppresses the **notification** - the
+`/notify` POST, and with it the native terminal banner that rides the same call. It still
+injects the completion voice instruction, so the first turn after live mode ends carries its
+own `🗣️` line.
+
+**omp emits no live-end signal** - its live controller stops without putting anything on the
+extension bus - so the mark is released by inference, three ways:
+
+- the next turn-triggering message that is not a live delegation: `role: "user"`, or
+  `role: "custom"` with any other `customType`. Typed user messages are not the only way a
+  turn starts; prewalk, advisor and session-stop continuations all trigger turns with
+  `role: "custom"`, and releasing only on `role: "user"` left those turns silent. Assistant
+  and tool messages are excluded because they occur inside the delegation's own turn. A
+  steered custom message can therefore release mid-turn - that direction is fail-open.
+- a cap of 10 minutes since the most recent delegation (`LIVE_MODE_MAX_SILENCE_MS`,
+  refreshed by each one), so suppression can never be unbounded.
+- `session_shutdown`, which forgets the session entirely.
+
+`echo_ask` is reported as unavailable while a session is marked, and refuses before consent:
+omp's live conversation already owns the microphone that a spoken ask would open.
+
+Codex reads the matching `turn_context` record from the hook payload's transcript and skips
+that turn when `realtime_active` is `true`. The match is on `turn_id`, never on the newest
+record, so a live turn cannot silence the rest of the session; missing or unreadable metadata
+leaves ordinary notification behavior unchanged. Codex needs no release rule because the hook
+is a fresh process per turn and holds no state.
+
+Neither adapter calls `/mute` or changes the daemon's mute state. Other concurrent sessions
+continue posting their notifications normally.
 
 ## Pi adapter - per-turn completions (issue #15)
 
@@ -147,10 +281,11 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
   `~/.config/echo/config.json` is the durable local configuration surface and wins over
   the one-release environment fallback; an existing host process must be relaunched after edits.
-- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from a
-  pool of neutral catchphrases (`adapters/pi/config.ts`, mirroring the Claude Code adapter's
-  `startupCatchphrases`). Configuring `ECHO_VOICE_CATCHPHRASE` in config.json replaces the
-  pool with that single line; setting `ECHO_VOICE_GREET_ON_START` there to `false` disables it.
+- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from
+  the shared resolver. Pool selection, `sayName`, and custom-line semantics are owned by
+  [the persona and voice guide](voices.md#per-project-persona--voice). Configuring
+  `ECHO_VOICE_CATCHPHRASE` in config.json replaces the pool with that single line;
+  setting `ECHO_VOICE_GREET_ON_START` there to `false` disables it.
 - **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
   (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
@@ -160,7 +295,8 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   back to the provider default voice (audibly the identity voice on stock installs), logged
   as `resolution: fallback`.
 - Injection is gated on `config.speakCompletions` (default on) **and** the same
-  `shouldSuppressVoice` check the speak side uses (headless/subagent stays silent).
+  `shouldSuppressVoice` check (`@echo/shared/persona.ts`) the speak side uses
+  (headless/subagent stays silent).
 - `extractVoiceLineFromText` (`shared/voice-line.ts`) strips an optional leading
   `<Name>:` (mirroring the Claude Code adapter's `parseFinalVoiceLine` name grammar) so the persona name isn't
   spoken aloud.
@@ -169,6 +305,18 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 
 The full design rationale is catalogued in
 [`design-docs/pi-completion-injection.md`](design-docs/pi-completion-injection.md).
+
+## Needs-input announce (#107)
+
+Claude Code, Pi, and omp detect a wait in the adapter and POST ordinary `/notify`.
+Wording and one-announce-per-request live in `shared/hil.ts`. Detection:
+
+| Host | Question | Approval | Attention |
+| --- | --- | --- | --- |
+| Claude Code | `PermissionRequest` `AskUserQuestion`, plus transcript `awaitingInput` on `permission_prompt` | `PermissionRequest` (other tools) | `Notification` `idle_prompt` / `agent_needs_input` |
+| Pi / omp | `ui_prompt_start` select/input/editor | `tool_approval_requested` (omp; Pi when the host emits it) | `ui_prompt_start` custom |
+
+Jcode, Grok, Codex, and OpenCode are unchanged.
 
 ## MCP adapter - Claude Code's route to a model-invokable tool
 
@@ -210,7 +358,9 @@ installed SDK rather than assumed, and each would have been a silent break:
   keeps its voice notifications, instead of taking the whole extension down on load.
 
 The adapters contribute only their host tag (`source`) and a per-call persona voice resolved from
-the host context, so a project-local persona still applies.
+the host context, so a project-local persona still applies. Optional `silence_mode` lives on the
+shared `echo_ask` schema in that module (`quick` / `standard` / `thoughtful`); adapters do not
+redefine it.
 
 ## oh-my-pi (omp) - sibling adapter, shared shape (issues #18, #109)
 

@@ -3,13 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
-import { resolveStartupCatchphrase } from "../../../adapters/claudecode/hooks/lib/greeting";
+import {
+  findStartupCatchphraseMatch,
+  resolveStartupCatchphrase,
+  resolveStartupCatchphrases,
+} from "../../../adapters/claudecode/hooks/lib/greeting";
 
-// A project persona name must drive the STARTUP greeting - not just the voice.
-// The regression the neutral test global (identity-layered's GLOBAL_ATLAS) missed:
-// Ed's real ~/.claude sets an explicit `displayName` AND a pool of "Atlas ..." literal
-// catchphrases, so a repo that set only name+voice (via /echo-voice) inherited the
-// global displayName and the "Atlas" pool → greeting said "Atlas" in the project voice.
+// Project names still win displayName precedence, but startup name announcement is
+// opt-in. Inherited custom literals remain unchanged; shared defaults follow sayName.
 const GLOBAL_ATLAS = {
   name: "Atlas",
   displayName: "Atlas",
@@ -24,12 +25,16 @@ function writeSettings(root: string, json: unknown): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "settings.json"), JSON.stringify(json));
 }
-function fakeHome(): string { const h = tmp("echo-home-"); writeSettings(h, { daidentity: GLOBAL_ATLAS }); return h; }
+function fakeHome(daidentity: Record<string, unknown> = GLOBAL_ATLAS): string {
+  const h = tmp("echo-home-");
+  writeSettings(h, { daidentity });
+  return h;
+}
 const firstPick = () => 0; // deterministic catchphrase pick
 
 afterEach(() => { clearCache(); for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
-describe("Claude Code startup greeting announces the project persona name", () => {
+describe("Claude Code startup greeting stays nameless unless sayName", () => {
   test("displayName precedence: project name overrides an inherited global displayName", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-");
@@ -42,15 +47,40 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(id.catchphrasesFromProject).toBe(false);
   });
 
-  test("name+voice, no catchphrases → greeting announces the project name, not Atlas", () => {
+  test("project name inherits global custom catchphrases verbatim", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-");
     writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
 
     const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
-    expect(greeting).toContain("EchoCC");
-    expect(greeting).not.toContain("Atlas");
-    expect(greeting).toBe("EchoCC online and standing by.");
+    expect(greeting).toBe("Atlas online and standing by.");
+  });
+
+  test("name+voice, no configured catchphrases, no sayName is nameless", () => {
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
+    const proj = tmp("echo-proj-");
+    writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
+
+    const id = getIdentity(proj, home);
+    const greeting = resolveStartupCatchphrase(id, firstPick);
+    expect(resolveStartupCatchphrases(id)).toEqual([
+      "standing by",
+      "ready when you are",
+      "waiting for direction",
+      "engaged",
+    ]);
+    expect(greeting).toBe("standing by");
+  });
+
+  test("sayName true uses the named default pool", () => {
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
+    const proj = tmp("echo-proj-");
+    writeSettings(proj, {
+      daidentity: { name: "EchoCC", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
+    });
+
+    const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
+    expect(greeting).toBe("EchoCC, standing by");
   });
 
   test("project sets its OWN catchphrases → those win over the name default", () => {
@@ -63,6 +93,64 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(resolveStartupCatchphrase(id, firstPick)).toBe("Echo reporting.");
   });
 
+  test("legacy singular startupCatchphrase is honored", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrase: "Legacy greeting.",
+    });
+    const proj = tmp("echo-proj-");
+
+    const id = getIdentity(proj, home);
+    expect(resolveStartupCatchphrases(id)).toEqual(["Legacy greeting."]);
+    expect(resolveStartupCatchphrase(id, firstPick)).toBe("Legacy greeting.");
+  });
+
+  test("sayName false removes name tokens from the dedup pool", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: ["{name}, ready"],
+    });
+    const proj = tmp("echo-proj-");
+
+    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
+  });
+
+  test("invalid custom entries are excluded before name token expansion", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: [null, 42, "", "  ", "{name}, ready"],
+    });
+    const proj = tmp("echo-proj-");
+
+    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
+  });
+
+  test("default greetings deduplicate only exact normalized lines", () => {
+    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
+    const proj = tmp("echo-proj-");
+    const id = getIdentity(proj, home);
+
+    expect(findStartupCatchphraseMatch("Engaged!", id)).toBe("engaged");
+    expect(findStartupCatchphraseMatch("I engaged the new adapter", id)).toBeUndefined();
+    expect(findStartupCatchphraseMatch("Standing by while tests run", id)).toBeUndefined();
+  });
+
+  test("custom greetings deduplicate only exact normalized lines", () => {
+    const home = fakeHome({
+      name: "Atlas",
+      displayName: "Atlas",
+      startupCatchphrases: ["Atlas reporting."],
+    });
+    const proj = tmp("echo-proj-");
+    const id = getIdentity(proj, home);
+
+    expect(findStartupCatchphraseMatch("Atlas reporting", id)).toBe("Atlas reporting.");
+    expect(findStartupCatchphraseMatch("Status: Atlas reporting", id)).toBeUndefined();
+  });
+
   test("no project persona → global Atlas greeting stays untouched", () => {
     const home = fakeHome();
     const proj = tmp("echo-proj-"); // no project .claude persona
@@ -71,6 +159,7 @@ describe("Claude Code startup greeting announces the project persona name", () =
     expect(id.displayName).toBe("Atlas");
     expect(id.personaFromProject).toBe(false);
     expect(resolveStartupCatchphrase(id, firstPick)).toBe("Atlas online and standing by.");
+    expect(id.sayName).toBe(false);
   });
 });
 

@@ -7,6 +7,7 @@ const config: PiVoiceConfig = {
   title: "Pi Notification",
   startupCatchphrases: ["Pi ready."],
   personaName: "Pi",
+  sayName: false,
   voiceId: "kai",
   voiceEnabled: true,
   greetOnSessionStart: true,
@@ -23,6 +24,11 @@ describe("Pi notify payloads", () => {
       voice_id: "kai",
       session_id: "session-1",
       source: "pi",
+      speak_mode: "announce",
     });
+  });
+
+  test("shapes a checkpoint question as consult", () => {
+    expect(buildNotifyPayload(config, "Want me to open the PR?", "pi").speak_mode).toBe("consult");
   });
 });

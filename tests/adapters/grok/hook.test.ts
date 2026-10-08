@@ -22,6 +22,7 @@ const config: GrokVoiceConfig = {
   title: "Grok Notification",
   startupCatchphrases: ["{name} online."],
   personaName: "Grok",
+  sayName: true,
   voiceId: "grok",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -55,6 +56,7 @@ describe("Grok lifecycle hook adapter", () => {
       voice_id: "grok",
       session_id: fixture.sessionId,
       source: "grok",
+      speak_mode: "announce",
     }));
   });
 

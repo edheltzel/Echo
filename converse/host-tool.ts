@@ -10,6 +10,7 @@
 // and the adapters dependency-free.
 
 import { askOnce, AskError, type AskOptions, type AskResult } from "./client.ts";
+import { isSilenceMode, type SilenceMode } from "./silence-mode.ts";
 import type { SessionConsentDecision } from "./session-consent.ts";
 
 export const ECHO_ASK_TOOL_NAME = "echo_ask";
@@ -24,6 +25,8 @@ export const ECHO_ASK_TOOL_DESCRIPTION = [
   "faster than waiting for typing. Ask one short question at a time.",
   "The call blocks until the human stops speaking, and only one ask can hold the",
   "microphone at a time.",
+  "silence_mode selects the end-of-utterance wait: quick (~0.5s), standard (~1.5s, default,",
+  "today's timeout), or thoughtful (~2.5s).",
 ].join(" ");
 
 /** JSON Schema, accepted directly by the Pi and omp tool runtimes. */
@@ -33,6 +36,12 @@ export const ECHO_ASK_PARAMETERS = {
     question: {
       type: "string",
       description: "The question to speak aloud. One sentence, phrased for the ear rather than the eye.",
+    },
+    silence_mode: {
+      type: "string",
+      enum: ["quick", "standard", "thoughtful"],
+      description:
+        "End-of-utterance window after the human stops talking. quick ~0.5s, standard ~1.5s (default; today's timeout), thoughtful ~2.5s.",
     },
   },
   required: ["question"],
@@ -53,6 +62,12 @@ export interface AskToolOptions {
   signal?: AbortSignal;
   /** Must return granted before this call may reach the microphone. */
   ensureConsent?: () => Promise<SessionConsentDecision>;
+  /**
+   * Reason this host cannot take a spoken turn right now, or undefined when it can. Checked
+   * before consent, so a host that already owns the microphone (omp live mode) neither prompts
+   * the human nor reaches capture.
+   */
+  unavailableReason?: () => string | undefined;
   /** Injected in tests; the real one runs a full turn. */
   ask?: (options: AskOptions) => Promise<AskResult>;
 }
@@ -74,6 +89,8 @@ export interface AskToolHostOptions {
   resolveVoice?: (ctx: unknown) => { voiceId?: string; title?: string };
   /** Resolve or request the one consent decision for this live host session. */
   ensureConsent?: (ctx: unknown, signal?: AbortSignal) => Promise<SessionConsentDecision>;
+  /** Reason this host session cannot take a spoken turn right now, resolved per call. */
+  unavailableReason?: (ctx: unknown) => string | undefined;
   ask?: AskToolOptions["ask"];
 }
 
@@ -109,6 +126,7 @@ export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolH
     ) => {
       const voice = options.resolveVoice?.(ctx) ?? {};
       const ensureConsent = options.ensureConsent;
+      const unavailableReason = options.unavailableReason;
       const outcome = await runAskTool(params, {
         source: options.source,
         voiceId: voice.voiceId,
@@ -117,6 +135,7 @@ export function registerEchoAskTool(host: ToolRegisteringHost, options: AskToolH
         ensureConsent: ensureConsent
           ? () => ensureConsent(ctx, signal)
           : undefined,
+        unavailableReason: unavailableReason ? () => unavailableReason(ctx) : undefined,
         ask: options.ask,
       });
       return {
@@ -135,6 +154,14 @@ function readQuestion(params: unknown): string | null {
   return typeof question === "string" && question.trim().length > 0 ? question.trim() : null;
 }
 
+function readSilenceMode(params: unknown): { ok: true; mode: SilenceMode | undefined } | { ok: false } {
+  if (typeof params !== "object" || params === null) return { ok: true, mode: undefined };
+  const raw = (params as { silence_mode?: unknown }).silence_mode;
+  if (raw === undefined) return { ok: true, mode: undefined };
+  if (isSilenceMode(raw)) return { ok: true, mode: raw };
+  return { ok: false };
+}
+
 /**
  * Run one ask on behalf of a host's tool call.
  *
@@ -150,6 +177,22 @@ export async function runAskTool(params: unknown, options: AskToolOptions): Prom
       isError: true,
       details: { error: "invalid_request" },
     };
+  }
+
+  const silence = readSilenceMode(params);
+  if (!silence.ok) {
+    return {
+      text: "echo_ask `silence_mode` must be `quick`, `standard`, or `thoughtful`.",
+      isError: true,
+      details: { error: "invalid_request" },
+    };
+  }
+
+  // Checked before consent: a host that is already using the microphone must not prompt the
+  // human for a grant it cannot honor.
+  const unavailable = options.unavailableReason?.();
+  if (unavailable) {
+    return { text: unavailable, isError: true, details: { error: "ask_unavailable" } };
   }
 
   const consent = await options.ensureConsent?.() ?? "unavailable";
@@ -171,6 +214,7 @@ export async function runAskTool(params: unknown, options: AskToolOptions): Prom
       source: options.source,
       voiceId: options.voiceId,
       title: options.title,
+      silenceMode: silence.mode,
       signal: options.signal,
     });
     return {
@@ -183,6 +227,8 @@ export async function runAskTool(params: unknown, options: AskToolOptions): Prom
         // Evidence that the microphone was opened inside this host's own process
         // tree, which is what makes the macOS grant attribute to the terminal.
         ancestry: result.ancestry,
+        ...(result.stopped ? { stopped: true } : {}),
+        ...(silence.mode ? { silence_mode: silence.mode } : {}),
       },
     };
   } catch (error) {

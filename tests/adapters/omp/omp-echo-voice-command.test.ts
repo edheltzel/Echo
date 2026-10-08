@@ -25,6 +25,7 @@ function registerAndGetEchoVoice(): { handler: CmdHandler; notes: Array<{ msg: s
   echoVoiceOmpAdapter(api);
   const cmd = commands.get("echo-voice");
   if (!cmd) throw new Error("omp adapter did not register /echo-voice");
+  if (!commands.has("echo-mute")) throw new Error("omp adapter did not register /echo-mute");
   return { handler: cmd.handler, notes };
 }
 

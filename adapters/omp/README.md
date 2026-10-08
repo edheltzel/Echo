@@ -15,6 +15,11 @@ through the same shared implementation the Pi adapter uses, feature-detected so 
 without a tool API keeps its voice notifications. Contract:
 [docs/converse.md](../../docs/converse.md).
 
+On `tool_approval_requested` and `ui_prompt_start` it speaks one needs-approval / question /
+attention line ([#107](https://github.com/edheltzel/Echo/issues/107)). Live mode still
+suppresses `/notify`. Default omp `approvalMode` is often `yolo`, so the approval event
+never fires until that is changed.
+
 ## Configuration
 
 omp loads the same canonical `ECHO_VOICE_*` settings as the Pi adapter (the legacy
@@ -44,9 +49,8 @@ daidentity:
 Resolved at `session_start` from `ctx.cwd`, per key: project → global → env config.
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - the
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
-omp session started in that repo. With a persona **name** set, the startup greeting
-**announces that name** (e.g. "Echo online and standing by.") unless the repo provides
-its own `startupCatchphrases`.
+omp session started in that repo. Startup greeting semantics are owned by
+[the persona and voice guide](../../docs/voices.md#per-project-persona--voice).
 
 ### Scaffold it without hand-editing YAML
 
@@ -62,6 +66,14 @@ edge-tts name, then merges the `daidentity` block into `<project>/.omp/config.ym
 `Bun.YAML` (parse → set → stringify), preserving every other key. A present-but-unparseable
 `config.yml` **aborts** rather than clobbering it. The command ships with the adapter (no
 installer step). Takes effect on the next omp session in that repo.
+
+### Mute from the host
+
+```text
+/echo-mute [on|off|toggle|status|duration]
+```
+
+Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
 
 ## Status command
 

@@ -170,6 +170,6 @@ describe("Pi adapter: echo_ask tool", () => {
 
     atlasVoicePiAdapter(host.api, loadPiVoiceConfig({}));
 
-    expect([...host.commands.keys()].sort()).toEqual(["echo-voice", "voice-status"]);
+    expect([...host.commands.keys()].sort()).toEqual(["echo-mute", "echo-voice", "voice-status"]);
   });
 });

@@ -10,6 +10,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveDaemonBase } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration, type EchoEnvironment } from "@echo/shared/echo-env.ts";
+import {
+  DEFAULT_SILENCE_MODE,
+  parseSilenceMode,
+  SILENCE_MODE_MS,
+  type SilenceMode,
+} from "./silence-mode.ts";
 
 /** Keypad ECHOV. Core's TTS daemon keeps :3246; converse never moves it. */
 export const DEFAULT_CONVERSE_PORT = 32468;
@@ -49,8 +55,18 @@ export interface ConverseConfig {
    * operator's Echo for as long as the calling host lives.
    */
   transcribeTimeoutMs: number;
+  /**
+   * Named end-of-utterance window. `standard` is today's 1500ms default.
+   * `ECHO_CONVERSE_SILENCE_MS` still overrides the numeric window when set.
+   */
+  silenceMode: SilenceMode;
   /** Trailing silence that ends a capture. */
   silenceMs: number;
+  /**
+   * Touch this file (or POST /turn/:id/stop) to end the current recording early.
+   * User-owned; never /tmp. The recorder is SIGTERM'd and the audio is transcribed.
+   */
+  stopFilePath: string;
   /** BCP-47 locale for the transcriber. */
   locale: string;
   /** `undefined` selects the best available rung at capture time. */
@@ -90,6 +106,11 @@ export function converseStateDir(homeDir: string = homedir()): string {
   return join(homeDir, ".local", "state", "echo", "converse");
 }
 
+/** Overlay a per-ask silence mode onto a resolved config. The named window always wins. */
+export function withSilenceMode(config: ConverseConfig, mode: SilenceMode): ConverseConfig {
+  return { ...config, silenceMode: mode, silenceMs: SILENCE_MODE_MS[mode] };
+}
+
 export function converseLogPath(homeDir: string = homedir()): string {
   return join(homeDir, "Library", "Logs", "echo-converse.log");
 }
@@ -105,6 +126,7 @@ export function resolveConverseConfig(
   // longer reach.
   const maxCaptureMs = positiveInt(env.ECHO_CONVERSE_MAX_CAPTURE_MS, 30_000);
   const transcribeTimeoutMs = positiveInt(env.ECHO_CONVERSE_TRANSCRIBE_TIMEOUT_MS, 60_000);
+  const silenceMode = parseSilenceMode(env.ECHO_CONVERSE_SILENCE_MODE) ?? DEFAULT_SILENCE_MODE;
   return {
     port,
     baseUrl: stripTrailingSlash(env.ECHO_CONVERSE_URL || `http://localhost:${port}`),
@@ -115,7 +137,12 @@ export function resolveConverseConfig(
     captureDir: env.ECHO_CONVERSE_CAPTURE_DIR || join(homeDir, "Library", "Caches", "echo", "converse"),
     maxCaptureMs,
     transcribeTimeoutMs,
-    silenceMs: positiveInt(env.ECHO_CONVERSE_SILENCE_MS, 1_500),
+    silenceMode,
+    // A numeric SILENCE_MS keeps working as a custom window; otherwise the named mode.
+    silenceMs: env.ECHO_CONVERSE_SILENCE_MS !== undefined
+      ? positiveInt(env.ECHO_CONVERSE_SILENCE_MS, SILENCE_MODE_MS[silenceMode])
+      : SILENCE_MODE_MS[silenceMode],
+    stopFilePath: env.ECHO_CONVERSE_STOP_FILE || join(converseStateDir(homeDir), "stop"),
     locale: env.ECHO_CONVERSE_LOCALE || "en-US",
     sttTier: parseTier(env.ECHO_CONVERSE_STT_TIER),
     recBin: env.ECHO_CONVERSE_REC_BIN || "rec",

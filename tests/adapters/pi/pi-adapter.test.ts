@@ -288,4 +288,57 @@ describe("Pi adapter lifecycle", () => {
 
     expect(payloads).toHaveLength(2);
   });
+
+  test("HIL approval and question speak once with the preferred name", async () => {
+    process.env.ECHO_PREFERRED_NAME = "Ed";
+    const payloads: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    };
+
+    const { api, handlers } = createMockPi();
+    registerAdapter(api);
+    const ctx = createContext();
+    const approval = {
+      type: "tool_approval_requested",
+      toolCallId: "c1",
+      toolName: "bash",
+      reason: "Run the verification command?",
+    };
+
+    await handlers.get("tool_approval_requested")?.(approval, ctx);
+    await handlers.get("tool_approval_requested")?.(approval, ctx);
+    await handlers.get("ui_prompt_start")?.({
+      type: "ui_prompt_start",
+      kind: "select",
+      title: "What is the first Echo problem?",
+    }, ctx);
+
+    expect(payloads.map((payload) => payload.message)).toEqual([
+      "Ed, Pi needs approval: Run the verification command?",
+      "Ed, What is the first Echo problem?",
+    ]);
+    expect(payloads[0]).toMatchObject({ source: "pi", session_id: "session-1", voice_id: "pi" });
+  });
+
+  test("HIL stays quiet in a headless subagent and skips Echo consent", async () => {
+    process.env.ECHO_PREFERRED_NAME = "Ed";
+    const payloads: unknown[] = [];
+    globalThis.fetch = async (_input, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    };
+    const { api, handlers } = createMockPi();
+    registerAdapter(api);
+    await handlers.get("tool_approval_requested")?.(
+      { type: "tool_approval_requested", toolCallId: "c1", toolName: "bash", reason: "npm test" },
+      createContext("session-1", { mode: "json", hasUI: false }),
+    );
+    await handlers.get("ui_prompt_start")?.(
+      { type: "ui_prompt_start", kind: "confirm", title: "Allow Echo voice replies for this Pi session?" },
+      createContext(),
+    );
+    expect(payloads).toHaveLength(0);
+  });
 });

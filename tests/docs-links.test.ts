@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const docs = [
   "docs/getting-started.md",
+  "docs/what-echo-does.md",
   "docs/install-human.md",
   "docs/install-agent.md",
   "docs/operations.md",
