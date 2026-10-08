@@ -250,6 +250,7 @@ describe("buildVoicePayload - the exact payload sent to the voice server", () =>
     expect(payload.session_id).toBe("sess-1");
     expect(payload.message).toBe("Dispatching the worker.");
     expect(payload.speak_mode).toBe("announce");
+    expect(payload.slot).toBe("done");
   });
 
   test("DA selection → mainDAVoiceID, Atlas title, prosody applied", () => {

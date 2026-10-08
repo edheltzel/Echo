@@ -57,6 +57,7 @@ describe("Grok lifecycle hook adapter", () => {
       session_id: fixture.sessionId,
       source: "grok",
       speak_mode: "announce",
+      slot: "done",
     }));
   });
 
@@ -116,6 +117,7 @@ describe("Grok lifecycle hook adapter", () => {
       source: "grok",
       session_id: fixture.sessionId,
     });
+    expect(payloads[0]).not.toHaveProperty("slot");
 
     expect(await handleGrokHook(
       { ...fixture, source: "resume" },
