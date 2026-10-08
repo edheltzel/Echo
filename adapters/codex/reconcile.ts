@@ -149,28 +149,32 @@ hooksChanged = ensureEvent(hooksRoot, "SessionStart", command, 10) || hooksChang
 hooksChanged = ensureEvent(hooksRoot, "Stop", command, 30) || hooksChanged;
 hooksChanged = pruneStaleEcho(hooksRoot, command) || hooksChanged;
 
-const muteSource = join(ADAPTER_DIR, "skills", "echo-mute");
-let muteSkillSource: string;
-try {
-  muteSkillSource = realpathSync(muteSource);
-} catch {
-  fatal(`the Codex mute skill is missing at ${muteSource}`);
-}
-const muteSkill = planOwnedSymlink({
-  destination: join(skillsDir(), "echo-mute"),
-  source: muteSkillSource,
-  isEchoSpelling: (target) => /(^|\/)adapters\/codex\/skills\/echo-mute\/?$/.test(target),
-  fatal,
+const skillNames = ["echo-mute", "echo-mode"] as const;
+const skills = skillNames.map((name) => {
+  const sourceDir = join(ADAPTER_DIR, "skills", name);
+  let source: string;
+  try {
+    source = realpathSync(sourceDir);
+  } catch {
+    fatal(`the Codex ${name} skill is missing at ${sourceDir}`);
+  }
+  const plan = planOwnedSymlink({
+    destination: join(skillsDir(), name),
+    source,
+    isEchoSpelling: (target) => new RegExp(`(^|/)adapters/codex/skills/${name}/?$`).test(target),
+    fatal,
+  });
+  log.push(ownedLinkLog(plan, `skills/${name}`));
+  return plan;
 });
-log.push(ownedLinkLog(muteSkill, "skills/echo-mute"));
-const changed = hooksChanged || muteSkill.kind !== "current";
+const changed = hooksChanged || skills.some((plan) => plan.kind !== "current");
 
 if (CHECK_ONLY) {
   if (changed) {
-    console.log("pending: Codex Echo hook/mute registration needs update");
+    console.log("pending: Codex Echo hook/mute/mode registration needs update");
     process.exit(3);
   }
-  console.log("✓ preflight passed - Codex hooks and mute skill already current");
+  console.log("✓ preflight passed - Codex hooks, mute skill, and mode skill already current");
   process.exit(0);
 }
 
@@ -185,5 +189,5 @@ if (hooksChanged) {
   console.log("= Codex Echo hooks already current");
 }
 
-applyOwnedSymlink(muteSkill);
+for (const plan of skills) applyOwnedSymlink(plan);
 for (const line of log) console.log(line);

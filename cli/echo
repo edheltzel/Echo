@@ -41,6 +41,9 @@ Commands:
   mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]
                        Runtime mute. Default scope `all` (speaker + mic). `tts` holds
                        playback only; `mic` holds capture/converse; notifications still log.
+  mode speech|sounds|status
+                       Output mode for every session. `speech` speaks (default);
+                       `sounds` plays slot cues instead. `status` reads /health.
   replay [n]           Re-speak the last n spoken notify lines (default 1, max 10).
   voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
                        Set the default persona and ask whether subagents may speak.
@@ -269,6 +272,7 @@ case "$cmd" in
   uninstall)  exec bash "$SCRIPTS/uninstall.sh" "$@" ;;
   status)     exec bash "$SCRIPTS/status.sh" "$@" ;;
   mute)       cmd_mute "$@" ;;
+  mode)       exec bash "$SCRIPTS/mode.sh" "$@" ;;
   replay)     exec bash "$SCRIPTS/replay.sh" "$@" ;;
   voice)      cmd_voice "$@" ;;
   doctor)     cmd_doctor "$@" ;;

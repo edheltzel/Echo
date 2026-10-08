@@ -39,6 +39,7 @@ describe("harness-catalog CLI", () => {
     const result = await runCatalog(["features"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("mute\t@echo/shared/extension.ts\tregisterEchoMute\tcli/echo mute");
+    expect(result.stdout).toContain("mode\t@echo/shared/extension.ts\tregisterEchoMode\tcli/echo mode");
     expect(result.stdout).toContain("ask\t@echo/converse/host-tool.ts\tregisterEchoAskTool");
     expect(result.stdout).toContain("env\t@echo/shared/echo-env.ts\tloadEchoEnvironment");
   });

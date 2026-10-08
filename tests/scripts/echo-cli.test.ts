@@ -38,7 +38,7 @@ describe("echo CLI dispatch", () => {
   test("no args prints usage listing every subcommand", async () => {
     const r = await runCli([], { HOME: "/tmp", PATH: `${bunDir}:/bin:/usr/bin` });
     expect(r.exitCode).toBe(0);
-    for (const cmd of ["install", "doctor", "status", "mute", "replay", "voice", "update", "uninstall"]) {
+    for (const cmd of ["install", "doctor", "status", "mute", "mode", "replay", "voice", "update", "uninstall"]) {
       expect(r.stdout).toContain(cmd);
     }
   });

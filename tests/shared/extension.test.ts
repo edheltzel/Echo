@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { FEATURES, HARNESS_IDS, HARNESSES, harnessUsageIds, isHarnessId, registerEchoMute, registerEchoVoice } from "../../shared/extension.ts";
+import { FEATURES, HARNESS_IDS, HARNESSES, harnessUsageIds, isHarnessId, registerEchoMode, registerEchoMute, registerEchoVoice } from "../../shared/extension.ts";
 import { mergePersonaJson, type EchoVoiceCommand } from "../../shared/persona-scaffold.ts";
 import type { MuteRunResult } from "../../shared/mute-command.ts";
 
@@ -64,6 +64,9 @@ describe("harness catalog", () => {
   test("entries and mute paths exist; extension hosts register through shared hooks", () => {
     for (const harness of HARNESSES) {
       if (harness.entry) expect(existsSync(harness.entry)).toBe(true);
+      if (harness.features.includes("mute")) {
+        expect(harness.features).toContain("mode");
+      }
       if (harness.features.includes("mute") && harness.kind !== "extension") {
         if (!harness.mutePath) throw new Error(`${harness.id} ships mute as a file`);
         expect(existsSync(harness.mutePath)).toBe(true);
@@ -72,6 +75,14 @@ describe("harness catalog", () => {
         const muteSource = read(harness.mutePath);
         expect(muteSource).not.toMatch(/fetch\([^)]*\/mute/);
         expect(muteSource).not.toMatch(/\bcurl\b[^\n]*\/mute/);
+      }
+      if (harness.features.includes("mode") && harness.kind !== "extension") {
+        if (!harness.modePath) throw new Error(`${harness.id} ships mode as a file`);
+        expect(existsSync(harness.modePath)).toBe(true);
+        expect(read(harness.modePath)).toContain("cli/echo");
+        expect(read(harness.modePath)).toContain("mode");
+        expect(read(harness.modePath)).not.toMatch(/fetch\([^)]*\/mode/);
+        expect(read(harness.modePath)).not.toMatch(/\bcurl\b[^\n]*\/mode/);
       }
       if (harness.kind === "extension") {
         const source = read(harness.entry!);
@@ -91,6 +102,7 @@ describe("harness catalog", () => {
       expect(read(file)).toContain(feature.register);
     }
     expect(FEATURES.mute.cli).toBe("cli/echo mute");
+    expect(FEATURES.mode.cli).toBe("cli/echo mode");
   });
 
   test("core/ does not import the harness catalog", () => {
@@ -137,6 +149,30 @@ describe("feature register hooks", () => {
     });
     expect(seen).toEqual({ cliPath: "/stub/cli/echo", muteArgs: ["30m"] });
     expect(notes.at(-1)).toEqual({ msg: '{"muted":true}', type: "info" });
+  });
+
+  test("registerEchoMode binds echo-mode to cli/echo mode", async () => {
+    const commands = new Map<string, EchoVoiceCommand>();
+    let seen: { cliPath: string; subcommand: string; args: string[] } | undefined;
+    registerEchoMode(
+      { registerCommand: (name, command) => commands.set(name, command) },
+      {
+        cliPath: "/stub/cli/echo",
+        run: async (cliPath, subcommand, args) => {
+          seen = { cliPath, subcommand, args };
+          return { exitCode: 0, stdout: "Mode: speech\n", stderr: "" };
+        },
+      },
+    );
+    const command = commands.get("echo-mode");
+    expect(command).toBeDefined();
+    const notes: Array<{ msg: string; type?: string }> = [];
+    await command!.handler("speech", {
+      cwd: "/tmp",
+      ui: { input: async () => undefined, notify: (msg, type) => notes.push({ msg, type }) },
+    });
+    expect(seen).toEqual({ cliPath: "/stub/cli/echo", subcommand: "mode", args: ["speech"] });
+    expect(notes.at(-1)).toEqual({ msg: "Mode: speech", type: "info" });
   });
 
   test("registerEchoVoice binds echo-voice", () => {
