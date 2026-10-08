@@ -142,7 +142,11 @@ describe("reconcile --check missing echo-mode", () => {
         },
         {
           script: "adapters/opencode/reconcile.ts",
-          env: { ECHO_OPENCODE_COMMANDS_DIR: join(root, "opencode", "commands") },
+          env: {
+            ECHO_OPENCODE_COMMANDS_DIR: join(root, "opencode", "commands"),
+            ECHO_OPENCODE_PLUGINS_DIR: join(root, "opencode", "plugins"),
+            ECHO_OPENCODE_CONFIG: join(root, "opencode", "opencode.json"),
+          },
           link: join(root, "opencode", "commands", "echo-mode.md"),
         },
       ];
