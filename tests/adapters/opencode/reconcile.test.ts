@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -113,6 +113,24 @@ describe("OpenCode registration", () => {
       expect(result.stderr).toContain("Remove that \"plugin\" entry by hand");
       expect(readFileSync(join(root, "opencode.json"), "utf8")).toBe(text);
       expect(existsSync(join(root, "plugins"))).toBe(false);
+    });
+  });
+
+  test("a failed config prune creates no plugin symlink beside the old entry", () => {
+    withRoot((root) => {
+      const locked = join(root, "locked");
+      mkdirSync(locked);
+      const real = join(locked, "opencode.json");
+      writeFileSync(real, JSON.stringify({ plugin: ["/Echo/adapters/opencode/plugin.ts"] }));
+      symlinkSync(real, join(root, "opencode.json"));
+      chmodSync(locked, 0o555); // backup and temp file cannot be written
+      try {
+        expect(runReconcile(root).exitCode).not.toBe(0);
+        expect(existsSync(join(root, "plugins", "echo-voice.ts"))).toBe(false);
+        expect(JSON.parse(readFileSync(real, "utf8")).plugin).toHaveLength(1);
+      } finally {
+        chmodSync(locked, 0o755);
+      }
     });
   });
 });

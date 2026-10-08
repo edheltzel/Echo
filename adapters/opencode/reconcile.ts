@@ -104,7 +104,6 @@ if (CHECK_ONLY) {
   process.exit(changed ? 3 : 0);
 }
 
-for (const { plan } of links) applyOwnedSymlink(plan);
 if (staleEntries.length > 0) {
   // Write through a symlinked config (dotfiles) and keep a backup, as the Pi reconciler does.
   const realPath = realpathSync(configPath);
@@ -116,5 +115,7 @@ if (staleEntries.length > 0) {
   renameSync(temp, realPath);
   log.push(`OpenCode config pruned (backup: ${backup})`);
 }
+// Prune first: if the config write fails, no new symlink sits beside the old entry.
+for (const { plan } of links) applyOwnedSymlink(plan);
 log.push(`OpenCode registration ${changed ? "updated" : "already current"}`);
 console.log(log.join("\n"));
