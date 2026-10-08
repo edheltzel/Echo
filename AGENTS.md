@@ -130,7 +130,10 @@ no bun) to name the versioned daemon payload dir; nothing at daemon runtime read
 hand-write it. Contributors and agents must not add or edit entries on a feature branch.
 **Flow:** work on `dev` → PR into `dev` → reviewer sign-off
 → **Ed merges** → `dev`→`master` promotion PR → tag `vX.Y.Z` + GitHub release. **Ed owns all
-merges; never push directly to `master`** (see Invariants).
+merges; never push directly to `master`** (see Invariants). One standing exception: an agent may
+squash-merge its own **low-risk** PR into `dev` once CI is green and the branch is current. Low
+risk means the diff touches only docs and tests (no `core/`, `shared/`, `adapters/`, `scripts/`,
+`cli/`, `converse/`, or CI). Everything else, and every `dev`→`master` promotion, waits for Ed.
 
 **Promotion PRs must be merge-committed, never squashed.** Squashing a `dev`→`master`
 promotion collapses the merge and drops `dev` from `master`'s ancestry, recreating the
