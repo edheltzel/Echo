@@ -71,7 +71,7 @@ A conforming registration:
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
 `~/.claude/settings.json`) and `adapters/claudecode/reconcile-commands.ts` (the
-`echo-voice.md` and `echo-mute.md` symlinks in `~/.claude/commands/`),
+`echo-voice.md`, `echo-mute.md`, and `echo-mode.md` symlinks in `~/.claude/commands/`),
 `adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
 `adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`,
 #18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
@@ -150,7 +150,12 @@ every host needs a new HTTP contract.
 5. If the feature needs configuration, read it through `loadEchoEnvironment` so doctor/env
    stay one surface.
 
-Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path.
+Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path. `/echo-mode` and
+`cli/echo mode` follow the same rule; every harness that ships `/echo-mute` ships `/echo-mode`.
+
+Notify callers set `slot` on `/notify` so sounds-only mode plays the right sound: `request`
+for a needs-input, approval, or attention announce, `done` for a turn completion, nothing
+for greetings (the daemon reads that as `generic`). See [`http-api.md`](http-api.md#post-mode).
 
 ## Prove
 
@@ -220,7 +225,7 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
   payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
-  (`/echo-mute` → bash `cli/echo mute`) via `adapters/grok/reconcile.ts`. Sibling files (for
+  and `~/.grok/skills/echo-mode` (bash `cli/echo mute` / `cli/echo mode`) via `adapters/grok/reconcile.ts`. Sibling files (for
   example firstmate's `fm-turn-end.json`) are never rewritten or pruned. `GROK_HOME` /
   `ECHO_GROK_HOOKS_DIR` redirect the target for tests. Wired into `install.sh` as `--adapter grok`.
 
@@ -231,7 +236,8 @@ surface wins.
 ## OpenCode adapter - plugin (#17, #129)
 
 `adapters/opencode/plugin.ts` is loaded from an owned `~/.config/opencode/plugins/echo-voice.ts`
-symlink; `/echo-mute` is an owned `commands/echo-mute.md` symlink. It speaks on `session.idle`,
+symlink; `/echo-mute` and `/echo-mode` are owned `commands/echo-mute.md` and `commands/echo-mode.md`
+symlinks. It speaks on `session.idle`,
 greets on `session.created` only when `ECHO_VOICE_GREET_ON_START` is set, and stays silent for
 subagents (`parentID`) and for sessions the v1 SDK client cannot read. Persona: `daidentity`
 in `opencode.jsonc` / `opencode.json`. Detail: [`adapters/opencode/README.md`](../adapters/opencode/README.md).

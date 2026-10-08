@@ -34,6 +34,8 @@ cli/echo doctor              # canonical "did my install work" check; recovery c
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
 /echo-mute [on|off|toggle|status|duration]  # bare toggles `all`; affects every Echo session
+cli/echo mode speech|sounds|status          # global: sounds plays request/done/generic sounds instead of speech
+/echo-mode [speech|sounds|status]           # same, from a session
 cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload

@@ -284,10 +284,26 @@ For an isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config cont
 The `/mute` endpoint contract and one-keystroke hotkey bindings (Raycast, Apple Shortcuts,
 Stream Deck) are in [`http-api.md`](http-api.md).
 
+### Sounds-only mode
+
+Sounds-only mode replaces spoken notifications with a short sound: request (an agent needs
+you), done (an agent finished), or generic (everything else). It is global and survives
+restarts. `/echo-mode` in a session is the same command:
+
+```bash
+cli/echo mode status     # Mode: speech|sounds
+cli/echo mode sounds     # play notification sounds, no speech
+cli/echo mode speech     # speak again (default)
+```
+
+`mute tts` also swaps speech for sounds; `mute all` stays silent. What plays when, and how
+to use your own sound files: [`what-echo-does.md`](what-echo-does.md#sounds-instead-of-speech).
+
 ## Replay
 
 `cli/echo replay [n]` re-speaks the last N lines that actually played (default 1, max 10).
-Muted, capture-held, dropped, and voice-disabled lines are not stored. Replay uses the same
+Muted, capture-held, dropped, voice-disabled, and sound-played lines are not stored. Replay
+speaks even in sounds-only mode. It uses the same
 play queue as `/notify` and does not fire a new banner.
 
 ```bash
