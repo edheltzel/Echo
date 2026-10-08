@@ -14,3 +14,10 @@ process.env.ECHO_CONFIG_FILE = join(scratch, "config.json");
 // The output mode is read on every dequeue; never let the operator's real
 // mode.json switch in-process daemon tests to sounds-only.
 process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");
+// Every host config a reconciler can write (~/.claude, ~/.pi, ~/.omp, ~/.codex,
+// ~/.grok, ~/.jcode, ~/.config/opencode) resolves from HOME or XDG_CONFIG_HOME.
+// A spawned reconciler inherits process.env, so a test that pins only one of its
+// paths would otherwise write the rest into the operator's real home (#203's mode
+// test rewrote the live OpenCode plugin link and pruned opencode.json this way).
+process.env.HOME = join(scratch, "home");
+process.env.XDG_CONFIG_HOME = join(scratch, "home", ".config");
