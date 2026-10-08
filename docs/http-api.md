@@ -178,7 +178,8 @@ which only log the status - are unaffected. The semantics shift from "delivered"
 "accepted": a `202` no longer means the line was spoken. True playback outcome now lives in
 the audio-lifecycle log (`~/.agents/Echo/audio-lifecycle.jsonl`), where each request's row
 records a `disposition` - `played` (reached the player; carries the measured play window
-unless muted), `superseded`, `dropped-stale` (waited past the age cap at dequeue, or
+unless muted), `played-sound` (the line's notification sound played instead of speech; see
+[`POST /mode`](#post-mode)), `superseded`, `dropped-stale` (waited past the age cap at dequeue, or
 evicted by the depth cap at enqueue - `disposition_reason` says which), or
 `held-for-capture` (skipped at speak time because an external mic capture was live - see
 `ECHO_CAPTURE_STATE_PATH` in [`configuration.md`](configuration.md); the banner still
@@ -196,7 +197,7 @@ session (one queue, one key).
 
 Runtime mute (#83, FM-446). Scopes:
 
-- `tts` — speaker/playback only. Notifications are accepted, logged, and voice-resolved; audio is suppressed across every provider, including macOS `say`.
+- `tts` — speech only. Notifications are accepted, logged, and voice-resolved; speech is suppressed across every provider, including macOS `say`. A line with a sound slot plays its notification sound instead; converse questions and replays stay silent.
 - `mic` — capture / converse / `echo_ask` booking only. TTS may still speak. The daemon does not open the microphone; this scope refuses the capture-reservation paths Echo already owns.
 - `all` — both. This is today's mute, and the default when `scope` is omitted.
 

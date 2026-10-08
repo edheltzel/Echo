@@ -39,8 +39,8 @@ Commands:
   doctor               Diagnose every degraded state with a concrete recovery command.
   status               Service + health snapshot with recent logs.
   mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]
-                       Runtime mute. Default scope `all` (speaker + mic). `tts` holds
-                       playback only; `mic` holds capture/converse; notifications still log.
+                       Runtime mute. Default scope `all` (speaker + mic, fully silent). `tts`
+                       swaps speech for notification sounds; `mic` holds capture/converse; notifications still log.
   mode speech|sounds|status
                        Output mode for every session. `speech` speaks (default);
                        `sounds` plays slot cues instead. `status` reads /health.

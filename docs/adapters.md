@@ -79,11 +79,11 @@ regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapt
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
 commands into both. Codex and OpenCode follow the same contract.
 
-Claude Code also ships a mute-only plugin at `adapters/claudecode/plugin/`. It is not a
+Claude Code also ships a mute and mode plugin at `adapters/claudecode/plugin/`. It is not a
 registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
-stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin command is
-`/echo:echo-mute`. Bare `/echo-mute` remains the installer slash command. Both shell to
-`cli/echo mute` via PATH or the current checkout.
+stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin commands are
+`/echo:echo-mute` and `/echo:echo-mode`. Bare `/echo-mute` and `/echo-mode` remain the installer
+slash commands. All shell to `cli/echo mute` / `cli/echo mode` via PATH or the current checkout.
 
 The shipped id list and feature register hooks live in [`../shared/extension.ts`](../shared/extension.ts).
 That catalog is the extension surface. It is not a second plugin loader: `install.sh` still
@@ -96,9 +96,10 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
-| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoVoice`, `registerEchoAskTool`. |
+| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`, `registerEchoAskTool`. |
 | `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
+
 
 Feature register hooks (reuse these; do not add a second factory):
 
@@ -106,6 +107,7 @@ Feature register hooks (reuse these; do not add a second factory):
 | --- | --- | --- |
 | notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
 | mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
+| mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
 | ask | `registerEchoAskTool` (`@echo/converse/host-tool.ts`) | Feature-detect the host tool API. |
 | greeting | `applyNameToken` / shared greeting pool | Adapter owns when to speak it. |
@@ -132,7 +134,7 @@ Subtract first: copy the closest as-built adapter rather than a new runtime.
 
 Pi/omp is the plugin-first reference. Claude Code is the thin-plugin reference (hooks +
 slash commands, no in-process SDK). Jcode is the lifecycle-hook reference. OpenCode is the
-mute-only reference.
+in-process plugin `event` hook reference.
 
 ## How to add a feature
 
@@ -141,11 +143,11 @@ every host needs a new HTTP contract.
 
 1. Put host-neutral behavior in `@echo/shared` (or `@echo/converse` for ask). Export a
    register function, not a parallel plugin table.
-2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoVoice` /
+2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoMode` / `registerEchoVoice` /
    `registerEchoAskTool` from the extension entry. Feature-detect host APIs; missing
    surface must no-op without taking the adapter down.
 3. Slash-command / skill hosts: add a file that shells out to the existing CLI (mute is
-   `bash cli/echo mute`) and register it with `planOwnedSymlink` / the host reconciler.
+   `bash cli/echo mute`, mode is `bash cli/echo mode`) and register it with `planOwnedSymlink` / the host reconciler.
 4. Name the feature on each opting-in harness in `HARNESSES[].features`.
 5. If the feature needs configuration, read it through `loadEchoEnvironment` so doctor/env
    stay one surface.
