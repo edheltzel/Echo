@@ -8,7 +8,7 @@ import {
 // Echo's extension surface. New harnesses and new features plug in through the
 // seams already proven in-tree: Pi/omp in-process registerCommand, Claude's thin
 // plugin (hooks + slash commands), Jcode/Grok/Codex lifecycle hooks, OpenCode's
-// mute-only owned symlink, MCP's stdio server, and doctor/env via echo-env.ts.
+// plugin event hook, MCP's stdio server, and doctor/env via echo-env.ts.
 //
 // This is not a second plugin loader and it is not imported by core/. The daemon
 // stays host-neutral. Install still delegates to each adapter's own reconciler.
@@ -146,10 +146,11 @@ export const HARNESSES: readonly HarnessManifest[] = [
     id: "opencode",
     displayName: "OpenCode",
     packageDir: "adapters/opencode",
-    kind: "commands-only",
+    kind: "hooks",
+    entry: "adapters/opencode/plugin.ts",
     requiredCli: "opencode",
-    reconcile: [{ script: "adapters/opencode/reconcile.ts", label: "Mute command" }],
-    features: ["mute"],
+    reconcile: [{ script: "adapters/opencode/reconcile.ts", label: "Adapter registration" }],
+    features: ["notify", "mute", "persona", "greeting"],
     mutePath: "adapters/opencode/commands/echo-mute.md",
   },
 ];
