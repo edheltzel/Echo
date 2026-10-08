@@ -1,7 +1,6 @@
 # Echo adapter for OpenCode
 
-An OpenCode plugin plus the `/echo-mute` command. Registration owns two symlinks and
-rewrites no OpenCode config file:
+An OpenCode plugin plus the `/echo-mute` command. Registration owns two symlinks:
 
 - `~/.config/opencode/plugins/echo-voice.ts` → `plugin.ts` (OpenCode auto-loads this directory)
 - `~/.config/opencode/commands/echo-mute.md` → `commands/echo-mute.md` (bash `cli/echo mute`)
@@ -10,8 +9,11 @@ rewrites no OpenCode config file:
 bash scripts/install.sh --adapter opencode
 ```
 
-Load the plugin once. Do not also list `adapters/opencode/plugin.ts` under `"plugin"` in
-`opencode.json`: OpenCode would load two instances and every line would be spoken twice.
+OpenCode also loads every `"plugin"` entry in its global config, so an entry pointing at any
+clone's `adapters/opencode/plugin.ts` would load Echo twice and speak every line twice.
+Reconcile removes such entries from the global `opencode.json` (backup written next to the
+real file, symlinks followed). It will not rewrite a JSONC file with comments; it exits 2
+and names the entry to remove by hand.
 
 ## Behavior
 
