@@ -72,6 +72,10 @@
       "type": "string",
       "description": "Executable the macOS say fallback provider spawns. Defaults to /usr/bin/say."
     },
+    "ECHO_OSASCRIPT_BIN": {
+      "type": "string",
+      "description": "Executable the legacy macOS notification banner spawns. Defaults to /usr/bin/osascript."
+    },
     "ECHO_CONVERSE_PORT": {
       "default": 32468,
       "description": "Port for the echo-converse coordinator. Core's TTS daemon keeps PORT (3246).",

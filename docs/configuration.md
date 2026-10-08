@@ -112,7 +112,7 @@ at runtime; invalid values use the defaults below.
 
 | Group | Properties | Defaults / notes |
 | --- | --- | --- |
-| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
+| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_OSASCRIPT_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say; /usr/bin/osascript |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
 | Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; startup names stay nameless unless ECHO_VOICE_SAY_NAME / daidentity.sayName is true; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
@@ -131,6 +131,10 @@ Settings whose behavior is not obvious from the name:
 - **ECHO_SAY_BIN** points the macOS `say` fallback provider at a different executable. It is
   the last rung of the provider chain, so this is the knob for wrapping it (a logging shim, a
   routed audio device, or a no-op for a run that must stay silent). Unset means `/usr/bin/say`.
+
+- **ECHO_OSASCRIPT_BIN** points the legacy macOS notification banner at a different executable,
+  called with `-e <AppleScript>`. The smoke and e2e scripts and `bun test` point it at a no-op
+  so isolated test daemons never show a banner. Unset means `/usr/bin/osascript`.
 
 - **ECHO_VOICE_SAY_NAME** is the config.json form of `daidentity.sayName`: when true, adapters
   use the named default startup pool and fill `{name}`. Unset or false stays nameless. A
