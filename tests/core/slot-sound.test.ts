@@ -9,9 +9,10 @@ process.env.PORT = "0";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import * as realChildProcess from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitFor } from "./poll";
 
 const realSpawn = realChildProcess.spawn;
 let spawns: string[][] = [];
@@ -43,8 +44,12 @@ const MUTE_PATH = join(TMP, "mute.json");
 const MODE_PATH = join(TMP, "mode.json");
 process.env.ECHO_MUTE_STATE_PATH = MUTE_PATH;
 process.env.ECHO_MODE_STATE_PATH = MODE_PATH;
-process.env.ECHO_RESOLUTION_LOG = join(TMP, "resolution.jsonl");
-process.env.ECHO_AUDIO_LIFECYCLE_LOG = join(TMP, "audio-lifecycle.jsonl");
+const RESOLUTION_LOG = join(TMP, "resolution.jsonl");
+const LIFECYCLE_LOG = join(TMP, "audio-lifecycle.jsonl");
+const CAPTURE_STATE = join(TMP, "recording-state.json");
+process.env.ECHO_RESOLUTION_LOG = RESOLUTION_LOG;
+process.env.ECHO_AUDIO_LIFECYCLE_LOG = LIFECYCLE_LOG;
+process.env.ECHO_CAPTURE_STATE_PATH = CAPTURE_STATE;
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
 
 // Dynamic imports on purpose: the daemon reads these env paths at load, so it
@@ -65,7 +70,7 @@ beforeEach(() => {
   spawnImpl = stubSpawn as (...args: unknown[]) => unknown;
   spawns = [];
   failingFiles = new Set();
-  for (const path of [MUTE_PATH, MODE_PATH]) if (existsSync(path)) rmSync(path);
+  for (const path of [MUTE_PATH, MODE_PATH, CAPTURE_STATE, RESOLUTION_LOG, LIFECYCLE_LOG]) if (existsSync(path)) rmSync(path);
   delete process.env.ECHO_SOUND_DONE;
   savedEnabled = {};
   for (const name of Object.keys(providers)) {
@@ -100,7 +105,9 @@ async function notify(extra: Record<string, unknown> = {}): Promise<Response> {
 }
 
 const said = () => spawns.some(([cmd]) => cmd === "/usr/bin/say");
+const spoken = () => spawns.filter(([cmd]) => cmd === "/usr/bin/say").map((argv) => argv[argv.length - 1]);
 const played = () => spawns.filter(([cmd]) => cmd === "/usr/bin/afplay").map((argv) => argv[argv.length - 1]);
+const lastRow = (path: string): Record<string, unknown> => JSON.parse(readFileSync(path, "utf-8").trim().split("\n").at(-1) ?? "{}");
 
 describe("slot field on /notify", () => {
   test("an unknown slot is a 400 and nothing is queued", async () => {
@@ -207,7 +214,7 @@ describe("replay", () => {
     await post("/replay", { n: 1 });
     await drainNotifications();
     expect(played()).toEqual([]);
-    expect(said()).toBe(true);
+    expect(spoken()).toEqual(["spoken earlier"]);
   });
 
   test("sounds mode: replay speaks the line", async () => {
@@ -230,11 +237,53 @@ describe("replay", () => {
     expect(played()).toEqual([]);
   });
 
-  test("a mode switch applies to a line already queued", async () => {
-    const queued = post("/notify", { message: "queued first", voice_enabled: true, slot: "done" });
+  test("a mode switch applies to a line that was waiting behind another", async () => {
+    let releaseFirst = () => {};
+    spawnImpl = ((cmd: string, args: string[] = []) => {
+      if (cmd !== "/usr/bin/say") return stubSpawn(cmd, args);
+      spawns.push([cmd, ...args]);
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(), stderr: new EventEmitter(), stdin: { write() {}, end() {} }, kill() {}, pid: 4243,
+      });
+      releaseFirst = () => child.emit("exit", 0);
+      return child;
+    }) as (...args: unknown[]) => unknown;
+    await post("/notify", { message: "in flight", voice_enabled: true, session_id: "a" });
+    await waitFor(() => said(), 5000, "first line to reach the speaker");
+    await post("/notify", { message: "waiting", voice_enabled: true, slot: "done", session_id: "b" });
     writeOutputMode("sounds");
-    await queued;
+    releaseFirst();
     await drainNotifications();
+    expect(spoken()).toEqual(["in flight"]);
     expect(played()).toEqual([join(BUNDLED, "done.wav")]);
+  });
+});
+
+describe("capture, failure, and logging", () => {
+  test("a live capture holds sounds as it holds speech", async () => {
+    writeFileSync(CAPTURE_STATE, JSON.stringify({ state: "recording", pid: process.pid, updated_at: new Date().toISOString() }));
+    writeOutputMode("sounds");
+    await notify({ slot: "done" });
+    writeMuteState({ muted: true, muted_until: null, scope: "tts" });
+    await notify({ slot: "request" });
+    expect(played()).toEqual([]);
+    expect(said()).toBe(false);
+    expect(lastRow(LIFECYCLE_LOG).disposition).toBe("held-for-capture");
+  });
+
+  test("when every sound file fails, nothing plays and nothing is spoken", async () => {
+    writeOutputMode("sounds");
+    failingFiles.add(join(BUNDLED, "done.wav"));
+    failingFiles.add(join(SYSTEM, "Hero.aiff"));
+    await notify({ slot: "done" });
+    expect(played()).toEqual([join(BUNDLED, "done.wav"), join(SYSTEM, "Hero.aiff")]);
+    expect(said()).toBe(false);
+  });
+
+  test("a sound play is logged as a sound, not as speech", async () => {
+    writeOutputMode("sounds");
+    await notify({ slot: "done" });
+    expect(lastRow(LIFECYCLE_LOG)).toMatchObject({ disposition: "played-sound", provider: "sound", success: true });
+    expect(lastRow(RESOLUTION_LOG)).toMatchObject({ provider: "sound", voice: null, hops: 0, slot: "done", success: true });
   });
 });

@@ -1293,6 +1293,7 @@ interface ResolutionEvent {
   hops: number;               // providers skipped/failed before the chosen one
   attempts: SpeakAttempt[];   // per-provider outcome (failures, circuit-open, skips)
   success: boolean;
+  slot?: NotifySlot;          // present when a slot sound replaced speech (provider 'sound')
 }
 
 // Classify how a requested voice_id resolved. Derived from the VoiceMapping that
@@ -1407,9 +1408,9 @@ export async function speakWithFallback(
   if (soundSlot && (ttsMuted || readOutputMode() === "sounds")) {
     try {
       await playSlotSound(soundSlot);
-      return { success: true, provider: 'sound', voice: soundSlot, attempts: [], muted: ttsMuted, sound: true };
+      return { success: true, provider: 'sound', voice: null, attempts: [], muted: ttsMuted, sound: true };
     } catch {
-      return { success: false, provider: 'sound', voice: soundSlot, attempts: [], muted: ttsMuted, sound: true };
+      return { success: false, provider: 'sound', voice: null, attempts: [], muted: ttsMuted, sound: true };
     }
   }
 
@@ -1646,9 +1647,10 @@ async function speakNotification(
     ...(reason && { resolution_reason: reason }),
     provider: result.provider,
     voice: result.voice,
-    hops: result.success ? result.attempts.length - 1 : result.attempts.length,
+    hops: result.sound ? 0 : result.success ? result.attempts.length - 1 : result.attempts.length,
     attempts: result.attempts,
     success: result.success,
+    ...(result.sound && { slot: soundSlot }),
     ...(result.muted && { muted: true }),
     ...(result.held_for_capture && { held_for_capture: true }),
   });

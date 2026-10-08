@@ -1,7 +1,7 @@
 // Bounded in-memory ring of lines that actually reached the speaker.
 //
 // Replay (FM-449) re-speaks from this ring. It is not a second play queue:
-// muted, capture-held, dropped, and voice-disabled lines are never stored, so
+// muted, capture-held, dropped, voice-disabled, and sound-played lines are never stored, so
 // there is nothing later to replay (http-api: "Muted lines are not held for
 // later replay"). Process-local on purpose — a restart starts empty; the TTS
 // cache already covers repeated synthesis.
