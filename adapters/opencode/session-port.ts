@@ -1,4 +1,4 @@
-import { lastAssistantTextFromMessages, type OpenCodeSessionPort } from "./handler.ts";
+import { lastAssistantFromMessages, type OpenCodeSessionPort } from "./handler.ts";
 
 // The plugin `client` is the v1 SDK (`createOpencodeClient`): every call takes
 // `{ path: { id } }` and returns `{ data, error }` without throwing.
@@ -34,8 +34,8 @@ export function sessionPortFromClient(client: PluginClient | undefined): OpenCod
         title: typeof record.title === "string" ? record.title : undefined,
       };
     },
-    async lastAssistantText(id) {
-      return lastAssistantTextFromMessages(await sessionData(client, "messages", id));
+    async lastAssistant(id) {
+      return lastAssistantFromMessages(await sessionData(client, "messages", id));
     },
   };
 }

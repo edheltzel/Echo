@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSON5 } from "bun";
 import { applyOwnedSymlink, ownedLinkLog, planOwnedSymlink } from "@echo/shared/owned-symlink.ts";
-import { resolveOpenCodeConfigPath, resolveOpenCodePluginsDir } from "./config-path.ts";
+import { openCodeGlobalConfigPaths, resolveOpenCodePluginsDir } from "./config-path.ts";
 
 const CHECK_ONLY = process.argv.includes("--check");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -67,38 +67,59 @@ const links = [
   commandLink("echo-mode.md"),
 ];
 
-// Config `"plugin"` entries that load Echo's plugin.ts (any clone, `file://` or bare path).
-const configPath = resolveOpenCodeConfigPath();
+// Config `"plugin"` entries that load Echo's plugin.ts: any clone, `file://` or bare
+// path, and OpenCode's tuple form `[spec, options]`.
+function echoPluginSpec(entry: unknown): string | null {
+  const spec = Array.isArray(entry) ? entry[0] : entry;
+  return typeof spec === "string" && ECHO_PLUGIN_RE.test(spec.replace(/^file:\/\//, "")) ? spec : null;
+}
+
+// OpenCode merges config.json < opencode.json < opencode.jsonc and a later array
+// replaces an earlier one, so the global plugin list is the highest-priority
+// file's `plugin` key. Only that file can load Echo twice; a shadowed entry is inert.
+let configPath = "";
 let configText: string | null = null;
 let config: Record<string, unknown> | null = null;
-let staleEntries: string[] = [];
-if (existsSync(configPath)) {
-  configText = readFileSync(configPath, "utf8");
+let staleSpecs: string[] = [];
+const configLog: string[] = [];
+for (const candidate of openCodeGlobalConfigPaths().toReversed()) {
+  if (!existsSync(candidate)) continue;
+  const text = readFileSync(candidate, "utf8");
+  // OpenCode treats an empty file as `{}`.
+  if (!text.trim()) continue;
+  let parsed: unknown;
   try {
-    config = JSON5.parse(configText) as Record<string, unknown>;
+    parsed = JSON5.parse(text);
   } catch (error) {
-    fatal(`could not parse ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
+    // Not Echo's file to repair: report it and keep going rather than block install.
+    configLog.push(
+      `! ${candidate} does not parse (${error instanceof Error ? error.message : String(error)}); duplicate-plugin check skipped for it`,
+    );
+    continue;
   }
-  const plugins = Array.isArray(config?.plugin) ? (config.plugin as unknown[]) : [];
-  staleEntries = plugins.filter(
-    (entry): entry is string => typeof entry === "string" && ECHO_PLUGIN_RE.test(entry.replace(/^file:\/\//, "")),
-  );
+  if (typeof parsed !== "object" || parsed === null || !("plugin" in parsed)) continue;
+  configPath = candidate;
+  configText = text;
+  config = parsed as Record<string, unknown>;
+  const plugins = Array.isArray(config.plugin) ? (config.plugin as unknown[]) : [];
+  staleSpecs = plugins.map(echoPluginSpec).filter((spec): spec is string => spec !== null);
+  break;
 }
-if (staleEntries.length > 0) {
+if (staleSpecs.length > 0) {
   try {
     JSON.parse(configText!);
   } catch {
     // Rewriting JSONC would drop the operator's comments.
     fatal(
-      `${configPath} lists Echo's plugin (${staleEntries.join(", ")}), which loads it twice next to `
+      `${configPath} lists Echo's plugin (${staleSpecs.join(", ")}), which loads it twice next to `
         + `plugins/echo-voice.ts. Remove that "plugin" entry by hand; Echo will not rewrite a JSONC file.`,
     );
   }
 }
 
-const changed = links.some(({ plan }) => plan.kind !== "current") || staleEntries.length > 0;
-const log = links.map(({ plan, filename }) => ownedLinkLog(plan, filename));
-for (const entry of staleEntries) log.push(`- ${configPath} "plugin" -= ${entry} (duplicate of echo-voice.ts)`);
+const changed = links.some(({ plan }) => plan.kind !== "current") || staleSpecs.length > 0;
+const log = [...links.map(({ plan, filename }) => ownedLinkLog(plan, filename)), ...configLog];
+for (const spec of staleSpecs) log.push(`- ${configPath} "plugin" -= ${spec} (duplicate of echo-voice.ts)`);
 
 if (CHECK_ONLY) {
   log.push(
@@ -110,13 +131,13 @@ if (CHECK_ONLY) {
   process.exit(changed ? 3 : 0);
 }
 
-if (staleEntries.length > 0) {
+if (staleSpecs.length > 0) {
   // Write through a symlinked config (dotfiles) and keep a backup, as the Pi reconciler does.
   const realPath = realpathSync(configPath);
   const backup = `${realPath}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   const temp = `${realPath}.tmp-${process.pid}`;
   copyFileSync(realPath, backup);
-  config!.plugin = (config!.plugin as unknown[]).filter((entry) => !staleEntries.includes(entry as string));
+  config!.plugin = (config!.plugin as unknown[]).filter((entry) => echoPluginSpec(entry) === null);
   writeFileSync(temp, JSON.stringify(config, null, 2) + "\n");
   renameSync(temp, realPath);
   log.push(`OpenCode config pruned (backup: ${backup})`);

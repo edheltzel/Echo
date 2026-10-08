@@ -23,7 +23,7 @@ describe("OpenCode plugin session client", () => {
           return {
             data: [
               { info: { role: "user" }, parts: [{ type: "text", text: "do it" }] },
-              { info: { role: "assistant" }, parts: [{ type: "text", text: "🗣️ OpenCode: Done with the fix." }] },
+              { info: { role: "assistant", id: "msg_7" }, parts: [{ type: "text", text: "🗣️ OpenCode: Done with the fix." }] },
             ],
           };
         },
@@ -31,7 +31,7 @@ describe("OpenCode plugin session client", () => {
     });
 
     expect(await port.getSession("ses_1")).toEqual({ id: "ses_1", parentID: "ses_parent", title: "t" });
-    expect(await port.lastAssistantText("ses_1")).toBe("🗣️ OpenCode: Done with the fix.");
+    expect(await port.lastAssistant("ses_1")).toEqual({ id: "msg_7", text: "🗣️ OpenCode: Done with the fix." });
     expect(calls).toEqual([{ path: { id: "ses_1" } }, { path: { id: "ses_1" } }]);
   });
 
@@ -43,7 +43,7 @@ describe("OpenCode plugin session client", () => {
       },
     });
     expect(await errorPort.getSession("ses_x")).toBeNull();
-    expect(await errorPort.lastAssistantText("ses_x")).toBe("");
+    expect(await errorPort.lastAssistant("ses_x")).toEqual({ text: "" });
 
     const throwingPort = sessionPortFromClient({
       session: {

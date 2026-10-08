@@ -8,13 +8,14 @@ const MUTE_SOURCE = resolve("adapters/opencode/commands/echo-mute.md");
 const PLUGIN_SOURCE = resolve("adapters/opencode/plugin.ts");
 
 // Every OpenCode path lives under `root`, never the operator's ~/.config/opencode.
-function runReconcile(root: string, check = false) {
+function runReconcile(root: string, check = false, overrides: Record<string, string> = {}) {
   const result = Bun.spawnSync([process.execPath, RECONCILE, ...(check ? ["--check"] : [])], {
     env: {
       ...process.env,
       ECHO_OPENCODE_COMMANDS_DIR: join(root, "commands"),
       ECHO_OPENCODE_PLUGINS_DIR: join(root, "plugins"),
       ECHO_OPENCODE_CONFIG: join(root, "opencode.json"),
+      ...overrides,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -131,6 +132,55 @@ describe("OpenCode registration", () => {
       } finally {
         chmodSync(locked, 0o755);
       }
+    });
+  });
+
+  test("an empty or unparseable config never blocks registration", () => {
+    for (const text of ["", "  \n", "{ not json"]) {
+      withRoot((root) => {
+        writeFileSync(join(root, "opencode.json"), text);
+        expect(runReconcile(root, true).exitCode).toBe(3);
+        expect(runReconcile(root).exitCode).toBe(0);
+        expect(existsSync(join(root, "plugins", "echo-voice.ts"))).toBe(true);
+        expect(readFileSync(join(root, "opencode.json"), "utf8")).toBe(text);
+      });
+    }
+  });
+
+  test("prunes the tuple form [spec, options] too", () => {
+    withRoot((root) => {
+      writeFileSync(join(root, "opencode.json"), JSON.stringify({
+        plugin: [["file:///old/Echo/adapters/opencode/plugin.ts", { verbose: true }], ["opencode-wakatime", {}]],
+      }));
+      expect(runReconcile(root).exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(join(root, "opencode.json"), "utf8")).plugin).toEqual([["opencode-wakatime", {}]]);
+    });
+  });
+
+  test("prunes the global file OpenCode takes its plugin list from, not a shadowed one", () => {
+    const echo = "file:///old/Echo/adapters/opencode/plugin.ts";
+    // Unpinned discovery: every global file lives under a scratch XDG_CONFIG_HOME.
+    const unpinned = (root: string) => ({ ECHO_OPENCODE_CONFIG: "", XDG_CONFIG_HOME: join(root, "xdg"), HOME: root });
+    withRoot((root) => {
+      const dir = join(root, "xdg", "opencode");
+      mkdirSync(dir, { recursive: true });
+      // opencode.jsonc has no `plugin` key, so opencode.json's list is the one OpenCode loads.
+      writeFileSync(join(dir, "opencode.jsonc"), '{\n  // theme only\n  "theme": "tokyonight"\n}\n');
+      writeFileSync(join(dir, "opencode.json"), JSON.stringify({ plugin: [echo, "opencode-wakatime"] }));
+      const check = runReconcile(root, true, unpinned(root));
+      expect(check.stdout).toContain(`"plugin" -= ${echo}`);
+      expect(runReconcile(root, false, unpinned(root)).exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(join(dir, "opencode.json"), "utf8")).plugin).toEqual(["opencode-wakatime"]);
+      expect(readFileSync(join(dir, "opencode.jsonc"), "utf8")).toContain("// theme only");
+    });
+    withRoot((root) => {
+      const dir = join(root, "xdg", "opencode");
+      mkdirSync(dir, { recursive: true });
+      // opencode.jsonc defines `plugin`, so the entry in opencode.json never loads: leave it.
+      writeFileSync(join(dir, "opencode.jsonc"), JSON.stringify({ plugin: ["opencode-wakatime"] }));
+      writeFileSync(join(dir, "opencode.json"), JSON.stringify({ plugin: [echo] }));
+      expect(runReconcile(root, false, unpinned(root)).exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(join(dir, "opencode.json"), "utf8")).plugin).toEqual([echo]);
     });
   });
 });

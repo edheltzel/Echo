@@ -12,9 +12,14 @@ export interface OpenCodeSessionSnapshot {
   agent?: string;
 }
 
+export interface OpenCodeAssistantMessage {
+  id?: string;
+  text: string;
+}
+
 export interface OpenCodeSessionPort {
   getSession(id: string): Promise<OpenCodeSessionSnapshot | null>;
-  lastAssistantText(id: string): Promise<string>;
+  lastAssistant(id: string): Promise<OpenCodeAssistantMessage>;
 }
 
 export interface OpenCodeEvent {
@@ -38,10 +43,20 @@ export interface OpenCodeEvent {
   [key: string]: unknown;
 }
 
+// `pending` closes the check-then-send window: OpenCode calls hooks without
+// awaiting them and publishes session.idle twice on an aborted or errored turn.
 const spokenKeys = new Set<string>();
+const pendingKeys = new Set<string>();
 
 export function resetSpokenKeys(): void {
   spokenKeys.clear();
+  pendingKeys.clear();
+}
+
+/** Only these two events can speak; everything else returns before any I/O. */
+export function isSpokenEvent(event: OpenCodeEvent): boolean {
+  const type = eventType(event);
+  return type === "session.created" || type === "session.idle";
 }
 
 export function eventType(event: OpenCodeEvent): string {
@@ -99,8 +114,12 @@ export function messageFromAssistantText(text: string, personaName?: string): st
   return extractFallbackSummary(text);
 }
 
-export function lastAssistantTextFromMessages(messages: unknown): string {
-  if (!Array.isArray(messages)) return "";
+/**
+ * The newest assistant message only. Walking back past a text-less message
+ * (a `!shell` turn, an abort during a tool call) would re-speak the previous turn.
+ */
+export function lastAssistantFromMessages(messages: unknown): OpenCodeAssistantMessage {
+  if (!Array.isArray(messages)) return { text: "" };
   for (let i = messages.length - 1; i >= 0; i--) {
     const item = messages[i];
     if (!item || typeof item !== "object") continue;
@@ -124,10 +143,10 @@ export function lastAssistantTextFromMessages(messages: unknown): string {
     }
     if (typeof info.content === "string") texts.push(info.content);
     if (typeof record.content === "string") texts.push(record.content);
-    const joined = texts.join("\n").trim();
-    if (joined) return joined;
+    const text = texts.join("\n").trim();
+    return typeof info.id === "string" && info.id ? { id: info.id, text } : { text };
   }
-  return "";
+  return { text: "" };
 }
 
 export async function handleOpenCodeEvent(
@@ -135,6 +154,7 @@ export async function handleOpenCodeEvent(
   config: OpenCodeVoiceConfig = loadOpenCodeVoiceConfig(),
   port?: OpenCodeSessionPort,
 ): Promise<OpenCodeHookResult> {
+  if (!isSpokenEvent(event)) return "skipped";
   const type = eventType(event);
   const sessionID = eventSessionID(event);
   if (!sessionID) return "skipped";
@@ -159,19 +179,19 @@ export async function handleOpenCodeEvent(
       config.sayName,
     );
     subject = { id: `created:${sessionID}` };
-  } else if (type === "session.idle") {
-    if (!config.speakCompletions) return "skipped";
-    const text = port ? await port.lastAssistantText(sessionID) : "";
-    message = messageFromAssistantText(text, config.personaName);
-    subject = { text };
   } else {
-    return "skipped";
+    if (!config.speakCompletions) return "skipped";
+    const last = port ? await port.lastAssistant(sessionID) : { text: "" };
+    message = last.text ? messageFromAssistantText(last.text, config.personaName) : null;
+    // A message id separates two turns with identical text; text is the fallback key.
+    subject = last.id ? { id: last.id } : { text: last.text };
   }
 
   if (!message) return "skipped";
 
   const key = stableMessageKey(sessionID, subject, message);
-  if (spokenKeys.has(key)) return "skipped";
+  if (spokenKeys.has(key) || pendingKeys.has(key)) return "skipped";
+  pendingKeys.add(key);
 
   try {
     const slot = type === "session.idle" ? "done" : undefined;
@@ -187,5 +207,7 @@ export async function handleOpenCodeEvent(
       `[echo/opencode] notify request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     return "failed";
+  } finally {
+    pendingKeys.delete(key);
   }
 }
