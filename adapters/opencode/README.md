@@ -1,9 +1,10 @@
 # Echo adapter for OpenCode
 
-An OpenCode plugin plus the `/echo-mute` command. Registration owns two symlinks:
+An OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands. Registration owns three symlinks:
 
 - `~/.config/opencode/plugins/echo-voice.ts` → `plugin.ts` (OpenCode auto-loads this directory)
 - `~/.config/opencode/commands/echo-mute.md` → `commands/echo-mute.md` (bash `cli/echo mute`)
+- `~/.config/opencode/commands/echo-mode.md` → `commands/echo-mode.md` (bash `cli/echo mode`)
 
 ```bash
 bash scripts/install.sh --adapter opencode
