@@ -53,7 +53,7 @@ Project wins per key over the first existing global file (`opencode.jsonc`, then
 ## Ownership
 
 Reconcile heals a dead Echo-spelled link (a moved checkout) and refuses any other occupant
-of either name (exit 2). `--check`: 0 current, 3 pending, 2 fatal.
+of any of those names (exit 2). `--check`: 0 current, 3 pending, 2 fatal.
 
 ## Environment overrides (tests)
 
