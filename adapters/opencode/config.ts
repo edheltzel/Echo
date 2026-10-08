@@ -76,10 +76,15 @@ export function loadProjectPersona(
   if (layers.length === 0) return null;
   const merged = layers.reduce(mergeDeep);
 
-  const voices = isPlainObject(merged.voices) ? merged.voices : undefined;
-  const main = isPlainObject(voices?.main) ? voices.main : undefined;
+  // A voice has two spellings. Resolve it per file first, then let the
+  // highest-priority file that sets one win; a raw deep merge would let a
+  // lower file's nested voices.main.voiceId beat a higher file's flat voiceId.
+  const voiceOf = (d: Json): string | undefined => {
+    const main = isPlainObject(d.voices) && isPlainObject(d.voices.main) ? d.voices.main : undefined;
+    return trimmedString(main?.voiceId) ?? trimmedString(d.voiceId);
+  };
   const name = trimmedString(merged.name);
-  const voiceId = trimmedString(main?.voiceId) ?? trimmedString(merged.voiceId);
+  const voiceId = layers.map(voiceOf).findLast((voice) => voice !== undefined);
   const greeting = personaGreetingFields(merged, null);
 
   const override: EchoPersonaOverride = {};

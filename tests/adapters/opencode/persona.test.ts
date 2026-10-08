@@ -106,6 +106,19 @@ describe("OpenCode project daidentity", () => {
     });
   });
 
+  test("the highest-priority voice wins whichever of the two spellings each file uses", () => {
+    const files: Record<string, string> = {
+      "/home/.config/opencode/opencode.json": JSON.stringify({ daidentity: { voices: { main: { voiceId: "global-nested" } } } }),
+      "/repo/opencode.json": JSON.stringify({ daidentity: { voiceId: "project-flat" } }),
+    };
+    const read = (path: string) => files[path] ?? null;
+    expect(loadProjectPersona("/repo", read, "/home", {}, "/repo")?.voiceId).toBe("project-flat");
+
+    files["/home/.config/opencode/opencode.json"] = JSON.stringify({ daidentity: { voiceId: "global-flat" } });
+    files["/repo/opencode.json"] = JSON.stringify({ daidentity: { voices: { main: { voiceId: "project-nested" } } } });
+    expect(loadProjectPersona("/repo", read, "/home", {}, "/repo")?.voiceId).toBe("project-nested");
+  });
+
   test("a session in a subfolder reads opencode.json from parent folders up to the worktree", () => {
     const files: Record<string, string> = {
       "/repo/opencode.json": JSON.stringify({ daidentity: { name: "RepoRoot", voices: { main: { voiceId: "root-voice" } } } }),
