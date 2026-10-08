@@ -79,4 +79,49 @@ describe("parseArgs", () => {
     expect(o.locales).toEqual(["en-GB", "en-IE"]);
     expect(o.rate).toBe("-6%");
   });
+
+  test("-h and --help ask for help", () => {
+    expect(parseArgs(["--help"]).help).toBe(true);
+    expect(parseArgs(["--voices", "en-GB-RyanNeural", "-h"]).help).toBe(true);
+    expect(parseArgs([]).help).toBe(false);
+  });
+
+  test("an unknown flag or a stray argument is an error, not a silent default run", () => {
+    expect(() => parseArgs(["--lsit"])).toThrow("unknown argument: --lsit");
+    expect(() => parseArgs(["en-GB"])).toThrow("unknown argument: en-GB");
+  });
+
+  test("a flag missing its value is an error", () => {
+    expect(() => parseArgs(["--voices"])).toThrow("--voices needs a value");
+  });
+});
+
+describe("preview-voices command", () => {
+  // Run the real file directly (no `bun` prefix) to prove the shebang and exec bit.
+  // A bogus python path proves --help and errors never reach edge-tts or audio.
+  const run = (args: string[]) => {
+    const result = Bun.spawnSync(["scripts/preview-voices.ts", ...args], {
+      env: { ...process.env, ECHO_PYTHON3_PATH: "/nonexistent/python3" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+  };
+
+  test("--help prints every flag and exits 0 without touching edge-tts", () => {
+    for (const flag of ["--help", "-h"]) {
+      const { exitCode, stdout } = run([flag]);
+      expect(exitCode).toBe(0);
+      for (const option of ["--list", "--dry-run", "--locale", "--voices", "--text", "--rate", "--help"]) {
+        expect(stdout).toContain(option);
+      }
+    }
+  });
+
+  test("an unknown flag prints the error plus usage and exits 2", () => {
+    const { exitCode, stderr } = run(["--bogus"]);
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("unknown argument: --bogus");
+    expect(stderr).toContain("Usage:");
+  });
 });

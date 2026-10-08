@@ -57,14 +57,15 @@ The resolved mapping supplies the per-provider voice and settings; a caller-supp
 `scripts/preview-voices.ts` plays short samples so you can choose voices by ear before
 editing `core/voices.json`. It calls `edge-tts` directly and is dev tooling - not part of
 the runtime request path. `--list` and `--dry-run` are silent (CI-safe); the others play
-audio.
+audio. The script is executable; `scripts/preview-voices.ts --help` prints the same flags as
+the table below, and an unknown flag exits 2 with usage instead of running a default audition.
 
 ```bash
-bun scripts/preview-voices.ts --list                                # list English voices, no audio
-bun scripts/preview-voices.ts --locale en-GB                        # audition all en-GB voices
-bun scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
-bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
-bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synth command, no audio
+scripts/preview-voices.ts --list                                # list English voices, no audio
+scripts/preview-voices.ts --locale en-GB                        # audition all en-GB voices
+scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
+scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
+scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synth command, no audio
 ```
 
 | Flag | Purpose | Default |
@@ -74,6 +75,7 @@ bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synt
 | `--text` | Sample line spoken (`{voice}` is substituted) | `Hi, I'm {voice}. This is how I sound for Atlas.` |
 | `--rate` | edge-tts rate applied to every sample | `+0%` |
 | `--list` / `--dry-run` | Print matched voices (and synth command) without playing audio | off |
+| `-h` / `--help` | Print usage and exit | - |
 
 ## Change the default (Atlas) voice
 
