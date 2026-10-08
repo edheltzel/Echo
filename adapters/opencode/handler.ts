@@ -174,7 +174,8 @@ export async function handleOpenCodeEvent(
   if (spokenKeys.has(key)) return "skipped";
 
   try {
-    const result = await sendNotification(config, message, "opencode", sessionID);
+    const slot = type === "session.idle" ? "done" : undefined;
+    const result = await sendNotification(config, message, "opencode", sessionID, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/opencode] notify failed with HTTP ${result.status}`);
       return "failed";
