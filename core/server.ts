@@ -611,20 +611,25 @@ function recordPlayback(file: string, playStart: number, playEnd: number, outcom
   slot.exit_reason = reason;
 }
 
-async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff' = 'mp3'): Promise<void> {
-  const temp = createAudioTempFile('play', format);
-  await Bun.write(temp.file, audioBuffer);
-
-  const volume = getVolumeSetting();
-  const proc = spawn('/usr/bin/afplay', ['-v', volume.toString(), temp.file]);
-
+// Play one file through afplay at the configured volume, depositing playback
+// metrics for the audio-lifecycle log either way. Throws on failure.
+async function afplayFile(file: string): Promise<void> {
+  const proc = spawn('/usr/bin/afplay', ['-v', getVolumeSetting().toString(), file]);
   const playStart = Date.now();
   try {
     await waitForProcess(proc, 'afplay', AUDIO_PROCESS_TIMEOUT_MS);
-    recordPlayback(temp.file, playStart, Date.now(), { exitCode: 0 });
+    recordPlayback(file, playStart, Date.now(), { exitCode: 0 });
   } catch (error) {
-    recordPlayback(temp.file, playStart, Date.now(), { exitCode: null, error });
+    recordPlayback(file, playStart, Date.now(), { exitCode: null, error });
     throw error;
+  }
+}
+
+async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff' = 'mp3'): Promise<void> {
+  const temp = createAudioTempFile('play', format);
+  await Bun.write(temp.file, audioBuffer);
+  try {
+    await afplayFile(temp.file);
   } finally {
     cleanupAudioTempDir(temp.dir);
   }
@@ -645,16 +650,12 @@ const SLOT_SYSTEM_SOUND: Record<NotifySlot, string> = {
 };
 
 async function playSlotSound(slot: NotifySlot): Promise<void> {
-  const volume = getVolumeSetting().toString();
   const file = resolveEchoEnv(SLOT_SOUND_CONFIG_KEY[slot]) || join(import.meta.dir, "sounds", `${slot}.wav`);
   for (const candidate of [file, SLOT_SYSTEM_SOUND[slot]]) {
-    const playStart = Date.now();
     try {
-      await waitForProcess(spawn('/usr/bin/afplay', ['-v', volume, candidate]), 'afplay', AUDIO_PROCESS_TIMEOUT_MS);
-      recordPlayback(candidate, playStart, Date.now(), { exitCode: 0 });
+      await afplayFile(candidate);
       return;
     } catch (error) {
-      recordPlayback(candidate, playStart, Date.now(), { exitCode: null, error });
       console.warn(`🔔 Slot sound failed (${candidate}): ${error instanceof Error ? error.message : error}`);
     }
   }
@@ -1626,7 +1627,7 @@ async function speakNotification(
     speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion, speakMode, soundSlot));
 
   if (result.sound) {
-    console.log(`🔔 ${result.success ? 'Played' : 'Failed to play'} ${result.voice} sound instead of speech`);
+    console.log(`🔔 ${result.success ? 'Played' : 'Failed to play'} ${soundSlot} sound instead of speech`);
   } else if (result.muted) {
     console.log('🔇 Speech suppressed (muted)');
   } else if (result.success) {
@@ -1672,7 +1673,6 @@ async function speakNotification(
     success: result.success,
     // Reached the player (Phase 2 / R7) — unless the capture guard held it
     // there: 'held-for-capture' keeps every 202-acked line's fate greppable.
-    // 'played-sound' marks a slot sound that replaced speech.
     disposition: result.held_for_capture ? 'held-for-capture' : result.sound ? 'played-sound' : 'played',
   };
   writeAudioLifecycleEvent(event);
@@ -2381,6 +2381,7 @@ export const server = serve({
       "POST /notify/capture-reservations/:reservation_id/release",
       "POST /notify/personality",
       "POST /mute",
+      "POST /mode",
       "POST /replay",
       "GET /health",
       "GET /voices",

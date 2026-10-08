@@ -119,11 +119,16 @@ export function readMuteState(path: string = resolveMuteStatePath()): MuteState 
   return activeMute(until, scope);
 }
 
-export function writeMuteState(state: MuteState, path: string = resolveMuteStatePath()): void {
+/** Atomic JSON state write (temp + rename): no partial-file window. */
+export function writeStateFile(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state));
+  writeFileSync(tmp, JSON.stringify(value));
   renameSync(tmp, path); // atomic on the same filesystem - no partial-file window
+}
+
+export function writeMuteState(state: MuteState, path: string = resolveMuteStatePath()): void {
+  writeStateFile(path, state);
 }
 
 export function setMuteState(

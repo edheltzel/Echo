@@ -4,9 +4,9 @@
 // same way mute is. Kept in its own file because mute writes replace mute.json
 // whole. Reads are tolerant: a missing or malformed file means `speech`.
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { resolveMuteStatePath } from "./mute";
+import { resolveMuteStatePath, writeStateFile } from "./mute";
 import { resolveEchoEnv } from "./env";
 
 export const OUTPUT_MODES = ["speech", "sounds"] as const;
@@ -30,8 +30,5 @@ export function readOutputMode(path: string = resolveOutputModePath()): OutputMo
 }
 
 export function writeOutputMode(mode: OutputMode, path: string = resolveOutputModePath()): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify({ mode }));
-  renameSync(tmp, path);
+  writeStateFile(path, { mode });
 }
