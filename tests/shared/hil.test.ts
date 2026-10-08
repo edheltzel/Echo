@@ -116,8 +116,10 @@ describe("HilDedupe", () => {
       reason: "Run the verification command?",
     };
     const statuses = [false, true, true];
-    const speak = async (message: string) => {
+    const slots: unknown[] = [];
+    const speak = async (message: string, slot?: unknown) => {
       spoken.push(message);
+      slots.push(slot);
       return statuses.shift() ?? true;
     };
 
@@ -153,6 +155,7 @@ describe("HilDedupe", () => {
       "Ed, Atlas needs approval: Run the verification command?",
       "Ed, Atlas needs approval: Run the verification command?",
     ]);
+    expect(slots).toEqual(["request", "request"]);
   });
 
   test("ui_prompt_start confirm does not re-speak after tool_approval_requested", async () => {

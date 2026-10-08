@@ -36,11 +36,11 @@ Project wins over `~/.grok/settings.json`, then env defaults
 
 ## Ownership
 
-Reconcile owns `echo-voice.json` under hooks and links `skills/echo-mute`
-(`/echo-mute` → bash `cli/echo mute`; the bun hook is not the mute path).
+Reconcile owns `echo-voice.json` under hooks and links `skills/echo-mute` and `skills/echo-mode`
+(`/echo-mute` → bash `cli/echo mute`, `/echo-mode` → bash `cli/echo mode`; the bun hook is not the mute path).
 Sibling hooks such as firstmate's `fm-turn-end.json` / `fm-turn-end.sh` are never
 rewritten or pruned. A foreign file already named `echo-voice.json` or a foreign
-`echo-mute` skill is a fatal ownership conflict (exit 2).
+`echo-mute` or `echo-mode` skill is a fatal ownership conflict (exit 2).
 
 ## Environment overrides (tests)
 

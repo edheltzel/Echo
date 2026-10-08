@@ -91,4 +91,31 @@ describe("omp HIL announce", () => {
     );
     expect(payloads).toHaveLength(1);
   });
+
+  test("HIL carries request, completion carries done, greeting carries no slot", async () => {
+    process.env.ECHO_PREFERRED_NAME = "Ed";
+    const payloads: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 202 });
+    };
+    const { handlers, api } = createMockOmp();
+    echoVoiceOmpAdapter(api, { ...config, greetOnSessionStart: true });
+    const ctx = context();
+    await handlers.get("session_start")?.({ reason: "startup" }, ctx);
+    await handlers.get("tool_approval_requested")?.({
+      type: "tool_approval_requested",
+      toolCallId: "c-slot",
+      toolName: "bash",
+      reason: "Run the verification command?",
+    }, ctx);
+    await handlers.get("message_end")?.(
+      { message: { role: "assistant", id: "m1", content: "Done.\n🗣️ Atlas: Shipped the fix." } },
+      ctx,
+    );
+    expect(payloads).toHaveLength(3);
+    expect(payloads[0]).not.toHaveProperty("slot");
+    expect(payloads[1]?.slot).toBe("request");
+    expect(payloads[2]?.slot).toBe("done");
+  });
 });

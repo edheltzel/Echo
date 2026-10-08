@@ -9,10 +9,11 @@ import {
 } from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
+import type { NotifySlot } from "@echo/shared/notify-slot.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { mergePersonaYaml } from "@echo/shared/persona-scaffold.ts";
-import { registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
+import { registerEchoMode, registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { maybeSpeakHil, preferredHumanName, HilDedupe } from "@echo/shared/hil.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
@@ -150,7 +151,7 @@ export default function echoVoiceOmpAdapter(
     }
   }
 
-  async function speak(message: string, ctx: OmpExtensionContext): Promise<boolean> {
+  async function speak(message: string, ctx: OmpExtensionContext, slot?: NotifySlot): Promise<boolean> {
     const cfg = resolveConfig(resolveCwd(ctx));
     const sessionId = resolveSessionId(ctx);
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
@@ -166,6 +167,7 @@ export default function echoVoiceOmpAdapter(
         sessionId,
         ctx.signal,
         nativeContextFromAdapterContext(ctx, process.env, sessionId, ctx.hasUI === true),
+        slot,
       );
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
@@ -194,7 +196,7 @@ export default function echoVoiceOmpAdapter(
     pending.add(key);
 
     try {
-      if (await speak(line, ctx)) {
+      if (await speak(line, ctx, "done")) {
         spoken.set(key, Date.now());
       }
     } finally {
@@ -212,7 +214,7 @@ export default function echoVoiceOmpAdapter(
       personaName: cfg.personaName,
       preferredName: preferredHumanName(loadEchoEnvironment()),
       dedupe: hilDedupe,
-      speak: (message) => speak(message, ctx),
+      speak: (message, slot) => speak(message, ctx, slot),
     });
   }
 
@@ -345,4 +347,5 @@ export default function echoVoiceOmpAdapter(
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
   registerEchoVoice(omp, { configPath: [".omp", "config.yml"], merge: mergePersonaYaml });
   registerEchoMute(omp);
+  registerEchoMode(omp);
 }

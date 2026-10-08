@@ -41,7 +41,7 @@ mute_str() {
 # Human status for on/off/toggle/status. `muted` is the speaker flag, so mic-only
 # stores muted=false — ON/OFF here means "any mute target is held", not that flag.
 print_mute_human() {
-  local obj muted scope until speaker=off microphone=off
+  local obj muted scope until mode speaker=off microphone=off
   obj="$(mute_object "$1")"
   muted="$(mute_bool "$obj" muted)"
   scope="$(mute_str "$obj" scope)"
@@ -86,6 +86,10 @@ print_mute_human() {
     echo "Targets: ${targets}"
   else
     echo "Targets: none"
+  fi
+  mode="$(mute_str "$1" mode)"
+  if [ -n "$mode" ]; then
+    echo "Mode: ${mode}"
   fi
   if [ -n "$until" ]; then
     echo "Until: ${until}"

@@ -38,7 +38,7 @@ Project wins over `~/.codex/settings.json`, then env defaults
 ## Ownership
 
 Reconcile adds/updates the Echo `adapters/codex/hook.ts` command entries and
-links `~/.codex/skills/echo-mute` (`/echo-mute` → bash `cli/echo mute`; the bun
+links `~/.codex/skills/echo-mute` and `~/.codex/skills/echo-mode` (`/echo-mute` → bash `cli/echo mute`, `/echo-mode` → bash `cli/echo mode`; the bun
 hook is not the mute path). Other hooks are preserved.
 
 ## Environment overrides (tests)

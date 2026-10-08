@@ -64,6 +64,7 @@ export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 # can read or rewrite the operator's real mute state, capture state, caches,
 # lifecycle log or voice config.
 export ECHO_MUTE_STATE_PATH="${SCRATCH}/mute.json"
+export ECHO_MODE_STATE_PATH="${SCRATCH}/mode.json"
 export ECHO_CAPTURE_STATE_PATH="${SCRATCH}/recording-state.json"
 export ECHO_AUDIO_CACHE_DIR="${SCRATCH}/audio-cache"
 export ECHO_AUDIO_LIFECYCLE_LOG="${SCRATCH}/audio-lifecycle.jsonl"
@@ -140,6 +141,7 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "PORT": $PORT,
   "VOICES_PATH": "$VOICES_PATH",
   "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
+  "ECHO_MODE_STATE_PATH": "$ECHO_MODE_STATE_PATH",
   "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
   "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
   "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",

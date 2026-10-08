@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Idempotent reconcile-and-prune for the OpenCode adapter (#77). Echo owns two
- * symlinks: `plugins/echo-voice.ts` -> `plugin.ts` (voice) and
- * `commands/echo-mute.md` (mute). OpenCode also loads every `"plugin"` entry in
+ * Idempotent reconcile-and-prune for the OpenCode adapter (#77). Echo owns three
+ * symlinks: `plugins/echo-voice.ts` -> `plugin.ts` (voice), `commands/echo-mute.md`
+ * (mute), and `commands/echo-mode.md` (mode). OpenCode also loads every `"plugin"` entry in
  * its global config, so an Echo `plugin.ts` entry there is a duplicate
  * registration (every line spoken twice) and is pruned. Foreign occupants are
  * fatal; dead Echo-spelled links are healed. `--check`: exit 3 = pending,
@@ -40,6 +40,19 @@ function sourceOf(relative: string): string {
   }
 }
 
+function commandLink(filename: "echo-mute.md" | "echo-mode.md") {
+  const rel = `adapters/opencode/commands/${filename}`;
+  return {
+    filename,
+    plan: planOwnedSymlink({
+      destination: join(commandsDir(), filename),
+      source: sourceOf(`commands/${filename}`),
+      isEchoSpelling: (target: string) => target === rel || target.endsWith(`/${rel}`),
+      fatal,
+    }),
+  };
+}
+
 const links = [
   {
     filename: "echo-voice.ts",
@@ -50,15 +63,8 @@ const links = [
       fatal,
     }),
   },
-  {
-    filename: "echo-mute.md",
-    plan: planOwnedSymlink({
-      destination: join(commandsDir(), "echo-mute.md"),
-      source: sourceOf("commands/echo-mute.md"),
-      isEchoSpelling: (target) => /(^|\/)adapters\/opencode\/commands\/echo-mute\.md$/.test(target),
-      fatal,
-    }),
-  },
+  commandLink("echo-mute.md"),
+  commandLink("echo-mode.md"),
 ];
 
 // Config `"plugin"` entries that load Echo's plugin.ts (any clone, `file://` or bare path).

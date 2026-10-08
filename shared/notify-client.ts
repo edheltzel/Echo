@@ -2,6 +2,7 @@
 // import shared/, never core/. The `source` field is a free-form host tag the
 // daemon records for context ("pi", "omp", "claudecode").
 
+import type { NotifySlot } from "./notify-slot.ts";
 import {
   withDetectedSpeakMode,
   type SpeakMode,
@@ -35,6 +36,8 @@ export interface NotifyPayload {
   volume?: number;
   /** Notify density. Omitted at the daemon keeps today's rate; adapters fill one. */
   speak_mode?: SpeakMode;
+  /** Sound slot for sounds-only playback. Omitted at the daemon means `generic`. */
+  slot?: NotifySlot;
   [key: string]: unknown;
 }
 
@@ -51,6 +54,7 @@ export function buildNotifyPayload(
   message: string,
   source: string,
   sessionId?: string,
+  slot?: NotifySlot,
 ): NotifyPayload {
   const payload: NotifyPayload = {
     message,
@@ -61,6 +65,7 @@ export function buildNotifyPayload(
   };
   if (config.voiceId) payload.voice_id = config.voiceId;
   if (sessionId) payload.session_id = sessionId;
+  if (slot) payload.slot = slot;
   return payload;
 }
 
@@ -136,13 +141,14 @@ export async function sendNotification(
   sessionId?: string,
   signal?: AbortSignal,
   visualContext?: TerminalNotificationContext,
+  slot?: NotifySlot,
 ): Promise<NotifyResult> {
   const timeout = signalWithTimeout(signal, DEFAULT_NOTIFY_TIMEOUT_MS);
 
   try {
     return await postNotification(
       { endpoint: config.endpoint, title: config.title, visualContext: visualContext ?? config.visualContext },
-      buildNotifyPayload(config, message, source, sessionId),
+      buildNotifyPayload(config, message, source, sessionId, slot),
       timeout.signal,
     );
   } finally {

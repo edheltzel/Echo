@@ -134,8 +134,9 @@ export async function handleGrokHookResult(
 
   if (!message) return "skipped";
 
+  const slot = event === "stop" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "grok", sessionId);
+    const result = await sendNotification(config, message, "grok", sessionId, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/grok] notify failed with HTTP ${result.status}`);
       return "failed";

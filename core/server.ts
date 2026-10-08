@@ -27,6 +27,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { edgeRateFromSpeed } from "./edge-rate";
 import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
 import { isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { isOutputMode, readOutputMode, writeOutputMode } from "./output-mode";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
 import {
@@ -59,6 +60,7 @@ import {
   voiceEnabledForSpeakMode,
   type SpeakMode,
 } from "../shared/speak-mode";
+import { parseNotifySlot, type NotifySlot } from "../shared/notify-slot";
 import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
@@ -609,23 +611,55 @@ function recordPlayback(file: string, playStart: number, playEnd: number, outcom
   slot.exit_reason = reason;
 }
 
-async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff' = 'mp3'): Promise<void> {
-  const temp = createAudioTempFile('play', format);
-  await Bun.write(temp.file, audioBuffer);
-
-  const volume = getVolumeSetting();
-  const proc = spawn('/usr/bin/afplay', ['-v', volume.toString(), temp.file]);
-
+// Play one file through afplay at the configured volume, depositing playback
+// metrics for the audio-lifecycle log either way. Throws on failure.
+async function afplayFile(file: string): Promise<void> {
+  const proc = spawn('/usr/bin/afplay', ['-v', getVolumeSetting().toString(), file]);
   const playStart = Date.now();
   try {
     await waitForProcess(proc, 'afplay', AUDIO_PROCESS_TIMEOUT_MS);
-    recordPlayback(temp.file, playStart, Date.now(), { exitCode: 0 });
+    recordPlayback(file, playStart, Date.now(), { exitCode: 0 });
   } catch (error) {
-    recordPlayback(temp.file, playStart, Date.now(), { exitCode: null, error });
+    recordPlayback(file, playStart, Date.now(), { exitCode: null, error });
     throw error;
+  }
+}
+
+async function playAudio(audioBuffer: ArrayBuffer, format: 'mp3' | 'wav' | 'aiff' = 'mp3'): Promise<void> {
+  const temp = createAudioTempFile('play', format);
+  await Bun.write(temp.file, audioBuffer);
+  try {
+    await afplayFile(temp.file);
   } finally {
     cleanupAudioTempDir(temp.dir);
   }
+}
+
+// Notification sounds: Echo's bundled file per slot, overridable by config, with
+// a macOS system sound as the last resort. A configured path that fails goes
+// straight to the system sound, never to the bundled file.
+const SLOT_SOUND_CONFIG_KEY: Record<NotifySlot, string> = {
+  request: "ECHO_SOUND_REQUEST",
+  done: "ECHO_SOUND_DONE",
+  generic: "ECHO_SOUND_GENERIC",
+};
+const SLOT_SYSTEM_SOUND: Record<NotifySlot, string> = {
+  request: "/System/Library/Sounds/Glass.aiff",
+  done: "/System/Library/Sounds/Hero.aiff",
+  generic: "/System/Library/Sounds/Pop.aiff",
+};
+
+async function playSlotSound(slot: NotifySlot): Promise<void> {
+  const file = resolveEchoEnv(SLOT_SOUND_CONFIG_KEY[slot]) || join(import.meta.dir, "sounds", `${slot}.wav`);
+  for (const candidate of [file, SLOT_SYSTEM_SOUND[slot]]) {
+    try {
+      await afplayFile(candidate);
+      return;
+    } catch (error) {
+      console.warn(`🔔 Slot sound failed (${candidate}): ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  throw new Error(`No playable sound for slot ${slot}`);
 }
 
 function spawnSafe(command: string, args: string[], timeoutMs = NOTIFICATION_PROCESS_TIMEOUT_MS): Promise<void> {
@@ -1259,6 +1293,7 @@ interface ResolutionEvent {
   hops: number;               // providers skipped/failed before the chosen one
   attempts: SpeakAttempt[];   // per-provider outcome (failures, circuit-open, skips)
   success: boolean;
+  slot?: NotifySlot;          // present when a slot sound replaced speech (provider 'sound')
 }
 
 // Classify how a requested voice_id resolved. Derived from the VoiceMapping that
@@ -1341,14 +1376,18 @@ export async function speakWithFallback(
   callerVoiceSettings?: Partial<VoiceSettings> | null,
   emotion?: string,
   speakMode?: SpeakMode,
-): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean }> {
+  soundSlot?: NotifySlot,
+): Promise<{ success: boolean; provider: string; voice: string | null; attempts: SpeakAttempt[]; muted?: boolean; held_for_capture?: boolean; sound?: boolean }> {
   // Runtime mute gate (#83 / FM-446): sits before the provider loop so ONE
   // check covers every provider including the macOS `say` fallback. `tts` and
   // `all` hold the speaker; `mic` does not. Lazy expiry — a timed mute past its
   // deadline reads as unmuted. Logging and voice resolution already happened
   // upstream; the caller records the drop-off event tagged muted.
+  // A line with a sound slot survives `mute tts` as a sound; `mute all` and
+  // slotless lines (converse questions, replays) stay fully muted.
   const muteState = readMuteState();
-  if (isTtsMuted(muteState)) {
+  const ttsMuted = isTtsMuted(muteState);
+  if (ttsMuted && (muteState.scope === "all" || !soundSlot)) {
     console.log(`🔇 Muted (${muteState.scope}) — speech suppressed${muteState.muted_until ? ` until ${muteState.muted_until}` : ''}`);
     return { success: false, provider: 'muted', voice: null, attempts: [], muted: true };
   }
@@ -1361,6 +1400,18 @@ export async function speakWithFallback(
   if (captureReservationHeld() || isCaptureActive()) {
     console.log('🎙️  Mic capture active — speech held (capture guard)');
     return { success: false, provider: 'capture-held', voice: null, attempts: [], held_for_capture: true };
+  }
+
+  // Notification sounds: `mute tts` or sounds-only mode play the slot sound
+  // instead of speaking. Decided here, at dequeue, so coalescing, age-out, the
+  // capture guard, and a mode switch made while the line waited all apply.
+  if (soundSlot && (ttsMuted || readOutputMode() === "sounds")) {
+    try {
+      await playSlotSound(soundSlot);
+      return { success: true, provider: 'sound', voice: null, attempts: [], muted: ttsMuted, sound: true };
+    } catch {
+      return { success: false, provider: 'sound', voice: null, attempts: [], muted: ttsMuted, sound: true };
+    }
   }
 
   // Build provider order: primary first, then fallback order
@@ -1545,6 +1596,7 @@ async function speakNotification(
   sessionId: string | null = null,
   requestId: string | null = null,
   speakMode?: SpeakMode,
+  soundSlot?: NotifySlot,
 ) {
   const messageValidation = validateInput(message);
   if (!messageValidation.valid) {
@@ -1573,9 +1625,11 @@ async function speakNotification(
   // /notify requests.
   const audioSlot: AudioCaptureSlot = {};
   const result = await audioCapture.run(audioSlot, () =>
-    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion, speakMode));
+    speakWithFallback(safeMessage, voiceId || undefined, callerVoiceSettings, emotion, speakMode, soundSlot));
 
-  if (result.muted) {
+  if (result.sound) {
+    console.log(`🔔 ${result.success ? 'Played' : 'Failed to play'} ${soundSlot} sound instead of speech`);
+  } else if (result.muted) {
     console.log('🔇 Speech suppressed (muted)');
   } else if (result.success) {
     console.log(`✅ Speech via ${result.provider}`);
@@ -1593,9 +1647,10 @@ async function speakNotification(
     ...(reason && { resolution_reason: reason }),
     provider: result.provider,
     voice: result.voice,
-    hops: result.success ? result.attempts.length - 1 : result.attempts.length,
+    hops: result.sound ? 0 : result.success ? result.attempts.length - 1 : result.attempts.length,
     attempts: result.attempts,
     success: result.success,
+    ...(result.sound && { slot: soundSlot }),
     ...(result.muted && { muted: true }),
     ...(result.held_for_capture && { held_for_capture: true }),
   });
@@ -1620,7 +1675,7 @@ async function speakNotification(
     success: result.success,
     // Reached the player (Phase 2 / R7) — unless the capture guard held it
     // there: 'held-for-capture' keeps every 202-acked line's fate greppable.
-    disposition: result.held_for_capture ? 'held-for-capture' : 'played',
+    disposition: result.held_for_capture ? 'held-for-capture' : result.sound ? 'played-sound' : 'played',
   };
   writeAudioLifecycleEvent(event);
   return result;
@@ -1675,6 +1730,9 @@ interface NotifyJobPayload {
   requestId: string;
   messageChars: number; // sanitized length, for disposition rows that never play
   speakMode?: SpeakMode;
+  // Slot whose sound may replace speech (sounds-only mode or `mute tts`).
+  // Absent on converse and replay jobs: those always take the speech path.
+  soundSlot?: NotifySlot;
   // Replay jobs re-speak a stored line and must not re-enter the ring.
   recordSpoken?: boolean;
 }
@@ -1683,10 +1741,10 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
   player: async (job) => {
     const p = job.payload;
     markPlaybackPlaying(p.requestId);
-    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId, p.speakMode);
+    const result = await speakNotification(p.message, p.voiceId, p.voiceSettings, p.sessionId, p.requestId, p.speakMode, p.soundSlot);
     // Only lines that actually reached the speaker are replayable. Muted,
-    // capture-held, and failed plays stay out of the ring (http-api).
-    if (p.recordSpoken !== false && result.success && !result.muted && !result.held_for_capture) {
+    // capture-held, sound-substituted, and failed plays stay out of the ring (http-api).
+    if (p.recordSpoken !== false && result.success && !result.muted && !result.held_for_capture && !result.sound) {
       recordSpokenLine({
         message: p.message,
         voiceId: p.voiceId,
@@ -1776,6 +1834,7 @@ function acceptNotification(
     nativeVisualShown: boolean;
     captureReservation?: CaptureReservationRequest;
     speakMode?: SpeakMode;
+    slot?: NotifySlot;
   },
 ): void {
   const titleValidation = validateInput(opts.title);
@@ -1822,6 +1881,7 @@ function acceptNotification(
       requestId: reqId,
       messageChars: messageValidation.sanitized!.length,
       speakMode: opts.speakMode,
+      soundSlot: opts.captureReservation ? undefined : (opts.slot ?? "generic"),
     },
   });
 }
@@ -1878,6 +1938,7 @@ export const server = serve({
     // handler; this bucket only bounds how often a caller may ask.
     const rateKey =
       url.pathname === "/mute" ? `mute:${clientIp}`
+      : url.pathname === "/mode" ? `mode:${clientIp}`
       : url.pathname === "/replay" ? `replay:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
       : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
@@ -1904,6 +1965,10 @@ export const server = serve({
           throw new Error("Invalid speak_mode");
         }
         const speakMode = parsedSpeakMode.mode;
+        const parsedSlot = parseNotifySlot(data.slot);
+        if (!parsedSlot.ok) {
+          throw new Error("Invalid slot");
+        }
         const voiceEnabled = voiceEnabledForSpeakMode(speakMode, data.voice_enabled !== false);
         const voiceId = data.voice_id || data.voice_name || null;
         const voiceSettings = data.voice_settings || null;
@@ -1943,7 +2008,7 @@ export const server = serve({
         // (plan R7). True playback outcome lives in the audio-lifecycle log.
         acceptNotification(reqId, {
           title, message, voiceEnabled, voiceId, voiceSettings, sessionId, nativeVisualShown,
-          captureReservation, speakMode,
+          captureReservation, speakMode, slot: parsedSlot.slot,
         });
 
         log('info', `📥 Notification accepted (queue depth: ${playQueue.depth})`, ctx);
@@ -2190,6 +2255,40 @@ export const server = serve({
       }
     }
 
+    // Output mode (speech | sounds). Body `{mode}`; response is the resulting
+    // `{mode}`. Status is read through GET /health.
+    if (url.pathname === "/mode" && req.method === "POST") {
+      const reqId = generateRequestId();
+      try {
+        let data: unknown;
+        try {
+          data = await req.json();
+        } catch {
+          throw new Error("Invalid JSON body");
+        }
+        const mode = typeof data === "object" && data !== null && "mode" in data ? data.mode : undefined;
+        if (!isOutputMode(mode)) {
+          throw new Error("Invalid body: 'mode' must be speech or sounds");
+        }
+        writeOutputMode(mode);
+        log('info', `🔔 Output mode ${mode}`, { requestId: reqId });
+        return new Response(JSON.stringify({ mode }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log('error', `Mode error: ${message}`, { requestId: reqId });
+        return new Response(
+          JSON.stringify({ status: "error", message: message || "Internal server error", request_id: reqId }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: message.includes('Invalid') ? 400 : 500,
+          },
+        );
+      }
+    }
+
     // Read-only projection of the voice config a caller needs to decide whether a
     // `voice_id` will resolve. Adapters must not read the daemon's config files off
     // disk — a co-located checkout is not part of the contract, and the daemon may
@@ -2231,6 +2330,7 @@ export const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           mute: readMuteState(),
+          mode: readOutputMode(),
           // Additive: the capture guard's resolved state file and current
           // reading (idle unless a live external mic capture is in progress).
           capture_guard: {
@@ -2283,6 +2383,7 @@ export const server = serve({
       "POST /notify/capture-reservations/:reservation_id/release",
       "POST /notify/personality",
       "POST /mute",
+      "POST /mode",
       "POST /replay",
       "GET /health",
       "GET /voices",

@@ -44,8 +44,9 @@ export async function handleJcodeHookResult(
 
   if (!message) return "skipped";
 
+  const slot = env.JCODE_HOOK_EVENT === "turn_end" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "jcode", env.JCODE_HOOK_SESSION_ID);
+    const result = await sendNotification(config, message, "jcode", env.JCODE_HOOK_SESSION_ID, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/jcode] notify failed with HTTP ${result.status}`);
       return "failed";

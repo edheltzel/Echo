@@ -9,7 +9,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.ECHO_CONFIG_FILE = join(
-  mkdtempSync(join(tmpdir(), "echo-test-config-")),
-  "config.json",
-);
+const scratch = mkdtempSync(join(tmpdir(), "echo-test-config-"));
+process.env.ECHO_CONFIG_FILE = join(scratch, "config.json");
+// The output mode is read on every dequeue; never let the operator's real
+// mode.json switch in-process daemon tests to sounds-only.
+process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");

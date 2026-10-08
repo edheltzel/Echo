@@ -157,29 +157,33 @@ if (existsSync(hooksDir)) {
   }
 }
 
-const muteSource = join(ADAPTER_DIR, "skills", "echo-mute");
-let muteSkillSource: string;
-try {
-  muteSkillSource = realpathSync(muteSource);
-} catch {
-  fatal(`the Grok mute skill is missing at ${muteSource}`);
-}
-const muteSkill = planOwnedSymlink({
-  destination: join(skillsDir(), "echo-mute"),
-  source: muteSkillSource,
-  isEchoSpelling: (target) => /(^|\/)adapters\/grok\/skills\/echo-mute\/?$/.test(target),
-  fatal,
+const skillNames = ["echo-mute", "echo-mode"] as const;
+const skills = skillNames.map((name) => {
+  const sourceDir = join(ADAPTER_DIR, "skills", name);
+  let source: string;
+  try {
+    source = realpathSync(sourceDir);
+  } catch {
+    fatal(`the Grok ${name} skill is missing at ${sourceDir}`);
+  }
+  const plan = planOwnedSymlink({
+    destination: join(skillsDir(), name),
+    source,
+    isEchoSpelling: (target) => new RegExp(`(^|/)adapters/grok/skills/${name}/?$`).test(target),
+    fatal,
+  });
+  if (plan.kind !== "current") changed = true;
+  log.push(ownedLinkLog(plan, `skills/${name}`));
+  return plan;
 });
-if (muteSkill.kind !== "current") changed = true;
-log.push(ownedLinkLog(muteSkill, "skills/echo-mute"));
 
 if (CHECK_ONLY) {
   console.log(
     [
       ...log,
       changed
-        ? "✓ preflight passed - Grok hooks/mute skill would be updated"
-        : "✓ preflight passed - Grok hooks and mute skill already current",
+        ? "✓ preflight passed - Grok hooks/mute/mode skills would be updated"
+        : "✓ preflight passed - Grok hooks, mute skill, and mode skill already current",
     ].join("\n"),
   );
   process.exit(changed ? 3 : 0);
@@ -197,8 +201,8 @@ if (existingText === null || existingText !== desired.text) {
   }
 }
 
-applyOwnedSymlink(muteSkill);
+for (const plan of skills) applyOwnedSymlink(plan);
 
 console.log(
-  [...log, `✓ Grok hook/mute registration ${changed ? "updated" : "already current"}`].join("\n"),
+  [...log, `✓ Grok hook/mute/mode registration ${changed ? "updated" : "already current"}`].join("\n"),
 );

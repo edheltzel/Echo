@@ -21,6 +21,8 @@ banks/
 *.mp3
 *.wav
 *.aiff
+# Bundled notification sounds ship with the daemon payload.
+!core/sounds/*.wav
 
 # Editor / OS
 .idea/

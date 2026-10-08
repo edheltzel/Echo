@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createEchoMuteCommand,
+  createEchoModeCommand,
   parseMuteArgs,
   runEchoMute,
   type MuteRunResult,
@@ -82,5 +83,26 @@ describe("createEchoMuteCommand", () => {
     });
     await cmd.handler("", ctx(notes));
     expect(notes.at(-1)).toEqual({ msg: "Usage: echo mute …", type: "error" });
+  });
+});
+
+describe("createEchoModeCommand", () => {
+  function ctx(notes: Array<{ msg: string; type?: string }>): ScaffoldContext {
+    return { cwd: "/tmp", ui: { input: async () => undefined, notify: (msg, type) => notes.push({ msg, type }) } };
+  }
+
+  test("forwards args to cli/echo mode", async () => {
+    const notes: Array<{ msg: string; type?: string }> = [];
+    let seen: { cliPath: string; subcommand: string; args: string[] } | undefined;
+    const cmd = createEchoModeCommand({
+      cliPath: "/stub/cli/echo",
+      run: async (cliPath, subcommand, args) => {
+        seen = { cliPath, subcommand, args };
+        return { exitCode: 0, stdout: "Mode: sounds\n", stderr: "" };
+      },
+    });
+    await cmd.handler("sounds", ctx(notes));
+    expect(seen).toEqual({ cliPath: "/stub/cli/echo", subcommand: "mode", args: ["sounds"] });
+    expect(notes.at(-1)).toEqual({ msg: "Mode: sounds", type: "info" });
   });
 });

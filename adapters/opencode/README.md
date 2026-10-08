@@ -1,9 +1,10 @@
 # Echo adapter for OpenCode
 
-An OpenCode plugin plus the `/echo-mute` command. Registration owns two symlinks:
+An OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands. Registration owns three symlinks:
 
 - `~/.config/opencode/plugins/echo-voice.ts` → `plugin.ts` (OpenCode auto-loads this directory)
 - `~/.config/opencode/commands/echo-mute.md` → `commands/echo-mute.md` (bash `cli/echo mute`)
+- `~/.config/opencode/commands/echo-mode.md` → `commands/echo-mode.md` (bash `cli/echo mode`)
 
 ```bash
 bash scripts/install.sh --adapter opencode
@@ -52,7 +53,7 @@ Project wins per key over the first existing global file (`opencode.jsonc`, then
 ## Ownership
 
 Reconcile heals a dead Echo-spelled link (a moved checkout) and refuses any other occupant
-of either name (exit 2). `--check`: 0 current, 3 pending, 2 fatal.
+of any of those names (exit 2). `--check`: 0 current, 3 pending, 2 fatal.
 
 ## Environment overrides (tests)
 

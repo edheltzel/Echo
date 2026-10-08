@@ -51,6 +51,7 @@ describe("Jcode lifecycle hook adapter", () => {
       session_id: "ses-1",
       source: "jcode",
       speak_mode: "announce",
+      slot: "done",
     }));
 
     const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
@@ -91,6 +92,7 @@ describe("Jcode lifecycle hook adapter", () => {
     )).toBe(true);
     expect(payloads).toHaveLength(1);
     expect(payloads[0]).toMatchObject({ message: "Jcode online.", source: "jcode", session_id: "ses-2" });
+    expect(payloads[0]).not.toHaveProperty("slot");
   });
 
   test("greets only newly created sessions", async () => {
