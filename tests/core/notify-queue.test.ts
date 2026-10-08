@@ -24,6 +24,8 @@ const PLAY_MS = 120;
 
 const realSpawn = realChildProcess.spawn;
 let spawnedCommands: string[] = [];
+// tests/preload.ts points the banner at a no-op; core spawns that, not osascript.
+const BANNER_BIN = process.env.ECHO_OSASCRIPT_BIN!;
 let spawnedArgv: string[][] = [];
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
@@ -210,7 +212,7 @@ describe("/notify acks on receipt (R2)", () => {
     expect(res.status).toBe(202);
 
     // The banner fires immediately at accept - no queue wait.
-    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await waitFor(() => spawnedCommands.includes(BANNER_BIN));
     // Never enqueued: no lifecycle row ever appears (per-spoken-line log).
     await Bun.sleep(150);
     expect(readRows().filter((r) => r.session_id === "sess-banner")).toEqual([]);
@@ -229,7 +231,7 @@ describe("/notify acks on receipt (R2)", () => {
     });
     expect(res.status).toBe(202);
     await Bun.sleep(40);
-    expect(spawnedCommands).not.toContain("/usr/bin/osascript");
+    expect(spawnedCommands).not.toContain(BANNER_BIN);
   });
 
   test("unknown visual markers preserve raw-caller banner compatibility", async () => {
@@ -244,7 +246,7 @@ describe("/notify acks on receipt (R2)", () => {
       }),
     });
     expect(res.status).toBe(202);
-    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await waitFor(() => spawnedCommands.includes(BANNER_BIN));
   });
 
   test("a banner-only line never supersedes a queued voice line (same session)", async () => {
@@ -285,7 +287,7 @@ describe("/notify acks on receipt (R2)", () => {
     expect(res.status).toBe(202);
 
     // Banner spawn is observable while the played row does not exist yet.
-    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await waitFor(() => spawnedCommands.includes(BANNER_BIN));
     expect(readRows().filter((r) => r.session_id === "sess-early")).toEqual([]);
     await waitForRows(1); // then the line still plays to completion
   });
@@ -346,7 +348,7 @@ describe("/notify acks on receipt (R2)", () => {
       }),
     });
     expect(res.status).toBe(202);
-    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await waitFor(() => spawnedCommands.includes(BANNER_BIN));
     await Bun.sleep(150);
     expect(readRows().filter((r) => r.session_id === "sess-think")).toEqual([]);
     expect(spawnedArgv.some((argv) => argv.includes("--rate"))).toBe(false);
@@ -429,7 +431,7 @@ describe("FM-449 - replay last N spoken lines", () => {
     expect(replayRows).toHaveLength(2);
     expect(replayRows.every((r) => r.disposition === "played")).toBe(true);
     expect(replayRows.every((r) => r.session_id === null)).toBe(true);
-    expect(spawnedCommands).not.toContain("/usr/bin/osascript");
+    expect(spawnedCommands).not.toContain(BANNER_BIN);
     // Replays do not re-enter the ring.
     expect(spokenLineCount()).toBe(2);
   });

@@ -21,6 +21,8 @@ import { waitFor } from "./poll";
 // --- spawn stub (playback is platform-dependent: afplay on darwin, mpv else) -
 const realSpawn = realChildProcess.spawn;
 let spawnedCommands: string[] = [];
+// tests/preload.ts points the banner at a no-op; core spawns that, not osascript.
+const BANNER_BIN = process.env.ECHO_OSASCRIPT_BIN!;
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
 function stubSpawn(command: string): any {
@@ -203,7 +205,7 @@ describe("capture guard - speak-time gate", () => {
     await drainNotifications();
 
     // Banner is not audio: it fired at accept. No playback binary ran.
-    await waitFor(() => spawnedCommands.includes("/usr/bin/osascript"));
+    await waitFor(() => spawnedCommands.includes(BANNER_BIN));
     expect(spawnedCommands.filter((c) => /afplay|mpv/.test(c))).toEqual([]);
 
     await waitFor(() => readRows().length >= 1);

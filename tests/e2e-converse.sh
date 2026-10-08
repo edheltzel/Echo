@@ -135,6 +135,12 @@ else
   export ECHO_SAY_BIN="/usr/bin/say"
 fi
 
+# The legacy macOS banner goes to a recorder, never /usr/bin/osascript, so the test
+# core puts nothing on the operator's screen; a recorded line proves it.
+BANNER_LOG="${SCRATCH}/banners.log"
+printf '#!/bin/bash\necho banner >> "%s"\n' "$BANNER_LOG" >"${SCRATCH}/fake-osascript"
+chmod +x "${SCRATCH}/fake-osascript"
+
 # Exported canonical values above are test-script plumbing for inline assertions.
 # Both runtime processes read the same scratch config, never the operator's file.
 cat >"$ECHO_CONFIG_FILE" <<JSON
@@ -151,6 +157,7 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
   "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL",
   "ECHO_SAY_BIN": "$ECHO_SAY_BIN",
+  "ECHO_OSASCRIPT_BIN": "$SCRATCH/fake-osascript",
   "ECHO_CONVERSE_PORT": $ECHO_CONVERSE_PORT,
   "ECHO_CONVERSE_URL": "$ECHO_CONVERSE_URL",
   "ECHO_CONVERSE_BOOKING_LOCK": "$ECHO_CONVERSE_BOOKING_LOCK",
@@ -271,6 +278,9 @@ bun -e '
 # ---------------------------------------------------------------------------
 grep -q "Notification accepted" "$CORE_LOG" || fail "core never accepted the question notification"
 echo "  core log -> question accepted through POST /notify"
+for _ in {1..20}; do [ -s "$BANNER_LOG" ] && break; sleep 0.1; done
+[ -s "$BANNER_LOG" ] || fail "the question's banner did not go through the scratch ECHO_OSASCRIPT_BIN recorder"
+echo "  banner -> scratch recorder, none on screen"
 
 # ---------------------------------------------------------------------------
 # 4. The booking is released, and a second ask can proceed.

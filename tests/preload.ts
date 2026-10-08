@@ -14,6 +14,10 @@ process.env.ECHO_CONFIG_FILE = join(scratch, "config.json");
 // The output mode is read on every dequeue; never let the operator's real
 // mode.json switch in-process daemon tests to sounds-only.
 process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");
+// Every in-process /notify fires the legacy macOS banner; point it at a no-op so
+// a test run never puts a notification on the operator's screen. Banner
+// assertions compare against this value, which core captures at first import.
+process.env.ECHO_OSASCRIPT_BIN = "/usr/bin/true";
 // Every host config a reconciler or persona reader can touch (~/.claude, ~/.pi,
 // ~/.omp, ~/.codex, ~/.grok, ~/.jcode, ~/.config/opencode) resolves from HOME or
 // XDG_CONFIG_HOME unless one of the overrides below is set. A spawned reconciler
