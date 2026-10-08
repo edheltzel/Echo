@@ -799,6 +799,102 @@ exit 0
       // The loaded legacy (com.atlas.voicesystem) is unloaded before com.echo loads.
       expect(log.indexOf("unload")).toBeGreaterThan(-1);
       expect(log.indexOf("load")).toBeGreaterThan(log.indexOf("unload"));
+
+      // A closing summary names what moved, where it went, and the way back (#12).
+      expect(result.stdout).toContain("Migrated com.pai.voice-server com.atlas.voicesystem onto com.echo");
+      expect(result.stdout).toContain(join(home, "Library/Logs/echo.log"));
+      expect(result.stdout).toMatch(/kept: +.*com\.atlas\.voicesystem\.plist\.migrated-/);
+      expect(result.stdout).toContain("rollback: docs/operations.md#legacy-services");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an install with nothing to migrate succeeds and prints no migration summary", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-no-legacy-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const state = join(root, "state");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(state, { recursive: true });
+      writeExecutable(join(bin, "bun"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+      const result = await runInstall(["--adapter", "none"], { HOME: home, PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin` });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("Migrated");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, INSTALL_TIMEOUT_MS);
+
+  test("--adapter pi fails when Pi does not list the adapter after install, and passes when it does", async () => {
+    const piPath = realpathSync("adapters/pi");
+    for (const [listed, expectedExit] of [["", 1], [`User packages:\n  ../adapters/pi\n    ${piPath}\n`, 0]] as const) {
+      const root = mkdtempSync(join(tmpdir(), "echo-install-pi-verify-"));
+      try {
+        const home = join(root, "home");
+        const bin = join(root, "bin");
+        const state = join(root, "state");
+        mkdirSync(join(home, ".pi/agent"), { recursive: true });
+        mkdirSync(bin, { recursive: true });
+        mkdirSync(state, { recursive: true });
+        writeFileSync(join(home, ".pi/agent/settings.json"), JSON.stringify({ packages: [] }));
+        writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+        writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
+        writeExecutable(join(bin, "sox"), "#!/bin/bash\nexit 0\n");
+        writeExecutable(join(bin, "rec"), "#!/bin/bash\nexit 0\n");
+        writeFileSync(join(root, "pi-list.txt"), listed);
+        writeExecutable(join(bin, "pi"), `#!/bin/bash\n[ "$1" = list ] && cat ${JSON.stringify(join(root, "pi-list.txt"))}\nexit 0\n`);
+        writeExecutable(join(bin, "launchctl"), `#!/bin/bash
+case "$1" in
+  list) [ -f ${JSON.stringify(join(state, "echo-loaded"))} ] && echo "111 0 com.echo" ;;
+  load) touch ${JSON.stringify(join(state, "echo-loaded"))} ;;
+esac
+exit 0
+`);
+        const result = await runInstall(["--adapter", "pi"], { HOME: home, PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin` });
+        expect(result.exitCode).toBe(expectedExit);
+        if (expectedExit === 1) expect(result.stderr).toContain("Pi does not list the Echo adapter");
+        else expect(result.stdout).toContain(`Pi lists the Echo adapter: ${piPath}`);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  }, INSTALL_TIMEOUT_MS * 2);
+
+  test("warns when run from a linked git worktree, not from a main checkout", () => {
+    // A throwaway repo holding only scripts/: the warning fires before anything else.
+    const root = mkdtempSync(join(tmpdir(), "echo-install-worktree-"));
+    try {
+      const main = join(root, "main");
+      const git = (cwd: string, ...args: string[]) =>
+        Bun.spawnSync(["git", "-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+      mkdirSync(main);
+      Bun.spawnSync(["cp", "-R", resolve("scripts"), join(main, "scripts")]);
+      writeFileSync(join(main, "package.json"), '{"version":"0.0.0"}\n');
+      git(main, "init", "-q");
+      git(main, "add", "-A");
+      git(main, "commit", "-qm", "init");
+      git(main, "worktree", "add", "-q", "--detach", join(root, "wt"));
+
+      const check = (repo: string) =>
+        Bun.spawnSync(["/bin/bash", join(repo, "scripts/install.sh"), "--check"], {
+          env: { HOME: join(root, "home"), PATH: "/bin:/usr/bin:/usr/sbin:/sbin", ECHO_SKIP_WORKSPACE_LINK: "1" },
+          stdout: "pipe",
+          stderr: "pipe",
+        }).stderr.toString();
+      expect(check(join(root, "wt"))).toContain("is a linked git worktree");
+      expect(check(join(root, "wt"))).toContain(`Install from the main checkout: ${realpathSync(main)}`);
+      expect(check(main)).not.toContain("linked git worktree");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

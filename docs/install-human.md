@@ -207,6 +207,17 @@ curl -fsS http://localhost:3246/health
 
 Day-to-day start, stop, restart, and status live in [operations.md](operations.md).
 
+### Next steps
+
+1. Hear it: [Hear your first spoken notification](getting-started.md).
+2. Pick a voice: [Choose voices (audition)](#choose-voices-audition), then `cli/echo update`.
+3. Give a project its own name and voice: [Give a project its own persona](#give-a-project-its-own-persona).
+4. Learn the quiet switches: [Silence Echo temporarily](#silence-echo-temporarily).
+
+Install from the main checkout, not a git worktree. The daemon runs from its own copy, but
+adapter registrations point at the checkout and break when a worktree is removed; the installer
+warns when it detects one.
+
 ## Choose voices (audition)
 
 Pick voices by ear with `bun scripts/preview-voices.ts` before editing `core/voices.json`. Commands, the full flag table, and how to apply your choice live in `docs/voices.md`.
