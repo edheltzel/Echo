@@ -10,20 +10,20 @@ This adapter owns all Claude Code integration glue:
 - `hooks/handlers/VoiceNotification.ts` - stop-phase `🗣️` completion speech
 - `hooks/handlers/VoiceHil.ts` - HIL notify path (transcript `AskUserQuestion` / `awaitingInput`)
 - `restore-hooks.ts` - idempotent registration into Claude Code settings
-- `commands/echo-voice.md` / `commands/echo-mute.md` - slash commands, symlinked into
-  `~/.claude/commands/` by the installer (`/echo-mute` runs `cli/echo mute`)
-- `plugin/` - mute-only Claude Code plugin. Claude namespaces plugin skills, so the
-  plugin form is `/echo:echo-mute`. Bare `/echo-mute` stays the installer command.
+- `commands/echo-voice.md` / `commands/echo-mute.md` / `commands/echo-mode.md` - slash commands, symlinked into
+  `~/.claude/commands/` by the installer (`/echo-mute` runs `cli/echo mute`, `/echo-mode` runs `cli/echo mode`)
+- `plugin/` - mute and mode Claude Code plugin. Claude namespaces plugin skills, so the
+  plugin forms are `/echo:echo-mute` and `/echo:echo-mode`. Bare `/echo-mute` and `/echo-mode` stay the installer commands.
   Neither registers Stop/SessionStart/VoiceGate hooks or installs the daemon.
 
 The universal server core must not import this adapter. The adapter sends HTTP requests to the core `/notify` endpoint.
 
-## Mute plugin
+## Mute and mode plugin
 
 Lifecycle hooks stay on `restore-hooks.ts`. Claude plugin skills are always namespaced
-(`/plugin-name:skill-name`), so this plugin's skill is `/echo:echo-mute`. Bare
-`/echo-mute` remains the installer slash command in `~/.claude/commands/` after
-`cli/echo install --adapter claudecode`. Type either; both run `cli/echo mute`.
+(`/plugin-name:skill-name`), so this plugin's skills are `/echo:echo-mute` and `/echo:echo-mode`. Bare
+`/echo-mute` and `/echo-mode` remain the installer slash commands in `~/.claude/commands/` after
+`cli/echo install --adapter claudecode`. Type either form; each runs `cli/echo mute` or `cli/echo mode`.
 The plugin skill resolves `cli/echo` from PATH or the current Echo checkout and does
 not walk `~/.claude/commands` (that symlink may point at a stale worktree).
 
@@ -53,4 +53,4 @@ bun run adapters/claudecode/reconcile-commands.ts
 ```
 
 The first command backs up settings before mutating them. The second reconciles only Echo's
-`echo-voice.md` and `echo-mute.md` symlinks. Both are safe to run repeatedly.
+`echo-voice.md`, `echo-mute.md`, and `echo-mode.md` symlinks. Both are safe to run repeatedly.

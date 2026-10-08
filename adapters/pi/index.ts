@@ -9,10 +9,11 @@ import {
 } from "./config.ts";
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
+import type { NotifySlot } from "@echo/shared/notify-slot.ts";
 import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts";
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
-import { registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
+import { registerEchoMode, registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
 import { applyNameToken } from "@echo/shared/greeting.ts";
 import { maybeSpeakHil, preferredHumanName, HilDedupe } from "@echo/shared/hil.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
@@ -128,7 +129,7 @@ export default function atlasVoicePiAdapter(
     }
   }
 
-  async function speak(message: string, ctx: ExtensionContext): Promise<boolean> {
+  async function speak(message: string, ctx: ExtensionContext, slot?: NotifySlot): Promise<boolean> {
     const cfg = resolveConfig(resolveCwd(ctx));
     if (cfg.suppressInSubagents && shouldSuppressVoice({ mode: ctx.mode, hasUI: ctx.hasUI })) return false;
     try {
@@ -139,6 +140,7 @@ export default function atlasVoicePiAdapter(
         resolveSessionId(ctx),
         ctx.signal,
         nativeContextFromAdapterContext(ctx, process.env, resolveSessionId(ctx), ctx.hasUI === true),
+        slot,
       );
       if (!result.ok) {
         logAdapterWarning(`notify failed with HTTP ${result.status}`);
@@ -167,7 +169,7 @@ export default function atlasVoicePiAdapter(
     pending.add(key);
 
     try {
-      if (await speak(line, ctx)) {
+      if (await speak(line, ctx, "done")) {
         spoken.set(key, Date.now());
       }
     } finally {
@@ -185,7 +187,7 @@ export default function atlasVoicePiAdapter(
       personaName: cfg.personaName,
       preferredName: preferredHumanName(loadEchoEnvironment()),
       dedupe: hilDedupe,
-      speak: (message) => speak(message, ctx),
+      speak: (message, slot) => speak(message, ctx, slot),
     });
   }
 
@@ -290,4 +292,5 @@ export default function atlasVoicePiAdapter(
   // of the Claude Code `/echo-voice` command; the resolver above reads it next session.
   registerEchoVoice(pi, { configPath: [".pi", "settings.json"], merge: mergePersonaJson });
   registerEchoMute(pi);
+  registerEchoMode(pi);
 }

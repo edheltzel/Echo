@@ -42,13 +42,13 @@
 | Host | Path | Status | Install |
 | --- | --- | --- | --- |
 | None / direct HTTP | core only | Supported | POST JSON to `/notify` |
-| Claude Code | `adapters/claudecode/` | Reference adapter; mute-only plugin at `plugin/` | `bash scripts/install.sh --adapter claudecode` (hooks). Optional: `claude --plugin-dir adapters/claudecode/plugin` |
+| Claude Code | `adapters/claudecode/` | Reference adapter; mute and mode plugin at `plugin/` | `bash scripts/install.sh --adapter claudecode` (hooks). Optional: `claude --plugin-dir adapters/claudecode/plugin` |
 | Jcode | `adapters/jcode/` | Native lifecycle-hook adapter | `bash scripts/install.sh --adapter jcode` |
-| Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) plus `/echo-mute` skill | `bash scripts/install.sh --adapter grok` |
+| Grok Build | `adapters/grok/` | Native lifecycle-hook adapter (global `~/.grok/hooks/`) plus `/echo-mute` and `/echo-mode` skills | `bash scripts/install.sh --adapter grok` |
 | Pi | `adapters/pi/` | First non-Claude-Code adapter | `bash scripts/install.sh --adapter pi` or `pi install ./adapters/pi` |
 | oh-my-pi (omp) | `adapters/omp/` | Supported - sibling package to the Pi adapter (#109) | `bash scripts/install.sh --adapter omp` |
 | MCP (Claude Code voice ask) | `adapters/mcp/` | Supported - serves the `echo_ask` tool over stdio | `bash scripts/install.sh --adapter mcp` |
-| OpenCode | `adapters/opencode/` | Supported - native plugin + `/echo-mute` command | `bash scripts/install.sh --adapter opencode` |
+| OpenCode | `adapters/opencode/` | Supported - native plugin + `/echo-mute` and `/echo-mode` commands | `bash scripts/install.sh --adapter opencode` |
 
 ### Terminal visual capabilities
 

@@ -22,6 +22,7 @@ import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoint
 import { loadEchoConfiguration, type EchoEnvironment } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { detectSpeakMode, type SpeakMode } from '@echo/shared/speak-mode.ts';
+import type { NotifySlot } from '@echo/shared/notify-slot.ts';
 import { createHookNativeVisualContext } from '../lib/native-terminal';
 
 // ElevenLabs voice notification payload
@@ -41,6 +42,7 @@ interface ElevenLabsNotificationPayload {
   session_id?: string;
   source?: string;
   speak_mode?: SpeakMode;
+  slot?: NotifySlot;
 }
 
 // 'aborted' = the 12s client AbortController fired after the POST was already
@@ -312,6 +314,7 @@ export function buildVoicePayload(
     session_id: sessionId,
     source: 'claudecode',
     speak_mode: detectSpeakMode(message),
+    slot: 'done',
     voice_settings: voiceSettings ? {
       stability: voiceSettings.stability ?? 0.5,
       similarity_boost: voiceSettings.similarity_boost ?? 0.75,

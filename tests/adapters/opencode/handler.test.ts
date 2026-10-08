@@ -71,6 +71,7 @@ describe("OpenCode plugin event adapter", () => {
         source: "opencode",
         session_id: "ses_1",
         voice_id: "opencode",
+        slot: "done",
       }),
     ]);
   });
@@ -149,6 +150,7 @@ describe("OpenCode plugin event adapter", () => {
     expect(bodies).toEqual([
       expect.objectContaining({ message: "OpenCode online.", source: "opencode" }),
     ]);
+    expect(bodies[0]).not.toHaveProperty("slot");
   });
 
   test("repeats of the same idle message are deduped", async () => {

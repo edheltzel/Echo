@@ -1,3 +1,4 @@
+import type { NotifySlot } from "../shared/notify-slot";
 import type { SpeakMode } from "../shared/speak-mode";
 
 export interface VoiceSettings {
@@ -21,6 +22,8 @@ export interface NotifyPayload {
   visual_delivery?: "native";
   /** Notify density. Omitted keeps today's rate. */
   speak_mode?: SpeakMode;
+  /** Sound slot for sounds-only playback. Omitted means `generic`. */
+  slot?: NotifySlot;
 }
 
 export interface NotifyResult {

@@ -44,9 +44,9 @@ That wraps the same checklist and exits non-zero on the first failure:
 2. `bun run adapters/pi/reconcile.ts --check` (exit 0 = current; 3 = stale)
 3. `curl -fsS` against Echo `GET /health` on the configured port
 
-Inside Pi, `/voice-status` shows adapter configuration and `/echo-mute` toggles the
-same machine-wide mute as `cli/echo mute`. Those commands are not part of the
-script.
+Inside Pi, `/voice-status` shows adapter configuration, `/echo-mute` toggles the
+same machine-wide mute as `cli/echo mute`, and `/echo-mode [speech|sounds|status]`
+runs `cli/echo mode`. Those commands are not part of the script.
 
 ## Behavior
 
@@ -143,6 +143,12 @@ Code's symlinked markdown command). Takes effect on the next Pi session in that 
 ```
 
 Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
+
+```text
+/echo-mode [speech|sounds|status]
+```
+
+Runs `cli/echo mode`. Global; survives restarts. `sounds` plays a request/done/generic notification sound instead of speech.
 
 ## Status command
 

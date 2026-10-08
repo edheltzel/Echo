@@ -16,7 +16,7 @@ First-class speech-to-text is [roadmap (#179)](https://github.com/edheltzel/Echo
 
 ## When it speaks
 
-A request becomes speech only after it reaches the daemon with voice on, the runtime TTS mute is off, and no live capture is holding the speaker.
+A request becomes speech only after it reaches the daemon with voice on, the runtime TTS mute is off, the output mode is `speech`, and no live capture is holding the speaker. In sounds-only mode, or with `mute tts`, the same request plays a short sound instead ([Sounds instead of speech](#sounds-instead-of-speech)).
 
 Typical spoken lines:
 
@@ -24,11 +24,11 @@ Typical spoken lines:
 - A needs-input, approval, or needs-attention line from Claude Code, Pi, or oh-my-pi ([When an agent needs you](#when-an-agent-needs-you))
 - A session-start greeting, when that host has greetings on (Pi and oh-my-pi default on. Claude Code, Jcode, Grok, and Codex default off.)
 - Anything you POST yourself, including the "Hello from Echo" smoke
-- A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines are not held for later replay.
+- A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines and lines that played as a sound are not held for later replay. Replay speaks even in sounds-only mode.
 
 If that completion line is a question, it still speaks. `speak_mode` (`announce` / `brief` / `consult` / `think`) is notify density on that line, not a new lifecycle event. `consult` is the slightly faster density for a `?` or "about to" line. Adapters never infer `think` (silence is already `voice_enabled: false`).
 
-Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode subagent sessions stay quiet; OpenCode has no headless check yet, so `opencode run` still speaks its completion.
+Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode speaks its completion when a session goes idle, and also exposes `/echo-mute` and `/echo-mode`. OpenCode subagent sessions stay quiet; OpenCode has no headless check yet, so `opencode run` still speaks its completion.
 
 ## When an agent needs you
 
@@ -45,7 +45,24 @@ The line uses `ECHO_PREFERRED_NAME` from `~/.config/echo/config.json` when set (
 | OpenCode, Jcode, Grok, Codex | No dedicated wait ping. Completions still speak at turn end where those adapters are wired. |
 | You want Echo to ask *you* a question out loud | That is opt-in [`echo_ask`](converse.md), the other direction. |
 
-Mute, scoped mute (`tts` | `mic` | `all`), and [daemon disable](operations.md#mute-vs-daemon-disable) apply to these lines the same as any other notify. A muted or capture-held line is not stored for replay.
+Mute, scoped mute (`tts` | `mic` | `all`), the output mode, and [daemon disable](operations.md#mute-vs-daemon-disable) apply to these lines the same as any other notify. A muted, sound-played, or capture-held line is not stored for replay.
+
+## Sounds instead of speech
+
+Echo can tell you what happened with a short sound instead of a sentence. There are three sounds:
+
+| Sound | Plays for |
+| --- | --- |
+| Request | An agent needs a response, an approval, or your attention |
+| Done | An agent finished its turn |
+| Generic | Everything else: greetings, progress lines, anything you POST without a slot |
+
+Sounds play in two cases:
+
+- **Sounds-only mode.** `cli/echo mode sounds`, or `/echo-mode sounds` in a session. Echo stops speaking notifications and plays their sound. `cli/echo mode speech` switches back. The mode is global, survives restarts, and `cli/echo mode status` shows it.
+- **`mute tts`.** The speaker mute now swaps speech for sounds instead of going silent, in either mode.
+
+`mute all` is still total silence. A voice-ask question (`echo_ask`) and `cli/echo replay` always speak; they ignore the mode, and mute still silences them. Requests sent silent (`voice_enabled: false`) stay silent. Echo ships its own three sounds; point `ECHO_SOUND_REQUEST`, `ECHO_SOUND_DONE`, or `ECHO_SOUND_GENERIC` in `~/.config/echo/config.json` at your own files. A file that will not play falls back to a macOS system sound.
 
 ## When it stays quiet
 
@@ -53,7 +70,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 
 - LaunchAgent `com.echo` is not loaded (`bash scripts/stop.sh` or uninstall). That is daemon disable, not mute. [operations.md](operations.md#mute-vs-daemon-disable)
 - No adapter is installed, and nothing POSTed `/notify`
-- Runtime mute is on for the speaker (`cli/echo mute on` or `on tts`)
+- Runtime mute is on for the speaker (`cli/echo mute on`). `mute tts` plays sounds instead of speech; `mute all` is silent.
 - The adapter has `ECHO_VOICE_SPEAK_COMPLETIONS` off, or greetings off
 - `ECHO_VOICE_ENABLED` is false, or this request sent `voice_enabled: false`
 - A subagent turn (suppressed by default)
@@ -72,7 +89,8 @@ These are the states a human can usefully ask about. They are not a second produ
 | --- | --- | --- |
 | Idle | Daemon up, nothing playing | `/health` is `"healthy"`. `play_queue.in_flight_ms` is null. Mute is off. |
 | Speaking | A line is in the speaker | `play_queue.in_flight_ms` is a number. The audio-lifecycle log later records `played`. |
-| Muted | Requests succeed, speaker stays off | `cli/echo mute status`. `/health` `mute.muted` is true (`tts` or `all`). |
+| Muted | Requests succeed, speaker stays off (sounds still play under `tts`) | `cli/echo mute status`. `/health` `mute.muted` is true (`tts` or `all`). |
+| Sounds only | You hear a short sound per notification, no speech | `cli/echo mode status`. `/health` `mode` is `sounds`. Lifecycle disposition `played-sound`. |
 | Stopped | `/health` does not connect. Nothing Echo-produced speaks. | `bash scripts/status.sh` shows `com.echo` not loaded. Daemon disable, not mute. |
 | Held for capture | Banner may fire, speaker waits | `/health` `capture_guard.state` is not idle. Lifecycle disposition `held-for-capture`. |
 | Error | Daemon is up but degraded, or speech falls through the chain | `cli/echo doctor` ends `DEGRADED`. `~/Library/Logs/echo.log` and the voice-resolution log name the provider attempt. |
@@ -84,7 +102,7 @@ These are the states a human can usefully ask about. They are not a second produ
 Silence is layered. Use the smallest layer that matches the room.
 
 1. **Do not wire a host.** Core-only Echo speaks only when something POSTs. A shared office with no adapter is already quiet.
-2. **Runtime mute.** `cli/echo mute on`, `off`, `toggle`, `status`, or a duration such as `30m`. Default scope `all` (speaker + capture booking). `tts` holds playback only — notifications still processed and logged. `mic` holds capture / converse / `echo_ask` only; TTS may still speak. One daemon serves the machine, so this mutes every Echo session at once. `/echo-mute` on hosts that register it is the same command. Do not invent a second mute system.
+2. **Runtime mute.** `cli/echo mute on`, `off`, `toggle`, `status`, or a duration such as `30m`. Default scope `all` (speaker + capture booking). `tts` replaces speech with notification sounds — notifications still processed and logged. `mic` holds capture / converse / `echo_ask` only; TTS may still speak. One daemon serves the machine, so this mutes every Echo session at once. `/echo-mute` on hosts that register it is the same command. Do not invent a second mute system. For sounds without muting, use sounds-only mode (`cli/echo mode sounds`).
 3. **Adapter policy.** `ECHO_VOICE_SPEAK_COMPLETIONS`, `ECHO_VOICE_GREET_ON_START`, `ECHO_VOICE_SUPPRESS`, and `ECHO_VOICE_SUPPRESS_SUBAGENTS` in `~/.config/echo/config.json`. This is "this host should not talk," not a meeting switch.
 4. **This request.** `"voice_enabled": false` is the silent smoke. Tests use it. You can too.
 5. **Capture hold.** While a live pid is recording or transcribing, Echo skips voice so the microphone does not hear the speaker.

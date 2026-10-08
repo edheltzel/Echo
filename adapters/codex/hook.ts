@@ -147,8 +147,9 @@ export async function handleCodexHookResult(
 
   if (!message) return "skipped";
 
+  const slot = event === "stop" || event === "stopfailure" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "codex", sessionId);
+    const result = await sendNotification(config, message, "codex", sessionId, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/codex] notify failed with HTTP ${result.status}`);
       return "failed";

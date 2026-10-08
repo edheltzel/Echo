@@ -8,9 +8,10 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
 `429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with five carve-outs that each get their own:
+`localhost` bucket, with six carve-outs that each get their own:
 
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
+- `POST /mode` - same reason: switching to sounds-only is most wanted during a burst.
 - `POST /replay` - operator re-hear during a flood; abusive `n` is rejected in the handler.
 - `GET /voices` - adapters read it once per turn immediately before that turn's `/notify`.
   On the shared bucket that would halve every host's notification budget and let the read
@@ -62,6 +63,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_settings` | - | Pass-through override, see below |
 | `session_id`, `source` | - | Echoed into the daemon log for correlation |
 | `speak_mode` | - (today's density) | Optional notify density borrowed from VoiceLayer's speak names, not a fifth TTS taxonomy. `announce` (short ping, speed ×1.10), `brief` (longer explanation, ×0.90), `consult` (checkpoint/question, ×1.05), `think` (banner only, no TTS). Omitted keeps the resolved persona speed. Invalid is `400`. Adapters fill a mode when they shape a notify; they never infer `think` (silence is already `voice_enabled: false`). Converse stays out of this field. Claude Code, Pi, and omp also POST ordinary `/notify` lines when the host is waiting on a human; that is adapter lifecycle, not a new daemon event. Human truth: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you). |
+| `slot` | `generic` | Which notification sound this line earns when Echo plays sounds instead of speech: `request` (an agent needs a response, approval, or attention), `done` (an agent finished its turn), or `generic` (everything else). Adapters set it; omitted means `generic`. Invalid is `400`. In speech mode it changes nothing. See [`POST /mode`](#post-mode) |
 | `visual_delivery` | - | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence - see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner - raw HTTP callers are unaffected |
 | `capture_reservation` | - | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms` (at most 300000, five minutes - a completed reservation holds every later voice line, so the daemon rejects a lease that could silence it indefinitely). It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
@@ -176,7 +178,8 @@ which only log the status - are unaffected. The semantics shift from "delivered"
 "accepted": a `202` no longer means the line was spoken. True playback outcome now lives in
 the audio-lifecycle log (`~/.agents/Echo/audio-lifecycle.jsonl`), where each request's row
 records a `disposition` - `played` (reached the player; carries the measured play window
-unless muted), `superseded`, `dropped-stale` (waited past the age cap at dequeue, or
+unless muted), `played-sound` (the line's notification sound played instead of speech; see
+[`POST /mode`](#post-mode)), `superseded`, `dropped-stale` (waited past the age cap at dequeue, or
 evicted by the depth cap at enqueue - `disposition_reason` says which), or
 `held-for-capture` (skipped at speak time because an external mic capture was live - see
 `ECHO_CAPTURE_STATE_PATH` in [`configuration.md`](configuration.md); the banner still
@@ -194,11 +197,11 @@ session (one queue, one key).
 
 Runtime mute (#83, FM-446). Scopes:
 
-- `tts` — speaker/playback only. Notifications are accepted, logged, and voice-resolved; audio is suppressed across every provider, including macOS `say`.
+- `tts` — speech only. Notifications are accepted, logged, and voice-resolved; speech is suppressed across every provider, including macOS `say`. A line with a sound slot plays its notification sound instead; converse questions and replays stay silent.
 - `mic` — capture / converse / `echo_ask` booking only. TTS may still speak. The daemon does not open the microphone; this scope refuses the capture-reservation paths Echo already owns.
 - `all` — both. This is today's mute, and the default when `scope` is omitted.
 
-Muted TTS lines are not held for later replay: they flow through the play queue as usual and are suppressed at speak time; the `/notify` contract is unchanged. The resolution drop-off log tags suppressed events `"muted": true`. `mute.muted` in the response and in `/health` remains the speaker flag (`true` for `tts` and `all`). A mic-only mute reports `muted: false` with `"scope": "mic"`.
+Muted TTS lines are not held for later replay: they flow through the play queue as usual and are suppressed at speak time; the `/notify` contract is unchanged. Under `tts`, a line with a slot plays its notification sound instead of speaking (see [`POST /mode`](#post-mode)); `all` stays fully silent, and converse questions stay silent under either. The resolution drop-off log tags suppressed events `"muted": true`. `mute.muted` in the response and in `/health` remains the speaker flag (`true` for `tts` and `all`). A mic-only mute reports `muted: false` with `"scope": "mic"`.
 
 An explicit JSON body sets state; an **empty body toggles `all`** (a one-keystroke hotkey needs no state knowledge). `{ "scope": "tts" }` without `muted` toggles that scope. The response is always the resulting state:
 
@@ -244,6 +247,35 @@ curl -fsS -X POST http://localhost:3246/mute -H 'Content-Type: application/json'
 In Apple Shortcuts, use **Get Contents of URL** → Method `POST` → URL
 `http://localhost:3246/mute` (leave the request body empty to toggle).
 
+## `POST /mode`
+
+Global output mode. `speech` (the default) speaks notifications as before. `sounds` plays
+each notification's slot sound and speaks nothing. Body `{"mode": "speech" | "sounds"}`;
+the response is `{"mode": …}`. Anything else is `400` and leaves the mode unchanged. The
+current mode is `mode` in `GET /health`.
+
+The choice is made when a line reaches the front of the play queue, so a switch applies to
+lines already waiting, and lines the queue coalesces or ages out never sound. Rules:
+
+- `mute all` is silent in either mode. `mute tts` plays the sound in either mode.
+- A capture in progress holds sounds the same way it holds speech.
+- `voice_enabled: false` and `speak_mode: think` stay silent.
+- Converse questions (`capture_reservation`) and `/replay` ignore the mode and keep the speech path, including its mute.
+- A line that played as a sound is not added to the replay ring.
+
+Sounds per slot: Echo's bundled files under `core/sounds/`, overridden per slot by
+`ECHO_SOUND_REQUEST`, `ECHO_SOUND_DONE`, and `ECHO_SOUND_GENERIC` in `config.json`. A file
+that is missing or fails to play falls back to a macOS system sound (`Glass`, `Hero`,
+`Pop`). The audio-lifecycle log records these plays as disposition `played-sound`.
+
+The mode persists across daemon restarts in a state file beside the mute state
+(`ECHO_MODE_STATE_PATH` overrides it). A missing or malformed file means `speech`.
+
+```bash
+curl -fsS -X POST http://localhost:3246/mode -H 'Content-Type: application/json' -d '{"mode": "sounds"}'
+cli/echo mode sounds   # same, from the terminal; /echo-mode in a session
+```
+
 ## `POST /replay`
 
 Re-speak the last N notify lines that actually reached the speaker (FM-449). Default
@@ -255,11 +287,11 @@ When the ring is empty: `200 {"status":"ok","message":"Nothing to replay","repla
 
 Replay does not fire a banner, does not coalesce with live sessions, and does not
 re-enter the ring. It re-enqueues through the same serial play queue, so a current TTS
-mute still suppresses audio. The TTS cache covers repeated synthesis; this ring is
-process-local and starts empty after a restart.
+mute still suppresses audio. Replay always speaks, even in sounds-only mode. The TTS cache
+covers repeated synthesis; this ring is process-local and starts empty after a restart.
 
-Muted, capture-held, dropped, and voice-disabled lines are not stored — there is nothing
-later to replay. Same product truth as `/mute`: muted lines are not held for later replay.
+Muted, capture-held, dropped, voice-disabled, and sound-played lines are not stored — there
+is nothing later to replay. Same product truth as `/mute`: muted lines are not held for later replay.
 
 ```bash
 curl -fsS -X POST http://localhost:3246/replay
@@ -276,7 +308,7 @@ status, `macos_fallback_voice`, pronunciation rule count, emotional preset count
 `play_queue` (`{depth, in_flight_ms, stalled}` - backlog, how long the current line has
 been playing (null when idle), and whether the consumer has outlived its own watchdog), live
 `circuit_breakers` state (per-provider `open`/`failures`, plus `threshold` and
-`reset_after_ms`), the current mute state (`mute: {muted, muted_until, scope}` — `muted` is the speaker flag; `scope` is `tts` | `mic` | `all`), the capture
+`reset_after_ms`), the current mute state (`mute: {muted, muted_until, scope}` — `muted` is the speaker flag; `scope` is `tts` | `mic` | `all`), the output mode (`mode`: `speech` | `sounds`), the capture
 guard (`capture_guard: {path, state}` - the resolved recording-state file and its current
 reading; `state` is `idle` unless an external mic capture is live), the last-N speak ring
 (`replay: {available, capacity, default_n, max_n}`), and the configuration

@@ -33,8 +33,9 @@ export type PlaybackExitReason = 'completed' | 'timed-out' | 'killed' | 'error';
 // past the age cap at dequeue, or the depth cap evicted it at enqueue;
 // `disposition_reason` discriminates), replaced by a newer same-session
 // line while queued (`superseded`), or skipped at speak time because an
-// external mic capture was live (`held-for-capture`, core/capture-guard.ts).
-export type AudioDisposition = 'played' | 'dropped-stale' | 'superseded' | 'held-for-capture';
+// external mic capture was live (`held-for-capture`, core/capture-guard.ts),
+// or played as the notification's slot sound instead of speech (`played-sound`).
+export type AudioDisposition = 'played' | 'played-sound' | 'dropped-stale' | 'superseded' | 'held-for-capture';
 
 export interface AudioLifecycleEvent {
   ts: string;

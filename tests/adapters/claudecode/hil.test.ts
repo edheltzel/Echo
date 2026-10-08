@@ -128,6 +128,7 @@ describe("handleHil notify payloads", () => {
       source: "claudecode",
       session_id: "sess-1",
       voice_enabled: true,
+      slot: "request",
     });
     rmSync(dir, { recursive: true, force: true });
   });

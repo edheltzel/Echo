@@ -34,6 +34,8 @@ cli/echo doctor              # canonical "did my install work" check; recovery c
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
 /echo-mute [on|off|toggle|status|duration]  # bare toggles `all`; affects every Echo session
+cli/echo mode speech|sounds|status          # global: sounds plays request/done/generic sounds instead of speech
+/echo-mode [speech|sounds|status]           # same, from a session
 cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
 cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
@@ -74,7 +76,7 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 `com.echo`). Do not resurrect the old services.
 
 ## Development workflow
-This checkout is a GitButler workspace (`but`). Fetch target is `origin/master` (`but pull`). That does **not** change PR policy: still do not push `master`; work on `dev` and open PRs from `dev` to `master`. Use `but` for git writes.
+This checkout is a GitButler workspace (`but`). Fetch target is `origin/dev` (`but pull`), so feature branches stack on `dev` and their PRs go into `dev`; `dev` → `master` is the promotion PR. Never push `master`. Use `but` for git writes.
 
 
 ```bash
@@ -169,7 +171,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | `@echo/shared` workspace package (config loading, notify client, native terminal visual routing, voice-line parsing, persona overlay + scaffold, mute commands, harness catalog + feature register hooks, greetings, edge-tts voice grammar, notify speak-mode density, daemon endpoints) | `shared/` |
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
-| Claude Code hooks, slash commands + reconcilers; mute-only plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
+| Claude Code hooks, slash commands + reconcilers; mute and mode plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
 | Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
@@ -202,7 +204,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
 - Do not point a test at the running daemon or its state files. Start an isolated instance (`tests/e2e-adapters.sh`) and prove the target before sending anything.
 - Do not register adapter paths append-only. Every adapter ships an idempotent reconcile-and-prune registration - set the canonical path, remove stale variants, edit through symlinks, support `--check` (contract: [docs/adapters.md](docs/adapters.md), #77).
-- Do not invent a second plugin loader beside the as-built adapter packages. New harnesses and features register through [`shared/extension.ts`](shared/extension.ts) (`HARNESSES`, `registerEchoMute`, `registerEchoVoice`) and the existing reconciler + `/notify` seams. `core/` stays host-neutral.
+- Do not invent a second plugin loader beside the as-built adapter packages. New harnesses and features register through [`shared/extension.ts`](shared/extension.ts) (`HARNESSES`, `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`) and the existing reconciler + `/notify` seams. `core/` stays host-neutral.
 - Do not call `server.stop()` from a test file's `afterAll`. `export const server` in `core/server.ts` is a singleton cached across every test file (Bun module cache); stopping it from one file tears it down for siblings that fetch it - the source of the #47 flake (`port 0` / connection refused, nondeterministic with file order). The ephemeral `PORT=0` server is reclaimed on `bun test` process exit.
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
 - Do not let `echo_ask` reach capture without a live host-session consent grant. Pi and omp keep the grant only in their active extension instance; MCP keeps it only for its stdio process because the protocol publishes no narrower conversation lifecycle. Denials are sticky for that session, missing UI fails closed, and no consent state is persisted. Exact surfaces and expiry: `docs/converse.md`.

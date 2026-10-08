@@ -98,6 +98,7 @@ describe("Pi adapter lifecycle", () => {
       source: "pi",
     }));
 
+
     const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
     expect(visualDelivery === undefined || visualDelivery === "native").toBe(true);
   });
@@ -340,5 +341,44 @@ describe("Pi adapter lifecycle", () => {
       createContext(),
     );
     expect(payloads).toHaveLength(0);
+  });
+});
+
+describe("Pi notification slots", () => {
+  const slotConfig = {
+    endpoint: "http://voice.example/notify",
+    title: "Pi Notification",
+    startupCatchphrases: ["Pi session ready."],
+    personaName: "Pi",
+    sayName: false,
+    voiceId: "pi",
+    voiceEnabled: true,
+    greetOnSessionStart: true,
+    speakCompletions: true,
+    suppressInSubagents: true,
+  };
+
+  test("HIL carries request, completion carries done, greeting carries no slot", async () => {
+    process.env.ECHO_PREFERRED_NAME = "Ed";
+    const payloads: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    };
+    const { api, handlers } = createMockPi();
+    atlasVoicePiAdapter(api as unknown as ExtensionAPI, slotConfig);
+    const ctx = createContext();
+    await handlers.get("session_start")?.({ reason: "startup" }, ctx);
+    await handlers.get("tool_approval_requested")?.({
+      type: "tool_approval_requested",
+      toolCallId: "c1",
+      toolName: "bash",
+      reason: "Run the verification command?",
+    }, ctx);
+    await handlers.get("message_end")?.(assistantEvent("m1"), ctx);
+    expect(payloads).toHaveLength(3);
+    expect(payloads[0]).not.toHaveProperty("slot");
+    expect(payloads[1]?.slot).toBe("request");
+    expect(payloads[2]?.slot).toBe("done");
   });
 });
