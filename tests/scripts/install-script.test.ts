@@ -800,11 +800,12 @@ exit 0
       expect(log.indexOf("unload")).toBeGreaterThan(-1);
       expect(log.indexOf("load")).toBeGreaterThan(log.indexOf("unload"));
 
-      // A closing summary names what moved, where it went, and the way back (#12).
+      // A closing summary names what moved, where it went, and that legacy services stay retired (#12).
       expect(result.stdout).toContain("Migrated com.pai.voice-server com.atlas.voicesystem onto com.echo");
       expect(result.stdout).toContain(join(home, "Library/Logs/echo.log"));
       expect(result.stdout).toMatch(/kept: +.*com\.atlas\.voicesystem\.plist\.migrated-/);
-      expect(result.stdout).toContain("rollback: docs/operations.md#legacy-services");
+      expect(result.stdout).toContain("never reload a legacy service");
+      expect(result.stdout).not.toMatch(/launchctl load|rollback:/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

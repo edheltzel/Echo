@@ -408,6 +408,7 @@ LaunchAgents onto `com.echo` (it unloads them and quarantines their plists as
 migrated, the new log path, and each quarantined plist. Do not reload them; if `status.sh`
 warns that one is still loaded, rerun the installer.
 
-Rollback, only if you need the old service back: `cli/echo uninstall`, rename the quarantined
-plist back to `<label>.plist`, then `launchctl load ~/Library/LaunchAgents/<label>.plist`. The old
-service runs whatever code its plist points at; Echo no longer maintains it.
+The legacy services are retired, not a rollback target: the quarantined plists are kept for
+reference only and must never be reloaded. To back out of Echo itself, run `cli/echo uninstall`
+(see [Uninstall](#uninstall)). A failed install or update already restores the previous Echo
+payload on its own when the new one does not pass its health check.

@@ -891,7 +891,8 @@ warn_if_linked_worktree() {
   echo "      break when it is removed. Install from the main checkout: $(dirname "$common_dir")" >&2
 }
 
-# Closing summary after a legacy service was migrated, with the way back (#12).
+# Closing summary after a legacy service was migrated (#12). Legacy services are
+# retired (AGENTS.md); the way out is uninstalling com.echo, never reloading them.
 print_migration_summary() {
   [ "${#MIGRATED_LEGACY[@]}" -eq 0 ] && return 0
   echo "Migrated ${MIGRATED_LEGACY[*]} onto $SERVICE_NAME"
@@ -901,7 +902,7 @@ print_migration_summary() {
   for backup in ${MIGRATED_BACKUPS[@]+"${MIGRATED_BACKUPS[@]}"}; do
     echo "  kept:    $backup"
   done
-  echo "  rollback: docs/operations.md#legacy-services"
+  echo "  kept for reference only; never reload a legacy service. To stop Echo: cli/echo uninstall"
 }
 
 warn_if_linked_worktree
