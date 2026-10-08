@@ -219,6 +219,46 @@ describe("Claude Code restore-hooks registration", () => {
     }
   });
 
+  test("de-dupes a hook registered in two same-matcher blocks and keeps other hooks (#63)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "atlas-restore-two-blocks-"));
+    try {
+      const settingsPath = join(root, "settings.json");
+      const hooksDir = resolve("adapters/claudecode/hooks");
+      const gate = join(hooksDir, "VoiceGate.hook.ts");
+      const greeting = join(hooksDir, "VoiceGreeting.hook.ts");
+      const other = "/usr/local/bin/other-bash-guard";
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              { matcher: "Bash", hooks: [{ type: "command", command: gate }] },
+              { matcher: "Bash", hooks: [{ type: "command", command: other }, { type: "command", command: gate }] },
+            ],
+            SessionStart: [
+              { matcher: "startup", hooks: [{ type: "command", command: greeting }] },
+              { matcher: "startup", hooks: [{ type: "command", command: greeting }] },
+            ],
+          },
+        }, null, 2) + "\n",
+        { mode: 0o644 },
+      );
+
+      const check = await runRestore(settingsPath, ["--check"]);
+      expect(check.exitCode).toBe(3);
+      expect((await runRestore(settingsPath)).exitCode).toBe(0);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const commands = (event: string) =>
+        settings.hooks[event].flatMap((entry: { hooks: { command: string }[] }) => entry.hooks.map((h) => h.command));
+      expect(commands("PreToolUse").filter((c: string) => c === gate)).toEqual([gate]);
+      expect(commands("PreToolUse")).toContain(other);
+      expect(commands("SessionStart").filter((c: string) => c === greeting)).toEqual([greeting]);
+      expect((await runRestore(settingsPath, ["--check"])).exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("prunes stale foreign-clone Voice hook paths left by a repo directory rename (#77)", async () => {
     const root = mkdtempSync(join(tmpdir(), "atlas-restore-stale-clone-"));
     try {
