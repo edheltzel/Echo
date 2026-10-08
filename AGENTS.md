@@ -213,7 +213,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Agent skills
 
-- **Issue tracker** - draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues (`gh`). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+- **Issue tracker** - draft issues/PRDs locally under `.scratch/<feature>/`, promote to GitHub Issues with `gh-axi` (installed binary, never `npx`; raw `gh` only for what it does not wrap). See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
 - **Triage labels** - namespaced taxonomy shared with Recall: `type:`, `agent:`, `needs:`/`needs-triage`/`needs-info`, `risk:`, `blocked:`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
 - **Domain docs** - single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See [docs/agents/domain.md](docs/agents/domain.md).
 
