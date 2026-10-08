@@ -163,15 +163,17 @@ echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the vo
 
 # ---------------------------------------------------------------------------
 # 5. OpenCode plugin: the real entry, driven by a client shaped like the v1 SDK
-#    OpenCode passes (`{ path: { id } }` in, `{ data }` out). A root turn
-#    reaches the daemon once; a repeat and a subagent stay quiet.
+#    OpenCode passes (`{ path: { id } }` in, `{ data }` out). Two idles for one
+#    turn fired un-awaited (as OpenCode does on an abort) reach the daemon once;
+#    a streamed-chunk event never queries the session; a subagent stays quiet.
 # ---------------------------------------------------------------------------
 HOME="$SCRATCH" ECHO_VOICE_ENABLED=false bun -e '
   const { EchoVoice } = await import(`${process.env.ROOT}/adapters/opencode/plugin.ts`);
   const sessions = { ses_root: {}, ses_child: { parentID: "ses_root" } };
+  let lookups = 0;
   const client = { session: {
-    get: async ({ path }) => ({ data: { id: path.id, ...sessions[path.id] } }),
-    messages: async () => ({ data: [{ info: { role: "assistant" },
+    get: async ({ path }) => { lookups += 1; return { data: { id: path.id, ...sessions[path.id] } }; },
+    messages: async () => ({ data: [{ info: { role: "assistant", id: "msg_e2e" },
       parts: [{ type: "text", text: "🗣️ OpenCode: Echo Test engaged. Beep, boop, bop. OpenCode path silent." }] }] }),
   } };
   const notified = [];
@@ -182,16 +184,18 @@ HOME="$SCRATCH" ECHO_VOICE_ENABLED=false bun -e '
     return res;
   };
   const hooks = await EchoVoice({ client, directory: process.env.HOME });
-  for (const id of ["ses_root", "ses_root", "ses_child"]) {
-    await hooks.event({ event: { type: "session.idle", properties: { sessionID: id } } });
-  }
+  await hooks.event({ event: { type: "message.part.delta", properties: { sessionID: "ses_root", delta: "Ech" } } });
+  if (lookups !== 0) throw new Error(`a streamed chunk queried the session ${lookups} time(s)`);
+  const idle = (id) => hooks.event({ event: { type: "session.idle", properties: { sessionID: id } } });
+  await Promise.all([idle("ses_root"), idle("ses_root")]);
+  await idle("ses_child");
   if (notified.length !== 1) throw new Error(`expected exactly 1 notify, got ${notified.length}`);
   const [{ status, body }] = notified;
   if (status !== 202) throw new Error(`expected 202, got ${status}`);
   if (body.source !== "opencode" || body.session_id !== "ses_root" || body.voice_enabled !== false) {
     throw new Error(`bad wire body ${JSON.stringify(body)}`);
   }
-  console.log("  opencode plugin -> 202 once (silent); repeat deduped, subagent suppressed");
+  console.log("  opencode plugin -> 202 once (silent); concurrent idles deduped, chunk skipped, subagent suppressed");
 ' || fail "OpenCode plugin did not notify the isolated daemon exactly once"
 
 # ---------------------------------------------------------------------------

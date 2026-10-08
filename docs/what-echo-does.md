@@ -28,7 +28,7 @@ Typical spoken lines:
 
 If that completion line is a question, it still speaks. `speak_mode` (`announce` / `brief` / `consult` / `think`) is notify density on that line, not a new lifecycle event. `consult` is the slightly faster density for a `?` or "about to" line. Adapters never infer `think` (silence is already `voice_enabled: false`).
 
-Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode does not speak completions. It only exposes mute.
+Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode subagent sessions stay quiet; OpenCode has no headless check yet, so `opencode run` still speaks its completion.
 
 ## When an agent needs you
 

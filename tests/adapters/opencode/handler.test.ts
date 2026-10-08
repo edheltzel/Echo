@@ -4,7 +4,7 @@ import {
   eventType,
   extractFallbackSummary,
   handleOpenCodeEvent,
-  lastAssistantTextFromMessages,
+  lastAssistantFromMessages,
   messageFromAssistantText,
   resetSpokenKeys,
   type OpenCodeSessionPort,
@@ -25,18 +25,22 @@ const config: OpenCodeVoiceConfig = {
   speakCompletions: true,
 };
 
+let sessionLookups = 0;
+
 function port(opts: {
   parentID?: string;
   text?: string;
+  messageID?: string;
   missing?: boolean;
 } = {}): OpenCodeSessionPort {
   return {
     async getSession(id) {
+      sessionLookups += 1;
       if (opts.missing) return null;
       return { id, parentID: opts.parentID };
     },
-    async lastAssistantText() {
-      return opts.text ?? "";
+    async lastAssistant() {
+      return { id: opts.messageID ?? "msg_1", text: opts.text ?? "" };
     },
   };
 }
@@ -44,6 +48,7 @@ function port(opts: {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   resetSpokenKeys();
+  sessionLookups = 0;
 });
 
 describe("OpenCode plugin event adapter", () => {
@@ -159,6 +164,74 @@ describe("OpenCode plugin event adapter", () => {
     expect(calls).toBe(1);
   });
 
+  test("a new turn whose text matches the previous turn still speaks", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof fetch;
+    const event = { type: "session.idle", sessionID: "ses_rep" };
+    const text = "All 42 tests pass.\n\n🗣️ OpenCode: All tests pass.";
+    expect(await handleOpenCodeEvent(event, config, port({ text, messageID: "msg_a" }))).toBe("sent");
+    expect(await handleOpenCodeEvent(event, config, port({ text, messageID: "msg_b" }))).toBe("sent");
+    expect(calls).toBe(2);
+  });
+
+  test("two idles for one turn delivered together speak once", async () => {
+    // OpenCode publishes session.idle from both processor.halt and the runner on
+    // an aborted or errored turn, and calls plugin hooks without awaiting them.
+    // The first send is held open until the second event has made its decision,
+    // so both events overlap exactly as two un-awaited hooks would.
+    const firstSendStarted = Promise.withResolvers<void>();
+    const releaseSend = Promise.withResolvers<void>();
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      firstSendStarted.resolve();
+      if (calls >= 2) releaseSend.resolve(); // a second send means the race was lost; never hang
+      await releaseSend.promise;
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof fetch;
+    const event = { type: "session.idle", sessionID: "ses_abort" };
+    const text = "🗣️ OpenCode: Stopped mid-refactor.";
+    const first = handleOpenCodeEvent(event, config, port({ text }));
+    await firstSendStarted.promise;
+    const second = await handleOpenCodeEvent(event, config, port({ text }));
+    releaseSend.resolve();
+    expect([await first, second]).toEqual(["sent", "skipped"]);
+    expect(calls).toBe(1);
+  });
+
+  test("a failed send does not block a retry of the same turn", async () => {
+    globalThis.fetch = (async () => new Response("no", { status: 503 })) as unknown as typeof fetch;
+    const event = { type: "session.idle", sessionID: "ses_retry" };
+    const lookup = port({ text: "🗣️ OpenCode: Retry me." });
+    expect(await handleOpenCodeEvent(event, config, lookup)).toBe("failed");
+    globalThis.fetch = (async () => new Response("{}", { status: 202 })) as unknown as typeof fetch;
+    expect(await handleOpenCodeEvent(event, config, lookup)).toBe("sent");
+  });
+
+  test("an idle whose newest assistant message has no text stays silent", async () => {
+    // A `!shell` turn or an abort during a tool call ends on an assistant message
+    // with only tool parts; the previous turn's line must not be spoken again.
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof fetch;
+    const event = { type: "session.idle", sessionID: "ses_shell" };
+    expect(await handleOpenCodeEvent(event, config, port({ text: "", messageID: "msg_tool" }))).toBe("skipped");
+    expect(calls).toBe(0);
+  });
+
+  test("events other than session.created and session.idle never query the session", async () => {
+    const lookup = port({ text: "🗣️ OpenCode: Unused." });
+    for (const type of ["message.part.delta", "message.updated", "session.updated", "session.status"]) {
+      expect(await handleOpenCodeEvent({ type, properties: { sessionID: "ses_busy" } }, config, lookup)).toBe("skipped");
+    }
+    expect(sessionLookups).toBe(0);
+  });
+
   test("unknown events and notify failures are distinct", async () => {
     globalThis.fetch = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
     expect(await handleOpenCodeEvent({ type: "session.status", sessionID: "ses_5" }, config, port())).toBe("skipped");
@@ -191,10 +264,13 @@ describe("OpenCode plugin event adapter", () => {
       .toBe("The adapter now speaks the last assistant turn.");
   });
 
-  test("lastAssistantTextFromMessages walks SDK message envelopes", () => {
-    expect(lastAssistantTextFromMessages([
-      { info: { role: "user" }, parts: [{ type: "text", text: "hi" }] },
-      { info: { role: "assistant" }, parts: [{ type: "text", text: "Done with the wiring." }] },
-    ])).toBe("Done with the wiring.");
+  test("lastAssistantFromMessages reads only the newest assistant message", () => {
+    const user = { info: { role: "user", id: "msg_u" }, parts: [{ type: "text", text: "hi" }] };
+    const textReply = { info: { role: "assistant", id: "msg_1" }, parts: [{ type: "text", text: "Done with the wiring." }] };
+    const toolOnly = { info: { role: "assistant", id: "msg_2" }, parts: [{ type: "tool", tool: "bash" }] };
+    expect(lastAssistantFromMessages([user, textReply])).toEqual({ id: "msg_1", text: "Done with the wiring." });
+    expect(lastAssistantFromMessages([user, textReply, user, toolOnly])).toEqual({ id: "msg_2", text: "" });
+    expect(lastAssistantFromMessages([user])).toEqual({ text: "" });
+    expect(lastAssistantFromMessages(undefined)).toEqual({ text: "" });
   });
 });

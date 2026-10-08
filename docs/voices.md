@@ -103,7 +103,7 @@ its own spoken identity - **name + voice** - in that repo only:
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 | Grok Build | `<project>/.grok/settings.json` | `~/.grok/settings.json` (see [`adapters/grok/README.md`](../adapters/grok/README.md)) |
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
-| OpenCode | `<project>/opencode.jsonc` or `opencode.json` | `~/.config/opencode/opencode.jsonc`, `opencode.json`, or `config.json` (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
+| OpenCode | `opencode.json(c)` from the worktree root down to the session folder, plus `.opencode/opencode.json(c)` | `~/.config/opencode/config.json`, `opencode.json`, and `opencode.jsonc`, merged (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
 Default adapter personas in `core/voices.json`:
 

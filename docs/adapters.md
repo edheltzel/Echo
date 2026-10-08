@@ -233,8 +233,10 @@ surface wins.
 `adapters/opencode/plugin.ts` is loaded from an owned `~/.config/opencode/plugins/echo-voice.ts`
 symlink; `/echo-mute` is an owned `commands/echo-mute.md` symlink. It speaks on `session.idle`,
 greets on `session.created` only when `ECHO_VOICE_GREET_ON_START` is set, and stays silent for
-subagents (`parentID`) and for sessions the v1 SDK client cannot read. Persona: `daidentity`
-in `opencode.jsonc` / `opencode.json`. Detail: [`adapters/opencode/README.md`](../adapters/opencode/README.md).
+subagents (`parentID`), for sessions the v1 SDK client cannot read, and when the newest
+assistant message has no text. Two `session.idle` events for one turn speak once. Persona:
+`daidentity` merged across every config file OpenCode merges. Detail:
+[`adapters/opencode/README.md`](../adapters/opencode/README.md).
 
 ## Live-session voice suppression - omp and Codex
 

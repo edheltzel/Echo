@@ -9,7 +9,7 @@
  * Session.parentID marks a subagent; an unreadable session fails closed (silent).
  */
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { handleOpenCodeEvent } from "./handler.ts";
+import { handleOpenCodeEvent, isSpokenEvent } from "./handler.ts";
 import { loadOpenCodeVoiceConfig } from "./config.ts";
 import { sessionPortFromClient, type PluginClient } from "./session-port.ts";
 
@@ -24,7 +24,14 @@ export const EchoVoice = async (input: PluginInput = {}) => {
   const port = sessionPortFromClient(input.client);
   return {
     event: async ({ event }: { event: Record<string, unknown> }) => {
-      const config = loadOpenCodeVoiceConfig(loadEchoEnvironment(), input.directory ?? input.worktree);
+      // Every streamed chunk is an event; read config only for the two that speak.
+      if (!isSpokenEvent(event)) return;
+      const config = loadOpenCodeVoiceConfig(
+        loadEchoEnvironment(),
+        input.directory ?? input.worktree,
+        undefined,
+        input.worktree,
+      );
       await handleOpenCodeEvent(event, config, port);
     },
   };
