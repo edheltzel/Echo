@@ -34,6 +34,10 @@ for (const name of [
   "ECHO_CLAUDE_COMMANDS_DIR", "ECHO_CODEX_HOOKS_FILE", "ECHO_CODEX_SKILLS_DIR", "ECHO_GROK_HOOKS_DIR",
   "ECHO_GROK_SKILLS_DIR", "ECHO_MCP_CONFIG_PATH", "ECHO_OPENCODE_COMMANDS_DIR", "ECHO_OPENCODE_CONFIG",
   "ECHO_OPENCODE_PLUGINS_DIR",
+  // Inside a Herdr pane these point adapters' native visual delivery at the live
+  // Herdr server, so any test calling sendNotification would pop a real Herdr
+  // notification. Tests that exercise the Herdr route inject their own context.
+  "HERDR_SOCKET_PATH", "HERDR_SESSION", "HERDR_CONFIG_PATH",
 ]) {
   delete process.env[name];
 }
