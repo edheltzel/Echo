@@ -17,6 +17,9 @@
 set -euo pipefail
 
 export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Adapter hooks below inherit this shell. Inside a Herdr pane these would route
+# their native visual delivery to the live Herdr server and pop a real notification.
+unset HERDR_SOCKET_PATH HERDR_SESSION HERDR_CONFIG_PATH
 
 # The production daemon's port. The test instance must never use it, and this
 # script must never send anything there.
@@ -164,12 +167,17 @@ bun -e '
 # ---------------------------------------------------------------------------
 # 4. Jcode lifecycle hook: explicit voice line reaches the isolated daemon.
 # ---------------------------------------------------------------------------
+# The hook exits 0 even when it skips, so prove the notify reached the daemon.
 JCODE_HOOK_EVENT=turn_end \
 JCODE_HOOK_STATUS=ok \
-JCODE_HOOK_TRANSCRIPT=$'assistant: 🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+JCODE_HOOK_LAST_ASSISTANT_TEXT=$'Done.\n\n🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+ECHO_VOICE_ENABLED=false \
 ECHO_DAEMON_URL="http://localhost:${PORT}" \
   bun run adapters/jcode/hook.ts
-echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the voice line"
+for _ in {1..20}; do grep -q 'source=jcode .*Notification accepted' "$LOG" && break; sleep 0.1; done
+grep -q 'source=jcode .*Notification accepted' "$LOG" || fail "the Jcode hook never notified the isolated daemon"
+grep -q 'source=jcode .*Notification: .*(voice: false' "$LOG" || fail "the Jcode notification was not silent"
+echo "  jcode adapter -> notification accepted (silent), executable hook extracted the voice line"
 
 # ---------------------------------------------------------------------------
 # 5. OpenCode plugin: the real entry, driven by a client shaped like the v1 SDK
