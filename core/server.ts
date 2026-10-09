@@ -693,6 +693,9 @@ const PYTHON3_PATH = '/opt/homebrew/bin/python3';
 // completion without an audio device), resolved through the canonical
 // configuration chain rather than read from process.env.
 const MACOS_SAY_BIN = resolveEchoEnv("ECHO_SAY_BIN") || '/usr/bin/say';
+// The legacy macOS banner, the same way: tests point it at a no-op so isolated
+// daemons never put a notification on the operator's screen.
+const MACOS_OSASCRIPT_BIN = resolveEchoEnv("ECHO_OSASCRIPT_BIN") || '/usr/bin/osascript';
 
 class EdgeProcessError extends Error {
   diagnostic: ProviderDiagnostic;
@@ -1579,7 +1582,7 @@ function showBanner(sanitizedTitle: string, sanitizedMessage: string): void {
   try {
     const visible = stripMarkers(extractEmotionalMarker(sanitizedMessage).cleaned);
     const script = `display notification "${escapeForAppleScript(visible)}" with title "${escapeForAppleScript(sanitizedTitle)}" sound name ""`;
-    void spawnSafe('/usr/bin/osascript', ['-e', script])
+    void spawnSafe(MACOS_OSASCRIPT_BIN, ['-e', script])
       .catch((error) => console.error("Notification display error:", error));
   } catch (error) {
     console.error("Notification display error:", error);

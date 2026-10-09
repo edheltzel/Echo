@@ -56,6 +56,11 @@ export ECHO_VOICE_EVENTS_LOG="${SCRATCH}/voice-events.jsonl"
 export ECHO_TTS_CACHE_DIR="${SCRATCH}/tts-cache"
 cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
+# The legacy macOS banner goes to a recorder, never /usr/bin/osascript, so the test
+# daemon puts nothing on the operator's screen; a recorded line proves it.
+BANNER_LOG="${SCRATCH}/banners.log"
+printf '#!/bin/bash\necho banner >> "%s"\n' "$BANNER_LOG" >"${SCRATCH}/fake-osascript"
+chmod +x "${SCRATCH}/fake-osascript"
 
 # Adapters address the daemon through this base, so both hosts under test point
 # at the isolated instance rather than the default :3246. Exported canonical
@@ -74,7 +79,8 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",
   "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
   "VOICES_PATH": "$VOICES_PATH",
-  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL"
+  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL",
+  "ECHO_OSASCRIPT_BIN": "$SCRATCH/fake-osascript"
 }
 JSON
 
@@ -224,5 +230,9 @@ if [ "$AUDIBLE" -eq 1 ]; then
   [ "$played" = "1" ] || fail "no playback recorded in ${ECHO_AUDIO_LIFECYCLE_LOG}"
   echo "  audible line played on :${PORT}, recorded in the isolated lifecycle log"
 fi
+
+for _ in {1..20}; do [ -s "$BANNER_LOG" ] && break; sleep 0.1; done
+[ -s "$BANNER_LOG" ] || fail "no banner went through the scratch ECHO_OSASCRIPT_BIN recorder"
+echo "  banners -> scratch recorder ($(wc -l <"$BANNER_LOG" | tr -d ' ') recorded), none on screen"
 
 echo "OK adapter e2e passed on :${PORT} (production :${PRODUCTION_PORT} untouched)"
