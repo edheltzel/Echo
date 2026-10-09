@@ -22,6 +22,7 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
   "PORT": $TEST_PORT,
   "ECHO_MUTE_STATE_PATH": "$SCRATCH/mute.json",
   "ECHO_CAPTURE_STATE_PATH": "$SCRATCH/recording-state.json",
+  "ECHO_PLAYBACK_STATE_PATH": "$SCRATCH/playback-state.json",
   "ECHO_OSASCRIPT_BIN": "$SCRATCH/fake-osascript"
 }
 JSON
