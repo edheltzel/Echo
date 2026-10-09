@@ -120,7 +120,7 @@ at runtime; invalid values use the defaults below.
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
 | Notification sounds | ECHO_SOUND_REQUEST, ECHO_SOUND_DONE, ECHO_SOUND_GENERIC | Audio files for the request, done, and generic sounds; unset uses Echo's bundled sounds in core/sounds/. A file that fails to play falls back to a macOS system sound |
-| State and logs | ECHO_MUTE_STATE_PATH, ECHO_MODE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths (the mode file sits beside mute.json); log caps default to 1 MB |
+| State and logs | ECHO_MUTE_STATE_PATH, ECHO_MODE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_PLAYBACK_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths (the mode file sits beside mute.json); playback signal defaults to ~/.local/state/echo/playback-state.json; log caps default to 1 MB |
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL | Adapter-side endpoint settings; otherwise adapters use <http://localhost:3246> |
 | Reserved | ECHO_VOICE_SURFACES | Schema-reserved; current runtime code does not read it |
 | Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS, ECHO_CONVERSE_LOG_PATH | 32468 (keypad ECHOV; core keeps 3246), <http://localhost:32468>, ~/.local/state/echo/converse/booking.lock, capture + transcription budget plus slack (120000 at the shipped defaults), ~/Library/Logs/echo-converse.log |
@@ -180,6 +180,17 @@ Settings whose behavior is not obvious from the name:
   from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition;
   the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
   disables the guard entirely**.
+- **ECHO_PLAYBACK_STATE_PATH** is the playback signal Echo writes for other processes
+  (default `~/.local/state/echo/playback-state.json`). The default hardcodes
+  `~/.local/state` and does not consult `XDG_STATE_HOME`, so an external reader
+  can poll one stable path. The file is
+  `{ "state": "idle" | "speaking", "queue_depth": <n>, "pid": <daemon pid>, "updated_at": "<ISO>" }`.
+  `queue_depth` is the queued-not-in-flight count, the same number `GET /health`
+  reports as `play_queue.depth`. Echo writes `speaking` when a queued job starts
+  and `idle` when it settles, and refreshes `queue_depth` on enqueue and drop.
+  A missing, corrupt, or wrong-shaped file reads as idle. A dead `pid` reads as
+  idle, so a crashed daemon cannot look like it is still speaking. An **empty
+  string disables writes entirely**.
 - **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
   `GET /voices` at once - and wins over `ECHO_NOTIFY_URL` for all of them - so pointing a host
   at a second instance can never split notify from the read endpoints

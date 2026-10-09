@@ -125,6 +125,7 @@ not a review nit.
 | Edge rate mapping | `core/edge-rate.ts` | Maps a `speed` multiplier to edge-tts `--rate`. |
 | Runtime mute state | `core/mute.ts` | Persisted scoped mute (`tts` / `mic` / `all`) with lazy expiry (#83, FM-446); `tts`/`all` gate the provider loop, `mic`/`all` gate converse capture. |
 | Capture guard | `core/capture-guard.ts` | Skips voice lines while an external mic capture is live (reads the capture tool's published state file, pid-liveness checked). |
+| Playback state | `core/playback-state.ts` | Publishes idle/speaking plus queue depth to a cross-process signal file (pid-liveness; empty path disables writes). |
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks, `/echo-voice`, `/echo-mute`, and `/echo-mode` commands, their reconcilers, and a mute and mode plugin at `plugin/` (`/echo:echo-mute` and `/echo:echo-mode`; Claude namespaces plugin skills. Bare `/echo-mute` and `/echo-mode` stay the installer commands. No plugin hooks; Stop/SessionStart/VoiceGate stay on `restore-hooks.ts`). |
