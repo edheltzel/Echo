@@ -320,6 +320,12 @@ reading; `state` is `idle` unless an external mic capture is live), the last-N s
 (`replay: {available, capacity, default_n, max_n}`), and the configuration
 audit below.
 
+Playback is also published to a cross-process signal file (default
+`~/.local/state/echo/playback-state.json`, override `ECHO_PLAYBACK_STATE_PATH`; an empty string
+disables writes): `{ "state": "idle" | "speaking", "queue_depth": <n>, "pid": <daemon pid>,
+"updated_at": "<ISO>" }`. `queue_depth` matches `play_queue.depth`. Readers treat a missing or
+malformed file, or a dead `pid`, as idle. See [`configuration.md`](configuration.md).
+
 `config: {path, present, valid, ignored_keys, errors}` reports what
 `~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
 existed, and - because a key that fails validation is dropped on its own rather than

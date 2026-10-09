@@ -18,6 +18,10 @@ process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");
 // a test run never puts a notification on the operator's screen. Banner
 // assertions compare against this value, which core captures at first import.
 process.env.ECHO_OSASCRIPT_BIN = "/usr/bin/true";
+// Every play-queue transition publishes playback state. Its default lives under
+// homedir(), which Bun reads once at startup, so the HOME pin below cannot
+// redirect it; pin the file itself.
+process.env.ECHO_PLAYBACK_STATE_PATH = join(scratch, "playback-state.json");
 // Every host config a reconciler or persona reader can touch (~/.claude, ~/.pi,
 // ~/.omp, ~/.codex, ~/.grok, ~/.jcode, ~/.config/opencode) resolves from HOME or
 // XDG_CONFIG_HOME unless one of the overrides below is set. A spawned reconciler
