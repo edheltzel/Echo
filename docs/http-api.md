@@ -78,6 +78,12 @@ Host adapters attempt visual delivery before they POST to `/notify`, in this ord
 3. The normal `/notify` request without `visual_delivery: "native"`; the daemon then uses its
    macOS `osascript` notification as the final visual fallback.
 
+Herdr is one socket call: method `notification.show`, params `{title, body, sound: "none"}` (no `position`). Installed protocol 22 (`herdr api schema --json`, schema_version 1) defines `NotificationShowParams` as required `title` plus optional `body`, `position`, and `sound` (`none`, `done`, `request`). The success result is `{type: "notification_show", shown, reason}`. `NotificationShowReason` is `shown`, `disabled`, `rate_limited`, `no_foreground_client`, or `busy`. No pane, workspace, tab, or click field exists.
+
+`tryHerdr` (`shared/terminal-notify.ts`) maps that result as follows. `shown: true` is native success (`route: "herdr"`) and stops the chain. Any other result is `unavailable`, with `reason` set to Herdr's reason string, or `"not-shown"` when the reason is missing. A socket or parse error is `failed` with the error message. No Herdr session or socket context never calls Herdr (`reason: "no-herdr-context"`). Unavailable and failed both continue to the terminal route. A terminal `shown` replaces the Herdr result. A terminal `failed` is returned alone (the Herdr reason is dropped). If the terminal route is also unavailable, the reason is `"<herdr reason>; <terminal reason>"` and the daemon still shows the AppleScript banner.
+
+Click-to-focus is not available on this route. `notification.show` cannot name a target, and Echo does not focus panes itself. Herdr's `keys.open_notification_target` only focuses a target Herdr already attached; Echo cannot set it.
+
 The native marker is an exact success contract. It is added only after route 1 or 2 reports
 `status: "shown"`; the daemon then suppresses its own AppleScript banner, so one native
 success produces one visual notification. A failed, unavailable, unsupported, headless, or
