@@ -5,36 +5,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org).
 
-## [v0.12.0](https://github.com/edheltzel/Echo/tree/v0.12.0) - 2026-10-09
-
-[Full Changelog](https://github.com/edheltzel/Echo/compare/v0.11.0...v0.12.0)
-
-### Added
-
-- OpenCode host adapter: spoken completions on `session.idle`, a startup greeting by default, `/echo-mute` and `/echo-mode`, and a persona and voice from OpenCode's own config (#198, #201, #204, #219).
-- Notification sounds and a sounds-only mode: `cli/echo mode sounds` and `/echo-mode` play request, done, and generic sounds instead of speech (#203).
-- Playback state signal file at `~/.local/state/echo/playback-state.json` (`ECHO_PLAYBACK_STATE_PATH`; empty disables) so other tools can see when Echo is speaking (#218).
-- `ECHO_OSASCRIPT_BIN` config key for the macOS banner command (#213).
-- Install guardrails: a warning when installing from a worktree, Pi registration verification, and a config migration summary (#210).
-- `scripts/preview-voices.ts --help` and strict flag parsing (#208).
-
-### Changed
-
-- Shared persona helpers across adapters; closes Grok and Codex identity leftovers (#164).
-
-### Fixed
-
-- Claude Code hooks are de-duplicated across blocks with the same matcher (#207).
-
-### Documentation
-
-- Herdr: how detection works and how to silence Herdr's own chime, the notification-target gap, and the agent identity surface (#215, #216, #217).
-- Jev decision-seat spike (#220).
-
-### Tests
-
-- Test runs stay out of the operator's home, real banners, live Herdr, and the voice-resolution log; the Jcode e2e asserts a real notify (#205, #206, #211, #213, #214).
-
 ## [v0.11.0](https://github.com/edheltzel/Echo/tree/v0.11.0) - 2026-08-26
 
 [Full Changelog](https://github.com/edheltzel/Echo/compare/v0.10.0...v0.11.0)
