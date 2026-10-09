@@ -182,6 +182,16 @@ adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and r
 `allow-passthrough` to be read as `on` or `all` before wrapping the OSC sequence. SSH/headless
 contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
 
+Herdr 0.9.3 (socket protocol 22) names the agent in a pane via `agent` and `display_agent` on
+`AgentInfo` and `PaneInfo` (`agent.get`, `agent.list`, `pane.current`). `agent_session` carries
+only `agent`, `kind` (`id` or `path`), `source`, and `value`. No request, response, or event has
+a parent, spawn, or lineage field, and pane env (`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID`,
+`HERDR_WORKSPACE_ID`, `HERDR_BIN_PATH`, `HERDR_SOCKET_PATH`) locates the pane, not a parent
+agent. Echo's notify path calls that socket only for `notification.show` and already stamps
+`source` on `/notify`, so reading Herdr's agent label would add a round trip for a host the
+adapter already names. Spawned-agent attribution stays blocked until Herdr exposes a parent or
+spawn field.
+
 The terminal protocol matrix, the tmux passthrough contract, and the exact
 `visual_delivery: "native"` marker rule are maintained in
 [Native terminal visual delivery](http-api.md#native-terminal-visual-delivery). Adapter
