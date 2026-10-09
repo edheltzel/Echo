@@ -1,7 +1,7 @@
 {
   "name": "@echo/opencode-adapter",
   "version": "0.1.0",
-  "description": "OpenCode plugin adapter for Echo (session.idle completions, opt-in greeting, /echo-mute)",
+  "description": "OpenCode plugin adapter for Echo (session.idle completions, session greeting, /echo-mute)",
   "private": true,
   "type": "module",
   "dependencies": {
