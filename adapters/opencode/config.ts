@@ -111,7 +111,7 @@ export function loadOpenCodeVoiceConfig(
     sayName,
     voiceId: env.ECHO_VOICE_ID ?? "opencode",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
-    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),
+    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
   return applyPersonaOverride(base, loadProjectPersona(cwd, defaultReadFile, home, env, worktree));
