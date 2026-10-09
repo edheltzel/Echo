@@ -1,12 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  defaultStartupGreetings,
-  personaGreetingFields,
-  resolvePersonaStartupGreetings,
-} from "@echo/shared/greeting.ts";
+import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { applyPersonaOverride, booleanEnv, type EchoPersonaOverride } from "@echo/shared/persona.ts";
 
 export interface GrokVoiceConfig {
   endpoint: string;
@@ -18,26 +15,6 @@ export interface GrokVoiceConfig {
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
-}
-
-// Same daidentity shape as Claude Code / Pi / omp:
-//   { "daidentity": { "name": "Themis",
-//                     "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } },
-//                     "sayName": true,
-//                     "startupCatchphrases": ["{name} online."] } }
-export interface EchoPersonaOverride {
-  personaName?: string;
-  voiceId?: string;
-  startupCatchphrases?: string[];
-  sayName?: boolean;
-}
-
-function booleanEnv(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
 }
 
 function defaultReadFile(path: string): string | null {
@@ -63,6 +40,11 @@ function readDaidentity(
   }
 }
 
+// Same daidentity shape as Claude Code / Pi / omp:
+//   { "daidentity": { "name": "Themis",
+//                     "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } },
+//                     "sayName": true,
+//                     "startupCatchphrases": ["{name} online."] } }
 /**
  * Project `<cwd>/.grok/settings.json` over global `~/.grok/settings.json`,
  * project wins per key (matches Pi/Claude daidentity layering).
@@ -90,26 +72,6 @@ export function loadProjectPersona(
   return Object.keys(override).length > 0 ? override : null;
 }
 
-export function applyPersonaOverride(
-  base: GrokVoiceConfig,
-  override: EchoPersonaOverride | null,
-): GrokVoiceConfig {
-  if (!override) return base;
-  const sayName = override.sayName ?? base.sayName;
-  const startupCatchphrases = resolvePersonaStartupGreetings(
-    base.startupCatchphrases,
-    override.startupCatchphrases,
-    sayName,
-  );
-  return {
-    ...base,
-    personaName: override.personaName ?? base.personaName,
-    voiceId: override.voiceId ?? base.voiceId,
-    sayName,
-    startupCatchphrases,
-  };
-}
-
 export function loadGrokVoiceConfig(
   env: Record<string, string | undefined> = process.env,
   cwd: string | undefined = process.cwd(),
@@ -130,8 +92,4 @@ export function loadGrokVoiceConfig(
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
   return applyPersonaOverride(base, loadProjectPersona(cwd));
-}
-
-export function pickStartupCatchphrase(pool: string[], random: () => number = Math.random): string {
-  return pool[Math.floor(random() * pool.length)];
 }

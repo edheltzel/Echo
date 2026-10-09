@@ -9,12 +9,11 @@
  */
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken } from "@echo/shared/greeting.ts";
+import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
 import {
   loadGrokVoiceConfig,
-  pickStartupCatchphrase,
   type GrokVoiceConfig,
 } from "./config.ts";
 
@@ -135,8 +134,9 @@ export async function handleGrokHookResult(
 
   if (!message) return "skipped";
 
+  const slot = event === "stop" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "grok", sessionId);
+    const result = await sendNotification(config, message, "grok", sessionId, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/grok] notify failed with HTTP ${result.status}`);
       return "failed";

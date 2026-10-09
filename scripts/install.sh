@@ -29,6 +29,9 @@ PAYLOAD_CURRENT="$PAYLOAD_HOME/current"
 # Payload copy that was live before this run; `current` is restored to it when the
 # reload cannot prove the newly staged one healthy. Empty on a first install.
 PAYLOAD_ROLLBACK=""
+# Legacy labels this run migrated, and where their plists were kept.
+MIGRATED_LEGACY=()
+MIGRATED_BACKUPS=()
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 CLAUDE_COMMANDS_DIR="${ECHO_CLAUDE_COMMANDS_DIR:-$HOME/.claude/commands}"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
@@ -39,6 +42,7 @@ OMP_EXTENSIONS="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 # adapters/grok/reconcile.ts honors GROK_HOME / ECHO_GROK_HOOKS_DIR the same way.
 GROK_HOOKS="${ECHO_GROK_HOOKS_DIR:-${GROK_HOME:-$HOME/.grok}/hooks}"
 OPENCODE_COMMANDS="${ECHO_OPENCODE_COMMANDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/commands}"
+OPENCODE_PLUGINS="${ECHO_OPENCODE_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins}"
 ADAPTER="none"
 CHECK_ONLY=0
 # Adapter ids are owned by shared/extension.ts (HARNESS_IDS). Adding a harness
@@ -281,7 +285,7 @@ codex_installed() {
 }
 
 opencode_installed() {
-  [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
+  [ -L "$OPENCODE_PLUGINS/echo-voice.ts" ] || [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
 }
 
 # Materialize the workspace links every adapter depends on. Each adapter package
@@ -390,7 +394,7 @@ preflight() {
         echo "OpenCode CLI is required for --adapter opencode" >&2
         exit 1
       fi
-      echo "> Preflighting OpenCode mute-command registration"
+      echo "> Preflighting OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
@@ -467,6 +471,7 @@ migrate_legacy_service() {
   for legacy in "${LEGACY_SERVICE_NAMES[@]}"; do
     local legacy_plist="$HOME/Library/LaunchAgents/${legacy}.plist"
 
+    local migrated=0
     if is_loaded "$legacy"; then
       echo "> Unloading legacy voice service ($legacy)"
       launchctl unload "$legacy_plist" 2>/dev/null || true
@@ -475,6 +480,7 @@ migrate_legacy_service() {
         echo "Legacy service is still loaded after unload: $legacy" >&2
         exit 1
       fi
+      migrated=1
     fi
 
     if [ -f "$legacy_plist" ]; then
@@ -483,7 +489,10 @@ migrate_legacy_service() {
       backup="${legacy_plist}.migrated-${stamp}"
       echo "> Quarantining legacy LaunchAgent plist: $backup"
       mv "$legacy_plist" "$backup"
+      MIGRATED_BACKUPS+=("$backup")
+      migrated=1
     fi
+    if [ "$migrated" -eq 1 ]; then MIGRATED_LEGACY+=("$legacy"); fi
   done
 }
 
@@ -542,6 +551,16 @@ install_adapter() {
       # survive beside the fresh one (#77).
       echo "> Reconciling Pi adapter registration"
       bun run "$REPO_ROOT/adapters/pi/reconcile.ts"
+      # pi install exits 0 even when Pi cannot load the path; confirm Pi lists it (#12).
+      local pi_entry pi_listed
+      pi_entry="$(cd "$REPO_ROOT/adapters/pi" && pwd -P)"
+      # Captured, not piped: under pipefail an early-exiting grep -q would SIGPIPE the producer.
+      pi_listed="$(pi list 2>/dev/null || true)"
+      if ! grep -Fxq -- "$pi_entry" <<<"$(sed 's/^[[:space:]]*//' <<<"$pi_listed")"; then
+        echo "Pi does not list the Echo adapter ($pi_entry) after install. Check: pi list" >&2
+        exit 1
+      fi
+      echo "✓ Pi lists the Echo adapter: $pi_entry"
       ;;
     omp)
       echo "> Reconciling oh-my-pi adapter registration"
@@ -560,7 +579,7 @@ install_adapter() {
       bun run "$REPO_ROOT/adapters/codex/reconcile.ts"
       ;;
     opencode)
-      echo "> Reconciling OpenCode mute-command registration"
+      echo "> Reconciling OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts"
       ;;
   esac
@@ -613,16 +632,13 @@ refresh_installed_adapters() {
       || echo "WARN: Codex registration refresh failed - run adapters/codex/reconcile.ts manually" >&2
   fi
   if [ "$ADAPTER" != "opencode" ] && opencode_installed; then
-    echo "> Refreshing OpenCode mute-command registration"
+    echo "> Refreshing OpenCode plugin + mute-command registration"
     bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" \
       || echo "WARN: OpenCode registration refresh failed - run adapters/opencode/reconcile.ts manually" >&2
   fi
 }
 
-# --check report: one harness heading, then checkboxes for each item under it.
-# Harness names use bold palette cyan (SGR 36) so they follow the terminal
-# color scheme instead of a hardcoded RGB. NO_COLOR or a non-TTY stdout
-# prints the same tree without escapes.
+# Harness names use SGR 36 when stdout is a color TTY; NO_COLOR disables that.
 check_use_color() {
   [ -t 1 ] && [ -z "${NO_COLOR:-}" ]
 }
@@ -675,10 +691,6 @@ begin_harness() {
   print_harness "$1"
 }
 
-# $1 checkbox label  $2 adapter --check exit  $3 captured stdout  $4 warn text
-# Registration is [x] when current, [\] when some Echo-owned items exist but
-# still need reconcile, [ ] when nothing of ours is installed yet (or the
-# check itself failed).
 apply_adapter_check() {
   local label="$1" rc="$2" out="$3" warn="$4"
   if [ "$rc" -eq 0 ]; then
@@ -812,8 +824,8 @@ check_installation() {
     fi
   fi
 
-  # Check the requested adapter even before first install so
-  # `install.sh --adapter grok --check` reports pending registration as exit 3.
+  # Report a requested adapter before first install so `--adapter X --check`
+  # can exit 3 for pending registration.
   local show_grok=0
   [ "$ADAPTER" = "grok" ] && show_grok=1
   grok_installed && show_grok=1
@@ -858,7 +870,7 @@ check_installation() {
     if [ "$ADAPTER" = "opencode" ] || opencode_installed; then
       rc=0
       out="$(bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check)" || rc=$?
-      apply_adapter_check "Mute command" "$rc" "$out" "OpenCode mute-command check failed"
+      apply_adapter_check "Adapter registration" "$rc" "$out" "OpenCode registration check failed"
     fi
   fi
 
@@ -867,6 +879,33 @@ check_installation() {
     exit 3
   fi
 }
+
+# The daemon runs from a copied payload, but adapter registrations point at
+# $REPO_ROOT. From a linked worktree they break the moment it is removed (#12).
+warn_if_linked_worktree() {
+  local dirs git_dir common_dir
+  dirs="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-dir --git-common-dir 2>/dev/null)" || return 0
+  { read -r git_dir; read -r common_dir; } <<<"$dirs"
+  [ "$git_dir" = "$common_dir" ] && return 0
+  echo "WARN: $REPO_ROOT is a linked git worktree. Adapter registrations will point into it and" >&2
+  echo "      break when it is removed. Install from the main checkout: $(dirname "$common_dir")" >&2
+}
+
+# Closing summary after a legacy service was migrated (#12). Legacy services are
+# retired (AGENTS.md); the way out is uninstalling com.echo, never reloading them.
+print_migration_summary() {
+  [ "${#MIGRATED_LEGACY[@]}" -eq 0 ] && return 0
+  echo "Migrated ${MIGRATED_LEGACY[*]} onto $SERVICE_NAME"
+  echo "  service: $SERVICE_NAME ($PLIST_PATH)"
+  echo "  log:     $LOG_PATH"
+  local backup
+  for backup in ${MIGRATED_BACKUPS[@]+"${MIGRATED_BACKUPS[@]}"}; do
+    echo "  kept:    $backup"
+  done
+  echo "  kept for reference only; never reload a legacy service. To stop Echo: cli/echo uninstall"
+}
+
+warn_if_linked_worktree
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! command -v bun >/dev/null 2>&1; then
@@ -888,3 +927,4 @@ fi
 discard_rollback_copy
 install_adapter
 refresh_installed_adapters
+print_migration_summary

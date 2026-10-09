@@ -6,8 +6,8 @@ import {
   normalizeHookEvent,
   type CodexHookPayload,
 } from "../../../adapters/codex/hook.ts";
+import { applyPersonaOverride } from "../../../shared/persona.ts";
 import {
-  applyPersonaOverride,
   loadCodexVoiceConfig,
   loadProjectPersona,
   type CodexVoiceConfig,
@@ -56,6 +56,7 @@ describe("Codex lifecycle hook adapter", () => {
       session_id: "sess-1",
       source: "codex",
       speak_mode: "announce",
+      slot: "done",
     }));
   });
 
@@ -78,19 +79,20 @@ describe("Codex lifecycle hook adapter", () => {
     }));
   });
 
-  test("session_start greeting is opt-in", async () => {
-    let calls = 0;
-    globalThis.fetch = async () => {
-      calls++;
+  test("session_start greeting is opt-in and carries no slot", async () => {
+    const payloads: unknown[] = [];
+    globalThis.fetch = async (_input, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
     };
     const fixture: CodexHookPayload = { hook_event_name: "SessionStart" };
     expect(await handleCodexHook(fixture, config)).toBe(false);
-    expect(calls).toBe(0);
+    expect(payloads).toHaveLength(0);
 
     const greet = { ...config, greetOnSessionStart: true };
     expect(await handleCodexHook(fixture, greet)).toBe(true);
-    expect(calls).toBe(1);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).not.toHaveProperty("slot");
   });
 
   test("messageFromStop and fallback helpers", () => {

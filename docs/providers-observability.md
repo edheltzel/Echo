@@ -65,11 +65,17 @@ and a single `writeResolutionEvent` call in `speakNotification` (the play queue'
   already returned (not a re-query), so the log can never disagree with the actual
   resolution. An edge-tts `circuit-open` attempt is read directly from the imported
   `circuitBreakers` map; edge-tts health checks remain diagnostic and do not gate `/notify`.
-- **Muted records (#83):** while the runtime mute is on, each voice-enabled `/notify` still
-  writes its event, with voice resolution intact but the speech stage suppressed:
+- **Muted records (#83):** while the runtime mute is on (`all`, or `tts` on a line with no
+  sound slot), each voice-enabled `/notify` still writes its event, with voice resolution intact but the speech stage suppressed:
   `provider: "muted"`, `attempts: []`, `hops: 0`, `success: false`, plus an additive
   `muted: true` marker. Consumers computing provider failure rates must filter on `muted` -
   a muted afternoon is not a provider outage.
+- **Sound records:** when a notification sound replaces speech (sounds-only mode, or `mute tts`
+  on a line with a slot), the event carries `provider: "sound"`, `voice: null`, `attempts: []`,
+  `hops: 0`, an additive `slot` (`request` | `done` | `generic`), and `success` from the
+  playback. Under `mute tts` it also carries `muted: true`, because speech was muted even
+  though a sound played. The audio-lifecycle log records the same play as disposition
+  `played-sound`.
 
 Proven by `tests/core/resolution-log.test.ts`: one `/notify` writes exactly one event with
 the expected fields, and the rolling prune is driven past the cap (file never exceeds it,

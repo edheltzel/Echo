@@ -1,13 +1,7 @@
 #!/usr/bin/env bun
 // Audition the available English edge-tts voices so per-persona voice/rate
 // choices in core/voices.json can be made by ear. Dev tooling only - not on
-// the runtime request path.
-//
-//   bun scripts/preview-voices.ts --list
-//   bun scripts/preview-voices.ts --locale en-GB
-//   bun scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
-//   bun scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
-//   bun scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural
+// the runtime request path. Usage: `scripts/preview-voices.ts --help`.
 
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
@@ -64,6 +58,29 @@ export function buildSynthArgs(voice: string, text: string, rate: string, outFil
   ];
 }
 
+export const USAGE = `Usage: scripts/preview-voices.ts [options]
+
+Audition English edge-tts voices so you can pick per-persona voices for
+core/voices.json by ear. --list and --dry-run play no audio.
+
+Options:
+  --locale <a,b>   Comma-separated locale prefixes to audition (default: ${DEFAULT_LOCALES.join(",")})
+  --voices <a,b>   Explicit voice ids; overrides --locale
+  --text <line>    Sample line; {voice} is replaced with the voice id
+                   (default: "${DEFAULT_TEXT}")
+  --rate <rate>    edge-tts rate for every sample (default: +0%)
+  --list           Print the matched voices, no audio
+  --dry-run        Print the matched voices and synth command, no audio
+  -h, --help       Show this help and exit
+
+Examples:
+  scripts/preview-voices.ts --list
+  scripts/preview-voices.ts --locale en-GB
+  scripts/preview-voices.ts --voices en-GB-RyanNeural,en-GB-ThomasNeural
+  scripts/preview-voices.ts --voices en-GB-ThomasNeural --rate -6%
+  scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural
+`;
+
 interface Options {
   locales: string[];
   voices: string[] | null;
@@ -71,8 +88,10 @@ interface Options {
   rate: string;
   list: boolean;
   dryRun: boolean;
+  help: boolean;
 }
 
+/** Throws on an unknown argument or a flag missing its value. */
 export function parseArgs(argv: string[]): Options {
   const opts: Options = {
     locales: DEFAULT_LOCALES,
@@ -81,15 +100,24 @@ export function parseArgs(argv: string[]): Options {
     rate: "+0%",
     list: false,
     dryRun: false,
+    help: false,
   };
+  const value = (i: number, flag: string): string => {
+    const v = argv[i];
+    if (v === undefined) throw new Error(`${flag} needs a value`);
+    return v;
+  };
+  const csv = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--list") opts.list = true;
     else if (arg === "--dry-run") opts.dryRun = true;
-    else if (arg === "--locale") opts.locales = (argv[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-    else if (arg === "--voices") opts.voices = (argv[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-    else if (arg === "--text") opts.text = argv[++i] ?? DEFAULT_TEXT;
-    else if (arg === "--rate") opts.rate = argv[++i] ?? "+0%";
+    else if (arg === "-h" || arg === "--help") opts.help = true;
+    else if (arg === "--locale") opts.locales = csv(value(++i, arg));
+    else if (arg === "--voices") opts.voices = csv(value(++i, arg));
+    else if (arg === "--text") opts.text = value(++i, arg);
+    else if (arg === "--rate") opts.rate = value(++i, arg);
+    else throw new Error(`unknown argument: ${arg}`);
   }
   return opts;
 }
@@ -124,7 +152,17 @@ function run(cmd: string, args: string[]): Promise<number> {
 }
 
 async function main(): Promise<number> {
-  const opts = parseArgs(process.argv.slice(2));
+  let opts: Options;
+  try {
+    opts = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`preview-voices: ${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
+    return 2;
+  }
+  if (opts.help) {
+    console.log(USAGE);
+    return 0;
+  }
 
   // Resolve the target voice set.
   let voices: EdgeVoice[];

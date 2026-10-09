@@ -75,6 +75,12 @@ installer step). Takes effect on the next omp session in that repo.
 
 Runs `cli/echo mute`. Empty args toggle. Same machine-wide mute as the CLI.
 
+```text
+/echo-mode [speech|sounds|status]
+```
+
+Runs `cli/echo mode`. Global; survives restarts. `sounds` plays a request/done/generic notification sound instead of speech.
+
 ## Status command
 
 Inside omp:

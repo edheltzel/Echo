@@ -132,6 +132,13 @@ sets `visual_delivery: "native"` after one of those routes reports success. The 
 skips its AppleScript banner exactly once. See [`http-api.md`](http-api.md#native-terminal-visual-delivery)
 for terminal limits, tmux passthrough, SSH/headless behavior, and the adapter-level diagnostic.
 
+Inside Herdr (an adapter sees `HERDR_SOCKET_PATH`, or `HERDR_SESSION` under the Herdr config
+directory), the toast goes through Herdr's `notification.show` with `sound: "none"`, so Echo's
+voice or sound stays the only audio Echo adds. Outside Herdr nothing changes. Herdr still plays
+its own agent-state chime for background workspaces; to hear only Echo, turn it off in Herdr's
+`config.toml` with `ui.sound.enabled = false`, or per agent (`[ui.sound.agents] claude = "off"`).
+Echo never edits Herdr config.
+
 Run a direct adapter-client smoke from the adapter package root and from the terminal that owns
 the adapter's TTY (not from a pipe, SSH headless shell, or hook-protocol stdout):
 
@@ -284,10 +291,26 @@ For an isolated test instance, point `ECHO_CONFIG_FILE` at a scratch config cont
 The `/mute` endpoint contract and one-keystroke hotkey bindings (Raycast, Apple Shortcuts,
 Stream Deck) are in [`http-api.md`](http-api.md).
 
+### Sounds-only mode
+
+Sounds-only mode replaces spoken notifications with a short sound: request (an agent needs
+you), done (an agent finished), or generic (everything else). It is global and survives
+restarts. `/echo-mode` in a session is the same command:
+
+```bash
+cli/echo mode status     # Mode: speech|sounds
+cli/echo mode sounds     # play notification sounds, no speech
+cli/echo mode speech     # speak again (default)
+```
+
+`mute tts` also swaps speech for sounds; `mute all` stays silent. What plays when, and how
+to use your own sound files: [`what-echo-does.md`](what-echo-does.md#sounds-instead-of-speech).
+
 ## Replay
 
 `cli/echo replay [n]` re-speaks the last N lines that actually played (default 1, max 10).
-Muted, capture-held, dropped, and voice-disabled lines are not stored. Replay uses the same
+Muted, capture-held, dropped, voice-disabled, and sound-played lines are not stored. Replay
+speaks even in sounds-only mode. It uses the same
 play queue as `/notify` and does not fire a new banner.
 
 ```bash
@@ -387,5 +410,12 @@ pointing at dead paths.
 ## Legacy services
 
 The installer migrates the old `com.pai.voice-server` and `com.atlas.voicesystem`
-LaunchAgents onto `com.echo` (it unloads them and quarantines their plists). Do not
-reload them; if `status.sh` warns that one is still loaded, rerun the installer.
+LaunchAgents onto `com.echo` (it unloads them and quarantines their plists as
+`~/Library/LaunchAgents/<label>.plist.migrated-<timestamp>`), then prints a summary of what it
+migrated, the new log path, and each quarantined plist. Do not reload them; if `status.sh`
+warns that one is still loaded, rerun the installer.
+
+The legacy services are retired, not a rollback target: the quarantined plists are kept for
+reference only and must never be reloaded. To back out of Echo itself, run `cli/echo uninstall`
+(see [Uninstall](#uninstall)). A failed install or update already restores the previous Echo
+payload on its own when the new one does not pass its health check.

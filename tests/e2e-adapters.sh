@@ -17,6 +17,9 @@
 set -euo pipefail
 
 export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Adapter hooks below inherit this shell. Inside a Herdr pane these would route
+# their native visual delivery to the live Herdr server and pop a real notification.
+unset HERDR_SOCKET_PATH HERDR_SESSION HERDR_CONFIG_PATH
 
 # The production daemon's port. The test instance must never use it, and this
 # script must never send anything there.
@@ -47,13 +50,21 @@ export ECHO_CONFIG_FILE="${SCRATCH}/config.json"
 # neither read nor rewrite the operator's real mute state, capture state, audio
 # cache, lifecycle log, or voice config.
 export ECHO_MUTE_STATE_PATH="${SCRATCH}/mute.json"
+export ECHO_MODE_STATE_PATH="${SCRATCH}/mode.json"
 export ECHO_CAPTURE_STATE_PATH="${SCRATCH}/recording-state.json"
+export ECHO_PLAYBACK_STATE_PATH="${SCRATCH}/playback-state.json"
 export ECHO_AUDIO_CACHE_DIR="${SCRATCH}/audio-cache"
 export ECHO_AUDIO_LIFECYCLE_LOG="${SCRATCH}/audio-lifecycle.jsonl"
+export ECHO_RESOLUTION_LOG="${SCRATCH}/voice-resolution.jsonl"
 export ECHO_VOICE_EVENTS_LOG="${SCRATCH}/voice-events.jsonl"
 export ECHO_TTS_CACHE_DIR="${SCRATCH}/tts-cache"
 cp "${ROOT}/core/voices.json" "${SCRATCH}/voices.json"
 export VOICES_PATH="${SCRATCH}/voices.json"
+# The legacy macOS banner goes to a recorder, never /usr/bin/osascript, so the test
+# daemon puts nothing on the operator's screen; a recorded line proves it.
+BANNER_LOG="${SCRATCH}/banners.log"
+printf '#!/bin/bash\necho banner >> "%s"\n' "$BANNER_LOG" >"${SCRATCH}/fake-osascript"
+chmod +x "${SCRATCH}/fake-osascript"
 
 # Adapters address the daemon through this base, so both hosts under test point
 # at the isolated instance rather than the default :3246. Exported canonical
@@ -64,13 +75,17 @@ cat >"$ECHO_CONFIG_FILE" <<JSON
 {
   "PORT": $PORT,
   "ECHO_MUTE_STATE_PATH": "$ECHO_MUTE_STATE_PATH",
+  "ECHO_MODE_STATE_PATH": "$ECHO_MODE_STATE_PATH",
   "ECHO_CAPTURE_STATE_PATH": "$ECHO_CAPTURE_STATE_PATH",
+  "ECHO_PLAYBACK_STATE_PATH": "$ECHO_PLAYBACK_STATE_PATH",
   "ECHO_AUDIO_CACHE_DIR": "$ECHO_AUDIO_CACHE_DIR",
   "ECHO_AUDIO_LIFECYCLE_LOG": "$ECHO_AUDIO_LIFECYCLE_LOG",
+  "ECHO_RESOLUTION_LOG": "$ECHO_RESOLUTION_LOG",
   "ECHO_VOICE_EVENTS_LOG": "$ECHO_VOICE_EVENTS_LOG",
   "ECHO_TTS_CACHE_DIR": "$ECHO_TTS_CACHE_DIR",
   "VOICES_PATH": "$VOICES_PATH",
-  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL"
+  "ECHO_DAEMON_URL": "$ECHO_DAEMON_URL",
+  "ECHO_OSASCRIPT_BIN": "$SCRATCH/fake-osascript"
 }
 JSON
 
@@ -154,15 +169,57 @@ bun -e '
 # ---------------------------------------------------------------------------
 # 4. Jcode lifecycle hook: explicit voice line reaches the isolated daemon.
 # ---------------------------------------------------------------------------
+# The hook exits 0 even when it skips, so prove the notify reached the daemon.
 JCODE_HOOK_EVENT=turn_end \
 JCODE_HOOK_STATUS=ok \
-JCODE_HOOK_TRANSCRIPT=$'assistant: 🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+JCODE_HOOK_LAST_ASSISTANT_TEXT=$'Done.\n\n🗣️ Echo Test engaged. Beep, boop, bop. Jcode path silent.' \
+ECHO_VOICE_ENABLED=false \
 ECHO_DAEMON_URL="http://localhost:${PORT}" \
   bun run adapters/jcode/hook.ts
-echo "  jcode adapter -> 202 accepted (silent), executable hook extracted the voice line"
+for _ in {1..20}; do grep -q 'source=jcode .*Notification accepted' "$LOG" && break; sleep 0.1; done
+grep -q 'source=jcode .*Notification accepted' "$LOG" || fail "the Jcode hook never notified the isolated daemon"
+grep -q 'source=jcode .*Notification: .*(voice: false' "$LOG" || fail "the Jcode notification was not silent"
+echo "  jcode adapter -> notification accepted (silent), executable hook extracted the voice line"
 
 # ---------------------------------------------------------------------------
-# 5. Optional audible pass - only after isolation is proven above.
+# 5. OpenCode plugin: the real entry, driven by a client shaped like the v1 SDK
+#    OpenCode passes (`{ path: { id } }` in, `{ data }` out). Two idles for one
+#    turn fired un-awaited (as OpenCode does on an abort) reach the daemon once;
+#    a streamed-chunk event never queries the session; a subagent stays quiet.
+# ---------------------------------------------------------------------------
+HOME="$SCRATCH" ECHO_VOICE_ENABLED=false bun -e '
+  const { EchoVoice } = await import(`${process.env.ROOT}/adapters/opencode/plugin.ts`);
+  const sessions = { ses_root: {}, ses_child: { parentID: "ses_root" } };
+  let lookups = 0;
+  const client = { session: {
+    get: async ({ path }) => { lookups += 1; return { data: { id: path.id, ...sessions[path.id] } }; },
+    messages: async () => ({ data: [{ info: { role: "assistant", id: "msg_e2e" },
+      parts: [{ type: "text", text: "🗣️ OpenCode: Echo Test engaged. Beep, boop, bop. OpenCode path silent." }] }] }),
+  } };
+  const notified = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const res = await realFetch(url, init);
+    if (String(url).endsWith("/notify")) notified.push({ status: res.status, body: JSON.parse(init.body) });
+    return res;
+  };
+  const hooks = await EchoVoice({ client, directory: process.env.HOME });
+  await hooks.event({ event: { type: "message.part.delta", properties: { sessionID: "ses_root", delta: "Ech" } } });
+  if (lookups !== 0) throw new Error(`a streamed chunk queried the session ${lookups} time(s)`);
+  const idle = (id) => hooks.event({ event: { type: "session.idle", properties: { sessionID: id } } });
+  await Promise.all([idle("ses_root"), idle("ses_root")]);
+  await idle("ses_child");
+  if (notified.length !== 1) throw new Error(`expected exactly 1 notify, got ${notified.length}`);
+  const [{ status, body }] = notified;
+  if (status !== 202) throw new Error(`expected 202, got ${status}`);
+  if (body.source !== "opencode" || body.session_id !== "ses_root" || body.voice_enabled !== false) {
+    throw new Error(`bad wire body ${JSON.stringify(body)}`);
+  }
+  console.log("  opencode plugin -> 202 once (silent); concurrent idles deduped, chunk skipped, subagent suppressed");
+' || fail "OpenCode plugin did not notify the isolated daemon exactly once"
+
+# ---------------------------------------------------------------------------
+# 6. Optional audible pass - only after isolation is proven above.
 # ---------------------------------------------------------------------------
 if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""
@@ -183,5 +240,9 @@ if [ "$AUDIBLE" -eq 1 ]; then
   [ "$played" = "1" ] || fail "no playback recorded in ${ECHO_AUDIO_LIFECYCLE_LOG}"
   echo "  audible line played on :${PORT}, recorded in the isolated lifecycle log"
 fi
+
+for _ in {1..20}; do [ -s "$BANNER_LOG" ] && break; sleep 0.1; done
+[ -s "$BANNER_LOG" ] || fail "no banner went through the scratch ECHO_OSASCRIPT_BIN recorder"
+echo "  banners -> scratch recorder ($(wc -l <"$BANNER_LOG" | tr -d ' ') recorded), none on screen"
 
 echo "OK adapter e2e passed on :${PORT} (production :${PRODUCTION_PORT} untouched)"

@@ -112,14 +112,15 @@ at runtime; invalid values use the defaults below.
 
 | Group | Properties | Defaults / notes |
 | --- | --- | --- |
-| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say |
+| Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_OSASCRIPT_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say; /usr/bin/osascript |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
 | Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; startup names stay nameless unless ECHO_VOICE_SAY_NAME / daidentity.sayName is true; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
 | Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
-| State and logs | ECHO_MUTE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths; log caps default to 1 MB |
+| Notification sounds | ECHO_SOUND_REQUEST, ECHO_SOUND_DONE, ECHO_SOUND_GENERIC | Audio files for the request, done, and generic sounds; unset uses Echo's bundled sounds in core/sounds/. A file that fails to play falls back to a macOS system sound |
+| State and logs | ECHO_MUTE_STATE_PATH, ECHO_MODE_STATE_PATH, ECHO_CAPTURE_STATE_PATH, ECHO_PLAYBACK_STATE_PATH, ECHO_AUDIO_LIFECYCLE_LOG, ECHO_AUDIO_LIFECYCLE_LOG_MAX_BYTES, ECHO_RESOLUTION_LOG, ECHO_RESOLUTION_LOG_MAX_BYTES, ECHO_VOICE_EVENTS_LOG | Existing platform-specific paths (the mode file sits beside mute.json); playback signal defaults to ~/.local/state/echo/playback-state.json; log caps default to 1 MB |
 | Adapter endpoint | ECHO_DAEMON_URL, ECHO_NOTIFY_URL | Adapter-side endpoint settings; otherwise adapters use <http://localhost:3246> |
 | Reserved | ECHO_VOICE_SURFACES | Schema-reserved; current runtime code does not read it |
 | Voice ask (coordinator) | ECHO_CONVERSE_PORT, ECHO_CONVERSE_URL, ECHO_CONVERSE_BOOKING_LOCK, ECHO_CONVERSE_LEASE_MS, ECHO_CONVERSE_LOG_PATH | 32468 (keypad ECHOV; core keeps 3246), <http://localhost:32468>, ~/.local/state/echo/converse/booking.lock, capture + transcription budget plus slack (120000 at the shipped defaults), ~/Library/Logs/echo-converse.log |
@@ -130,6 +131,10 @@ Settings whose behavior is not obvious from the name:
 - **ECHO_SAY_BIN** points the macOS `say` fallback provider at a different executable. It is
   the last rung of the provider chain, so this is the knob for wrapping it (a logging shim, a
   routed audio device, or a no-op for a run that must stay silent). Unset means `/usr/bin/say`.
+
+- **ECHO_OSASCRIPT_BIN** points the legacy macOS notification banner at a different executable,
+  called with `-e <AppleScript>`. The smoke and e2e scripts and `bun test` point it at a no-op
+  so isolated test daemons never show a banner. Unset means `/usr/bin/osascript`.
 
 - **ECHO_VOICE_SAY_NAME** is the config.json form of `daidentity.sayName`: when true, adapters
   use the named default startup pool and fill `{name}`. Unset or false stays nameless. A
@@ -175,6 +180,17 @@ Settings whose behavior is not obvious from the name:
   from a live pid, voice lines are skipped at speak time (`held-for-capture` disposition;
   the banner is unaffected). A missing or corrupt file reads as idle, and an **empty string
   disables the guard entirely**.
+- **ECHO_PLAYBACK_STATE_PATH** is the playback signal Echo writes for other processes
+  (default `~/.local/state/echo/playback-state.json`). The default hardcodes
+  `~/.local/state` and does not consult `XDG_STATE_HOME`, so an external reader
+  can poll one stable path. The file is
+  `{ "state": "idle" | "speaking", "queue_depth": <n>, "pid": <daemon pid>, "updated_at": "<ISO>" }`.
+  `queue_depth` is the queued-not-in-flight count, the same number `GET /health`
+  reports as `play_queue.depth`. Echo writes `speaking` when a queued job starts
+  and `idle` when it settles, and refreshes `queue_depth` on enqueue and drop.
+  A missing, corrupt, or wrong-shaped file reads as idle. A dead `pid` reads as
+  idle, so a crashed daemon cannot look like it is still speaking. An **empty
+  string disables writes entirely**.
 - **ECHO_DAEMON_URL** is adapter-side and sets `POST /notify`, `POST /notify/personality` and
   `GET /voices` at once - and wins over `ECHO_NOTIFY_URL` for all of them - so pointing a host
   at a second instance can never split notify from the read endpoints

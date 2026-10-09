@@ -10,13 +10,14 @@
 // a crash. Writes are atomic (temp + rename).
 //
 // Scopes (role-scoped keys, no migration):
-//   tts - speaker/playback only. Notifications still accepted and logged.
+//   tts - speech only: a line with a sound slot plays its notification sound
+//         instead (core/server.ts). Notifications still accepted and logged.
 //   mic - capture / converse / echo_ask booking paths only. TTS may speak.
 //   all - both (the historical mute). Missing scope on a muted file is `all`.
 //
-// `muted` stays the speaker flag: true when scope is tts or all. Mic-only
+// `muted` stays the speech flag: true when scope is tts or all. Mic-only
 // stores muted=false with scope=mic so existing /health.mute.muted readers
-// still mean "the speaker is off".
+// still mean "speech is off".
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -119,11 +120,16 @@ export function readMuteState(path: string = resolveMuteStatePath()): MuteState 
   return activeMute(until, scope);
 }
 
-export function writeMuteState(state: MuteState, path: string = resolveMuteStatePath()): void {
+/** Atomic JSON state write (temp + rename): no partial-file window. */
+export function writeStateFile(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state));
+  writeFileSync(tmp, JSON.stringify(value));
   renameSync(tmp, path); // atomic on the same filesystem - no partial-file window
+}
+
+export function writeMuteState(state: MuteState, path: string = resolveMuteStatePath()): void {
+  writeStateFile(path, state);
 }
 
 export function setMuteState(

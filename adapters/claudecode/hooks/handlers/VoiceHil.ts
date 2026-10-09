@@ -103,6 +103,7 @@ export async function handleHil(input: ClaudeHilInput, deps: HilSpeakDeps = {}):
     session_id: sessionId,
     source: "claudecode",
     speak_mode: detectSpeakMode(message),
+    slot: "request",
   };
   if (identity.mainDAVoiceID) payload.voice_id = identity.mainDAVoiceID;
 

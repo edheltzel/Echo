@@ -1,5 +1,6 @@
 import { defaultStartupGreetings } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { booleanEnv } from "@echo/shared/persona.ts";
 
 export interface JcodeVoiceConfig {
   endpoint: string;
@@ -11,14 +12,6 @@ export interface JcodeVoiceConfig {
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
-}
-
-function booleanEnv(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
 }
 
 export function loadJcodeVoiceConfig(
@@ -41,6 +34,3 @@ export function loadJcodeVoiceConfig(
   };
 }
 
-export function pickStartupCatchphrase(pool: string[], random: () => number = Math.random): string {
-  return pool[Math.floor(random() * pool.length)];
-}

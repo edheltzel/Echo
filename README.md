@@ -120,11 +120,11 @@ cli/echo install --adapter omp          # oh-my-pi
 cli/echo install --adapter jcode
 cli/echo install --adapter grok
 cli/echo install --adapter codex
-cli/echo install --adapter opencode    # mute only
+cli/echo install --adapter opencode
 cli/echo install --adapter mcp        # optional one-shot voice ask for Claude Code
 ```
 
-Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
+Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. `/echo-mode [speech|sounds|status]` is the same `cli/echo mode` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 
 | I want to… | Read |
 | --- | --- |

@@ -1,4 +1,4 @@
-import { createEchoMuteCommand, type MuteRunner } from "./mute-command.ts";
+import { createEchoModeCommand, createEchoMuteCommand, type EchoCliRunner, type MuteRunner } from "./mute-command.ts";
 import {
   createEchoVoiceCommand,
   type EchoVoiceCommand,
@@ -8,7 +8,7 @@ import {
 // Echo's extension surface. New harnesses and new features plug in through the
 // seams already proven in-tree: Pi/omp in-process registerCommand, Claude's thin
 // plugin (hooks + slash commands), Jcode/Grok/Codex lifecycle hooks, OpenCode's
-// mute-only owned symlink, MCP's stdio server, and doctor/env via echo-env.ts.
+// plugin event hook plus mute and mode commands, MCP's stdio server, and doctor/env via echo-env.ts.
 //
 // This is not a second plugin loader and it is not imported by core/. The daemon
 // stays host-neutral. Install still delegates to each adapter's own reconciler.
@@ -30,7 +30,7 @@ export const HARNESS_IDS = [
 export type HarnessId = (typeof HARNESS_IDS)[number];
 export type AdapterFlag = "none" | HarnessId;
 
-export type FeatureId = "notify" | "mute" | "persona" | "ask" | "greeting";
+export type FeatureId = "notify" | "mute" | "mode" | "persona" | "ask" | "greeting";
 
 export type HarnessKind = "extension" | "hooks" | "mcp" | "commands-only";
 
@@ -58,6 +58,8 @@ export type HarnessManifest = {
   features: readonly FeatureId[];
   /** Slash-command / skill mute file, repo-relative. Extension hosts use registerEchoMute instead. */
   mutePath?: string;
+  /** Slash-command / skill mode file, repo-relative. Extension hosts use registerEchoMode instead. */
+  modePath?: string;
   /** Doctor heading when this harness is grouped under another host (MCP under Claude Code). */
   doctorGroup?: string;
 };
@@ -73,8 +75,9 @@ export const HARNESSES: readonly HarnessManifest[] = [
       { script: "adapters/claudecode/restore-hooks.ts", label: "Adapter registration" },
       { script: "adapters/claudecode/reconcile-commands.ts", label: "Slash commands" },
     ],
-    features: ["notify", "mute", "persona", "greeting"],
+    features: ["notify", "mute", "mode", "persona", "greeting"],
     mutePath: "adapters/claudecode/commands/echo-mute.md",
+    modePath: "adapters/claudecode/commands/echo-mode.md",
   },
   {
     id: "jcode",
@@ -94,8 +97,9 @@ export const HARNESSES: readonly HarnessManifest[] = [
     entry: "adapters/grok/hook.ts",
     requiredCli: "grok",
     reconcile: [{ script: "adapters/grok/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "mute", "greeting"],
+    features: ["notify", "mute", "mode", "greeting"],
     mutePath: "adapters/grok/skills/echo-mute/SKILL.md",
+    modePath: "adapters/grok/skills/echo-mode/SKILL.md",
   },
   {
     id: "codex",
@@ -105,8 +109,9 @@ export const HARNESSES: readonly HarnessManifest[] = [
     entry: "adapters/codex/hook.ts",
     requiredCli: "codex",
     reconcile: [{ script: "adapters/codex/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "mute", "greeting"],
+    features: ["notify", "mute", "mode", "greeting"],
     mutePath: "adapters/codex/skills/echo-mute/SKILL.md",
+    modePath: "adapters/codex/skills/echo-mode/SKILL.md",
   },
   {
     id: "mcp",
@@ -129,7 +134,7 @@ export const HARNESSES: readonly HarnessManifest[] = [
     converse: true,
     hostInstall: { bin: "pi", args: ["install", "adapters/pi"] },
     reconcile: [{ script: "adapters/pi/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "mute", "persona", "ask", "greeting"],
+    features: ["notify", "mute", "mode", "persona", "ask", "greeting"],
   },
   {
     id: "omp",
@@ -140,17 +145,19 @@ export const HARNESSES: readonly HarnessManifest[] = [
     requiredCli: "omp",
     converse: true,
     reconcile: [{ script: "adapters/omp/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "mute", "persona", "ask", "greeting"],
+    features: ["notify", "mute", "mode", "persona", "ask", "greeting"],
   },
   {
     id: "opencode",
     displayName: "OpenCode",
     packageDir: "adapters/opencode",
-    kind: "commands-only",
+    kind: "hooks",
+    entry: "adapters/opencode/plugin.ts",
     requiredCli: "opencode",
-    reconcile: [{ script: "adapters/opencode/reconcile.ts", label: "Mute command" }],
-    features: ["mute"],
+    reconcile: [{ script: "adapters/opencode/reconcile.ts", label: "Adapter registration" }],
+    features: ["notify", "mute", "mode", "persona", "greeting"],
     mutePath: "adapters/opencode/commands/echo-mute.md",
+    modePath: "adapters/opencode/commands/echo-mode.md",
   },
 ];
 
@@ -166,6 +173,12 @@ export const FEATURES = {
     module: "@echo/shared/extension.ts",
     register: "registerEchoMute",
     cli: "cli/echo mute",
+  },
+  mode: {
+    id: "mode",
+    module: "@echo/shared/extension.ts",
+    register: "registerEchoMode",
+    cli: "cli/echo mode",
   },
   persona: {
     id: "persona",
@@ -212,6 +225,14 @@ export function registerEchoMute(
   opts?: { cliPath?: string; run?: MuteRunner },
 ): void {
   host.registerCommand("echo-mute", createEchoMuteCommand(opts));
+}
+
+/** Register `/echo-mode` so it shells out to bash `cli/echo mode`. No second mode path. */
+export function registerEchoMode(
+  host: CommandHost,
+  opts?: { cliPath?: string; run?: EchoCliRunner },
+): void {
+  host.registerCommand("echo-mode", createEchoModeCommand(opts));
 }
 
 /** Register `/echo-voice` on a command host. Claude's analog is the markdown slash command. */

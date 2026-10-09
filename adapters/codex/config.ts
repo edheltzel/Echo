@@ -1,12 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  defaultStartupGreetings,
-  personaGreetingFields,
-  resolvePersonaStartupGreetings,
-} from "@echo/shared/greeting.ts";
+import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
+import { applyPersonaOverride, booleanEnv, type EchoPersonaOverride } from "@echo/shared/persona.ts";
 
 export interface CodexVoiceConfig {
   endpoint: string;
@@ -18,21 +15,6 @@ export interface CodexVoiceConfig {
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
   speakCompletions: boolean;
-}
-
-export interface EchoPersonaOverride {
-  personaName?: string;
-  voiceId?: string;
-  startupCatchphrases?: string[];
-  sayName?: boolean;
-}
-
-function booleanEnv(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
 }
 
 function defaultReadFile(path: string): string | null {
@@ -85,26 +67,6 @@ export function loadProjectPersona(
   return Object.keys(override).length > 0 ? override : null;
 }
 
-export function applyPersonaOverride(
-  base: CodexVoiceConfig,
-  override: EchoPersonaOverride | null,
-): CodexVoiceConfig {
-  if (!override) return base;
-  const sayName = override.sayName ?? base.sayName;
-  const startupCatchphrases = resolvePersonaStartupGreetings(
-    base.startupCatchphrases,
-    override.startupCatchphrases,
-    sayName,
-  );
-  return {
-    ...base,
-    personaName: override.personaName ?? base.personaName,
-    voiceId: override.voiceId ?? base.voiceId,
-    sayName,
-    startupCatchphrases,
-  };
-}
-
 export function loadCodexVoiceConfig(
   env: Record<string, string | undefined> = process.env,
   cwd: string | undefined = process.cwd(),
@@ -123,8 +85,4 @@ export function loadCodexVoiceConfig(
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
   return applyPersonaOverride(base, loadProjectPersona(cwd));
-}
-
-export function pickStartupCatchphrase(pool: string[], random: () => number = Math.random): string {
-  return pool[Math.floor(random() * pool.length)];
 }

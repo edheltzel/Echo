@@ -43,7 +43,9 @@ of a path string, not an import - so the guard pairs an import check with a stri
 
 `@echo/shared` is also the single owner of invariants both sides enforce: the edge-tts voice
 grammar lives in `shared/edge-voice.ts` and `core/server.ts` imports it, rather than each
-keeping a copy in sync. `shared/` may never import `core/` - core imports shared, so the
+keeping a copy in sync. Persona overlay helpers (`applyPersonaOverride`, `booleanEnv`,
+`shouldSuppressVoice`) live in `shared/persona.ts`; greeting pick lives in
+`shared/greeting.ts`. `shared/` may never import `core/` - core imports shared, so the
 dependency runs one way only.
 
 ## Registration contract - reconcile and prune (issue #77)
@@ -69,7 +71,7 @@ A conforming registration:
 
 Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook entries in
 `~/.claude/settings.json`) and `adapters/claudecode/reconcile-commands.ts` (the
-`echo-voice.md` and `echo-mute.md` symlinks in `~/.claude/commands/`),
+`echo-voice.md`, `echo-mute.md`, and `echo-mode.md` symlinks in `~/.claude/commands/`),
 `adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
 `adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`,
 #18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
@@ -77,11 +79,11 @@ regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapt
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
 commands into both. Codex and OpenCode follow the same contract.
 
-Claude Code also ships a mute-only plugin at `adapters/claudecode/plugin/`. It is not a
+Claude Code also ships a mute and mode plugin at `adapters/claudecode/plugin/`. It is not a
 registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
-stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin command is
-`/echo:echo-mute`. Bare `/echo-mute` remains the installer slash command. Both shell to
-`cli/echo mute` via PATH or the current checkout.
+stay on `restore-hooks.ts`). Claude namespaces plugin skills, so the plugin commands are
+`/echo:echo-mute` and `/echo:echo-mode`. Bare `/echo-mute` and `/echo-mode` remain the installer
+slash commands. All shell to `cli/echo mute` / `cli/echo mode` via PATH or the current checkout.
 
 The shipped id list and feature register hooks live in [`../shared/extension.ts`](../shared/extension.ts).
 That catalog is the extension surface. It is not a second plugin loader: `install.sh` still
@@ -94,10 +96,10 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
-| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoVoice`, `registerEchoAskTool`. |
-| `hooks` | Claude Code, Jcode, Grok, Codex | Out-of-process lifecycle interceptors plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`, `registerEchoAskTool`. |
+| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
-| `commands-only` | OpenCode | Mute-only owned symlink. |
+
 
 Feature register hooks (reuse these; do not add a second factory):
 
@@ -105,6 +107,7 @@ Feature register hooks (reuse these; do not add a second factory):
 | --- | --- | --- |
 | notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
 | mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
+| mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
 | ask | `registerEchoAskTool` (`@echo/converse/host-tool.ts`) | Feature-detect the host tool API. |
 | greeting | `applyNameToken` / shared greeting pool | Adapter owns when to speak it. |
@@ -131,7 +134,7 @@ Subtract first: copy the closest as-built adapter rather than a new runtime.
 
 Pi/omp is the plugin-first reference. Claude Code is the thin-plugin reference (hooks +
 slash commands, no in-process SDK). Jcode is the lifecycle-hook reference. OpenCode is the
-mute-only reference.
+in-process plugin `event` hook reference.
 
 ## How to add a feature
 
@@ -140,16 +143,21 @@ every host needs a new HTTP contract.
 
 1. Put host-neutral behavior in `@echo/shared` (or `@echo/converse` for ask). Export a
    register function, not a parallel plugin table.
-2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoVoice` /
+2. Command hosts (Pi, omp): call `registerEchoMute` / `registerEchoMode` / `registerEchoVoice` /
    `registerEchoAskTool` from the extension entry. Feature-detect host APIs; missing
    surface must no-op without taking the adapter down.
 3. Slash-command / skill hosts: add a file that shells out to the existing CLI (mute is
-   `bash cli/echo mute`) and register it with `planOwnedSymlink` / the host reconciler.
+   `bash cli/echo mute`, mode is `bash cli/echo mode`) and register it with `planOwnedSymlink` / the host reconciler.
 4. Name the feature on each opting-in harness in `HARNESSES[].features`.
 5. If the feature needs configuration, read it through `loadEchoEnvironment` so doctor/env
    stay one surface.
 
-Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path.
+Mute must keep working: `/echo-mute` and `cli/echo mute` are the same path. `/echo-mode` and
+`cli/echo mode` follow the same rule; every harness that ships `/echo-mute` ships `/echo-mode`.
+
+Notify callers set `slot` on `/notify` so sounds-only mode plays the right sound: `request`
+for a needs-input, approval, or attention announce, `done` for a turn completion, nothing
+for greetings (the daemon reads that as `generic`). See [`http-api.md`](http-api.md#post-mode).
 
 ## Prove
 
@@ -173,6 +181,16 @@ then the adapter-owned controlling TTY. The TTY route is deliberately conservati
 adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
 `allow-passthrough` to be read as `on` or `all` before wrapping the OSC sequence. SSH/headless
 contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
+
+Herdr 0.9.3 (socket protocol 22) names the agent in a pane via `agent` and `display_agent` on
+`AgentInfo` and `PaneInfo` (`agent.get`, `agent.list`, `pane.current`). `agent_session` carries
+only `agent`, `kind` (`id` or `path`), `source`, and `value`. No request, response, or event has
+a parent, spawn, or lineage field, and pane env (`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID`,
+`HERDR_WORKSPACE_ID`, `HERDR_BIN_PATH`, `HERDR_SOCKET_PATH`) locates the pane, not a parent
+agent. Echo's notify path calls that socket only for `notification.show` and already stamps
+`source` on `/notify`, so reading Herdr's agent label would add a round trip for a host the
+adapter already names. Spawned-agent attribution stays blocked until Herdr exposes a parent or
+spawn field.
 
 The terminal protocol matrix, the tmux passthrough contract, and the exact
 `visual_delivery: "native"` marker rule are maintained in
@@ -219,7 +237,7 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
   payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
-  (`/echo-mute` → bash `cli/echo mute`) via `adapters/grok/reconcile.ts`. Sibling files (for
+  and `~/.grok/skills/echo-mode` (bash `cli/echo mute` / `cli/echo mode`) via `adapters/grok/reconcile.ts`. Sibling files (for
   example firstmate's `fm-turn-end.json`) are never rewritten or pruned. `GROK_HOME` /
   `ECHO_GROK_HOOKS_DIR` redirect the target for tests. Wired into `install.sh` as `--adapter grok`.
 
@@ -227,10 +245,16 @@ Fixtures under `tests/adapters/grok/fixtures/` were captured from the installed
 `grok 1.0.0` CLI; where public docs and the installed surface disagree, the installed
 surface wins.
 
-## OpenCode adapter - mute only
+## OpenCode adapter - plugin (#17, #129)
 
-`adapters/opencode/` registers `/echo-mute` (`~/.config/opencode/commands/echo-mute.md` →
-bash `cli/echo mute`). No lifecycle voice hooks.
+`adapters/opencode/plugin.ts` is loaded from an owned `~/.config/opencode/plugins/echo-voice.ts`
+symlink; `/echo-mute` and `/echo-mode` are owned `commands/echo-mute.md` and `commands/echo-mode.md`
+symlinks. It speaks on `session.idle`,
+greets on `session.created` unless `ECHO_VOICE_GREET_ON_START` is `false`, and stays silent for
+subagents (`parentID`), for sessions the v1 SDK client cannot read, and when the newest
+assistant message has no text. Two `session.idle` events for one turn speak once. Persona:
+`daidentity` merged across every config file OpenCode merges. Detail:
+[`adapters/opencode/README.md`](../adapters/opencode/README.md).
 
 ## Live-session voice suppression - omp and Codex
 

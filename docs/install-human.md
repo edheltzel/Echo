@@ -10,17 +10,17 @@ for when it speaks and how mute works in a shared office.
 The installer writes a macOS LaunchAgent for the universal core server and optionally registers one host adapter:
 
 - **Core only** - any process can POST to `/notify`.
-- **Claude Code adapter** - lifecycle hooks speak, with `/echo-voice` and `/echo-mute`
-  slash commands. A mute-only plugin at `adapters/claudecode/plugin/` is optional
-  (`/echo:echo-mute`; bare `/echo-mute` stays the installer command) and does not
-  replace this install.
+- **Claude Code adapter** - lifecycle hooks speak, with `/echo-voice`, `/echo-mute`, and `/echo-mode`
+  slash commands. A mute and mode plugin at `adapters/claudecode/plugin/` is optional
+  (`/echo:echo-mute`, `/echo:echo-mode`; bare `/echo-mute` and `/echo-mode` stay the installer
+  commands) and does not replace this install.
 - **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
-- **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions; `/echo-mute` is a skill.
-- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` is a skill.
+- **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions; `/echo-mute` and `/echo-mode` are skills.
+- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` and `/echo-mode` are skills.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
-- **OpenCode adapter** - mute-only `/echo-mute` command.
+- **OpenCode adapter** - OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands.
 
 ## Prerequisites
 
@@ -65,17 +65,17 @@ cli/echo install --adapter claudecode    # or: bash scripts/install.sh --adapter
 ```
 
 This installs the same core server, re-applies Claude Code hook registrations through
-`adapters/claudecode/restore-hooks.ts`, and reconciles the `echo-voice.md` and `echo-mute.md`
-symlinks in `~/.claude/commands/` through `adapters/claudecode/reconcile-commands.ts`.
-The reconciler preserves a non-Echo file or symlink occupying either command name and aborts
+`adapters/claudecode/restore-hooks.ts`, and reconciles the `echo-voice.md`, `echo-mute.md`, and
+`echo-mode.md` symlinks in `~/.claude/commands/` through `adapters/claudecode/reconcile-commands.ts`.
+The reconciler preserves a non-Echo file or symlink occupying any of those command names and aborts
 the install instead of overwriting it.
 
-A mute-only Claude Code plugin also lives at `adapters/claudecode/plugin/`. It is not a
+A mute and mode Claude Code plugin also lives at `adapters/claudecode/plugin/`. It is not a
 substitute for this install: hooks stay on `restore-hooks.ts`, and the plugin does not
 write a LaunchAgent. Load it with `claude --plugin-dir adapters/claudecode/plugin` after
 `claude plugin validate adapters/claudecode/plugin --strict`. Claude namespaces plugin
-skills, so the plugin command is `/echo:echo-mute`. Bare `/echo-mute` stays the
-installer command from this step. Both run `cli/echo mute`.
+skills, so the plugin commands are `/echo:echo-mute` and `/echo:echo-mode`. Bare `/echo-mute`
+and `/echo-mode` stay the installer commands from this step. They run `cli/echo mute` and `cli/echo mode`.
 
 ## Add the Pi adapter
 
@@ -206,6 +206,17 @@ curl -fsS http://localhost:3246/health
 ```
 
 Day-to-day start, stop, restart, and status live in [operations.md](operations.md).
+
+### Next steps
+
+1. Hear it: [Hear your first spoken notification](getting-started.md).
+2. Pick a voice: [Choose voices (audition)](#choose-voices-audition), then `cli/echo update`.
+3. Give a project its own name and voice: [Give a project its own persona](#give-a-project-its-own-persona).
+4. Learn the quiet switches: [Silence Echo temporarily](#silence-echo-temporarily).
+
+Install from the main checkout, not a git worktree. The daemon runs from its own copy, but
+adapter registrations point at the checkout and break when a worktree is removed; the installer
+warns when it detects one.
 
 ## Choose voices (audition)
 

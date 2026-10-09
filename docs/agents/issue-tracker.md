@@ -3,7 +3,8 @@
 This repo uses two surfaces:
 
 - **GitHub Issues** - the canonical, shared tracker. Anything ready for an AFK agent or
-  another person lives here. Use the `gh` CLI for all operations.
+  another person lives here. Use `gh-axi` (agent-optimized wrapper over `gh`) for issue and
+  PR operations; fall back to raw `gh` only for what `gh-axi` does not wrap.
 - **Local markdown** under `.scratch/<feature-slug>/` - a drafting scratchpad for breaking
   down work before it's ready to publish.
 
@@ -11,14 +12,20 @@ Default flow: draft locally, promote to GitHub when the issue is specified enoug
 
 ## GitHub conventions
 
-- **Create**: `gh issue create --title "..." --body "..."` (heredoc for multi-line bodies).
-- **Read**: `gh issue view <number> --comments`.
-- **List**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with `--label` / `--state` filters.
-- **Comment**: `gh issue comment <number> --body "..."`
-- **Labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+Run the installed binary (`gh-axi`, from Homebrew), never `npx gh-axi`: this repo is Bun
+only (AGENTS.md). `gh-axi <command> --help` is the current flag reference.
 
-`gh` infers the repo from `git remote -v` when run inside the clone.
+- **Create**: `gh-axi issue create --title "..." --body-file <path>`
+- **Read**: `gh-axi issue view <number> --comments` (`--full` for untruncated bodies)
+- **List**: `gh-axi issue list --state open` with `--label` / `--state` / `--fields` filters
+- **Comment**: `gh-axi issue comment <number> --body "..."`
+- **Labels**: `gh-axi issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Close**: `gh-axi issue close <number> --reason completed|not_planned --comment "..."`
+- **PRs**: `gh-axi pr view|create|merge ...`
+
+Both tools infer the repo from `git remote -v` when run inside the clone. Issues only
+auto-close from `Closes #N` when a PR merges into the default branch (`master`); a PR into
+`dev` needs the issue closed by hand with a comment naming the PR.
 
 ## Local markdown conventions
 
@@ -36,5 +43,5 @@ reference the local draft if one exists).
 
 ## When a skill says "fetch the relevant ticket"
 
-If given a GitHub issue number, run `gh issue view <number> --comments`. If given a local
+If given a GitHub issue number, run `gh-axi issue view <number> --comments`. If given a local
 path, read that file.

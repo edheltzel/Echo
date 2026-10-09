@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { applyPersonaOverride } from "../../../shared/persona.ts";
 import {
-  applyPersonaOverride,
   loadGrokVoiceConfig,
   loadProjectPersona,
   type GrokVoiceConfig,

@@ -25,6 +25,8 @@ import { join } from "node:path";
 // path can assert zero provider invocations. Swappable impl restored in afterEach.
 const realSpawn = realChildProcess.spawn;
 let spawnedCommands: string[] = [];
+// tests/preload.ts points the banner at a no-op; core spawns that, not osascript.
+const BANNER_BIN = process.env.ECHO_OSASCRIPT_BIN!;
 let spawnImpl: (...args: any[]) => any = realSpawn;
 
 function stubSpawn(cmd: string): any {
@@ -279,7 +281,7 @@ describe("issue #83 - speech-stage mute gate", () => {
     // banner (osascript) is visual, not audio, and still fires.
     expect(spawnedCommands).not.toContain("/usr/bin/say");
     expect(spawnedCommands).not.toContain("/usr/bin/afplay");
-    expect(spawnedCommands).toContain("/usr/bin/osascript");
+    expect(spawnedCommands).toContain(BANNER_BIN);
 
     // R2: drop-off log still records the voice resolution, tagged muted.
     const lines = readFileSync(HTTP_LOG, "utf-8").split("\n").filter(Boolean);

@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { EchoEnvironment } from "./echo-env.ts";
+import type { NotifySlot } from "./notify-slot.ts";
 
 export const HIL_KINDS = ["question", "approval", "attention"] as const;
 export type HilKind = (typeof HIL_KINDS)[number];
@@ -249,7 +250,7 @@ export async function maybeSpeakHil(opts: {
   personaName: string;
   preferredName?: string;
   dedupe: HilDedupe;
-  speak: (message: string) => Promise<boolean>;
+  speak: (message: string, slot: NotifySlot) => Promise<boolean>;
 }): Promise<boolean> {
   const candidate = classifyExtensionHil(opts.event, opts.eventName);
   if (!candidate) return false;
@@ -269,7 +270,7 @@ export async function maybeSpeakHil(opts: {
     prompt: candidate.prompt,
   });
   try {
-    const ok = await opts.speak(message);
+    const ok = await opts.speak(message, "request");
     if (!ok) opts.dedupe.release(key);
     return ok;
   } catch (error) {

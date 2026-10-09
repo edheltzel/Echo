@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken } from "@echo/shared/greeting.ts";
+import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
-import { loadJcodeVoiceConfig, pickStartupCatchphrase, type JcodeVoiceConfig } from "./config.ts";
+import { loadJcodeVoiceConfig, type JcodeVoiceConfig } from "./config.ts";
 
 export interface JcodeHookEnvironment {
   JCODE_HOOK_EVENT?: string;
@@ -44,8 +44,9 @@ export async function handleJcodeHookResult(
 
   if (!message) return "skipped";
 
+  const slot = env.JCODE_HOOK_EVENT === "turn_end" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "jcode", env.JCODE_HOOK_SESSION_ID);
+    const result = await sendNotification(config, message, "jcode", env.JCODE_HOOK_SESSION_ID, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/jcode] notify failed with HTTP ${result.status}`);
       return "failed";

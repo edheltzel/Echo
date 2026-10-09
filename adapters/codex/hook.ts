@@ -8,12 +8,11 @@
  */
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken } from "@echo/shared/greeting.ts";
+import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
 import {
   loadCodexVoiceConfig,
-  pickStartupCatchphrase,
   type CodexVoiceConfig,
 } from "./config.ts";
 
@@ -148,8 +147,9 @@ export async function handleCodexHookResult(
 
   if (!message) return "skipped";
 
+  const slot = event === "stop" || event === "stopfailure" ? "done" : undefined;
   try {
-    const result = await sendNotification(config, message, "codex", sessionId);
+    const result = await sendNotification(config, message, "codex", sessionId, undefined, undefined, slot);
     if (!result.ok) {
       console.error(`[echo/codex] notify failed with HTTP ${result.status}`);
       return "failed";

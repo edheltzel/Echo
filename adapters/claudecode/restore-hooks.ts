@@ -81,12 +81,20 @@ for (const [event, entries] of Object.entries(settings.hooks)) {
   }
 }
 
-// Reconcile a single matcher entry to exactly one canonical hook registration:
-// add it if absent, and collapse any duplicates so a stale + adapter pair can't survive.
-function reconcileEntry(entry: MatcherEntry, canonical: string, loc: string, hookFile: string): void {
-  const matches = entry.hooks.filter((h) => h.command === canonical);
+// Reconcile every block of `entries` sharing one matcher to exactly one canonical
+// registration: add it to the first block if absent, and collapse duplicates across
+// all such blocks (#63), so a hook split over two same-matcher blocks can't fire twice.
+function reconcileMatcher(
+  entries: MatcherEntry[],
+  canonical: string,
+  loc: string,
+  hookFile: string,
+): void {
+  const matches = entries.flatMap((entry) =>
+    entry.hooks.filter((h) => h.command === canonical).map((hook) => ({ entry, hook })),
+  );
   if (matches.length === 0) {
-    entry.hooks.push({ type: "command", command: canonical });
+    entries[0].hooks.push({ type: "command", command: canonical });
     changed = true;
     log.push(`+ ${loc} += ${hookFile}`);
     return;
@@ -94,30 +102,31 @@ function reconcileEntry(entry: MatcherEntry, canonical: string, loc: string, hoo
   if (matches.length === 1) {
     log.push(`= ${loc} already has ${hookFile}`);
   }
-  for (const dup of matches.slice(1)) {
-    entry.hooks.splice(entry.hooks.indexOf(dup), 1);
+  for (const { entry, hook } of matches.slice(1)) {
+    entry.hooks.splice(entry.hooks.indexOf(hook), 1);
     changed = true;
     log.push(`- ${loc}: removed duplicate ${hookFile}`);
   }
 }
 
-// 1) Add VoiceGate to existing PreToolUse matcher="Bash" entry.
-const bashEntry = settings.hooks.PreToolUse.find((entry) => entry.matcher === "Bash");
-if (!bashEntry) {
+// 1) Add VoiceGate to the existing PreToolUse matcher="Bash" entries.
+const bashEntries = settings.hooks.PreToolUse.filter((entry) => entry.matcher === "Bash");
+if (bashEntries.length === 0) {
   console.error("FATAL: no PreToolUse matcher='Bash' entry found in settings.json");
   process.exit(2);
 }
-reconcileEntry(bashEntry, VOICE_GATE_CMD, "PreToolUse[matcher=Bash]", "VoiceGate.hook.ts");
+reconcileMatcher(bashEntries, VOICE_GATE_CMD, "PreToolUse[matcher=Bash]", "VoiceGate.hook.ts");
 
 // 2) Add SessionStart matcher="startup" entry with VoiceGreeting.
-let startupEntry = settings.hooks.SessionStart.find((entry) => entry.matcher === "startup");
-if (!startupEntry) {
-  startupEntry = { matcher: "startup", hooks: [] };
+const startupEntries = settings.hooks.SessionStart.filter((entry) => entry.matcher === "startup");
+if (startupEntries.length === 0) {
+  const startupEntry: MatcherEntry = { matcher: "startup", hooks: [] };
   settings.hooks.SessionStart.push(startupEntry);
+  startupEntries.push(startupEntry);
   changed = true;
   log.push('+ SessionStart += { matcher: "startup", hooks: [] }');
 }
-reconcileEntry(startupEntry, VOICE_GREETING_CMD, "SessionStart[matcher=startup]", "VoiceGreeting.hook.ts");
+reconcileMatcher(startupEntries, VOICE_GREETING_CMD, "SessionStart[matcher=startup]", "VoiceGreeting.hook.ts");
 
 // 3) Point the Stop hook at the adapter's VoiceCompletion, replacing an unmanaged
 //    ~/.claude/hooks/VoiceCompletion.hook.ts a standalone install wired, and collapsing
