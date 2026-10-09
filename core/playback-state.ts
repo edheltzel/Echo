@@ -26,6 +26,7 @@
 // ponytail: sync rename on the caller turn. Detach the write if a wedged
 // state dir ever stalls playback.
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -72,7 +73,8 @@ function isPlaybackRecord(value: unknown): value is PlaybackStateRecord {
   const { state, pid, updated_at, queue_depth } = value;
   return (state === "idle" || state === "speaking")
     && typeof pid === "number"
-    && Number.isFinite(pid)
+    && Number.isSafeInteger(pid)
+    && pid > 0
     && typeof updated_at === "string"
     && typeof queue_depth === "number"
     && Number.isInteger(queue_depth)
@@ -112,7 +114,9 @@ export function writePlaybackState(
 ): void {
   if (path === null) return;
 
-  const staging = join(dirname(path), `.${pid}.playback-state.tmp`);
+  // Unique and exclusively created: a leftover or planted file at a fixed name
+  // (a FIFO would block this synchronous write forever) is never reopened.
+  const staging = join(dirname(path), `.${pid}.${randomUUID()}.playback-state.tmp`);
   try {
     const record: PlaybackStateRecord = {
       state,
@@ -121,7 +125,7 @@ export function writePlaybackState(
       updated_at: new Date(now).toISOString(),
     };
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    writeFileSync(staging, JSON.stringify(record), { mode: 0o600 });
+    writeFileSync(staging, JSON.stringify(record), { mode: 0o600, flag: "wx" });
     renameSync(staging, path);
   } catch {
     try {

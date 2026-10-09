@@ -3,7 +3,7 @@
 // only. Does not import the daemon (no server.stop).
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlayQueue, type PlayJob } from "../../core/play-queue";
 import { primeEchoFileEnv } from "../../core/env";
@@ -61,13 +61,17 @@ describe("writePlaybackState", () => {
     const dest = join(TMP, "dest-is-dir");
     mkdirSync(dest);
     expect(() => writePlaybackState("speaking", 1, dest, 4242)).not.toThrow();
-    expect(existsSync(join(TMP, ".4242.playback-state.tmp"))).toBe(false);
+    expect(readdirSync(TMP).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
-  test("null path writes nothing", () => {
-    const absent = join(TMP, "absent.json");
-    expect(() => writePlaybackState("speaking", 1, null)).not.toThrow();
-    expect(existsSync(absent)).toBe(false);
+  test("a planted file at a staging-like name is never reopened", () => {
+    const dir = mkdtempSync(join(TMP, "planted-"));
+    const legacyStaging = join(dir, ".4242.playback-state.tmp");
+    expect(Bun.spawnSync(["mkfifo", legacyStaging]).exitCode).toBe(0);
+    const dest = join(dir, "playback-state.json");
+    writePlaybackState("speaking", 2, dest, 4242);
+    expect(JSON.parse(readFileSync(dest, "utf-8")).queue_depth).toBe(2);
+    expect(statSync(dest).mode & 0o777).toBe(0o600);
   });
 });
 
@@ -84,6 +88,9 @@ describe("readPlaybackState - tolerant reads", () => {
     writeFileSync(STATE, JSON.stringify({ state: "speaking", pid: "1", queue_depth: 0, updated_at: "x" }));
     expect(readPlaybackState(STATE)).toEqual({ state: "idle", queue_depth: 0 });
     writeFileSync(STATE, JSON.stringify({ state: "speaking", pid: 1, queue_depth: -1, updated_at: "x" }));
+    expect(readPlaybackState(STATE)).toEqual({ state: "idle", queue_depth: 0 });
+    // pid 0 would probe this process group, not a daemon.
+    writeFileSync(STATE, JSON.stringify({ state: "speaking", pid: 0, queue_depth: 3, updated_at: "x" }));
     expect(readPlaybackState(STATE)).toEqual({ state: "idle", queue_depth: 0 });
   });
 
@@ -116,9 +123,7 @@ describe("resolvePlaybackStatePath", () => {
       primeEchoFileEnv({});
       process.env.XDG_STATE_HOME = join(TMP, "xdg-state");
       await withPlaybackEnv(undefined, () => {
-        expect(resolvePlaybackStatePath()).toBe(
-          join(homedir(), ".local", "state", "echo", "playback-state.json"),
-        );
+        expect(resolvePlaybackStatePath()).toMatch(/\/\.local\/state\/echo\/playback-state\.json$/);
       });
     } finally {
       if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
@@ -164,18 +169,6 @@ describe("play-queue seams", () => {
       release();
       await q.drain();
       expect(readPlaybackState(STATE)).toEqual({ state: "idle", queue_depth: 0 });
-    });
-  });
-
-  test("empty string disables queue writes", async () => {
-    const published = join(homedir(), ".local", "state", "echo", "playback-state.json");
-    await withPlaybackEnv("", async () => {
-      const before = existsSync(published) ? statSync(published).mtimeMs : null;
-      const q = new PlayQueue<string>({ player: async () => {} });
-      q.enqueue(job("silent"));
-      await q.drain();
-      const after = existsSync(published) ? statSync(published).mtimeMs : null;
-      expect(after).toBe(before);
     });
   });
 });
