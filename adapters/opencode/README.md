@@ -28,7 +28,8 @@ Plugin events (`opencode.ai/docs/plugins`, `@opencode-ai/sdk` v1 types):
   text (a `!shell` turn, an abort during a tool call) stays silent. Deduped per session +
   message id, including two idles for one turn arriving at once (OpenCode publishes
   `session.idle` twice on an aborted or errored turn and does not await plugin hooks).
-- **`session.created`**: greeting is opt-in via `ECHO_VOICE_GREET_ON_START`.
+- **`session.created`**: greets by default, like Pi and omp; set `ECHO_VOICE_GREET_ON_START` to
+  `false` in `~/.config/echo/config.json` to turn it off.
 - **Subagent sessions** (`parentID` set): silent.
 - **Unreadable session** (`session.get` returns an error): silent (fail closed).
 - **Every other event** (streamed parts, message updates) returns before any config read or

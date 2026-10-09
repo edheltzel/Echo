@@ -127,7 +127,7 @@ describe("OpenCode plugin event adapter", () => {
     expect(called).toBe(false);
   });
 
-  test("session greeting is opt-in and only for session.created", async () => {
+  test("session greeting follows greetOnSessionStart and only for session.created", async () => {
     const bodies: unknown[] = [];
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)));
@@ -251,12 +251,16 @@ describe("OpenCode plugin event adapter", () => {
     expect(eventSessionID({ type: "session.idle", properties: { sessionID: "ses_x" } })).toBe("ses_x");
   });
 
-  test("defaults to the OpenCode persona and voice key", () => {
+  test("defaults to the OpenCode persona and voice key, greeting on", () => {
     const resolved = loadOpenCodeVoiceConfig({}, undefined, "/tmp/echo-absent-home");
     expect(resolved.personaName).toBe("OpenCode");
     expect(resolved.voiceId).toBe("opencode");
-    expect(resolved.greetOnSessionStart).toBe(false);
+    expect(resolved.greetOnSessionStart).toBe(true);
     expect(resolved.sayName).toBe(false);
+    expect(
+      loadOpenCodeVoiceConfig({ ECHO_VOICE_GREET_ON_START: "false" }, undefined, "/tmp/echo-absent-home")
+        .greetOnSessionStart,
+    ).toBe(false);
   });
 
   test("messageFromAssistantText prefers a voice line over fallback", () => {
