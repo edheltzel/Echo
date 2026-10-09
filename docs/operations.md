@@ -132,6 +132,13 @@ sets `visual_delivery: "native"` after one of those routes reports success. The 
 skips its AppleScript banner exactly once. See [`http-api.md`](http-api.md#native-terminal-visual-delivery)
 for terminal limits, tmux passthrough, SSH/headless behavior, and the adapter-level diagnostic.
 
+Inside Herdr (an adapter sees `HERDR_SOCKET_PATH`, or `HERDR_SESSION` under the Herdr config
+directory), the toast goes through Herdr's `notification.show` with `sound: "none"`, so Echo's
+voice or sound stays the only audio Echo adds. Outside Herdr nothing changes. Herdr still plays
+its own agent-state chime for background workspaces; to hear only Echo, turn it off in Herdr's
+`config.toml` with `ui.sound.enabled = false`, or per agent (`[ui.sound.agents] claude = "off"`).
+Echo never edits Herdr config.
+
 Run a direct adapter-client smoke from the adapter package root and from the terminal that owns
 the adapter's TTY (not from a pipe, SSH headless shell, or hook-protocol stdout):
 
