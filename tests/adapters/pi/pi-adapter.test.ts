@@ -64,7 +64,6 @@ beforeEach(() => {
   delete process.env.ECHO_VOICE_SUPPRESS;
   delete process.env.ATLAS_VOICE_SUPPRESS;
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
-  process.env.ECHO_VOICE_CATCHPHRASE = "Pi session ready.";
   process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
   Date.now = originalDateNow;
 });
@@ -76,13 +75,15 @@ afterEach(() => {
 });
 
 describe("Pi adapter lifecycle", () => {
-  test("session_start sends one configured greeting", async () => {
+  test("session_start says the harness line even when the persona and a legacy catchphrase are set", async () => {
     const payloads: unknown[] = [];
     globalThis.fetch = async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
     };
 
+    process.env.ECHO_VOICE_PERSONA_NAME = "Atlas";
+    process.env.ECHO_VOICE_CATCHPHRASE = "Pi session ready.";
     const { api, handlers } = createMockPi();
     registerAdapter(api);
 
@@ -90,7 +91,7 @@ describe("Pi adapter lifecycle", () => {
 
     expect(payloads).toHaveLength(1);
     expect(payloads[0]).toEqual(expect.objectContaining({
-      message: "Pi session ready.",
+      message: "Pie, ready.",
       title: "Pi Notification",
       voice_enabled: true,
       voice_id: "pi",
@@ -98,9 +99,33 @@ describe("Pi adapter lifecycle", () => {
       source: "pi",
     }));
 
-
     const visualDelivery = (payloads[0] as { visual_delivery?: unknown }).visual_delivery;
     expect(visualDelivery === undefined || visualDelivery === "native").toBe(true);
+  });
+
+  test("ECHO_VOICE_GREET_ON_START=false stays silent on startup", async () => {
+    process.env.ECHO_VOICE_GREET_ON_START = "false";
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response("{}", { status: 200 });
+    };
+    const { api, handlers } = createMockPi();
+    registerAdapter(api);
+    await handlers.get("session_start")?.({ reason: "startup" }, createContext());
+    expect(calls).toBe(0);
+  });
+
+  test.each(["new", "resume", "fork", "reload"])("session_start reason %s does not announce startup", async (reason) => {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response("{}", { status: 200 });
+    };
+    const { api, handlers } = createMockPi();
+    registerAdapter(api);
+    await handlers.get("session_start")?.({ reason }, createContext());
+    expect(calls).toBe(0);
   });
 
   test("message_end and turn_end for the same message speak once", async () => {
@@ -348,9 +373,7 @@ describe("Pi notification slots", () => {
   const slotConfig = {
     endpoint: "http://voice.example/notify",
     title: "Pi Notification",
-    startupCatchphrases: ["Pi session ready."],
     personaName: "Pi",
-    sayName: false,
     voiceId: "pi",
     voiceEnabled: true,
     greetOnSessionStart: true,

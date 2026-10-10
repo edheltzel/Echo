@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
+import { startupGreeting } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
 import { loadJcodeVoiceConfig, type JcodeVoiceConfig } from "./config.ts";
@@ -39,7 +39,7 @@ export async function handleJcodeHookResult(
     );
   } else if (env.JCODE_HOOK_EVENT === "session_start") {
     if (!config.greetOnSessionStart || env.JCODE_HOOK_SOURCE !== "create") return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
+    message = startupGreeting("jcode");
   }
 
   if (!message) return "skipped";

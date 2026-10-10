@@ -50,9 +50,7 @@ runs `cli/echo mode`. Those commands are not part of the script.
 
 ## Behavior
 
-- `session_start` → speaks a greeting once for user-visible session starts.
-  [The persona and voice guide](../../docs/voices.md#per-project-persona--voice) owns
-  pool, `sayName`, and custom-line semantics. `ECHO_VOICE_CATCHPHRASE` pins one line.
+- `session_start` → says "Pie, ready." only for a process `startup` (or a host without a reason). `new`, `resume`, `fork`, and `reload` stay silent. `ECHO_VOICE_GREET_ON_START=false` disables it. The persona name does not change the line.
 - `message_end` / `turn_end` → extracts the final `🗣️` line from assistant text and speaks it once.
 - `tool_approval_requested` / `ui_prompt_start` → one needs-approval / question / attention line
   ([#107](https://github.com/edheltzel/Echo/issues/107)). Hosts that lack the event never emit it.
@@ -73,8 +71,7 @@ editing the file:
 
 ```json
 {
-  "ECHO_VOICE_PERSONA_NAME": "Atlas",
-  "ECHO_VOICE_CATCHPHRASE": "Atlas online and standing by."
+  "ECHO_VOICE_PERSONA_NAME": "Atlas"
 }
 ```
 
@@ -82,7 +79,6 @@ editing the file:
 |---|---|---|
 | `ECHO_NOTIFY_URL` | `http://localhost:3246/notify` | Core notify endpoint |
 | `ECHO_VOICE_TITLE` | `Pi Notification` | Notification title |
-| `ECHO_VOICE_CATCHPHRASE` | random from built-in pool | Session-start greeting; setting it pins one line |
 | `ECHO_VOICE_ID` | `pi` | Voice mapping/id (resolves to `agents.pi` in `core/voices.json`) |
 | `ECHO_VOICE_ENABLED` | `true` | Set `false` for silent notifications |
 | `ECHO_VOICE_GREET_ON_START` | `true` | Enable/disable greetings |
@@ -94,7 +90,7 @@ editing the file:
 
 ## Per-project persona & voice
 
-A repo can override the persona **name + voice** (and greeting) for that project
+A repo can override the persona **name + voice** for that project
 only, using the **same convention as the Claude Code adapter**: a `daidentity` block
 in the host's native `settings.json`. Pi layers config exactly like Claude Code -
 `<project>/.pi/settings.json` (project) over `~/.pi/agent/settings.json` (global),
@@ -106,8 +102,7 @@ project-over-global:
 {
   "daidentity": {
     "name": "Echo",
-    "voices": { "main": { "voiceId": "en-US-AndrewNeural" } },
-    "startupCatchphrases": ["Echo online."]
+    "voices": { "main": { "voiceId": "en-US-AndrewNeural" } }
   }
 }
 ```

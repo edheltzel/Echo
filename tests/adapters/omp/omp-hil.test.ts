@@ -11,9 +11,7 @@ const originalPreferred = process.env.ECHO_PREFERRED_NAME;
 const config: OmpVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "OMP Notification",
-  startupCatchphrases: ["OMP online."],
   personaName: "Atlas",
-  sayName: false,
   voiceId: "omp",
   voiceEnabled: true,
   greetOnSessionStart: false,

@@ -15,7 +15,7 @@ bash scripts/install.sh --adapter codex
 - **Normal Stop**: speaks an explicit final `Name: summary` voice line when present,
   otherwise a short fallback summary of the last assistant message. Codex live-turn suppression
   is documented in [`docs/adapters.md`](../../docs/adapters.md#live-session-voice-suppression---omp-and-codex).
-- **SessionStart** greetings: opt-in via `ECHO_VOICE_GREET_ON_START=true`.
+- **SessionStart** says "Codex, ready." only when `source` is `startup`. Missing, resume, clear, compact, fork, attach, and reload stay silent. Set `ECHO_VOICE_GREET_ON_START=false` to disable it.
 - Subagent-related stop events stay silent.
 
 ## Per-project persona and voice

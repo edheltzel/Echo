@@ -12,15 +12,12 @@
  *   4. neutral defaults
  * A project's `daidentity` overrides the global one PER KEY (deep merge, local
  * leaf wins) - the same "tightest source wins per key" precedence shared/echo-env.ts
- * commits to. So a repo can set just its name + voice and inherit everything else
- * from global. Arrays (startupCatchphrases) are atomic: a local array replaces the
- * global one only when present. projectDir defaults to CLAUDE_PROJECT_DIR (set for
- * every hook, incl. Stop, and pointing at the project root).
+ * commits to. A repo can set just its name + voice and inherit everything else
+ * from global. projectDir defaults to CLAUDE_PROJECT_DIR, the hook's project root.
  */
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { parseEchoBoolean } from '@echo/shared/echo-env.ts';
 
 const HOME = process.env.HOME!;
 
@@ -72,16 +69,8 @@ export interface Identity {
   color: string;
   voice?: VoiceProsody;
   personality?: VoicePersonality;
-  /** Startup catchphrase pool (raw; callers apply the `{name}` substitution). */
-  startupCatchphrases?: string[];
-  /** Single startup catchphrase (legacy; used when the array is empty). */
-  startupCatchphrase?: string;
   /** True when a project-scope layer set the persona name/displayName (a repo renamed the DA). */
   personaFromProject?: boolean;
-  /** True when a project-scope layer set its own startupCatchphrases array. */
-  catchphrasesFromProject?: boolean;
-  /** Opt-in: announce the persona name in the default startup greeting. */
-  sayName?: boolean;
 }
 
 export interface Principal {
@@ -194,16 +183,13 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
   const daidentity = settings.daidentity || {};
   const envDA = settings.env?.DA;
 
-  // What THIS repo set for itself (no global) - for persona-name precedence + greeting policy.
+  // What this repo set for itself, so its name wins an inherited global displayName.
   const projectDai = loadProjectDaidentity(projectDir, home);
   const personaFromProject = typeof projectDai.name === 'string' || typeof projectDai.displayName === 'string';
-  const catchphrasesFromProject = Array.isArray(projectDai.startupCatchphrases);
 
   // Support both old (daidentity.voice) and new (daidentity.voices.main) structures
   const voices = (daidentity as any).voices || {};
   const voiceConfig = voices.main || (daidentity as any).voice;
-
-  const catchphrases = (daidentity as any).startupCatchphrases;
 
   return {
     name: daidentity.name || envDA || DEFAULT_IDENTITY.name,
@@ -216,11 +202,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
     color: daidentity.color || DEFAULT_IDENTITY.color,
     voice: voiceConfig as VoiceProsody | undefined,
     personality: (daidentity as any).personality as VoicePersonality | undefined,
-    startupCatchphrases: Array.isArray(catchphrases) ? catchphrases : undefined,
-    startupCatchphrase: (daidentity as any).startupCatchphrase as string | undefined,
     personaFromProject,
-    catchphrasesFromProject,
-    sayName: parseEchoBoolean((daidentity as { sayName?: unknown }).sayName, false),
   };
 }
 

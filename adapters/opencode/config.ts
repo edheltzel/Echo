@@ -1,7 +1,6 @@
 import { JSON5 } from "bun";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { applyPersonaOverride, booleanEnv, type EchoPersonaOverride } from "@echo/shared/persona.ts";
 import { openCodeConfigLayers } from "./config-path.ts";
@@ -9,9 +8,7 @@ import { openCodeConfigLayers } from "./config-path.ts";
 export interface OpenCodeVoiceConfig {
   endpoint: string;
   title: string;
-  startupCatchphrases: string[];
   personaName: string;
-  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -85,13 +82,10 @@ export function loadProjectPersona(
   };
   const name = trimmedString(merged.name);
   const voiceId = layers.map(voiceOf).findLast((voice) => voice !== undefined);
-  const greeting = personaGreetingFields(merged, null);
 
   const override: EchoPersonaOverride = {};
   if (name) override.personaName = name;
   if (voiceId) override.voiceId = voiceId;
-  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
-  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
   return Object.keys(override).length > 0 ? override : null;
 }
 
@@ -101,14 +95,10 @@ export function loadOpenCodeVoiceConfig(
   home: string = process.env.HOME ?? homedir(),
   worktree?: string,
 ): OpenCodeVoiceConfig {
-  const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
-  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   const base: OpenCodeVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "OpenCode Notification",
-    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "OpenCode",
-    sayName,
     voiceId: env.ECHO_VOICE_ID ?? "opencode",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, true),

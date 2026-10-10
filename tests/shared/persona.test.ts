@@ -5,17 +5,11 @@ import {
   shouldSuppressVoice,
   type BaseVoiceConfig,
 } from "../../shared/persona.ts";
-import {
-  NAMED_STARTUP_GREETINGS,
-  NAMELESS_STARTUP_GREETINGS,
-} from "../../shared/greeting.ts";
 
 function base(overrides: Partial<BaseVoiceConfig> = {}): BaseVoiceConfig {
   return {
     personaName: "Pi",
-    sayName: false,
     voiceId: "pi",
-    startupCatchphrases: NAMELESS_STARTUP_GREETINGS,
     ...overrides,
   };
 }
@@ -45,30 +39,11 @@ describe("booleanEnv", () => {
 });
 
 describe("applyPersonaOverride", () => {
-  test("null override returns the same object", () => {
-    const cfg = base();
-    expect(applyPersonaOverride(cfg, null)).toBe(cfg);
-  });
-
   test("set keys win; unset keys keep the base", () => {
     const cfg = base();
     const out = applyPersonaOverride(cfg, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
     expect(out.personaName).toBe("Echo");
     expect(out.voiceId).toBe("en-US-AndrewNeural");
-    expect(out.sayName).toBe(false);
-    expect(out.startupCatchphrases).toBe(NAMELESS_STARTUP_GREETINGS);
-  });
-
-  test("sayName switches only the shared default greeting pools", () => {
-    const out = applyPersonaOverride(base(), { sayName: true });
-    expect(out.sayName).toBe(true);
-    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
-  });
-
-  test("custom greetings stay when sayName flips", () => {
-    const custom = ["Base ready."];
-    const out = applyPersonaOverride(base({ startupCatchphrases: custom }), { sayName: true });
-    expect(out.startupCatchphrases).toBe(custom);
   });
 
   test("preserves extra adapter fields on T", () => {

@@ -5,9 +5,7 @@ import type { PiVoiceConfig } from "../../../adapters/pi/config";
 const config: PiVoiceConfig = {
   endpoint: "http://localhost:3246/notify",
   title: "Pi Notification",
-  startupCatchphrases: ["Pi ready."],
   personaName: "Pi",
-  sayName: false,
   voiceId: "kai",
   voiceEnabled: true,
   greetOnSessionStart: true,
