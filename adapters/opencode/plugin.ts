@@ -4,7 +4,7 @@
  * never need a running OpenCode process.
  *
  * Event surface (opencode.ai/docs/plugins + @opencode-ai/sdk 1.18 types):
- *   session.created  - new session; greets unless ECHO_VOICE_GREET_ON_START is false
+ *   session.created  - new root session; says "Open code, ready." unless greet is disabled
  *   session.idle     — turn finished; speak last assistant text
  * Session.parentID marks a subagent; an unreadable session fails closed (silent).
  */

@@ -18,9 +18,7 @@ const originalFetch = globalThis.fetch;
 const config: CodexVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "Codex Notification",
-  startupCatchphrases: ["{name} online."],
   personaName: "Codex",
-  sayName: true,
   voiceId: "codex",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -79,19 +77,22 @@ describe("Codex lifecycle hook adapter", () => {
     }));
   });
 
-  test("session_start greeting is opt-in and carries no slot", async () => {
+  test("SessionStart greets only when source is startup", async () => {
     const payloads: unknown[] = [];
     globalThis.fetch = async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
     };
-    const fixture: CodexHookPayload = { hook_event_name: "SessionStart" };
-    expect(await handleCodexHook(fixture, config)).toBe(false);
-    expect(payloads).toHaveLength(0);
-
+    const start = { hook_event_name: "SessionStart" };
     const greet = { ...config, greetOnSessionStart: true };
-    expect(await handleCodexHook(fixture, greet)).toBe(true);
+    expect(await handleCodexHook(start, greet)).toBe(false);
+    expect(await handleCodexHook({ ...start, source: "startup" }, config)).toBe(false);
+    expect(await handleCodexHook({ ...start, source: "startup" }, greet)).toBe(true);
+    for (const source of ["resume", "clear", "compact", "fork", "attach", "reload"]) {
+      expect(await handleCodexHook({ ...start, source }, greet)).toBe(false);
+    }
     expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({ source: "codex" });
     expect(payloads[0]).not.toHaveProperty("slot");
   });
 
@@ -116,13 +117,11 @@ describe("Codex lifecycle hook adapter", () => {
       voiceId: "en-GB-LibbyNeural",
     });
     const base = loadCodexVoiceConfig({ ECHO_VOICE_PERSONA_NAME: "Codex" }, undefined);
+    expect(base.greetOnSessionStart).toBe(true);
+    expect(loadCodexVoiceConfig({ ECHO_VOICE_GREET_ON_START: "false" }, undefined).greetOnSessionStart).toBe(false);
     const resolved = applyPersonaOverride(base, override);
     expect(resolved.personaName).toBe("Themis");
     expect(resolved.voiceId).toBe("en-GB-LibbyNeural");
   });
 
-  test("project persona preserves a custom base greeting", () => {
-    const resolved = applyPersonaOverride(config, { personaName: "Themis", sayName: false });
-    expect(resolved.startupCatchphrases).toBe(config.startupCatchphrases);
-  });
 });

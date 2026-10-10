@@ -11,8 +11,8 @@ import { looksLikeEdgeVoice } from "./edge-voice.ts";
 // format-independent lives here and is unit-tested here.
 //
 // Invariant (the brief's central "never clobber"): merging preserves every existing
-// key - other top-level settings AND other `daidentity` sub-keys (startupCatchphrases,
-// extra voices). The readers (adapters' `loadProjectPersona`) are deliberately lenient
+// key - other top-level settings AND other `daidentity` sub-keys (extra voices). The
+// readers (adapters' `loadProjectPersona`) are deliberately lenient
 // with a malformed file (→ no override); this WRITER is deliberately strict - a present
 // but unparseable file ABORTS rather than overwriting the user's content with `{}`.
 
@@ -37,7 +37,7 @@ export function parsePersonaArgs(args: string): { name?: string; voice?: string 
 /**
  * Set the persona name + voice on a parsed config object, preserving every other key.
  * Only `daidentity.name` and `daidentity.voices.main.voiceId` are touched; existing
- * daidentity siblings (startupCatchphrases, other voices) and all top-level keys stay.
+ * daidentity siblings and all top-level keys stay.
  * Mutates and returns `config`.
  */
 export function applyPersona(

@@ -123,12 +123,11 @@ Every host reads a **`daidentity` block from its native config**, project layere
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
 Grok, and Codex use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
 
-A persona **name** alone does **not** change the startup greeting. The shared default
-pool is exactly `standing by`, `ready when you are`, `waiting for direction`, and
-`engaged`. `daidentity.sayName: true` selects the corresponding `{name}` pool.
-`startupCatchphrases` resolves project-over-global as one atomic array: lines without
-`{name}` stay verbatim, including inherited custom lines; a `{name}` token expands only
-when `sayName` is true and is removed cleanly otherwise. Per-turn speech is unchanged.
+Each genuine harness startup says one fixed line: `Claude code, ready.`, `Jay code, ready.`,
+`Grok, ready.`, `Codex, ready.`, `Pie, ready.`, `Oh em pee, ready.`, or `Open code, ready.`.
+The line identifies the harness, not the persona. Persona name and voice still apply to normal
+per-turn speech; the startup line uses the resolved voice. Set `ECHO_VOICE_GREET_ON_START` to
+`false` to silence it. Resume, reload, compact, and known child sessions stay silent.
 
 ### Claude Code
 
@@ -141,9 +140,8 @@ precedence, tightest scope wins **per key**:
 4. neutral defaults
 
 So a repo can override the global persona **in that repo only**. The resolved voice
-applies to the startup greeting, while per-turn lines use the resolved name and voice;
-startup name announcement follows the shared policy above. Every other repo keeps the
-global persona, and unset keys fall through to it.
+applies to the startup line and per-turn speech. Every other repo keeps the global
+persona, and unset keys fall through to it.
 
 Drop a `daidentity` block into the project's `.claude/settings.json`:
 
@@ -155,10 +153,6 @@ Drop a `daidentity` block into the project's `.claude/settings.json`:
   }
 }
 ```
-
-Add `"sayName": true` inside `daidentity` to announce the resolved name at startup.
-An optional `"startupCatchphrases": ["Echo online."]` array replaces the inherited or
-default pool in this repo.
 
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - no
 `core/voices.json` edit is needed; it flows straight through as the DA voice. The block
@@ -199,15 +193,15 @@ writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config
 
 Same `daidentity` shape. Project `<cwd>/.grok/settings.json` wins per key over
 `~/.grok/settings.json`, then env defaults (`ECHO_VOICE_PERSONA_NAME`,
-`ECHO_VOICE_ID`, ...). There is no `config.toml` path. Greetings stay opt-in
-(`ECHO_VOICE_GREET_ON_START=true`). See [`adapters/grok/README.md`](../adapters/grok/README.md).
+`ECHO_VOICE_ID`, ...). There is no `config.toml` path. New sessions say `Grok, ready.` unless
+`ECHO_VOICE_GREET_ON_START=false`. See [`adapters/grok/README.md`](../adapters/grok/README.md).
 
 ### Codex
 
 Same `daidentity` shape. Project `<cwd>/.codex/settings.json` wins per key over
 `~/.codex/settings.json`, then env defaults. The override file is
-`.codex/settings.json`, not Codex `config.toml`. Greetings stay opt-in
-(`ECHO_VOICE_GREET_ON_START=true`). See [`adapters/codex/README.md`](../adapters/codex/README.md).
+`.codex/settings.json`, not Codex `config.toml`. `SessionStart` source `startup` says
+`Codex, ready.` unless `ECHO_VOICE_GREET_ON_START=false`. See [`adapters/codex/README.md`](../adapters/codex/README.md).
 
 When `cli/echo voice` runs in a terminal it also asks **“Enable voice for subagents?”**;
 an empty answer is **No**. The answer is stored as

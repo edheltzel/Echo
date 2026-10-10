@@ -1,13 +1,10 @@
-import { defaultStartupGreetings } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { booleanEnv } from "@echo/shared/persona.ts";
 
 export interface JcodeVoiceConfig {
   endpoint: string;
   title: string;
-  startupCatchphrases: string[];
   personaName: string;
-  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -17,19 +14,14 @@ export interface JcodeVoiceConfig {
 export function loadJcodeVoiceConfig(
   env: Record<string, string | undefined> = process.env,
 ): JcodeVoiceConfig {
-  const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
-  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Jcode Notification",
-    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Jcode",
-    sayName,
     voiceId: env.ECHO_VOICE_ID,
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
-    // Jcode fires lifecycle hooks for TUI, headless, and swarm workers without a
-    // foreground/child discriminator. Keep greetings opt-in to avoid session floods.
-    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),
+    // Root create sessions greet. Resume/attach and child sessions stay silent.
+    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
 }

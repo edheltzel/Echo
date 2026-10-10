@@ -14,9 +14,7 @@ const tempDirs: string[] = [];
 const config: CodexVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "Codex Notification",
-  startupCatchphrases: ["Codex online."],
   personaName: "Codex",
-  sayName: false,
   voiceId: "codex",
   voiceEnabled: true,
   greetOnSessionStart: false,
