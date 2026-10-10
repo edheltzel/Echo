@@ -29,10 +29,10 @@ persona `omp`, voice `pi`.
 
 ## Per-project persona & voice
 
-A repo can override the persona **name + voice** (and greeting) for that project
-only, using the **same convention as the Claude Code and Pi adapters**: a `daidentity`
-block in omp's native config. omp's config is YAML, layered project-over-user, so
-Echo reads the `daidentity` block from `<project>/.omp/config.yml` (project) and
+A repo can override the persona **name + voice** for that project only, using the
+**same convention as the Claude Code and Pi adapters**: a `daidentity` block in
+omp's native config. omp's config is YAML, layered project-over-user, so Echo
+reads the `daidentity` block from `<project>/.omp/config.yml` (project) and
 `~/.omp/agent/config.yml` (global) and merges project-over-global:
 
 ```yaml
@@ -42,15 +42,18 @@ daidentity:
   voices:
     main:
       voiceId: en-GB-LibbyNeural
-  startupCatchphrases:
-    - Echo online.
 ```
 
 Resolved at `session_start` from `ctx.cwd`, per key: project → global → env config.
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - the
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
-omp session started in that repo. Startup greeting semantics are owned by
-[the persona and voice guide](../../docs/voices.md#per-project-persona--voice).
+omp session started in that repo.
+
+A genuine `session_start` says "Oh em pee, ready." A missing reason still greets.
+Explicit `resume`, `attach`, `compact`, and `reload` reasons stay silent, as do child
+agents (`agent.parentId`, `depth > 0`, or `name` `sub`) and headless runs.
+`ECHO_VOICE_GREET_ON_START=false` disables the greeting. The persona name does not
+change the line. Resume, fork, and `/new` are `session_switch`, not `session_start`.
 
 ### Scaffold it without hand-editing YAML
 

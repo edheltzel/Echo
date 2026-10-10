@@ -1,23 +1,18 @@
 // Host-neutral persona overlay + subagent suppression, shared by Pi and omp.
 // Host config paths and file formats stay in each adapter.
 
-import { resolvePersonaStartupGreetings } from "./greeting.ts";
 import { loadEchoConfiguration } from "./echo-env.ts";
 
 /** Project/global daidentity fields that can overlay env-based adapter config. */
 export interface EchoPersonaOverride {
   personaName?: string;
   voiceId?: string;
-  startupCatchphrases?: string[];
-  sayName?: boolean;
 }
 
 /** Adapter config fields `applyPersonaOverride` is allowed to replace. */
 export interface BaseVoiceConfig {
   personaName: string;
-  sayName: boolean;
   voiceId?: string;
-  startupCatchphrases: string[];
 }
 
 /**
@@ -39,18 +34,10 @@ export function applyPersonaOverride<T extends BaseVoiceConfig>(
   override: EchoPersonaOverride | null,
 ): T {
   if (!override) return base;
-  const sayName = override.sayName ?? base.sayName;
-  const startupCatchphrases = resolvePersonaStartupGreetings(
-    base.startupCatchphrases,
-    override.startupCatchphrases,
-    sayName,
-  );
   return {
     ...base,
     personaName: override.personaName ?? base.personaName,
     voiceId: override.voiceId ?? base.voiceId,
-    sayName,
-    startupCatchphrases,
   };
 }
 
