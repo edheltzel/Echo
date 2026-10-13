@@ -20,9 +20,7 @@ function loadFixture(name: string): GrokHookPayload {
 const config: GrokVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "Grok Notification",
-  startupCatchphrases: ["{name} online."],
   personaName: "Grok",
-  sayName: true,
   voiceId: "grok",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -99,7 +97,7 @@ describe("Grok lifecycle hook adapter", () => {
     expect(calls).toBe(0);
   });
 
-  test("session greeting is opt-in and only for new sessions", async () => {
+  test("new SessionStart greets unless disabled", async () => {
     const payloads: unknown[] = [];
     globalThis.fetch = async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
@@ -109,20 +107,16 @@ describe("Grok lifecycle hook adapter", () => {
     const fixture = loadFixture("session-start.json");
     expect(fixture.source).toBe("new");
     expect(await handleGrokHook(fixture, config)).toBe(false);
-
     expect(await handleGrokHook(fixture, { ...config, greetOnSessionStart: true })).toBe(true);
     expect(payloads).toHaveLength(1);
-    expect(payloads[0]).toMatchObject({
-      message: "Grok online.",
-      source: "grok",
-      session_id: fixture.sessionId,
-    });
+    expect(payloads[0]).toMatchObject({ source: "grok", session_id: fixture.sessionId });
     expect(payloads[0]).not.toHaveProperty("slot");
-
     expect(await handleGrokHook(
       { ...fixture, source: "resume" },
       { ...config, greetOnSessionStart: true },
     )).toBe(false);
+    expect(loadGrokVoiceConfig({}).greetOnSessionStart).toBe(true);
+    expect(loadGrokVoiceConfig({ ECHO_VOICE_GREET_ON_START: "false" }).greetOnSessionStart).toBe(false);
   });
 
   test("distinguishes skipped hooks from notify failures", async () => {

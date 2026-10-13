@@ -3,7 +3,6 @@ import {
   applyPersonaOverride,
   loadPiVoiceConfig,
   loadProjectPersona,
-  pickStartupCatchphrase,
   shouldSuppressVoice,
   type PiVoiceConfig,
 } from "./config.ts";
@@ -14,7 +13,7 @@ import { nativeContextFromAdapterContext } from "@echo/shared/terminal-notify.ts
 import { extractVoiceLineFromMessage, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { mergePersonaJson } from "@echo/shared/persona-scaffold.ts";
 import { registerEchoMode, registerEchoMute, registerEchoVoice } from "@echo/shared/extension.ts";
-import { applyNameToken } from "@echo/shared/greeting.ts";
+import { startupGreeting } from "@echo/shared/greeting.ts";
 import { maybeSpeakHil, preferredHumanName, HilDedupe } from "@echo/shared/hil.ts";
 import { registerEchoAskTool } from "@echo/converse/host-tool.ts";
 import { SessionConsent, type SessionConsentDecision } from "@echo/converse/session-consent.ts";
@@ -36,11 +35,10 @@ function resolveCwd(ctx: ExtensionContext): string | undefined {
   return typeof cwd === "string" && cwd.length > 0 ? cwd : undefined;
 }
 
+// Pi emits startup for a new process; new/resume/fork/reload replace a live session.
 function sessionStartIsUserVisible(event: unknown): boolean {
-  const reason = typeof event === "object" && event !== null && "reason" in event
-    ? String((event as { reason?: unknown }).reason ?? "")
-    : "";
-  return reason !== "reload";
+  if (typeof event !== "object" || event === null || !("reason" in event)) return true;
+  return event.reason === "startup";
 }
 
 function logAdapterWarning(message: string, error?: unknown): void {
@@ -226,9 +224,8 @@ export default function atlasVoicePiAdapter(
   pi.on("session_start", async (event, ctx) => {
     askConsent.begin(resolveSessionId(ctx));
     const cfg = resolveConfig(resolveCwd(ctx));
-    if (!cfg.greetOnSessionStart) return;
-    if (!sessionStartIsUserVisible(event)) return;
-    await speak(applyNameToken(pickStartupCatchphrase(cfg.startupCatchphrases), cfg.personaName, cfg.sayName), ctx);
+    if (!cfg.greetOnSessionStart || !sessionStartIsUserVisible(event)) return;
+    await speak(startupGreeting("pi"), ctx);
   });
 
   pi.on("message_end", async (event, ctx) => {

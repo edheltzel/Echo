@@ -40,10 +40,7 @@ Arguments (either may be omitted): `$ARGUMENTS`
      }
    }
    ```
-   - Following `docs/voices.md`, add `"sayName": true` only when the user wants the
-     startup greeting to announce the name. For project-specific startup lines, add
-     `"startupCatchphrases": ["...", "..."]`; the array replaces the inherited or
-     default pool, and `{name}` remains governed by `sayName`.
+   - Startup speech is fixed to `Claude code, ready.` and uses this persona voice.
    - Write the merged JSON back with 2-space indentation.
 
 5. **Decide shared vs per-machine.** Default to the checked-in `.claude/settings.json`

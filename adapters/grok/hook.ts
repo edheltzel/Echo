@@ -4,12 +4,12 @@
  * Grok Build lifecycle hook adapter.
  *
  * Reads Grok hook JSON from stdin (camelCase envelope from grok 1.0.0). Speaks
- * on Stop with reason == "end_turn" and optionally greets on SessionStart.
+ * on Stop with reason == "end_turn" and greets on a new SessionStart.
  * SubagentStop and non-end_turn Stop fires (session-end observe) stay silent.
  */
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
+import { startupGreeting } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
 import {
@@ -127,7 +127,7 @@ export async function handleGrokHookResult(
   } else if (event === "session_start") {
     if (!config.greetOnSessionStart) return "skipped";
     if (!isNewSessionSource(payload.source)) return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
+    message = startupGreeting("grok");
   } else {
     return "skipped";
   }

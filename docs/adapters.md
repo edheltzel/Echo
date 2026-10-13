@@ -110,7 +110,7 @@ Feature register hooks (reuse these; do not add a second factory):
 | mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
 | ask | `registerEchoAskTool` (`@echo/converse/host-tool.ts`) | Feature-detect the host tool API. |
-| greeting | `applyNameToken` / shared greeting pool | Adapter owns when to speak it. |
+| greeting | `startupGreeting` (`@echo/shared/greeting.ts`) | Adapter owns when to speak it. |
 | env | `loadEchoEnvironment` (`@echo/shared/echo-env.ts`) | `config.json` first; doctor reads the same keys. |
 
 `bun run scripts/harness-catalog.ts` prints the catalog. `tests/shared/extension.test.ts`
@@ -209,8 +209,8 @@ TOML section. `adapters/jcode/hook.ts` translates those events into `/notify` ca
 
 Jcode's lifecycle stream covers TUI, desktop, headless, and swarm workers. The adapter uses
 `JCODE_HOOK_SESSION_KIND` and `JCODE_HOOK_PARENT_SESSION_ID` to suppress child sessions.
-Startup greetings are disabled by default; when enabled they run only for root
-`session_start` events whose source is `create`, never attach/resume. Ordinary assistant text
+Root `session_start` events whose source is `create` say `Jay code, ready.` unless
+`ECHO_VOICE_GREET_ON_START=false`; attach/resume and child sessions stay silent. Ordinary assistant text
 is never read aloud. Jcode supports only one command per hook key; reconciliation rewrites
 Echo-owned `turn_end` / `session_start` commands (this checkout, another clone whose
 `package.json` is `@echo/jcode-adapter`, or a dead `*/adapters/jcode/hook.ts` from a
@@ -229,8 +229,8 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
   final `🗣️ Name: summary` line when present and a short fallback summary of
   `lastAssistantMessage` otherwise.
 - **SubagentStop** is ignored so a fan-out does not produce a storm of spoken lines.
-- **SessionStart** greetings are opt-in (`ECHO_VOICE_GREET_ON_START`); only new sessions
-  (`source` of `new` / `startup` / `create`) greet. Captured against grok 1.0.0 where
+- **SessionStart** says `Grok, ready.` for new sessions (`source` of `new` / `startup` /
+  `create`) unless `ECHO_VOICE_GREET_ON_START=false`. Captured against grok 1.0.0 where
   `source` is `"new"`.
 - **Voice:** `voice_id` defaults to `"grok"` (`ECHO_VOICE_ID` overrides), resolved by the daemon
   through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
@@ -250,7 +250,7 @@ surface wins.
 `adapters/opencode/plugin.ts` is loaded from an owned `~/.config/opencode/plugins/echo-voice.ts`
 symlink; `/echo-mute` and `/echo-mode` are owned `commands/echo-mute.md` and `commands/echo-mode.md`
 symlinks. It speaks on `session.idle`,
-greets on `session.created` unless `ECHO_VOICE_GREET_ON_START` is `false`, and stays silent for
+says `Open code, ready.` on `session.created` unless `ECHO_VOICE_GREET_ON_START` is `false`, and stays silent for
 subagents (`parentID`), for sessions the v1 SDK client cannot read, and when the newest
 assistant message has no text. Two `session.idle` events for one turn speak once. Persona:
 `daidentity` merged across every config file OpenCode merges. Detail:
@@ -303,11 +303,9 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
   `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
   `~/.config/echo/config.json` is the durable local configuration surface and wins over
   the one-release environment fallback; an existing host process must be relaunched after edits.
-- **Startup greeting (#81):** each user-visible `session_start` speaks a random pick from
-  the shared resolver. Pool selection, `sayName`, and custom-line semantics are owned by
-  [the persona and voice guide](voices.md#per-project-persona--voice). Configuring
-  `ECHO_VOICE_CATCHPHRASE` in config.json replaces the pool with that single line;
-  setting `ECHO_VOICE_GREET_ON_START` there to `false` disables it.
+- **Startup line:** Pi says `Pie, ready.` only for process `startup`; new, resume, fork, and
+  reload stay silent. omp says `Oh em pee, ready.`; resume, attach, compact, reload, and known child agents stay silent.
+  Set `ECHO_VOICE_GREET_ON_START` to `false` to disable it.
 - **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
   (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike

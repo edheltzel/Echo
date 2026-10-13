@@ -10,25 +10,19 @@ import {
   loadProjectPersona,
   type OmpVoiceConfig,
 } from "../../../adapters/omp/config";
-import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 
-// omp project persona override - SAME convention as the Claude Code and Pi adapters:
-// a `daidentity` block in the host's native config. omp's config is YAML, layered
-// `<cwd>/.omp/config.yml` (project) over `~/.omp/agent/config.yml` (global), project
-// wins per key. Inside a repo with a project daidentity, the greeting + per-turn voice
-// use that persona.
+// omp project persona override: a `daidentity` block in the host's native YAML,
+// project over global, project wins per key for name and voice. Startup speech
+// is the fixed harness line.
 
 const GLOBAL_PATH = (home: string) => join(home, ".omp", "agent", "config.yml");
 const PROJECT_PATH = (cwd: string) => join(cwd, ".omp", "config.yml");
 
-// ── config-level unit tests (pure; injected readFile + explicit home) ────────
 describe("loadProjectPersona - daidentity from omp YAML config layering", () => {
   const HOME = "/home/u";
   const CWD = "/proj";
   const reader = (files: Record<string, string>) => (path: string) => files[path] ?? null;
 
-  // Clear any ambient PI_CODING_AGENT_DIR so ompAgentDir() falls back to the
-  // injected `home` and the global path is deterministic.
   const savedAgentDir = process.env.PI_CODING_AGENT_DIR;
   beforeEach(() => { delete process.env.PI_CODING_AGENT_DIR; });
   afterEach(() => {
@@ -40,7 +34,7 @@ describe("loadProjectPersona - daidentity from omp YAML config layering", () => 
     expect(loadProjectPersona(CWD, () => null, HOME)).toBeNull();
   });
 
-  test("project daidentity (YAML) → name + voice + catchphrases", () => {
+  test("project daidentity (YAML) → name + voice; leftover greeting keys are ignored", () => {
     const o = loadProjectPersona(CWD, reader({
       [PROJECT_PATH(CWD)]: [
         "theme: dark",
@@ -52,12 +46,12 @@ describe("loadProjectPersona - daidentity from omp YAML config layering", () => 
         "  startupCatchphrases:",
         "    - Libby here.",
         "    - Libby online.",
+        "  sayName: true",
       ].join("\n"),
     }), HOME);
     expect(o).toEqual({
       personaName: "Libby",
       voiceId: "en-GB-LibbyNeural",
-      startupCatchphrases: ["Libby here.", "Libby online."],
     });
   });
 
@@ -76,13 +70,11 @@ describe("loadProjectPersona - daidentity from omp YAML config layering", () => 
         "  voices: { main: { voiceId: global-voice } }",
         "  startupCatchphrases: [Global line.]",
       ].join("\n"),
-      // Project sets only the voice → name + catchphrases fall through to global.
       [PROJECT_PATH(CWD)]: "daidentity:\n  voices:\n    main:\n      voiceId: en-GB-LibbyNeural\n",
     }), HOME);
     expect(o).toEqual({
       personaName: "GlobalOmp",
       voiceId: "en-GB-LibbyNeural",
-      startupCatchphrases: ["Global line."],
     });
   });
 
@@ -102,9 +94,7 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
   const base: OmpVoiceConfig = {
     endpoint: "http://x/notify",
     title: "omp Notification",
-    startupCatchphrases: ["Base ready."],
     personaName: "omp",
-    sayName: false,
     voiceId: "pi",
     voiceEnabled: true,
     greetOnSessionStart: true,
@@ -116,34 +106,15 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override preserves a custom base greeting", () => {
+  test("name + voice override leaves the other config fields", () => {
     const out = applyPersonaOverride(base, { personaName: "Libby", voiceId: "en-GB-LibbyNeural" });
     expect(out.personaName).toBe("Libby");
     expect(out.voiceId).toBe("en-GB-LibbyNeural");
-    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
-    expect(out.sayName).toBe(false);
     expect(out.speakCompletions).toBe(true);
-  });
-
-  test("sayName true preserves a custom base greeting", () => {
-    const out = applyPersonaOverride(base, { personaName: "Libby", sayName: true });
-    expect(out.sayName).toBe(true);
-    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
-  });
-
-  test("sayName switches the shared default pool", () => {
-    const defaultBase = { ...base, startupCatchphrases: NAMELESS_STARTUP_GREETINGS };
-    const out = applyPersonaOverride(defaultBase, { personaName: "Libby", sayName: true });
-    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
-  });
-
-  test("name override WITH its own catchphrases → keeps the custom pool", () => {
-    const out = applyPersonaOverride(base, { personaName: "Libby", startupCatchphrases: ["Libby reporting."] });
-    expect(out.startupCatchphrases).toEqual(["Libby reporting."]);
+    expect(out.greetOnSessionStart).toBe(true);
   });
 });
 
-// ── integration: greeting + completion use the override via ctx.cwd ──────────
 type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -156,11 +127,12 @@ function createMockOmp() {
   };
 }
 
-function ctxWithCwd(cwd: string) {
+function ctxWithCwd(cwd: string, agent?: { parentId?: string; depth?: number; name?: string }) {
   return {
     mode: "tui",
     hasUI: true,
     cwd,
+    agent,
     sessionManager: { getSessionFile: () => undefined, getSessionId: () => "session-1" },
     signal: undefined,
     ui: { notify: () => {} },
@@ -173,11 +145,10 @@ let fakeHome: string;
 beforeEach(() => {
   process.env = { ...originalEnv };
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
-  process.env.ECHO_VOICE_PERSONA_NAME = "omp";
+  process.env.ECHO_VOICE_PERSONA_NAME = "Atlas";
   process.env.ECHO_VOICE_ID = "pi";
-  // Isolate the GLOBAL config read: point omp's own PI_CODING_AGENT_DIR override at
-  // an empty scratch dir so the resolver never reads Ed's real ~/.omp/agent/config.yml.
-  // (homedir() ignores $HOME on macOS, so HOME redirection would NOT isolate it.)
+  process.env.ECHO_VOICE_CATCHPHRASE = "Atlas online.";
+  process.env.ECHO_VOICE_SAY_NAME = "true";
   fakeHome = mkdtempSync(join(tmpdir(), "echo-omp-home-"));
   mkdirSync(join(fakeHome, ".omp", "agent"), { recursive: true });
   process.env.PI_CODING_AGENT_DIR = join(fakeHome, ".omp", "agent");
@@ -193,6 +164,7 @@ beforeEach(() => {
       "      voiceId: en-GB-LibbyNeural",
       "  startupCatchphrases:",
       "    - Libby here, omp British voice.",
+      "  sayName: true",
     ].join("\n"),
   );
 });
@@ -205,58 +177,56 @@ afterEach(() => {
 });
 
 describe("integration - omp project override flows through greeting + completion", () => {
-  // Hermeticity guard: prove the global read is isolated to the scratch dir. With
-  // PI_CODING_AGENT_DIR pointing at an empty agent dir, loadProjectPersona with no
-  // project must resolve to null - so a green bar below reflects the project override,
-  // not Ed's real ~/.omp/agent/config.yml.
   test("global config read is isolated (empty scratch agent dir → no override)", () => {
     expect(loadProjectPersona(undefined)).toBeNull();
   });
 
-  test("session_start greeting uses the project catchphrase AND voice; source=omp", async () => {
-    const payloads: any[] = [];
+  test("startup says the harness line in the project voice; source=omp", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
     };
     const { handlers, api } = createMockOmp();
-    echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env)); // base persona=omp, voice=pi
+    echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
 
-    await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(projectDir));
+    await handlers.get("session_start")?.({}, ctxWithCwd(projectDir));
 
     expect(payloads).toHaveLength(1);
-    expect(payloads[0].message).toBe("Libby here, omp British voice."); // project catchphrase
-    expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");             // project voice, not "pi"
-    expect(payloads[0].source).toBe("omp");                             // omp-tagged
+    expect(payloads[0].message).toBe("Oh em pee, ready.");
+    expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");
+    expect(payloads[0].source).toBe("omp");
   });
 
-  test("name+voice persona with NO catchphrases stays nameless", async () => {
-    const payloads: any[] = [];
+  test("explicit resume stays silent; a child agent stays silent", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
     };
-    const dir = mkdtempSync(join(tmpdir(), "echo-omp-nameonly-"));
-    mkdirSync(join(dir, ".omp"), { recursive: true });
-    writeFileSync(
-      join(dir, ".omp", "config.yml"),
-      "daidentity:\n  name: EchoOmp\n  voices:\n    main:\n      voiceId: en-GB-LibbyNeural\n",
-    );
-    try {
-      const { handlers, api } = createMockOmp();
-      echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
-      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
-      expect(payloads).toHaveLength(1);
-      expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");
-      expect(payloads[0].message).not.toContain("EchoOmp");
-      expect(NAMELESS_STARTUP_GREETINGS).toContain(payloads[0].message);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const { handlers, api } = createMockOmp();
+    echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
+
+    await handlers.get("session_start")?.({ reason: "resume" }, ctxWithCwd(projectDir));
+    await handlers.get("session_start")?.({}, ctxWithCwd(projectDir, { parentId: "parent", depth: 1, name: "task" }));
+    expect(payloads).toHaveLength(0);
+  });
+
+  test("ECHO_VOICE_GREET_ON_START=false stays silent", async () => {
+    process.env.ECHO_VOICE_GREET_ON_START = "false";
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response("{}", { status: 200 });
+    };
+    const { handlers, api } = createMockOmp();
+    echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
+    await handlers.get("session_start")?.({}, ctxWithCwd(projectDir));
+    expect(calls).toBe(0);
   });
 
   test("per-turn completion uses the project voice", async () => {
-    const payloads: any[] = [];
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
@@ -265,17 +235,18 @@ describe("integration - omp project override flows through greeting + completion
     echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
 
     await handlers.get("message_end")?.(
-      { message: { role: "assistant", id: "m1", content: "Did the thing.\n🗣️ Shipped the fix." } },
+      { message: { role: "assistant", id: "m1", content: "Did the thing.\n🗣️ Libby: Shipped the fix." } },
       ctxWithCwd(projectDir),
     );
 
     expect(payloads).toHaveLength(1);
     expect(payloads[0].voice_id).toBe("en-GB-LibbyNeural");
     expect(payloads[0].source).toBe("omp");
+    expect(payloads[0].message).toBe("Shipped the fix.");
   });
 
-  test("project with no daidentity → base persona/voice", async () => {
-    const payloads: any[] = [];
+  test("project with no daidentity → base voice", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
@@ -284,8 +255,9 @@ describe("integration - omp project override flows through greeting + completion
     try {
       const { handlers, api } = createMockOmp();
       echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
-      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(bare));
-      expect(payloads[0].voice_id).toBe("pi"); // base voice, no override
+      await handlers.get("session_start")?.({}, ctxWithCwd(bare));
+      expect(payloads[0].voice_id).toBe("pi");
+      expect(payloads[0].message).toBe("Oh em pee, ready.");
     } finally {
       rmSync(bare, { recursive: true, force: true });
     }

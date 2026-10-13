@@ -1,11 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  defaultStartupGreetings,
-  personaGreetingFields,
-  pickStartupCatchphrase,
-} from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { loadEchoConfiguration } from "@echo/shared/echo-env.ts";
 import {
@@ -18,7 +13,7 @@ import {
 } from "@echo/shared/persona.ts";
 
 export type { EchoPersonaOverride, RunContext };
-export { applyPersonaOverride, pickStartupCatchphrase, shouldSuppressVoice };
+export { applyPersonaOverride, shouldSuppressVoice };
 
 export interface OmpVoiceConfig extends BaseVoiceConfig {
   endpoint: string;
@@ -29,20 +24,14 @@ export interface OmpVoiceConfig extends BaseVoiceConfig {
   suppressInSubagents: boolean;
 }
 
-// Default greeting pool lives in @echo/shared/greeting.ts (nameless unless sayName).
-
 export function loadOmpVoiceConfig(env: Record<string, string | undefined> = loadEchoConfiguration()): OmpVoiceConfig {
   // Same canonical config.json values as the Pi adapter. Legacy ATLAS_VOICE_*
   // process values remain deprecated fallbacks. omp defaults to persona "omp"
   // and shares Pi's "pi" voice mapping unless a project identity overrides it.
-  const catchphraseOverride = env.ECHO_VOICE_CATCHPHRASE ?? env.ATLAS_VOICE_CATCHPHRASE;
-  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   return {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? env.ATLAS_VOICE_TITLE ?? "omp Notification",
-    startupCatchphrases: catchphraseOverride !== undefined ? [catchphraseOverride] : defaultStartupGreetings(sayName),
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? env.ATLAS_VOICE_PERSONA_NAME ?? "omp",
-    sayName,
     voiceId: env.ECHO_VOICE_ID ?? env.ATLAS_VOICE_ID ?? "pi",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED ?? env.ATLAS_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START ?? env.ATLAS_VOICE_GREET_ON_START, true),
@@ -51,17 +40,8 @@ export function loadOmpVoiceConfig(env: Record<string, string | undefined> = loa
   };
 }
 
-// ── Project persona override (omp-native YAML config) ────────────────────────
-// A project can override the persona name + voice (+ catchphrases) for THIS repo
-// only, via the SAME convention as the Claude Code and Pi adapters: a `daidentity`
-// block in the host's native config. omp's config is YAML, layered project-over-user
-// - so Echo reads the `daidentity` block from `<cwd>/.omp/config.yml` (project) and
-// `~/.omp/agent/config.yml` (global) and merges project-over-global:
-//   daidentity:
-//     name: Echo
-//     voices: { main: { voiceId: en-GB-LibbyNeural } }
-//     startupCatchphrases: ["Echo online."]
-// Unset keys fall through to global config, then to the env-based config.
+// Project persona: `<cwd>/.omp/config.yml` over `~/.omp/agent/config.yml`.
+// Only name and voice are read. Other daidentity keys stay in the file.
 
 function defaultReadFile(path: string): string | null {
   try {
@@ -123,13 +103,10 @@ export function loadProjectPersona(
     d?.voices?.main?.voiceId ?? d?.voiceId;
   const name = project?.name ?? global?.name;
   const voiceId = voiceOf(project) ?? voiceOf(global);
-  const greeting = personaGreetingFields(project, global);
 
   const override: EchoPersonaOverride = {};
   if (typeof name === "string" && name.trim()) override.personaName = name.trim();
   if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
-  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
 
   return Object.keys(override).length > 0 ? override : null;
 }

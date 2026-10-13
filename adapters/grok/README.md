@@ -14,8 +14,7 @@ bash scripts/install.sh --adapter grok
   when present, otherwise a short fallback summary of `lastAssistantMessage`.
 - **Session-end Stop** (`reason` is `shutdown` / `channel_closed`): silent.
 - **SubagentStop**: silent, so a fan-out does not produce a storm of spoken lines.
-- **SessionStart** greetings: opt-in via `ECHO_VOICE_GREET_ON_START=true`; only
-  new sessions (`source` of `new` / `startup` / `create`).
+- **SessionStart** says "Grok, ready." for a new session (`source` of `new` / `startup` / `create`). Other sources stay silent. Set `ECHO_VOICE_GREET_ON_START=false` to disable it.
 
 ## Per-project persona and voice
 

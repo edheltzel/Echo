@@ -7,9 +7,7 @@ const originalFetch = globalThis.fetch;
 const config: JcodeVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "Jcode Notification",
-  startupCatchphrases: ["{name} online."],
   personaName: "Jcode",
-  sayName: true,
   voiceId: "jcode",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -21,11 +19,9 @@ afterEach(() => {
 });
 
 describe("Jcode lifecycle hook adapter", () => {
-  test("ECHO_VOICE_SAY_NAME from config env opts into named greetings", () => {
-    expect(loadJcodeVoiceConfig({}).sayName).toBe(false);
-    expect(loadJcodeVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" }).sayName).toBe(true);
-    expect(loadJcodeVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" }).startupCatchphrases)
-      .not.toEqual(loadJcodeVoiceConfig({}).startupCatchphrases);
+  test("startup greeting defaults on and explicit false stays off", () => {
+    expect(loadJcodeVoiceConfig({}).greetOnSessionStart).toBe(true);
+    expect(loadJcodeVoiceConfig({ ECHO_VOICE_GREET_ON_START: "false" }).greetOnSessionStart).toBe(false);
   });
   test("speaks an explicit final voice line on a successful turn", async () => {
     const payloads: unknown[] = [];
@@ -78,7 +74,7 @@ describe("Jcode lifecycle hook adapter", () => {
     expect(calls).toBe(0);
   });
 
-  test("session greeting is opt-in", async () => {
+  test("disabled greeting stays silent on create", async () => {
     const payloads: unknown[] = [];
     globalThis.fetch = async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
@@ -91,7 +87,7 @@ describe("Jcode lifecycle hook adapter", () => {
       { ...config, greetOnSessionStart: true },
     )).toBe(true);
     expect(payloads).toHaveLength(1);
-    expect(payloads[0]).toMatchObject({ message: "Jcode online.", source: "jcode", session_id: "ses-2" });
+    expect(payloads[0]).toMatchObject({ source: "jcode", session_id: "ses-2" });
     expect(payloads[0]).not.toHaveProperty("slot");
   });
 

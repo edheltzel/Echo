@@ -7,7 +7,7 @@ describe("OpenCode project daidentity", () => {
     const resolved = loadOpenCodeVoiceConfig({}, undefined, "/tmp/echo-absent-home");
     expect(resolved.personaName).toBe("OpenCode");
     expect(resolved.voiceId).toBe("opencode");
-    expect(resolved.sayName).toBe(false);
+    expect(resolved.greetOnSessionStart).toBe(true);
   });
 
   test("project opencode.json overrides env defaults", () => {
@@ -56,7 +56,6 @@ describe("OpenCode project daidentity", () => {
     expect(loadProjectPersona("/proj", (path) => files[path] ?? null, "/home", {})).toEqual({
       personaName: "GlobalOpen",
       voiceId: "en-AU-WilliamNeural",
-      startupCatchphrases: ["Global line."],
     });
   });
 

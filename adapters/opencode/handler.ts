@@ -1,4 +1,4 @@
-import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
+import { startupGreeting } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText, stableMessageKey } from "@echo/shared/voice-line.ts";
 import { loadOpenCodeVoiceConfig, type OpenCodeVoiceConfig } from "./config.ts";
@@ -173,11 +173,7 @@ export async function handleOpenCodeEvent(
 
   if (type === "session.created") {
     if (!config.greetOnSessionStart) return "skipped";
-    message = applyNameToken(
-      pickStartupCatchphrase(config.startupCatchphrases),
-      config.personaName,
-      config.sayName,
-    );
+    message = startupGreeting("opencode");
     subject = { id: `created:${sessionID}` };
   } else {
     if (!config.speakCompletions) return "skipped";

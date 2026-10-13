@@ -1,16 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { defaultStartupGreetings, personaGreetingFields } from "@echo/shared/greeting.ts";
 import { resolveNotifyUrl } from "@echo/shared/daemon-endpoints.ts";
 import { applyPersonaOverride, booleanEnv, type EchoPersonaOverride } from "@echo/shared/persona.ts";
 
 export interface GrokVoiceConfig {
   endpoint: string;
   title: string;
-  startupCatchphrases: string[];
   personaName: string;
-  sayName: boolean;
   voiceId?: string;
   voiceEnabled: boolean;
   greetOnSessionStart: boolean;
@@ -42,9 +39,7 @@ function readDaidentity(
 
 // Same daidentity shape as Claude Code / Pi / omp:
 //   { "daidentity": { "name": "Themis",
-//                     "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } },
-//                     "sayName": true,
-//                     "startupCatchphrases": ["{name} online."] } }
+//                     "voices": { "main": { "voiceId": "en-GB-LibbyNeural" } } } }
 /**
  * Project `<cwd>/.grok/settings.json` over global `~/.grok/settings.json`,
  * project wins per key (matches Pi/Claude daidentity layering).
@@ -62,13 +57,10 @@ export function loadProjectPersona(
     d?.voices?.main?.voiceId ?? d?.voiceId;
   const name = project?.name ?? global?.name;
   const voiceId = voiceOf(project) ?? voiceOf(global);
-  const greeting = personaGreetingFields(project, global);
 
   const override: EchoPersonaOverride = {};
   if (typeof name === "string" && name.trim()) override.personaName = name.trim();
   if (typeof voiceId === "string" && voiceId.trim()) override.voiceId = voiceId.trim();
-  if (greeting.phrases) override.startupCatchphrases = greeting.phrases;
-  if (greeting.sayName !== undefined) override.sayName = greeting.sayName;
   return Object.keys(override).length > 0 ? override : null;
 }
 
@@ -76,19 +68,13 @@ export function loadGrokVoiceConfig(
   env: Record<string, string | undefined> = process.env,
   cwd: string | undefined = process.cwd(),
 ): GrokVoiceConfig {
-  const catchphrase = env.ECHO_VOICE_CATCHPHRASE;
-  const sayName = booleanEnv(env.ECHO_VOICE_SAY_NAME, false);
   const base: GrokVoiceConfig = {
     endpoint: resolveNotifyUrl(env),
     title: env.ECHO_VOICE_TITLE ?? "Grok Notification",
-    startupCatchphrases: catchphrase === undefined ? defaultStartupGreetings(sayName) : [catchphrase],
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Grok",
-    sayName,
     voiceId: env.ECHO_VOICE_ID ?? "grok",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
-    // Grok fires SessionStart for every new TUI/headless session. Keep greetings
-    // opt-in so a busy operator does not get a spoken line on every launch.
-    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, false),
+    greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
   };
   return applyPersonaOverride(base, loadProjectPersona(cwd));
