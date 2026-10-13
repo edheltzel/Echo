@@ -13,8 +13,8 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** Echo never talks over a voice conversation the operator is having in the ChatGPT or Claude desktop app, and the operator still hears when an agent needs them or finishes.
-- **Product authority:** Ed. This plan covers automatic switching during desktop voice conversations only. The sound set and the sounds-only mode it switches into belong to [the notification sounds plan](2026-10-07-1549-feat-notification-sounds-plan.md).
-- **Open blockers:** Depends on the notification sounds plan shipping its sounds-only behavior first. Planning is paused on the two `Resolve Before Planning` questions: whether a background process can see which app holds the microphone, and how desktop-app events reach Echo today.
+- **Product authority:** Ed. This plan covers automatic switching during desktop voice conversations only. The sound set and the sounds-only mode it switches into shipped in [#203](https://github.com/edheltzel/Echo/pull/203) (`cli/echo mode`, `POST /mode`; see `docs/http-api.md`).
+- **Open blockers:** The sounds-only dependency shipped in #203. Planning is paused on the two `Resolve Before Planning` questions: whether a background process can see which app holds the microphone, and how desktop-app events reach Echo today.
 
 ---
 
@@ -33,7 +33,7 @@ The operator uses voice mode in the ChatGPT and Claude desktop apps. Echo keeps 
 
 This plan covers automatic quieting during desktop voice conversations. The breakdown below is the current understanding, not a committed roadmap.
 
-- Notification sounds and sounds-only mode ([plan](2026-10-07-1549-feat-notification-sounds-plan.md)).
+- Notification sounds and sounds-only mode (shipped in [#203](https://github.com/edheltzel/Echo/pull/203)).
   - This plan depends on it: R3 reuses its sounds-only behavior and mute rules.
 - Desktop-app notification sounds: dropped. ChatGPT and Claude desktop already play their own notification sounds, so Echo adds nothing for those sessions beyond this plan.
 
