@@ -5,9 +5,8 @@ import { join } from "node:path";
 import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
 
 // Layered identity resolution: project.local → project → global → defaults, per key.
-// The feature is a per-project spoken identity (name + voice); catchphrases ride the
-// same resolver. These tests drive getIdentity(projectDir, home) with throwaway dirs
-// so no real ~/.claude or CLAUDE_PROJECT_DIR is touched.
+// These tests drive getIdentity(projectDir, home) with throwaway dirs so no real
+// ~/.claude or CLAUDE_PROJECT_DIR is touched.
 
 const scratch: string[] = [];
 
@@ -34,7 +33,6 @@ function fakeHome(daidentity: Record<string, unknown>): string {
 const GLOBAL_ATLAS = {
   name: "Atlas",
   voices: { main: { voiceId: "atlas-voice" } },
-  startupCatchphrases: ["Atlas online.", "Atlas standing by."],
   personality: { baseVoice: "en-US-Global", enthusiasm: 0.7 },
 };
 
@@ -98,30 +96,6 @@ describe("getIdentity - layered precedence (project → global → default)", ()
   });
 });
 
-describe("getIdentity - catchphrases (secondary, rides the same resolver)", () => {
-  test("project catchphrases replace the global pool wholesale when present", () => {
-    const home = fakeHome(GLOBAL_ATLAS);
-    const proj = tmp("echo-proj-");
-    writeClaudeSettings(proj, "settings.json", {
-      daidentity: { name: "Echo", startupCatchphrases: ["Echo online.", "Echo here."] },
-    });
-
-    const id = getIdentity(proj, home);
-    // Array is atomic - the global two-phrase pool is replaced, not merged.
-    expect(id.startupCatchphrases).toEqual(["Echo online.", "Echo here."]);
-  });
-
-  test("no project catchphrases → global pool", () => {
-    const home = fakeHome(GLOBAL_ATLAS);
-    const proj = tmp("echo-proj-");
-    writeClaudeSettings(proj, "settings.json", {
-      daidentity: { name: "Echo", voices: { main: { voiceId: "echo-voice" } } },
-    });
-
-    const id = getIdentity(proj, home);
-    expect(id.startupCatchphrases).toEqual(["Atlas online.", "Atlas standing by."]);
-  });
-});
 
 describe("getIdentity - settings.local.json overlay", () => {
   test("local overlay wins over project settings.json for the same key", () => {

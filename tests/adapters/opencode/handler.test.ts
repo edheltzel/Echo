@@ -16,9 +16,7 @@ const originalFetch = globalThis.fetch;
 const config: OpenCodeVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "OpenCode Notification",
-  startupCatchphrases: ["{name} online."],
   personaName: "OpenCode",
-  sayName: true,
   voiceId: "opencode",
   voiceEnabled: true,
   greetOnSessionStart: false,
@@ -143,14 +141,22 @@ describe("OpenCode plugin event adapter", () => {
 
     const sent = await handleOpenCodeEvent(
       { type: "session.created", properties: { info: { id: "ses_3" } } },
-      { ...config, greetOnSessionStart: true },
+      { ...config, personaName: "Atlas", greetOnSessionStart: true },
       port(),
     );
     expect(sent).toBe("sent");
     expect(bodies).toEqual([
-      expect.objectContaining({ message: "OpenCode online.", source: "opencode" }),
+      expect.objectContaining({ message: "Open code, ready.", source: "opencode", voice_id: "opencode" }),
     ]);
     expect(bodies[0]).not.toHaveProperty("slot");
+
+    const repeat = await handleOpenCodeEvent(
+      { type: "session.created", properties: { info: { id: "ses_3" } } },
+      { ...config, greetOnSessionStart: true },
+      port(),
+    );
+    expect(repeat).toBe("skipped");
+    expect(bodies).toHaveLength(1);
   });
 
   test("repeats of the same idle message are deduped", async () => {
@@ -256,7 +262,6 @@ describe("OpenCode plugin event adapter", () => {
     expect(resolved.personaName).toBe("OpenCode");
     expect(resolved.voiceId).toBe("opencode");
     expect(resolved.greetOnSessionStart).toBe(true);
-    expect(resolved.sayName).toBe(false);
     expect(
       loadOpenCodeVoiceConfig({ ECHO_VOICE_GREET_ON_START: "false" }, undefined, "/tmp/echo-absent-home")
         .greetOnSessionStart,

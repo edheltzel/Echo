@@ -193,7 +193,7 @@ export const FEATURES = {
   greeting: {
     id: "greeting",
     module: "@echo/shared/greeting.ts",
-    register: "applyNameToken",
+    register: "startupGreeting",
   },
   env: {
     id: "env",

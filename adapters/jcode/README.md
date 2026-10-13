@@ -9,9 +9,9 @@ bash scripts/install.sh --adapter jcode
 
 Jcode's `turn_end` hook covers TUI, desktop, headless, and swarm sessions. Echo speaks only
 an explicit final `🗣️ Name: summary` line from Jcode's bounded response tail, and suppresses
-events whose lifecycle metadata identifies a child session. Startup greetings are disabled
-by default; when enabled with `ECHO_VOICE_GREET_ON_START=true`, only newly created root
-sessions greet (attach/resume and child sessions stay silent).
+events whose lifecycle metadata identifies a child session. A newly created root
+session says "Jay code, ready." Resume, attach, and child sessions stay silent.
+Set `ECHO_VOICE_GREET_ON_START=false` to disable the greeting.
 
 Jcode currently supports one command per hook. Installation rewrites Echo-owned
 `session_start` / `turn_end` commands onto this checkout (including a live hook from

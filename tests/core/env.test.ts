@@ -302,25 +302,23 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
     expect(validateEchoConfig({ notEcho: true })).toHaveLength(1);
     expect(validateEchoConfig({ ECHO_VOICE_ID: ["voice"] })).toHaveLength(1);
     expect(validateEchoConfig({ PORT: 3246, ECHO_VOICE_ENABLED: false })).toEqual([]);
-    expect(validateEchoConfig({ ECHO_VOICE_SAY_NAME: true })).toEqual([]);
-    expect(validateEchoConfig({ ECHO_VOICE_SAY_NAME: "true" })).toEqual([]);
   });
 
-  test("ECHO_VOICE_SAY_NAME is accepted from config.json, not dropped as unknown", () => {
-    const home = mkdtempSync(join(tmpdir(), "echo-say-name-"));
+  test("retired startup personalization keys do not discard valid configuration", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-retired-greeting-"));
     try {
       mkdirSync(join(home, ".config", "echo"), { recursive: true });
       writeFileSync(echoConfigPath(home), JSON.stringify({
+        ECHO_VOICE_CATCHPHRASE: "Atlas online.",
         ECHO_VOICE_SAY_NAME: true,
         ECHO_DEFAULT_TITLE: "Kept",
       }));
 
       const { env, config } = loadEchoConfigurationWithStatus({}, home);
-      expect(env.ECHO_VOICE_SAY_NAME).toBe("true");
+      expect(env.ECHO_VOICE_CATCHPHRASE).toBeUndefined();
+      expect(env.ECHO_VOICE_SAY_NAME).toBeUndefined();
       expect(env.ECHO_DEFAULT_TITLE).toBe("Kept");
-      expect(config.ignored).toEqual([]);
-      expect(config.errors).toEqual([]);
-      expect(config.configured).toContain("ECHO_VOICE_SAY_NAME");
+      expect(config.ignored).toEqual(["ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_SAY_NAME"]);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

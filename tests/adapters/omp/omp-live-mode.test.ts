@@ -11,9 +11,7 @@ const originalFetch = globalThis.fetch;
 const config: OmpVoiceConfig = {
   endpoint: "http://voice.example/notify",
   title: "OMP Notification",
-  startupCatchphrases: ["OMP online."],
   personaName: "OMP",
-  sayName: false,
   voiceId: "omp",
   voiceEnabled: true,
   greetOnSessionStart: false,

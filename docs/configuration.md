@@ -114,8 +114,8 @@ at runtime; invalid values use the defaults below.
 | --- | --- | --- |
 | Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_OSASCRIPT_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say; /usr/bin/osascript |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
-| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; startup names stay nameless unless ECHO_VOICE_SAY_NAME / daidentity.sayName is true; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
-| Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice is enabled and unsuppressed by default; subagent voice is suppressed by default; title defaults to Voice Notification |
+| Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
+| Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_DEFAULT_TITLE | Voice and genuine harness startup lines are enabled by default; subagent voice is suppressed by default; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
@@ -135,10 +135,6 @@ Settings whose behavior is not obvious from the name:
 - **ECHO_OSASCRIPT_BIN** points the legacy macOS notification banner at a different executable,
   called with `-e <AppleScript>`. The smoke and e2e scripts and `bun test` point it at a no-op
   so isolated test daemons never show a banner. Unset means `/usr/bin/osascript`.
-
-- **ECHO_VOICE_SAY_NAME** is the config.json form of `daidentity.sayName`: when true, adapters
-  use the named default startup pool and fill `{name}`. Unset or false stays nameless. A
-  host `daidentity.sayName` still wins when that file sets it.
 
 - **ECHO_PREFERRED_NAME** is the human name Claude Code, Pi, and omp put at the front of a
   needs-input / approval / attention line (`Ed, …`). Unset or blank stays nameless. Echo
@@ -253,7 +249,6 @@ legacy `PYTHON3_PATH` follows the same one-release warning fallback and maps to
 | `ATLAS_VOICE_NOTIFY_URL` | `ECHO_NOTIFY_URL` |
 | `ATLAS_VOICE_ID` | `ECHO_VOICE_ID` |
 | `ATLAS_VOICE_TITLE` | `ECHO_VOICE_TITLE` |
-| `ATLAS_VOICE_CATCHPHRASE` | `ECHO_VOICE_CATCHPHRASE` |
 | `ATLAS_VOICE_PERSONA_NAME` | `ECHO_VOICE_PERSONA_NAME` |
 | `ATLAS_VOICE_ENABLED` | `ECHO_VOICE_ENABLED` |
 | `ATLAS_VOICE_GREET_ON_START` | `ECHO_VOICE_GREET_ON_START` |

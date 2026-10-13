@@ -28,8 +28,8 @@ Plugin events (`opencode.ai/docs/plugins`, `@opencode-ai/sdk` v1 types):
   text (a `!shell` turn, an abort during a tool call) stays silent. Deduped per session +
   message id, including two idles for one turn arriving at once (OpenCode publishes
   `session.idle` twice on an aborted or errored turn and does not await plugin hooks).
-- **`session.created`**: greets by default, like Pi and omp; set `ECHO_VOICE_GREET_ON_START` to
-  `false` in `~/.config/echo/config.json` to turn it off.
+- **`session.created`**: says "Open code, ready." unless `ECHO_VOICE_GREET_ON_START` is
+  `false`. A repeat of the same created event stays silent. The persona name does not change the line.
 - **Subagent sessions** (`parentID` set): silent.
 - **Unreadable session** (`session.get` returns an error): silent (fail closed).
 - **Every other event** (streamed parts, message updates) returns before any config read or
@@ -47,9 +47,7 @@ Default persona `OpenCode`, voice key `opencode` in `core/voices.json`. Override
 {
   "daidentity": {
     "name": "Neo",
-    "voices": { "main": { "voiceId": "en-IN-NeerjaExpressiveNeural" } },
-    "sayName": false,
-    "startupCatchphrases": ["There is no spoon."]
+    "voices": { "main": { "voiceId": "en-IN-NeerjaExpressiveNeural" } }
   }
 }
 ```
@@ -59,8 +57,8 @@ own config (objects per key, later files win): the three global files, `OPENCODE
 `opencode.json(c)` from the worktree root down to the session's folder, every `.opencode/`
 folder from that folder up plus `~/.opencode/`, then `OPENCODE_CONFIG_DIR`.
 `OPENCODE_DISABLE_PROJECT_CONFIG` drops the project and project `.opencode/` layers. The
-result wins over env and adapter defaults (`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`,
-`ECHO_VOICE_SAY_NAME`).
+result wins over env and adapter defaults (`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`).
+Other `daidentity` keys are left in the file and not read.
 
 ## Ownership
 

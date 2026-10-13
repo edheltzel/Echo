@@ -10,18 +10,14 @@ import {
   loadProjectPersona,
   type PiVoiceConfig,
 } from "../../../adapters/pi/config";
-import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 
-// Pi project persona override - SAME convention as the Claude Code adapter: a
-// `daidentity` block in the host's native settings.json, layered project over
-// global. Pi's own layering is `<cwd>/.pi/settings.json` (project) over
-// `~/.pi/agent/settings.json` (global), project wins per key. Inside a repo with
-// a project daidentity, the greeting + per-turn voice use that persona.
+// Pi project persona override: a `daidentity` block in the host's native
+// settings.json, layered project over global. Project wins per key for name
+// and voice. Startup speech is the fixed harness line, not the persona name.
 
 const GLOBAL_PATH = (home: string) => join(home, ".pi", "agent", "settings.json");
 const PROJECT_PATH = (cwd: string) => join(cwd, ".pi", "settings.json");
 
-// ── config-level unit tests (pure; injected readFile + explicit home) ────────
 describe("loadProjectPersona - daidentity from .pi/settings.json layering", () => {
   const HOME = "/home/u";
   const CWD = "/proj";
@@ -32,18 +28,18 @@ describe("loadProjectPersona - daidentity from .pi/settings.json layering", () =
     expect(loadProjectPersona(CWD, () => null, HOME)).toBeNull();
   });
 
-  test("project daidentity → name + voice + catchphrases", () => {
+  test("project daidentity → name + voice; leftover greeting keys are ignored", () => {
     const o = loadProjectPersona(CWD, reader({
       [PROJECT_PATH(CWD)]: daidentity({
         name: "Echo",
         voices: { main: { voiceId: "en-US-AndrewNeural" } },
         startupCatchphrases: ["Echo online.", "Echo here."],
+        sayName: true,
       }),
     }), HOME);
     expect(o).toEqual({
       personaName: "Echo",
       voiceId: "en-US-AndrewNeural",
-      startupCatchphrases: ["Echo online.", "Echo here."],
     });
   });
 
@@ -61,13 +57,11 @@ describe("loadProjectPersona - daidentity from .pi/settings.json layering", () =
         voices: { main: { voiceId: "global-voice" } },
         startupCatchphrases: ["Global line."],
       }),
-      // Project sets only the voice → name + catchphrases fall through to global.
       [PROJECT_PATH(CWD)]: daidentity({ voices: { main: { voiceId: "en-US-AndrewNeural" } } }),
     }), HOME);
     expect(o).toEqual({
-      personaName: "GlobalPi",              // from global
-      voiceId: "en-US-AndrewNeural",         // project wins
-      startupCatchphrases: ["Global line."], // from global
+      personaName: "GlobalPi",
+      voiceId: "en-US-AndrewNeural",
     });
   });
 
@@ -89,6 +83,12 @@ describe("loadProjectPersona - daidentity from .pi/settings.json layering", () =
     expect(o).toBeNull();
   });
 
+  test("greeting-only daidentity does not invent a persona override", () => {
+    expect(loadProjectPersona(CWD, reader({
+      [PROJECT_PATH(CWD)]: daidentity({ startupCatchphrases: ["Echo online."], sayName: true }),
+    }), HOME)).toBeNull();
+  });
+
   test("no cwd → still reads global settings.json", () => {
     const o = loadProjectPersona(undefined, reader({
       [GLOBAL_PATH(HOME)]: daidentity({ name: "GlobalPi" }),
@@ -101,9 +101,7 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
   const base: PiVoiceConfig = {
     endpoint: "http://x/notify",
     title: "Pi Notification",
-    startupCatchphrases: ["Base ready."],
     personaName: "Pi",
-    sayName: false,
     voiceId: "pi",
     voiceEnabled: true,
     greetOnSessionStart: true,
@@ -115,36 +113,15 @@ describe("applyPersonaOverride - per-key override onto the base config", () => {
     expect(applyPersonaOverride(base, null)).toBe(base);
   });
 
-  test("name + voice override preserves a custom base greeting", () => {
+  test("name + voice override leaves the other config fields", () => {
     const out = applyPersonaOverride(base, { personaName: "Echo", voiceId: "en-US-AndrewNeural" });
     expect(out.personaName).toBe("Echo");
     expect(out.voiceId).toBe("en-US-AndrewNeural");
-    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
-    expect(out.sayName).toBe(false);
     expect(out.speakCompletions).toBe(true);
-  });
-
-  test("sayName true preserves a custom base greeting", () => {
-    const out = applyPersonaOverride(base, { personaName: "Echo", sayName: true });
-    expect(out.sayName).toBe(true);
-    expect(out.startupCatchphrases).toBe(base.startupCatchphrases);
-  });
-
-  test("sayName switches the shared default pool", () => {
-    const defaultBase = { ...base, startupCatchphrases: NAMELESS_STARTUP_GREETINGS };
-    const out = applyPersonaOverride(defaultBase, { personaName: "Echo", sayName: true });
-    expect(out.startupCatchphrases).toBe(NAMED_STARTUP_GREETINGS);
-  });
-
-  test("name override WITH its own catchphrases → keeps the custom pool", () => {
-    const out = applyPersonaOverride(base, { personaName: "Echo", startupCatchphrases: ["Echo reporting."] });
-    expect(out.startupCatchphrases).toEqual(["Echo reporting."]);
+    expect(out.greetOnSessionStart).toBe(true);
   });
 });
 
-// ── integration: greeting + completion use the override via ctx.cwd ──────────
-// HOME is redirected to a temp dir (no global ~/.pi/agent/settings.json daidentity)
-// so the test is isolated from the real user config; only the project file counts.
 type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -174,16 +151,23 @@ let fakeHome: string;
 beforeEach(() => {
   process.env = { ...originalEnv };
   process.env.ECHO_NOTIFY_URL = "http://voice.example/notify";
-  process.env.ECHO_VOICE_PERSONA_NAME = "Pi";
+  process.env.ECHO_VOICE_PERSONA_NAME = "Atlas";
   process.env.ECHO_VOICE_ID = "pi";
+  process.env.ECHO_VOICE_CATCHPHRASE = "Atlas online and standing by.";
+  process.env.ECHO_VOICE_SAY_NAME = "true";
   fakeHome = mkdtempSync(join(tmpdir(), "echo-pi-home-"));
-  process.env.HOME = fakeHome; // homedir() → fakeHome (no global daidentity there)
+  process.env.HOME = fakeHome;
   projectDir = mkdtempSync(join(tmpdir(), "echo-pi-int-"));
   mkdirSync(join(projectDir, ".pi"), { recursive: true });
   writeFileSync(
     join(projectDir, ".pi", "settings.json"),
     JSON.stringify({
-      daidentity: { name: "Echo", voices: { main: { voiceId: "en-US-AndrewNeural" } }, startupCatchphrases: ["Echo online."] },
+      daidentity: {
+        name: "Echo",
+        voices: { main: { voiceId: "en-US-AndrewNeural" } },
+        startupCatchphrases: ["Echo online."],
+        sayName: true,
+      },
     }),
   );
 });
@@ -196,74 +180,24 @@ afterEach(() => {
 });
 
 describe("integration - project override flows through greeting + completion", () => {
-  test("session_start greeting uses the project catchphrase AND voice", async () => {
-    const payloads: any[] = [];
+  test("startup says the harness line in the project voice, ignoring persona and legacy greeting settings", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
     };
     const { handlers, api } = createMockPi();
-    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env)); // base persona=Pi, voice=pi
+    atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
 
     await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(projectDir));
 
     expect(payloads).toHaveLength(1);
-    expect(payloads[0].message).toBe("Echo online.");        // project catchphrase
-    expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");  // project voice, not "pi"
+    expect(payloads[0].message).toBe("Pie, ready.");
+    expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
   });
 
-  test("name+voice persona with NO catchphrases stays nameless", async () => {
-    const payloads: any[] = [];
-    globalThis.fetch = async (_i, init) => {
-      payloads.push(JSON.parse(String(init?.body)));
-      return new Response("{}", { status: 200 });
-    };
-    const dir = mkdtempSync(join(tmpdir(), "echo-pi-nameonly-"));
-    mkdirSync(join(dir, ".pi"), { recursive: true });
-    writeFileSync(
-      join(dir, ".pi", "settings.json"),
-      JSON.stringify({ daidentity: { name: "EchoPi", voices: { main: { voiceId: "en-US-AndrewNeural" } } } }),
-    );
-    try {
-      const { handlers, api } = createMockPi();
-      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
-      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
-      expect(payloads).toHaveLength(1);
-      expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
-      expect(payloads[0].message).not.toContain("EchoPi");
-      expect(NAMELESS_STARTUP_GREETINGS).toContain(payloads[0].message);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("sayName true announces the persona name from the named pool", async () => {
-    const payloads: any[] = [];
-    globalThis.fetch = async (_i, init) => {
-      payloads.push(JSON.parse(String(init?.body)));
-      return new Response("{}", { status: 200 });
-    };
-    const dir = mkdtempSync(join(tmpdir(), "echo-pi-sayname-"));
-    mkdirSync(join(dir, ".pi"), { recursive: true });
-    writeFileSync(
-      join(dir, ".pi", "settings.json"),
-      JSON.stringify({
-        daidentity: { name: "EchoPi", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
-      }),
-    );
-    try {
-      const { handlers, api } = createMockPi();
-      atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
-      await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(dir));
-      expect(payloads).toHaveLength(1);
-      expect(payloads[0].message).toContain("EchoPi");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("per-turn completion uses the project voice", async () => {
-    const payloads: any[] = [];
+  test("per-turn completion uses the project voice and persona name", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
@@ -272,16 +206,17 @@ describe("integration - project override flows through greeting + completion", (
     atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
 
     await handlers.get("message_end")?.(
-      { message: { role: "assistant", id: "m1", content: "Did the thing.\n🗣️ Shipped the fix." } },
+      { message: { role: "assistant", id: "m1", content: "Did the thing.\n🗣️ Echo: Shipped the fix." } },
       ctxWithCwd(projectDir),
     );
 
     expect(payloads).toHaveLength(1);
     expect(payloads[0].voice_id).toBe("en-US-AndrewNeural");
+    expect(payloads[0].message).toBe("Shipped the fix.");
   });
 
-  test("project with no daidentity → base persona/voice (global stands)", async () => {
-    const payloads: any[] = [];
+  test("project with no daidentity → base voice", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
@@ -291,7 +226,8 @@ describe("integration - project override flows through greeting + completion", (
       const { handlers, api } = createMockPi();
       atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
       await handlers.get("session_start")?.({ reason: "startup" }, ctxWithCwd(bare));
-      expect(payloads[0].voice_id).toBe("pi"); // base voice, no override
+      expect(payloads[0].voice_id).toBe("pi");
+      expect(payloads[0].message).toBe("Pie, ready.");
     } finally {
       rmSync(bare, { recursive: true, force: true });
     }

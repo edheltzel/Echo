@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 /**
- * VoiceGreeting.hook.ts - Speak catchphrase at Session Start (async)
+ * VoiceGreeting.hook.ts - Announce Claude Code at Session Start (async)
  *
  * PURPOSE:
- * Sends voice notification with the startup catchphrase from settings.json.
+ * Sends the fixed harness startup line using the configured persona voice.
  * Runs as an async hook so it doesn't block session startup.
  *
  * For named subagents (Intern, Engineer, etc.), announces with THAT agent's
@@ -31,14 +31,15 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
-import { resolveStartupCatchphrase } from './lib/greeting';
+import { startupGreeting } from '@echo/shared/greeting.ts';
 import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
-import { loadEchoConfiguration } from '@echo/shared/echo-env.ts';
+import { loadEchoConfiguration, parseEchoBoolean } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { createHookNativeVisualContext } from './lib/native-terminal';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 const ECHO_CONFIG = loadEchoConfiguration();
+if (!parseEchoBoolean(ECHO_CONFIG.ECHO_VOICE_GREET_ON_START, true)) process.exit(0);
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
 // in ~tens of ms. A short guard is enough to avoid hanging if the daemon is down;
 // it no longer needs to cover synthesis + playback (that was the old 12 s wait
@@ -227,11 +228,7 @@ if (isNamedAgent && agentType) {
       ? fm.voiceId
       : atlasVoiceId;
 
-    // Build announcement message using agent's persona name if available
-    const personaName = fm.persona?.name;
-    const message = personaName
-      ? `${personaName}, standing by`
-      : `${agentType} online`;
+    const message = startupGreeting("claudecode");
 
     // Build voice_settings from agent frontmatter (gives each agent a distinct sound)
     const voice = fm.voice;
@@ -270,7 +267,7 @@ try {
   const identity = getIdentity();
   const daName = identity.displayName;
 
-  const catchphrase = resolveStartupCatchphrase(identity);
+  const catchphrase = startupGreeting("claudecode");
   const personality = identity.personality;
 
   const url = personality?.baseVoice

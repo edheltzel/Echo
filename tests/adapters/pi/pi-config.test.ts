@@ -4,10 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   loadPiVoiceConfig,
-  pickStartupCatchphrase,
   shouldSuppressVoice,
 } from "../../../adapters/pi/config";
-import { NAMELESS_STARTUP_GREETINGS, NAMED_STARTUP_GREETINGS } from "../../../shared/greeting";
 import { edgeRateFromSpeed } from "../../../core/edge-rate";
 import { loadEchoEnvironment } from "../../../shared/echo-env";
 
@@ -16,16 +14,9 @@ describe("Pi voice config", () => {
     const config = loadPiVoiceConfig({});
     expect(config.endpoint).toBe("http://localhost:3246/notify");
     expect(config.title).toBe("Pi Notification");
-    expect(config.startupCatchphrases).toEqual(NAMELESS_STARTUP_GREETINGS);
-    expect(config.sayName).toBe(false);
     expect(config.voiceEnabled).toBe(true);
     expect(config.personaName).toBe("Pi");
-  });
-
-  test("ECHO_VOICE_SAY_NAME opts into the named default startup pool", () => {
-    const config = loadPiVoiceConfig({ ECHO_VOICE_SAY_NAME: "true" });
-    expect(config.sayName).toBe(true);
-    expect(config.startupCatchphrases).toEqual(NAMED_STARTUP_GREETINGS);
+    expect(config.greetOnSessionStart).toBe(true);
   });
 
   test("default adapter reads config.json instead of process configuration", () => {
@@ -60,59 +51,15 @@ describe("Pi voice config", () => {
 
       const fromFile = loadPiVoiceConfig(loadEchoEnvironment({}, home));
       expect(fromFile.personaName).toBe("Atlas");
-      expect(fromFile.startupCatchphrases).toEqual(["Atlas online and standing by."]);
 
       const fromProcess = loadPiVoiceConfig(loadEchoEnvironment(
         { ECHO_VOICE_PERSONA_NAME: "Override" },
         home,
       ));
       expect(fromProcess.personaName).toBe("Override");
-      expect(fromProcess.startupCatchphrases).toEqual(["Atlas online and standing by."]);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
-  });
-
-  test("default greeting pool has variety and no hardcoded persona name (#81)", () => {
-    // A pool of one would make the random pick pointless; a persona name would
-    // violate the neutral-default-identity rule (Pi and omp share this adapter).
-    expect(NAMELESS_STARTUP_GREETINGS.length).toBeGreaterThan(1);
-    for (const phrase of NAMELESS_STARTUP_GREETINGS) {
-      expect(phrase.trim().length).toBeGreaterThan(0);
-      expect(phrase).not.toMatch(/\bPi\b/i);
-      expect(phrase).not.toContain("{name}");
-    }
-  });
-
-  test("injected catchphrase values pin the greeting to a single line (#81)", () => {
-    expect(loadPiVoiceConfig({ ECHO_VOICE_CATCHPHRASE: "Pinned line." }).startupCatchphrases)
-      .toEqual(["Pinned line."]);
-    // Legacy name still works as a deprecated fallback; canonical wins when both are set.
-    expect(loadPiVoiceConfig({ ATLAS_VOICE_CATCHPHRASE: "Legacy line." }).startupCatchphrases)
-      .toEqual(["Legacy line."]);
-    expect(
-      loadPiVoiceConfig({ ECHO_VOICE_CATCHPHRASE: "Echo.", ATLAS_VOICE_CATCHPHRASE: "Atlas." })
-        .startupCatchphrases,
-    ).toEqual(["Echo."]);
-  });
-
-  test("pickStartupCatchphrase selects uniformly by the injected random (#81)", () => {
-    const pool = ["a", "b", "c"];
-    expect(pickStartupCatchphrase(pool, () => 0)).toBe("a");
-    expect(pickStartupCatchphrase(pool, () => 0.5)).toBe("b");
-    expect(pickStartupCatchphrase(pool, () => 0.999)).toBe("c");
-    // A pinned pool always yields its single line.
-    expect(pickStartupCatchphrase(["only"], Math.random)).toBe("only");
-  });
-
-  test("consecutive session starts can greet with different lines (#81)", () => {
-    // Probabilistic but effectively certain: 200 real-random draws from a pool
-    // of N>1 collapse to one distinct value with probability N^(1-200).
-    const seen = new Set<string>();
-    for (let i = 0; i < 200; i++) {
-      seen.add(pickStartupCatchphrase(NAMELESS_STARTUP_GREETINGS));
-    }
-    expect(seen.size).toBeGreaterThan(1);
   });
 
   test("defaults voice_id to the pi persona (distinct Pi voice, #76)", () => {

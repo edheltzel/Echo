@@ -14,7 +14,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { paiPath } from '../lib/paths';
 import { getIdentity, type Identity, type VoiceProsody } from '../lib/identity';
-import { findStartupCatchphraseMatch } from '../lib/greeting';
+import { matchesStartupGreeting } from '../lib/greeting';
 import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
@@ -353,14 +353,9 @@ export async function handleVoice(
     return;
   }
 
-  // Skip startup catchphrase - already spoken by VoiceGreeting.hook.ts at SessionStart.
-  // Without this, the AI's first 🗣️ line echoing the greeting causes a double-fire.
-  // Uses the same layered identity VoiceGreeting resolves, so a project persona's
-  // catchphrases are deduped in that repo (not the global pool). Only normalized
-  // full-line equality counts; ordinary speech may contain generic greeting fragments.
-  const matchingCatchphrase = findStartupCatchphraseMatch(voiceCompletion, identity);
-  if (matchingCatchphrase) {
-    console.error(`[Voice] Skipping - matches startup catchphrase: "${matchingCatchphrase}"`);
+  // An echoed startup line is already spoken by the SessionStart hook.
+  if (matchesStartupGreeting(voiceCompletion)) {
+    console.error('[Voice] Skipping - matches startup greeting');
     return;
   }
 

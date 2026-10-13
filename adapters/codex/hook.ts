@@ -8,7 +8,7 @@
  */
 
 import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
-import { applyNameToken, pickStartupCatchphrase } from "@echo/shared/greeting.ts";
+import { startupGreeting } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
 import {
@@ -26,6 +26,7 @@ export interface CodexHookPayload {
   cwd?: string;
   model?: string;
   permission_mode?: string;
+  source?: string;
   last_assistant_message?: string;
   lastAssistantMessage?: string;
   // Codex Stop may use these
@@ -139,8 +140,8 @@ export async function handleCodexHookResult(
     }
     message = messageFromStop(lastAssistantMessage(payload), config.personaName);
   } else if (event === "session_start" || event === "sessionstart") {
-    if (!config.greetOnSessionStart) return "skipped";
-    message = applyNameToken(pickStartupCatchphrase(config.startupCatchphrases), config.personaName, config.sayName);
+    if (!config.greetOnSessionStart || payload.source !== "startup") return "skipped";
+    message = startupGreeting("codex");
   } else {
     return "skipped";
   }

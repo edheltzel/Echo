@@ -1,189 +1,96 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearCache, getIdentity } from "../../../adapters/claudecode/hooks/lib/identity";
-import {
-  findStartupCatchphraseMatch,
-  resolveStartupCatchphrase,
-  resolveStartupCatchphrases,
-} from "../../../adapters/claudecode/hooks/lib/greeting";
-
-// Project names still win displayName precedence, but startup name announcement is
-// opt-in. Inherited custom literals remain unchanged; shared defaults follow sayName.
-const GLOBAL_ATLAS = {
-  name: "Atlas",
-  displayName: "Atlas",
-  voices: { main: { voiceId: "atlas-voice" } },
-  startupCatchphrases: ["Atlas online and standing by.", "Atlas standing by."],
-};
+import { matchesStartupGreeting } from "../../../adapters/claudecode/hooks/lib/greeting";
 
 const scratch: string[] = [];
-function tmp(prefix: string): string { const d = mkdtempSync(join(tmpdir(), prefix)); scratch.push(d); return d; }
-function writeSettings(root: string, json: unknown): void {
-  const dir = join(root, ".claude");
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "settings.json"), JSON.stringify(json));
-}
-function fakeHome(daidentity: Record<string, unknown> = GLOBAL_ATLAS): string {
-  const h = tmp("echo-home-");
-  writeSettings(h, { daidentity });
-  return h;
-}
-const firstPick = () => 0; // deterministic catchphrase pick
-
-afterEach(() => { clearCache(); for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true }); });
-
-describe("Claude Code startup greeting stays nameless unless sayName", () => {
-  test("displayName precedence: project name overrides an inherited global displayName", () => {
-    const home = fakeHome();
-    const proj = tmp("echo-proj-");
-    writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
-
-    const id = getIdentity(proj, home);
-    expect(id.displayName).toBe("EchoCC");           // was "Atlas" (the bug)
-    expect(id.mainDAVoiceID).toBe("en-US-AndrewNeural");
-    expect(id.personaFromProject).toBe(true);
-    expect(id.catchphrasesFromProject).toBe(false);
-  });
-
-  test("project name inherits global custom catchphrases verbatim", () => {
-    const home = fakeHome();
-    const proj = tmp("echo-proj-");
-    writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
-
-    const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
-    expect(greeting).toBe("Atlas online and standing by.");
-  });
-
-  test("name+voice, no configured catchphrases, no sayName is nameless", () => {
-    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
-    const proj = tmp("echo-proj-");
-    writeSettings(proj, { daidentity: { name: "EchoCC", voices: { main: { voiceId: "en-US-AndrewNeural" } } } });
-
-    const id = getIdentity(proj, home);
-    const greeting = resolveStartupCatchphrase(id, firstPick);
-    expect(resolveStartupCatchphrases(id)).toEqual([
-      "standing by",
-      "ready when you are",
-      "waiting for direction",
-      "engaged",
-    ]);
-    expect(greeting).toBe("standing by");
-  });
-
-  test("sayName true uses the named default pool", () => {
-    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
-    const proj = tmp("echo-proj-");
-    writeSettings(proj, {
-      daidentity: { name: "EchoCC", sayName: true, voices: { main: { voiceId: "en-US-AndrewNeural" } } },
-    });
-
-    const greeting = resolveStartupCatchphrase(getIdentity(proj, home), firstPick);
-    expect(greeting).toBe("EchoCC, standing by");
-  });
-
-  test("project sets its OWN catchphrases → those win over the name default", () => {
-    const home = fakeHome();
-    const proj = tmp("echo-proj-");
-    writeSettings(proj, { daidentity: { name: "EchoCC", startupCatchphrases: ["Echo reporting."] } });
-
-    const id = getIdentity(proj, home);
-    expect(id.catchphrasesFromProject).toBe(true);
-    expect(resolveStartupCatchphrase(id, firstPick)).toBe("Echo reporting.");
-  });
-
-  test("legacy singular startupCatchphrase is honored", () => {
-    const home = fakeHome({
-      name: "Atlas",
-      displayName: "Atlas",
-      startupCatchphrase: "Legacy greeting.",
-    });
-    const proj = tmp("echo-proj-");
-
-    const id = getIdentity(proj, home);
-    expect(resolveStartupCatchphrases(id)).toEqual(["Legacy greeting."]);
-    expect(resolveStartupCatchphrase(id, firstPick)).toBe("Legacy greeting.");
-  });
-
-  test("sayName false removes name tokens from the dedup pool", () => {
-    const home = fakeHome({
-      name: "Atlas",
-      displayName: "Atlas",
-      startupCatchphrases: ["{name}, ready"],
-    });
-    const proj = tmp("echo-proj-");
-
-    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
-  });
-
-  test("invalid custom entries are excluded before name token expansion", () => {
-    const home = fakeHome({
-      name: "Atlas",
-      displayName: "Atlas",
-      startupCatchphrases: [null, 42, "", "  ", "{name}, ready"],
-    });
-    const proj = tmp("echo-proj-");
-
-    expect(resolveStartupCatchphrases(getIdentity(proj, home))).toEqual(["ready"]);
-  });
-
-  test("default greetings deduplicate only exact normalized lines", () => {
-    const home = fakeHome({ name: "Atlas", displayName: "Atlas" });
-    const proj = tmp("echo-proj-");
-    const id = getIdentity(proj, home);
-
-    expect(findStartupCatchphraseMatch("Engaged!", id)).toBe("engaged");
-    expect(findStartupCatchphraseMatch("I engaged the new adapter", id)).toBeUndefined();
-    expect(findStartupCatchphraseMatch("Standing by while tests run", id)).toBeUndefined();
-  });
-
-  test("custom greetings deduplicate only exact normalized lines", () => {
-    const home = fakeHome({
-      name: "Atlas",
-      displayName: "Atlas",
-      startupCatchphrases: ["Atlas reporting."],
-    });
-    const proj = tmp("echo-proj-");
-    const id = getIdentity(proj, home);
-
-    expect(findStartupCatchphraseMatch("Atlas reporting", id)).toBe("Atlas reporting.");
-    expect(findStartupCatchphraseMatch("Status: Atlas reporting", id)).toBeUndefined();
-  });
-
-  test("no project persona → global Atlas greeting stays untouched", () => {
-    const home = fakeHome();
-    const proj = tmp("echo-proj-"); // no project .claude persona
-
-    const id = getIdentity(proj, home);
-    expect(id.displayName).toBe("Atlas");
-    expect(id.personaFromProject).toBe(false);
-    expect(resolveStartupCatchphrase(id, firstPick)).toBe("Atlas online and standing by.");
-    expect(id.sayName).toBe(false);
-  });
+afterEach(() => {
+  for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-// The greeting hook runs its work at import time (it is a hook script, not a
-// module), so its daemon address is asserted by reading the source: both POST
-// paths must resolve through @echo/shared rather than pinning :3246 themselves.
-describe("VoiceGreeting hook resolves the daemon address, never hardcodes it", () => {
-  const source = readFileSync(
-    join("adapters", "claudecode", "hooks", "VoiceGreeting.hook.ts"),
-    "utf8",
-  );
+async function runGreeting(
+  source: string,
+  config: Record<string, unknown> = {},
+  extraEnv: Record<string, string> = {},
+): Promise<unknown[]> {
+  const home = mkdtempSync(join(tmpdir(), "echo-claude-startup-"));
+  scratch.push(home);
+  const project = join(home, "project");
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  mkdirSync(join(project, ".claude"), { recursive: true });
+  writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({
+    daidentity: { name: "Atlas", startupCatchphrases: ["Atlas online."], sayName: true },
+  }));
+  writeFileSync(join(project, ".claude", "settings.json"), JSON.stringify({
+    daidentity: { name: "Echo", voices: { main: { voiceId: "en-GB-LibbyNeural" } } },
+  }));
+  const payloads: unknown[] = [];
+  const receiver = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      payloads.push(await request.json());
+      return new Response("accepted", { status: 202 });
+    },
+  });
+  const configPath = join(home, "config.json");
+  writeFileSync(configPath, JSON.stringify({ ECHO_DAEMON_URL: `http://127.0.0.1:${receiver.port}`, ...config }));
+  try {
+    const child = Bun.spawn([process.execPath, "adapters/claudecode/hooks/VoiceGreeting.hook.ts"], {
+      env: {
+        ...process.env,
+        HOME: home,
+        CLAUDE_PROJECT_DIR: project,
+        ECHO_CONFIG_FILE: configPath,
+        PAI_SUPPRESS_VOICE: "false",
+        CLAUDE_CODE_AGENT_TASK_ID: "",
+        CLAUDE_AGENT_TYPE: "",
+        HERDR_SOCKET_PATH: "",
+        HERDR_SESSION: "",
+        HERDR_CONFIG_PATH: "",
+        TERM_PROGRAM: "echo-test-unsupported",
+        TERM: "dumb",
+        KITTY_WINDOW_ID: "",
+        ITERM_SESSION_ID: "",
+        ...extraEnv,
+      },
+      stdin: new Blob([JSON.stringify({ source, session_id: "root-startup" })]),
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    const stderr = new Response(child.stderr).text();
+    const exitCode = await child.exited;
+    const detail = await stderr;
+    if (exitCode !== 0) throw new Error(`Greeting hook exited ${exitCode}: ${detail}`);
+    return payloads;
+  } finally {
+    receiver.stop(true);
+  }
+}
 
-  test("both POST targets come from the shared resolver", () => {
-    expect(source).toContain("@echo/shared/daemon-endpoints.ts");
-    expect(source).toContain("loadEchoConfiguration()");
-    expect(source).toContain("resolveNotifyUrl(ECHO_CONFIG)");
-    expect(source).toContain("resolvePersonalityUrl(ECHO_CONFIG)");
+describe("Claude Code startup speech", () => {
+  test("identifies the harness while keeping the project persona voice", async () => {
+    expect(await runGreeting("startup")).toEqual([
+      expect.objectContaining({ message: "Claude code, ready.", voice_id: "en-GB-LibbyNeural" }),
+    ]);
   });
 
-  test("no hardcoded daemon URL survives, so ECHO_DAEMON_URL retargets the greeting", () => {
-    const offenders = source
-      .split("\n")
-      .map((line, i) => ({ line: line.trim(), n: i + 1 }))
-      .filter(({ line }) => /(['"`])https?:\/\/[^'"`]*:3246[^'"`]*\1/.test(line));
-    expect(offenders).toEqual([]);
+  test("an explicit greeting disable sends nothing", async () => {
+    expect(await runGreeting("startup", { ECHO_VOICE_GREET_ON_START: false })).toEqual([]);
+  });
+
+  test.each(["resume", "compact", "reload", "unknown"])("%s does not announce startup", async (source) => {
+    expect(await runGreeting(source)).toEqual([]);
+  });
+
+  test("a task worker does not announce the parent harness", async () => {
+    expect(await runGreeting("startup", {}, { CLAUDE_CODE_AGENT_TASK_ID: "child-task" })).toEqual([]);
+  });
+
+  test("completion suppression matches only the complete startup announcement", () => {
+    expect(matchesStartupGreeting("CLAUDE CODE, ready!")).toBe(true);
+    expect(matchesStartupGreeting("Claude code, ready. The tests passed.")).toBe(false);
+    expect(matchesStartupGreeting("Engaged!")).toBe(false);
   });
 });

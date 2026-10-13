@@ -128,7 +128,7 @@ describe("scripts/migrate-config.ts", () => {
   test(
     "migrates a padded dotenv PORT into a canonical config value",
     withHome("echo-migrate-padded-port-", async (home, configDir) => {
-      writeFileSync(join(configDir, ".env"), 'PORT=" 8888 "\nECHO_VOICE_CATCHPHRASE=" spaced "\n');
+      writeFileSync(join(configDir, ".env"), 'PORT=" 8888 "\nECHO_VOICE_TITLE=" spaced "\n');
 
       const r = await runMigration(home);
       expect(r.exitCode).toBe(0);
@@ -136,7 +136,7 @@ describe("scripts/migrate-config.ts", () => {
       const written = JSON.parse(readFileSync(join(configDir, "config.json"), "utf8"));
       expect(written.PORT).toBe("8888");
       // Only PORT is normalized; every other value migrates byte for byte.
-      expect(written.ECHO_VOICE_CATCHPHRASE).toBe(" spaced ");
+      expect(written.ECHO_VOICE_TITLE).toBe(" spaced ");
     }),
   );
 
