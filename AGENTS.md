@@ -28,8 +28,13 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
-# package.json scripts wrap the commands below: bun run update|doctor|status|restart|
-# mute|mode|replay|voice|install:echo|uninstall, and smoke|e2e|build|verify for checks
+# package.json scripts are aliases for the commands below (npm, pnpm, bun and vp all run them):
+# update|doctor|status|restart|mute|mode|replay|voice|install:echo|uninstall, and
+# test|smoke|e2e|build|verify for checks. `npm run update` runs `cli/echo update`.
+# Flags differ by runner. npm drops flags after the script name, so use
+# `npm run update -- --check` (`npm run update --check` runs a real update). pnpm and vp
+# pass `--` through as an argument, so write `pnpm run update --check` with no `--`.
+# bun accepts both.
 # (`install:echo`, not `install`, so it never shadows the package manager's install).
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
