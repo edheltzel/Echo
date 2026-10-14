@@ -28,6 +28,10 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
+# package.json scripts wrap the commands below: bun run update|doctor|status|restart|
+# mute|mode|replay|voice|install:echo|uninstall, and smoke|e2e|build|verify for checks
+# (`install:echo`, not `install`, so it never shadows the package manager's install).
+
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
 cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
