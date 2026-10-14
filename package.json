@@ -23,7 +23,13 @@
     "e2e:adapters": "tests/e2e-adapters.sh",
     "e2e:converse": "tests/e2e-converse.sh",
     "build": "D=${TMPDIR:-/tmp}/echo-build && bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir $D/pi && bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir $D/omp && bun build adapters/mcp/server.ts --target=bun --outdir $D/mcp && bun build adapters/jcode/hook.ts --target=bun --outdir $D/jcode && bun build adapters/grok/hook.ts --target=bun --outdir $D/grok && bun build adapters/codex/hook.ts --target=bun --outdir $D/codex && bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir $D/opencode",
-    "verify": "bun test && bun run smoke && bun run e2e && bun run build"
+    "verify": "bun test && bun run smoke && bun run e2e && bun run build",
+    "preview-voices": "bun scripts/preview-voices.ts",
+    "harness-catalog": "bun scripts/harness-catalog.ts",
+    "prove:pi": "bash scripts/prove-pi.sh",
+    "converse:deps": "bash scripts/converse-dependencies.sh",
+    "migrate-config": "bun scripts/migrate-config.ts",
+    "precache-catchphrases": "bun scripts/precache-catchphrases.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14"
