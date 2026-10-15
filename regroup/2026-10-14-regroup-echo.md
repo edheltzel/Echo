@@ -7,7 +7,7 @@ Sources: GitHub issues, PRs, tags and releases for edheltzel/Echo; repo `todo.tx
 
 - 2026-10-15 (UTC): #228 package.json scripts (`npm|pnpm|bun|vp run update` and the rest) landed in dev as `0d93361`, after No Mistakes `checks-passed`.
 - 2026-10-14: local daemon updated to v0.12.0 (payload `versions/0.12.0`); edge-tts fixed by installing it into Homebrew Python 3.15.
-- 2026-10-10: v0.12.0 tagged on master `7b79250` and released.
+- 2026-10-13: v0.12.0 tagged on master `7b79250` and released.
 
 ## Up next
 

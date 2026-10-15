@@ -12,8 +12,8 @@ Sources: repo-root `todo.txt` (no sibling `done.txt`); `~/todo.txt` and `~/done.
 
 ## Last completed
 
-- 2026-10-09: v0.12.0 tagged on master `7b79250` and released (Latest), after #223 merged with a merge commit.
-- 2026-10-09: #226 deleted the shipped notification-sounds and banner-isolation plans.
+- 2026-10-13: v0.12.0 tagged on master `7b79250` and released (Latest), after #223 merged with a merge commit.
+- 2026-10-13: #226 deleted the shipped notification-sounds and banner-isolation plans.
 - 2026-10-09: #129, #106, #191, #194 closed as completed; #95, #96 closed as not planned.
 
 ## Up next

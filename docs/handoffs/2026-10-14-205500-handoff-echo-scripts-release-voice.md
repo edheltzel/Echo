@@ -36,7 +36,7 @@ Open the dev to master promotion PR (merge commit) for #226-#228, and validate i
 - `docs/operations.md`: Restart section, rewritten by the No Mistakes document step.
 - `tests/e2e-converse.sh`: health probe header and 15-second deadline (No Mistakes fix).
 - PR #228: the No Mistakes run summary is in the PR comments and body.
-- `regroup/2026-10-14-regroup-echo.md`: full open-item list.
+- [Regroup snapshot](../../regroup/2026-10-14-regroup-echo.md); [repo todo.txt](../../todo.txt) for the remaining backlog.
 
 ## todo.txt
 
