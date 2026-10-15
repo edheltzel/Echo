@@ -126,7 +126,7 @@ writes its own file and points `ECHO_CONFIG_FILE` at it.
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
-such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
+such as the JSON config file. Use **Bun only** for TypeScript execution; package-script runners follow the Quick commands rules above. Run
 `bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, and Codex builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 

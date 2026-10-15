@@ -31,7 +31,7 @@ disable-flag file.
 | Remove the service | Uninstall | `cli/echo uninstall` | Unloads `com.echo` and deletes the staged payload. Logs and `~/.config/echo/config.json` stay. |
 
 `cli/echo` wraps mute, doctor, update, and uninstall. Start and stop are `scripts/start.sh`
-and `scripts/stop.sh`. `restart.sh` unloads and reloads; that is a bounce, not a disable.
+and `scripts/stop.sh`. To reload the loaded service, see [Restart](#restart).
 Never broad-kill whatever owns port `3246`.
 
 ## The everyday four
@@ -89,17 +89,16 @@ Prints `OK echo stopped`. If Echo's port is still in use afterwards, the script 
 deliberately does **not** kill the owner - it may belong to another service. Never
 broad-kill whatever owns that port.
 
-## Restart - two idioms
+## Restart
 
 ```bash
-bash scripts/restart.sh                        # stop + start, ends with a health check
-launchctl kickstart -k "gui/$UID/com.echo"     # one-shot in-place restart
+bun run restart
 ```
 
-Both work. `restart.sh` unloads and reloads the LaunchAgent and verifies health;
-`kickstart -k` is the quick one-liner - follow it with the health check below if you want
-confirmation. Neither picks up an edit to `core/` or `shared/` in your checkout: both reload
-the staged payload, so a source or `voices.json` change needs `cli/echo update` (see
+The `restart` package script restarts the loaded LaunchAgent in place through
+`launchctl kickstart`. Follow it with [Health](#health) to confirm it is ready.
+If the service is unloaded, use [Start](#start) first. This reloads the staged payload, so
+a source or `voices.json` change needs `cli/echo update` (see
 [Update after a `git pull`](#update-after-a-git-pull)).
 
 ## Status

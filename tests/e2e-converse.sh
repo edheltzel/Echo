@@ -185,7 +185,7 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in {1..40}; do
-  curl -fsS "http://localhost:${PORT}/health" >/dev/null 2>&1 && break
+  curl -fsS -H 'X-Forwarded-For: e2e-converse-probe' "http://localhost:${PORT}/health" >/dev/null 2>&1 && break
   sleep 0.25
 done
 for _ in {1..40}; do
@@ -196,7 +196,7 @@ done
 # ---------------------------------------------------------------------------
 # Isolation proof, run BEFORE anything is sent, audible or not.
 # ---------------------------------------------------------------------------
-core_health="$(curl -fsS "http://localhost:${PORT}/health")" || fail "test core never came up (see $CORE_LOG)"
+core_health="$(curl -fsS -H 'X-Forwarded-For: e2e-converse-probe' "http://localhost:${PORT}/health")" || fail "test core never came up (see $CORE_LOG)"
 converse_health="$(curl -fsS "http://localhost:${CONVERSE_PORT}/health")" || fail "test coordinator never came up (see $CONVERSE_LOG)"
 
 reported_core_port="$(echo "$core_health" | bun -e 'console.log(JSON.parse(await Bun.stdin.text()).port)')"
@@ -427,7 +427,8 @@ bun -e '
   const pending = askOnce({ question: process.env.TEST_QUESTION, source: "e2e-stop" }, { config });
 
   let stopped = false;
-  for (let attempt = 0; attempt < 200; attempt++) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
     const { readdirSync } = await import("node:fs");
     const wavs = (() => {
       try {

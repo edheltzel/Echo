@@ -42,7 +42,7 @@ This plan covers automatic quieting during desktop voice conversations. The brea
 - **Switch to sounds-only, not silence or a hold queue.** The operator keeps request and done cues without speech colliding. Governs R3. (session-settled: user-directed - chosen over full silence or hold-and-speak-later: silence misses blocked agents, held lines go stale.)
 - **Trigger from a configurable app list.** Predictable, and extendable to Zoom or FaceTime without a code change. Governs R1, R2. (session-settled: user-approved - chosen over any app using the mic, or a fixed two-app list.)
 - **On by default, can be disabled.** Works without setup for the operator's two apps. Governs R5. (session-settled: user-approved - chosen over opt-in or always-on.)
-- **`echo_ask` fails fast during a desktop voice conversation.** This overrides, for this window only, the notification sounds plan's rule that `echo_ask` is always spoken. Governs R6. (session-settled: user-approved - chosen over waiting for the conversation to end or speaking anyway.)
+- **`echo_ask` fails fast during a desktop voice conversation.** This overrides, for this window only, the [current voice-ask behavior](../what-echo-does.md#sounds-instead-of-speech). Governs R6. (session-settled: user-approved - chosen over waiting for the conversation to end or speaking anyway.)
 - **No new Echo behavior for desktop-app sessions outside voice mode.** Those apps' own notification sounds are enough. (session-settled: user-directed - chosen over always-sounds for desktop sessions or new desktop integration.)
 
 ### Requirements
@@ -54,7 +54,7 @@ This plan covers automatic quieting during desktop voice conversations. The brea
 
 **Behavior while active**
 
-- R3. While a listed app's conversation is active, Echo behaves as in sounds-only mode, whatever mode the operator configured, and every mute rule from the notification sounds plan still applies.
+- R3. While a listed app's conversation is active, Echo behaves as in sounds-only mode, whatever mode the operator configured, and the [current mute rules](../what-echo-does.md#sounds-instead-of-speech) still apply.
 - R4. When the conversation ends, Echo returns to the configured mode without changing the stored setting.
 - R5. Auto-quiet is on by default, and one config setting turns it off.
 - R6. During an active conversation, an `echo_ask` call speaks nothing, opens no microphone, and returns a result telling the agent the operator is in a voice conversation; it plays the request sound only when R3's mute rules allow sounds.
