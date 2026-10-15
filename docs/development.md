@@ -120,7 +120,8 @@ tests/e2e-adapters.sh --audible    # also speaks, on the isolated instance only
 own. It starts a second isolated process (the `echo-converse` coordinator, `ECHO_E2E_CONVERSE_PORT`,
 default `8922`) and refuses `32468` as well as `3246`. And its recorder and transcriber are
 stand-in scripts, so it opens no microphone and needs neither `sox` nor `yap` - which is what lets
-it run on CI. Silence comes from disabling every provider in its own scratch `voices.json`: an ask
+it run on CI. Silence comes from enabling only `say` in its own scratch `voices.json` and
+routing it to a no-op executable: an ask
 forces `voice_enabled` on by design, so `--audible` is the only way to hear it (and the only way
 to exercise real synthesis timing in the drain wait). See [converse.md](converse.md).
 

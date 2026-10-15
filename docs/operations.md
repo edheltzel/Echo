@@ -64,7 +64,7 @@ Result: READY
 
 A failing row prints its own recovery command indented underneath it, and the run ends with
 `Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor`, exiting non-zero. The
-`payload` row reports which daemon payload is staged (`v0.10.0` on the current release).
+`payload` row reports which daemon payload is staged.
 
 ## Start
 
