@@ -255,8 +255,8 @@ are contract.
   port).
 - **Never write process state to `/tmp`.** Use user-owned cache/log/config paths.
 - **Do not broad-kill whatever owns port `3246`** - it may be another service.
-- **Bun + TypeScript only.** No npm/npx/node workflows. Python only as the out-of-process
-  `edge_tts` dependency.
+- **Runtime and script-runner policy:** see [`AGENTS.md`](AGENTS.md#development-workflow).
+  Python only as the out-of-process `edge_tts` dependency.
 - **Do not commit secrets or `.env` files.**
 - **Do not push directly to `master`.** Work on `dev`, PR `dev` → `master`; Ed owns merges.
 - **Adapters are out-of-process `/notify` clients** that suppress child/subagent contexts

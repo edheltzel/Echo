@@ -75,6 +75,10 @@ git worktree add -b fix/example .worktrees/fix-example origin/dev
 
 ## Tests
 
+After `bun install`, `bun run verify` runs the checks below. Individual check aliases are defined in
+[package.json](../package.json); other script runners follow the
+[README usage](../README.md#commands-after-that).
+
 ```bash
 bun install                  # required before bun test - adapters import @echo/shared
 bun test

@@ -56,7 +56,7 @@ OK echo is healthy on :3246
 
 If the installer prints `Voice server did not respond` instead, open the log at `~/Library/Logs/echo.log`.
 
-If it refuses with `Port 3246 is occupied but not answering Echo's /health`, something is holding the port without serving Echo - either a wedged Echo daemon (`bash scripts/restart.sh`) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
+If it refuses with `Port 3246 is occupied but not answering Echo's /health`, something is holding the port without serving Echo - either a wedged Echo daemon (see [Restart](operations.md#restart)) or an unrelated process (stop it and rerun). Echo never kills the port owner. `cli/echo doctor` reports the same state with a recovery command per row.
 
 ## Add the Claude Code adapter
 

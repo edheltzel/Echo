@@ -27,10 +27,8 @@ handling; use an absolute path when a tool does not expand it.
 
 The file is optional. Missing or invalid files leave the documented defaults in effect, and
 Echo logs a warning rather than failing startup. It is read from your home directory, never
-from the daemon payload, so a plain reload picks up an edit, with no re-staging:
-
-    launchctl kickstart -k "gui/$UID/com.echo"
-    # or: bash scripts/restart.sh
+from the daemon payload, so a plain reload picks up an edit, with no re-staging. Follow
+[Restart](operations.md#restart).
 
 (A `core/voices.json` edit is the case that also needs `cli/echo update`; see
 [`operations.md`](operations.md#which-config-changes-need-a-re-stage).)
@@ -266,8 +264,8 @@ To find both families across your own config:
 rg -l 'ATLAS_VOICE_|VOICESYSTEM_' ~/.zshrc ~/.bashrc ~/.config/echo/.env 2>/dev/null
 ```
 
-Rewrite each match to its canonical name, put it in config.json, and restart the daemon
-(`bash scripts/restart.sh`).
+Rewrite each match to its canonical name, put it in config.json, and
+[restart the daemon](operations.md#restart).
 
 > Filesystem default paths also moved (`…/atlas-voicesystem/…` → `…/echo/…`) and the
 > LaunchAgent label changed (`com.atlas.voicesystem` → `com.echo`). A reinstall

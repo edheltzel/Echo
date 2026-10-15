@@ -84,6 +84,12 @@ curl -fsS http://localhost:3246/health
 
 `doctor` is the "did my install work" check. Mute is the shared-office switch (`tts` speaker, `mic` capture, `all` both). Replay re-speaks lines that actually played. The same `curl` you just ran is the notify path every adapter uses.
 
+You can also run the aliases in [package.json](package.json) from the repo root with
+`npm run <script>`, `pnpm run <script>`, `bun run <script>`, or Vite+ (`vp run <script>`).
+Bun is still required for Echo's TypeScript execution. See the
+[runner flag rules and install script name](AGENTS.md#quick-commands) before passing options.
+For service restarts, see [Restart](docs/operations.md#restart).
+
 ## Architecture
 
 ```mermaid

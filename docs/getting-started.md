@@ -127,10 +127,9 @@ If you hear macOS `say` ("Daniel") instead of Ryan, Echo fell back to the built-
 
 ```bash
 /opt/homebrew/bin/python3 -m pip install edge-tts
-bash scripts/restart.sh
 ```
 
-If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the two commands above. Repeat step 4. You should now hear Ryan (`en-GB-RyanNeural`).
+If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the command above. [Restart Echo](operations.md#restart) and repeat step 4. You should now hear Ryan (`en-GB-RyanNeural`).
 
 **No sound, but the curl returned `"status":"accepted"`?** Check the output device and the volume, then the resolution log in check 3. If the last line has `"success":false`, the `attempts` array tells you which provider failed.
 
