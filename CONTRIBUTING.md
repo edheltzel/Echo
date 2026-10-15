@@ -8,7 +8,8 @@ A good change makes that boundary clearer, safer, or easier to install and verif
 These are the working assumptions this guide is written against. If one is wrong for
 your change, say so in the PR rather than silently widening scope.
 
-- Contributors run macOS and [Bun](https://bun.sh/). There is no npm/npx/node path.
+- Contributors run macOS and [Bun](https://bun.sh/). Package-script usage is in
+  [README.md](README.md#commands-after-that).
 - You have read [`AGENTS.md`](AGENTS.md). It is the binding work contract; this file
   is the human/PR surface of the same rules.
 - PRs target `dev`. `master` moves only through a promotion PR that Ed merges.

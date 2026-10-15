@@ -28,6 +28,15 @@ the calling host opens the microphone. Why, and the TCC measurements behind it:
 # Link the workspace (adapters resolve @echo/shared through it)
 bun install
 
+# package.json scripts are aliases for the commands below (npm, pnpm, bun and vp all run them):
+# update|doctor|status|restart|mute|mode|replay|voice|install:echo|uninstall, and
+# test|smoke|e2e|build|verify for checks. `npm run update` runs `cli/echo update`.
+# Flags differ by runner. npm drops flags after the script name, so use
+# `npm run update -- --check` (`npm run update --check` runs a real update). pnpm and vp
+# pass `--` through as an argument, so write `pnpm run update --check` with no `--`.
+# bun accepts both.
+# (`install:echo`, not `install`, so it never shadows the package manager's install).
+
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
 cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
@@ -117,7 +126,7 @@ writes its own file and points `ECHO_CONFIG_FILE` at it.
 After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Logs/echo.log`).
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
-such as the JSON config file. Use **Bun only** - no npm/npx/node. Run
+such as the JSON config file. Use **Bun only** for TypeScript execution; package-script runners follow the Quick commands rules above. Run
 `bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, and Codex builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
