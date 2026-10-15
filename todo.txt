@@ -27,3 +27,8 @@
 2026-10-09 FM-353 Thin Claude Code plugin. Still "underway" in factory.db; merged as PR #176 +echo @close
 2026-10-09 FM-365 Echo extension API / surface. Still "underway" in factory.db; merged as #177 +echo @close
 2026-10-09 Merged/duplicate remote branches. feat/notification-sounds, feat/install-onboarding-12, fix/test-preload-overrides, fix/test-xdg-leak (duplicate), docs/low-risk-merge-rule, feat/preview-voices-help-13, fix/registrar-dedupe-63, chore/resync-dev-with-master, chore/restore-master-ancestry, feat/opencode-adapter, fix/opencode-prune-config-plugin(-dev), cursor/fm-352, fm-365. Prune only after Ed confirms +echo @close
+2026-10-15 Promote dev to master for #226-#228 (merge commit), validated with No Mistakes --yes +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
+2026-10-15 Add a no-mistakes axi --yes workflow line to AGENTS.md +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
+2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
+2026-10-15 Fix cli/echo --help backticks being evaluated by the shell note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md +echo
+2026-10-15 Trial Pocket TTS through the Kokoro endpoint on an isolated daemon +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
