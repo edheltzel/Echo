@@ -7,9 +7,16 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
-`429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with six carve-outs that each get their own:
+`429 {"status":"error","message":"Rate limit exceeded"}`. The bucket key is the
+`X-Forwarded-For` header when the caller sets one, otherwise `localhost`, so
+every local caller that does not set that header shares one bucket. Carve-outs:
 
+- `GET /health` from a loopback peer is not limited. It is a read-only diagnostic
+  (`cli/echo status`, `doctor`, `mute status`, `mode status`, install, converse)
+  and must not spend the notification budget. All other `GET /health` requests have
+  their own bucket at the same 10/60s, so they still cannot spend `/notify`. The
+  exemption uses the socket address, not `X-Forwarded-For`. `GET /health` runs
+  provider health checks, so the exemption is loopback-only.
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
 - `POST /mode` - same reason: switching to sounds-only is most wanted during a burst.
 - `POST /replay` - operator re-hear during a flood; abusive `n` is rejected in the handler.

@@ -131,7 +131,6 @@ describe("GET /health", () => {
     expect(body.core.base_url).toBe("http://core.test");
     expect(body.capture.owner).toBe("caller");
     expect(typeof body.capture.stop_file).toBe("string");
-    // core/health shares core's /notify bucket; a status check must not spend it.
     expect(core.calls).toEqual([]);
   });
 
