@@ -18,4 +18,4 @@
 2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
 2026-10-15 Fix cli/echo --help backticks being evaluated by the shell +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
 2026-10-15 Trial Pocket TTS through the Kokoro endpoint on an isolated daemon +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-17 Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions (AGENTS.md now excludes them) or name another promotion check +echo @waiting pr:https://github.com/edheltzel/Echo/pull/230
+2026-10-17 Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check +echo @waiting pr:https://github.com/edheltzel/Echo/pull/230

@@ -4,7 +4,7 @@ Mirror of `todo.txt` (source of truth, managed with `tuxedo`). Synced 2026-10-17
 
 ## Open
 
-- [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). on Ed to waive NM for dev-to-master promotions (AGENTS.md now excludes them) or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
+- [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). on Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
 - [ ] 2026-10-09 **Waiting:** ATL-633 Daemon-owned notice (no name yet). on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue atl:633
 - [ ] 2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet @outstanding
 - [ ] 2026-10-09 OpenCode HIL announce (permission.asked). Regroup follow-up, no issue filed. Owner: Atlas @outstanding
