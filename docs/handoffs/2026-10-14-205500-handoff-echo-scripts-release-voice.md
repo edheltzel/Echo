@@ -6,7 +6,7 @@ Date: 2026-10-14. Status snapshot: [regroup/2026-10-14-regroup-echo.md](../../re
 
 - dev `0d93361` contains #228: root `package.json` scripts wrapping `cli/echo` and the test scripts. Verified under npm, pnpm, bun and vp; `smoke` and `e2e` exit 0 in each.
 - master is `7b79250`, tagged v0.12.0. #226-#228 are on dev only.
-- Local daemon (machine-local): `com.echo` runs `~/Library/Application Support/echo/payload/versions/0.12.0`, healthy. `/health` flags `ECHO_VOICE_SAY_NAME` in `~/.config/echo/config.json` as ignored; that is expected, because v0.12.0 retired the key. Left in place.
+- Local daemon (machine-local): `com.echo` runs `~/Library/Application Support/echo/payload/versions/0.12.0`, healthy. Operator config was left in place; current [retired-key handling](../configuration.md#invalid-keys) is documented in the configuration guide.
 - edge-tts (machine-local): installed into Homebrew Python 3.15. It will break again on the next Homebrew Python upgrade.
 - Plain clone (machine-local): `~/Developer/Atlas/Echo-nm`, with No Mistakes initialized; used to run the gate outside GitButler.
 - `bun test` has 6 failures on this machine (Claude plugin validate, runEchoMute, omp HIL, two Pi lifecycle tests, one integration test). They were not compared against a clean dev run.

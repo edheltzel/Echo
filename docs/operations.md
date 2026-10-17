@@ -56,7 +56,8 @@ cli/echo doctor
 
 The canonical "did my install work" check. It prints one row per check - platform, `bun`,
 converse dependencies, staged payload version, LaunchAgent, service, health, providers, and
-adapter registrations - and a healthy run ends with:
+adapter registrations - plus a config row when retired properties are present
+([retirement and cleanup rules](configuration.md#invalid-keys)). A healthy run ends with:
 
 ```
 Result: READY
