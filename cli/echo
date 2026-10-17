@@ -39,11 +39,11 @@ Commands:
   doctor               Diagnose every degraded state with a concrete recovery command.
   status               Service + health snapshot with recent logs.
   mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]
-                       Runtime mute. Default scope `all` (speaker + mic, fully silent). `tts`
-                       swaps speech for notification sounds; `mic` holds capture/converse; notifications still log.
+                       Runtime mute. Default scope \`all\` (speaker + mic, fully silent). \`tts\`
+                       swaps speech for notification sounds; \`mic\` holds capture/converse; notifications still log.
   mode speech|sounds|status
-                       Output mode for every session. `speech` speaks (default);
-                       `sounds` plays slot cues instead. `status` reads /health.
+                       Output mode for every session. \`speech\` speaks (default);
+                       \`sounds\` plays slot cues instead. \`status\` reads /health.
   replay [n]           Re-speak the last n spoken notify lines (default 1, max 10).
   voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
                        Set the default persona and ask whether subagents may speak.
@@ -215,12 +215,16 @@ cmd_doctor() {
   fi
 
   # 6. Health + port ownership
-  local health=""
+  local health="" health_code="" health_response=""
   if command -v curl >/dev/null 2>&1; then
-    health="$(curl --connect-timeout 2 --max-time 5 -fsS "$HEALTH_URL" 2>/dev/null || true)"
+    health_response="$(echo_http GET "$HEALTH_URL" 2>/dev/null || true; printf '\n%s' "$ECHO_HTTP_CODE")"
+    health_code="${health_response##*$'\n'}"
+    health="${health_response%$'\n'*}"
   fi
-  if [ -n "$health" ]; then
+  if [[ "$health" =~ [^[:space:]] ]]; then
     doctor_row ok "health" "daemon healthy on :${ECHO_PORT}"
+  elif [ "$health_code" = "429" ]; then
+    doctor_row warn "health" "Echo is rate-limiting /health on :${ECHO_PORT}; service healthy, retry in a minute"
   elif command -v lsof >/dev/null 2>&1 && [ -n "$(port_listener_pids)" ]; then
     # The exact lines install.sh refuses with. Neither claims whose daemon this
     # is: a foreign owner is what crash-loops ours, so the two states are not
@@ -233,7 +237,7 @@ cmd_doctor() {
   fi
 
   # 7. Providers (only meaningful once the daemon answered)
-  if [ -n "$health" ]; then
+  if [[ "$health" =~ [^[:space:]] ]]; then
     if has_unhealthy_provider "$health"; then
       doctor_row warn "providers" "a configured TTS provider is unhealthy (macOS say still covers speech)" \
         "See docs/dependencies.md; check ${LOG_PATH}"
