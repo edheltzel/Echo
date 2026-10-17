@@ -67,6 +67,12 @@ A failing row prints its own recovery command indented underneath it, and the ru
 `Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor`, exiting non-zero. The
 `payload` row reports which daemon payload is staged.
 
+If `/health` returns HTTP `429`, doctor reports a healthy, rate-limited service only when
+`launchctl` lists a running PID for `com.echo` and `lsof` identifies that PID as the port's
+only listener. This warning allows `READY` if the other checks pass; retry in a minute.
+Without that ownership evidence, doctor reports `Echo health unverified` and `DEGRADED`.
+Provider health is not checked on a rate-limited response.
+
 ## Start
 
 ```bash

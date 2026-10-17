@@ -87,6 +87,9 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 ## Development workflow
 This checkout is a GitButler workspace (`but`). Fetch target is `origin/dev` (`but pull`), so feature branches stack on `dev` and their PRs go into `dev`; `dev` → `master` is the promotion PR. Never push `master`. Use `but` for git writes.
 
+- Validate changes autonomously with `no-mistakes axi run --yes --intent "<full user intent and decisions>"`. If the 8m wait times out, rerun `no-mistakes axi run` to reattach, not as a failure. Follow `branch_sync.next_action`.
+- Stop only for protected-path or test-unvalidated-work refusals or a real ask-user product decision.
+- Run from a plain clone with the feature branch checked out because GitButler's workspace branch hides feature branches from the gate. Do not use it for dev-to-master promotion PRs: the pipeline rebases onto its base and breaks the required merge commit.
 
 ```bash
 git checkout dev

@@ -15,15 +15,13 @@ Date: 2026-10-14. Status snapshot: [regroup/2026-10-14-regroup-echo.md](../../re
 
 - Ed: `npm run <x>` must work, alongside pnpm, bun and vp. The repo itself stays Bun-only.
 - Mine: the install alias is `install:echo`, not `install`, so it never shadows the package manager's install. `restart` uses `launchctl kickstart`, not `scripts/restart.sh`. The `--` flag rules per runner are documented in `AGENTS.md:31-38`.
-- Ed: run No Mistakes autonomously with `no-mistakes axi run --yes`. Saved as Recall learning #1351. It is not yet in AGENTS.md.
+- Ed's autonomous No Mistakes workflow and promotion exception live in [AGENTS.md](../../AGENTS.md#development-workflow).
 - Ed: Supertonic is rejected (archived). Pocket TTS is preferred for a local voice over Kitten (KittenTTS 2 is 1.7B parameters).
 - Ed: OpenAI and xAI voices need API keys and separate billing; not pursued yet.
 
 ## Open questions
 
-- Add a `no-mistakes axi run --yes` workflow line to root `AGENTS.md`? DOX says durable behavior changes belong there.
 - Keep or trash the clone `~/Developer/Atlas/Echo-nm`?
-- Fix the `cli/echo doctor` 429 misreport and the `--help` backtick bug?
 
 ## Next step
 
