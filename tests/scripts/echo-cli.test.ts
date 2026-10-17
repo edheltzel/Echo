@@ -152,6 +152,8 @@ describe("echo doctor", () => {
   test.each([
     { label: "say-name property", config: '{"ECHO_VOICE_SAY_NAME":true}', retired: "ECHO_VOICE_SAY_NAME" },
     { label: "catchphrase property", config: '{"ECHO_VOICE_CATCHPHRASE":"Hello"}', retired: "ECHO_VOICE_CATCHPHRASE" },
+    { label: "escaped say-name property", config: '{"ECHO_VOICE_SAY_NAM\\u0045":true}', retired: "ECHO_VOICE_SAY_NAME" },
+    { label: "escaped catchphrase property", config: '{"ECHO_VOICE_CATCHPHRAS\\u0045":"Hello"}', retired: "ECHO_VOICE_CATCHPHRASE" },
     {
       label: "both properties with multiline whitespace",
       config: '{\n  "ECHO_VOICE_SAY_NAME"\n  : true,\r\n  "ECHO_VOICE_CATCHPHRASE"\t:\t"Hello"\n}',

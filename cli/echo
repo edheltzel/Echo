@@ -156,17 +156,17 @@ converse_configured() {
 }
 
 # Retired keys Echo itself no longer reads. Informational only: a leftover does
-# not fail the run. Names stay in step with RETIRED_CONFIG_KEYS in shared/echo-env.ts.
+# not fail the run.
 retired_config_keys() {
-  local config_path="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}" found="" key config
+  local config_path="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}"
   [ -f "$config_path" ] || return 0
-  config="$(tr -d '\r\n' < "$config_path")"
-  for key in ECHO_VOICE_CATCHPHRASE ECHO_VOICE_SAY_NAME; do
-    if grep -qE "(^|[{,])[[:space:]]*\"${key}\"[[:space:]]*:" <<< "$config"; then
-      found="${found:+$found, }$key"
-    fi
-  done
-  printf '%s' "$found"
+  command -v bun >/dev/null 2>&1 || return 0
+  bun -e '
+    const { RETIRED_CONFIG_KEYS } = await import(process.argv[1]);
+    const config = await Bun.file(process.argv[2]).json();
+    console.log(Object.keys(config)
+      .filter(key => RETIRED_CONFIG_KEYS[key] === true).sort().join(", "));
+  ' "$REPO_ROOT/shared/echo-env.ts" "$config_path" 2>/dev/null || true
 }
 
 read_manifest_version() {

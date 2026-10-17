@@ -53,7 +53,6 @@ export const ECHO_CONFIG_KEYS = new Set([
 
 // Canonical keys Echo used to write and no longer reads. An old config.json may
 // still contain them; they are harmless and must not warn on every host start.
-// Keep cli/echo's doctor scan in step with these names.
 export const RETIRED_CONFIG_KEYS: Record<string, true> = {
   ECHO_VOICE_CATCHPHRASE: true,
   ECHO_VOICE_SAY_NAME: true,
