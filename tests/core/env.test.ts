@@ -8,9 +8,11 @@ import {
   ECHO_CONFIG_KEYS,
   MAX_CONFIG_PORT,
   MIN_CONFIG_PORT,
+  RETIRED_CONFIG_KEYS,
   echoConfigPath,
   loadEchoConfiguration,
   loadEchoConfigurationWithStatus,
+  retiredConfigKeyMessage,
   validateEchoConfig,
 } from "../../shared/echo-env";
 
@@ -318,8 +320,49 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
       expect(env.ECHO_VOICE_CATCHPHRASE).toBeUndefined();
       expect(env.ECHO_VOICE_SAY_NAME).toBeUndefined();
       expect(env.ECHO_DEFAULT_TITLE).toBe("Kept");
-      expect(config.ignored).toEqual(["ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_SAY_NAME"]);
+      expect(config.retired).toEqual(["ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_SAY_NAME"]);
+      expect(config.ignored).toEqual([]);
+      expect(config.errors).toEqual([]);
+      expect(validateEchoConfig({ ECHO_VOICE_SAY_NAME: true })).toEqual([
+        retiredConfigKeyMessage("ECHO_VOICE_SAY_NAME"),
+      ]);
     } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("a retired key loads quietly while an unknown key still warns", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-retired-quiet-"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      writeFileSync(echoConfigPath(home), JSON.stringify({
+        ECHO_VOICE_SAY_NAME: true,
+        ECHO_DEFAULT_TITLE: "Kept",
+      }));
+      const quiet = loadEchoConfigurationWithStatus({}, home);
+      expect(quiet.env.ECHO_DEFAULT_TITLE).toBe("Kept");
+      expect(quiet.config.retired).toEqual(["ECHO_VOICE_SAY_NAME"]);
+      expect(quiet.config.ignored).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+
+      writeFileSync(echoConfigPath(home), JSON.stringify({
+        ECHO_VOICE_SAY_NAME: true,
+        NOT_A_KEY: true,
+        ECHO_DEFAULT_TITLE: "Kept",
+      }));
+      warn.mockClear();
+      const mixed = loadEchoConfigurationWithStatus({}, home);
+      expect(mixed.config.retired).toEqual(["ECHO_VOICE_SAY_NAME"]);
+      expect(mixed.config.ignored).toEqual(["NOT_A_KEY"]);
+      expect(mixed.config.errors).toEqual(["NOT_A_KEY is not an Echo configuration key"]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0]?.[0]);
+      expect(message).toContain("NOT_A_KEY is not an Echo configuration key");
+      expect(message).not.toContain("ECHO_VOICE_SAY_NAME");
+      expect(Object.keys(RETIRED_CONFIG_KEYS)).toContain("ECHO_VOICE_SAY_NAME");
+    } finally {
+      warn.mockRestore();
       rmSync(home, { recursive: true, force: true });
     }
   });
@@ -486,6 +529,7 @@ describe("default-resolution cache", () => {
       first.config.present = !first.config.present;
       first.config.path = "poisoned";
       first.config.ignored.push("POISON");
+      first.config.retired.push("POISON");
       first.config.errors.push("poison");
       first.config.configured.push("POISON");
       first.config.deprecatedEnvironment.push("POISON");
@@ -494,6 +538,7 @@ describe("default-resolution cache", () => {
       expect(second.config).not.toBe(first.config);
       expect(second.config.path).not.toBe("poisoned");
       expect(second.config.ignored).not.toContain("POISON");
+      expect(second.config.retired).not.toContain("POISON");
       expect(second.config.errors).not.toContain("poison");
       expect(second.config.configured).not.toContain("POISON");
       expect(second.config.deprecatedEnvironment).not.toContain("POISON");

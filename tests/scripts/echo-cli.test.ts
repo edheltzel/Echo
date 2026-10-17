@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { RETIRED_CONFIG_KEYS } from "../../shared/echo-env";
 
 // The `echo` CLI is a thin bash wrapper over scripts/*.sh + the daemon API.
 // Every test runs in a temp HOME with stubbed launchctl/curl - it never touches
@@ -146,6 +147,38 @@ describe("echo doctor", () => {
       expect(r.stdout).toContain("brew install sox");
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a retired config key is informational and does not fail doctor", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-retired-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({
+        ECHO_VOICE_SAY_NAME: true,
+        ECHO_DEFAULT_TITLE: "Kept",
+      }));
+      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
+      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 7\n");
+
+      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
+      expect(r.stdout).toContain("retired key(s) ignored: ECHO_VOICE_SAY_NAME");
+      expect(r.stdout).toContain("Harmless");
+      expect(r.stdout).not.toContain("not an Echo configuration key");
+      // Other missing pieces still degrade the run; the retired key is not a ✗ row.
+      expect(r.stdout).not.toMatch(/✗\s+config/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor names every retired config key", () => {
+    const cli = readFileSync("cli/echo", "utf8");
+    for (const key of Object.keys(RETIRED_CONFIG_KEYS)) {
+      expect(cli).toContain(key);
     }
   });
 

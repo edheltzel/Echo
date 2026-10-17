@@ -88,6 +88,10 @@ one warning naming each dropped key, and reports the same thing in `GET /health`
       "errors": ["ECHO_VOICE_PERSONNA_NAME is not an Echo configuration key"]
     }
 
+A key Echo itself retired (`ECHO_VOICE_CATCHPHRASE`, `ECHO_VOICE_SAY_NAME`) is also dropped,
+but it is not a typo: startup stays quiet, `valid` stays true, and `retired_keys` names it
+so `echo doctor` can tell you to delete the line. An unknown key still warns.
+
 A file that is not valid JSON, or not a JSON object, cannot be partially applied: the whole
 file is skipped, `valid` reads false, and the built-in defaults are used.
 

@@ -326,12 +326,13 @@ disables writes): `{ "state": "idle" | "speaking", "queue_depth": <n>, "pid": <d
 "updated_at": "<ISO>" }`. `queue_depth` matches `play_queue.depth`. Readers treat a missing or
 malformed file, or a dead `pid`, as idle. See [`configuration.md`](configuration.md).
 
-`config: {path, present, valid, ignored_keys, errors}` reports what
+`config: {path, present, valid, ignored_keys, retired_keys, errors}` reports what
 `~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
 existed, and - because a key that fails validation is dropped on its own rather than
 discarding the file - exactly which keys were ignored and why. `valid: false` with a
 non-empty `ignored_keys` is the machine-readable form of "your config partly applied", so a
-typo is discoverable without reading `~/Library/Logs/echo.log`:
+typo is discoverable without reading `~/Library/Logs/echo.log`. `retired_keys` lists keys
+Echo itself stopped reading; those do not warn and do not make `valid` false.
 
 ```bash
 curl -fsS http://localhost:3246/health | jq '.config'
