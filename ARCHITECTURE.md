@@ -146,9 +146,9 @@ not a review nit.
 
 A `POST /notify` runs through `core/server.ts` roughly in this order:
 
-1. **Rate-limit** - `checkRateLimit(clientIp)`: 10 requests per 60s per client IP, 429 on
-   breach. With no proxy header, all local callers share one `localhost` bucket; the
-   per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
+1. **Rate-limit** - `checkRateLimit` applies the notification bucket before validation.
+   Bucket keys, limits, and endpoint exemptions are defined in
+   [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** - `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
    input is a 4xx **before** anything is queued. Optional `speak_mode`

@@ -13,8 +13,8 @@ every local caller that does not set that header shares one bucket. Carve-outs:
 
 - `GET /health` from a loopback peer is not limited. It is a read-only diagnostic
   (`cli/echo status`, `doctor`, `mute status`, `mode status`, install, converse)
-  and must not spend the notification budget. A non-loopback `GET /health` has
-  its own bucket at the same 10/60s, so it still cannot spend `/notify`. The
+  and must not spend the notification budget. All other `GET /health` requests have
+  their own bucket at the same 10/60s, so they still cannot spend `/notify`. The
   exemption uses the socket address, not `X-Forwarded-For`. `GET /health` runs
   provider health checks, so the exemption is loopback-only.
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
@@ -326,9 +326,6 @@ guard (`capture_guard: {path, state}` - the resolved recording-state file and it
 reading; `state` is `idle` unless an external mic capture is live), the last-N speak ring
 (`replay: {available, capacity, default_n, max_n}`), and the configuration
 audit below.
-
-A loopback `GET` is not rate-limited (see above). A non-loopback `GET` has its own
-10/60s bucket and does not spend `/notify`.
 
 Playback is also published to a cross-process signal file (default
 `~/.local/state/echo/playback-state.json`, override `ECHO_PLAYBACK_STATE_PATH`; an empty string
