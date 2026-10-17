@@ -7,9 +7,16 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
-`429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
-`localhost` bucket, with six carve-outs that each get their own:
+`429 {"status":"error","message":"Rate limit exceeded"}`. The bucket key is the
+`X-Forwarded-For` header when the caller sets one, otherwise `localhost`, so
+every local caller that does not set that header shares one bucket. Carve-outs:
 
+- `GET /health` from a loopback peer is not limited. It is a read-only diagnostic
+  (`cli/echo status`, `doctor`, `mute status`, `mode status`, install, converse)
+  and must not spend the notification budget. A non-loopback `GET /health` has
+  its own bucket at the same 10/60s, so it still cannot spend `/notify`. The
+  exemption uses the socket address, not `X-Forwarded-For`. `GET /health` runs
+  provider health checks, so the exemption is loopback-only.
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
 - `POST /mode` - same reason: switching to sounds-only is most wanted during a burst.
 - `POST /replay` - operator re-hear during a flood; abusive `n` is rejected in the handler.
@@ -319,6 +326,9 @@ guard (`capture_guard: {path, state}` - the resolved recording-state file and it
 reading; `state` is `idle` unless an external mic capture is live), the last-N speak ring
 (`replay: {available, capacity, default_n, max_n}`), and the configuration
 audit below.
+
+A loopback `GET` is not rate-limited (see above). A non-loopback `GET` has its own
+10/60s bucket and does not spend `/notify`.
 
 Playback is also published to a cross-process signal file (default
 `~/.local/state/echo/playback-state.json`, override `ECHO_PLAYBACK_STATE_PATH`; an empty string
