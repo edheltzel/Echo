@@ -201,6 +201,74 @@ describe("echo doctor", () => {
     });
   }
 
+  test.each([
+    { state: "Echo owns the listener", service: "4242 0 com.echo", listeners: "4242", ready: true },
+    { state: "Echo owns both address families", service: "4242 0 com.echo", listeners: "4242\n4242", ready: true },
+    { state: "Echo is crash-looping", service: "- 1 com.echo", listeners: "4242", ready: false },
+    { state: "Echo is not loaded", service: "", listeners: "4242", ready: false },
+    { state: "another process owns the listener", service: "111 0 com.echo", listeners: "4242", ready: false },
+    { state: "Echo shares the port with another listener", service: "4242 0 com.echo", listeners: "4242\n5151", ready: false },
+    { state: "listener ownership is unavailable", service: "4242 0 com.echo", listeners: "", ready: false },
+    { state: "a similarly named service owns the listener", service: "4242 0 com.echo.other", listeners: "4242", ready: false },
+  ])("rate-limited health verifies ownership when $state", async ({ service, listeners, ready }) => {
+    const root = mkdtempSync(join(process.cwd(), ".echo-doctor-rate-limit-"));
+    const requests: string[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return Response.json({ status: "error", message: "Rate limit exceeded" }, { status: 429 });
+      },
+    });
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const payload = join(home, "Library/Application Support/echo/payload/current");
+      const plist = join(home, "Library/LaunchAgents/com.echo.plist");
+      const config = join(home, ".config/echo/config.json");
+      for (const dir of [bin, join(payload, "core"), dirname(plist), dirname(config)]) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(join(payload, "core/server.ts"), "");
+      writeFileSync(join(payload, "manifest.json"), JSON.stringify({ version: "test" }));
+      writeFileSync(plist, `<plist version="1.0"><dict>
+<key>ProgramArguments</key><array><string>${join(payload, "core/server.ts")}</string></array>
+<key>WorkingDirectory</key>
+<string>${payload}</string>
+</dict></plist>\n`);
+      writeFileSync(config, JSON.stringify({ PORT: endpoint.port }));
+      writeExecutable(join(bin, "uname"), '#!/bin/bash\necho Darwin\n');
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\nprintf '%s\\n' '${service}'\n`);
+      writeExecutable(join(bin, "lsof"), `#!/bin/bash\nprintf '%s\\n' '${listeners}'\n`);
+
+      const r = await runCli(["doctor"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin`,
+        ECHO_CONVERSE_SOX_BIN: "/usr/bin/true",
+        ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
+      });
+      expect(requests).toEqual(["GET /health"]);
+      expect(r.stdout).toContain("plist + host adapter paths current");
+      expect(r.stdout).not.toContain("configured TTS providers healthy");
+      expect(r.stdout).not.toContain("is occupied but not answering Echo's /health");
+      if (ready) {
+        expect(r.stdout).toContain("service healthy, retry in a minute");
+        expect(r.stdout).toContain("Result: READY");
+        expect(r.exitCode).toBe(0);
+      } else {
+        expect(r.stdout).toContain("HTTP 429");
+        expect(r.stdout).toContain("Echo health unverified");
+        expect(r.stdout).not.toContain("service healthy");
+        expect(r.stdout).toContain("Result: DEGRADED");
+        expect(r.exitCode).toBe(1);
+      }
+    } finally {
+      endpoint.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("flags an enabled-but-unhealthy provider whatever order /health serialized the keys in", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-doctor-providers-"));
     try {

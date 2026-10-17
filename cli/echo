@@ -224,7 +224,16 @@ cmd_doctor() {
   if [[ "$health" =~ [^[:space:]] ]]; then
     doctor_row ok "health" "daemon healthy on :${ECHO_PORT}"
   elif [ "$health_code" = "429" ]; then
-    doctor_row warn "health" "Echo is rate-limiting /health on :${ECHO_PORT}; service healthy, retry in a minute"
+    local service_pid listener_pids
+    service_pid="$(launchctl list 2>/dev/null | awk -v service="$SERVICE_NAME" \
+      '$3 == service && $1 ~ /^[1-9][0-9]*$/ { print $1 }' || true)"
+    listener_pids="$(port_listener_pids | sort -u)"
+    if [ -n "$service_pid" ] && [ "$listener_pids" = "$service_pid" ]; then
+      doctor_row warn "health" "Echo is rate-limiting /health on :${ECHO_PORT}; service healthy, retry in a minute"
+    else
+      doctor_row fail "health" "HTTP 429 from :${ECHO_PORT}; Echo health unverified" \
+        "Retry in a minute: echo doctor"
+    fi
   elif command -v lsof >/dev/null 2>&1 && [ -n "$(port_listener_pids)" ]; then
     # The exact lines install.sh refuses with. Neither claims whose daemon this
     # is: a foreign owner is what crash-loops ours, so the two states are not
