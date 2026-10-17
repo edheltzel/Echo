@@ -53,12 +53,10 @@ HEALTH_URL="${ECHO_BASE_URL}/health"
 ECHO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- occupied port ----------------------------------------------------------
-# Echo deliberately does NOT classify who owns the port. A foreign process on
-# :3246 is what makes our own service fail to bind, so launchd respawns it and
-# reports no stable PID - the two states co-occur, and every "is it ours" test
-# is guesswork in exactly the case that matters. So: name what lsof saw, give
-# both recoveries, let the operator decide. install.sh and cli/echo print these
-# same lines so they can never disagree about the same port.
+# A foreign process on :3246 can make Echo fail to bind while launchd respawns
+# it with no stable PID. These helpers therefore describe an unresponsive port
+# without attributing it to Echo or another service, and offer both recoveries.
+# install.sh and cli/echo share these diagnostics.
 
 # Identity of whatever listens on ECHO_PORT, e.g. `bun (PID 4242)`; empty when
 # nothing holds it or lsof is unavailable.
