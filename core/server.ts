@@ -2324,6 +2324,7 @@ export const server = serve({
             present: CONFIG_STATUS.present,
             valid: CONFIG_STATUS.errors.length === 0,
             ignored_keys: CONFIG_STATUS.ignored,
+            retired_keys: CONFIG_STATUS.retired,
             errors: CONFIG_STATUS.errors,
           },
           activeProvider: voicesConfig.defaultProvider,
