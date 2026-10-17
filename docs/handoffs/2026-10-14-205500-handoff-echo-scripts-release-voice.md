@@ -27,7 +27,7 @@ Date: 2026-10-14. Status snapshot: [regroup/2026-10-14-regroup-echo.md](../../re
 
 ## Next step
 
-Open the dev to master promotion PR (merge commit) for #226-#228, and validate it with `no-mistakes axi run --yes` from `~/Developer/Atlas/Echo-nm`.
+Continue from [repo todo.txt](../../todo.txt). Promotion outcomes are recorded in [done.txt](../../done.txt).
 
 ## Links
 
@@ -37,11 +37,3 @@ Open the dev to master promotion PR (merge commit) for #226-#228, and validate i
 - `tests/e2e-converse.sh`: health probe header and 15-second deadline (No Mistakes fix).
 - PR #228: the No Mistakes run summary is in the PR comments and body.
 - [Regroup snapshot](../../regroup/2026-10-14-regroup-echo.md); [repo todo.txt](../../todo.txt) for the remaining backlog.
-
-## todo.txt
-
-- Promote dev to master for #226-#228 (merge commit), validated with No Mistakes `--yes`
-- Add a no-mistakes axi `--yes` workflow line to AGENTS.md
-- Fix `cli/echo doctor` reporting a /health 429 as a foreign port owner
-- Fix `cli/echo --help` backticks being evaluated by the shell
-- Trial Pocket TTS through the Kokoro endpoint on an isolated daemon
