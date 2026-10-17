@@ -1,10 +1,10 @@
 # To-do
 
-Mirror of `todo.txt` (source of truth, managed with `tuxedo`). Synced 2026-10-17.
+Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (archive), managed with `tuxedo`. Synced 2026-10-17.
 
 ## Open
 
-- [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). on Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
+- [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
 - [ ] 2026-10-09 **Waiting:** ATL-633 Daemon-owned notice (no name yet). on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue atl:633
 - [ ] 2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet @outstanding
 - [ ] 2026-10-09 OpenCode HIL announce (permission.asked). Regroup follow-up, no issue filed. Owner: Atlas @outstanding
@@ -32,17 +32,17 @@ _None._
 
 ## Archived (done.txt)
 
-- [x] 2026-10-15 Promote dev → master. master is still abdac2d (Sep 28) and all Oct 7–8 work is dev-only. Owner: Ed. ⚠ a promotion may be staged locally in GitButler @outstanding - [pr](https://github.com/edheltzel/Echo/pull/223)
-- [x] 2026-10-15 OpenCode adapter: runtime persona & voice. Needs Ed's decision: close by hand or switch to env-wins precedence @outstanding issue:129 - [pr](https://github.com/edheltzel/Echo/pull/204)
-- [x] 2026-10-15 Detect Herdr: stay as today if missing, talk to Herdr if present. Not started @outstanding issue:191 - [pr](https://github.com/edheltzel/Echo/pull/215)
-- [x] 2026-10-15 Route Echo notifications through Herdr with pane-aware context and focus. Not started; separate from ATL-633. Herdr-first route shipped in #133; click-to-focus closed not planned (Herdr has no notification target) @outstanding issue:95 - [pr](https://github.com/edheltzel/Echo/pull/216)
-- [x] 2026-10-15 herdr socket api for agent types. Not started; assigned Atlas-Key. closed not planned (Herdr has no parent/spawn lineage field) @outstanding issue:96 - [pr](https://github.com/edheltzel/Echo/pull/217)
-- [x] 2026-10-15 Jev seats: interrupt/duck, mute gate, wake vs ignore. Not started @outstanding issue:194 - [pr](https://github.com/edheltzel/Echo/pull/220)
-- [x] 2026-10-15 Publish playback state as a cross-process signal file. Branch cursor/fm-456-playback-state-6c32 (tip 1733444, Sep 10) is unmerged and the factory says awaiting-redteam, but the Oct 7 regroup says not started @check issue:106 - [pr](https://github.com/edheltzel/Echo/pull/218)
-- [x] 2026-10-15 Regroup doc branch docs/regroup-2026-10-07. Never merged to dev; check whether it was meant to land @check - [report](regroup/2026-10-07-regroup-echo.md)
-- [x] 2026-10-15 Installed daemon branch on BigMac. Sounds-only mode and /mode exist only on dev; confirm what BigMac runs before building the Tern button @check verified 2026-10-15: BigMac runs payload 0.12.0 with /mode
-- [x] 2026-10-15 fix: keep test daemons' banners off the operator's screen. Open, mergeable (clean), adds ECHO_OSASCRIPT_BIN. Waiting on Ed's merge (or Atlas under the #212 low-risk rule) @inprogress pr:213 - [pr](https://github.com/edheltzel/Echo/pull/213)
-- [x] 2026-10-15 FM-352 / FM-356 Pi extension finish + RedTeam review. Still "underway" in factory.db, but cursor/fm-352-pi-install-prove-72b2 is an ancestor of dev @close fm-352 branch is an ancestor of dev - [pr](https://github.com/edheltzel/Echo/pull/174)
-- [x] 2026-10-15 FM-353 Thin Claude Code plugin. Still "underway" in factory.db; merged as PR #176 @close - [pr](https://github.com/edheltzel/Echo/pull/176)
-- [x] 2026-10-15 FM-365 Echo extension API / surface. Still "underway" in factory.db; merged as #177 @close - [pr](https://github.com/edheltzel/Echo/pull/177)
+- [x] 2026-10-15 Promote dev → master. Merged as #223 - [pr](https://github.com/edheltzel/Echo/pull/223)
+- [x] 2026-10-15 OpenCode adapter: runtime persona & voice. Shipped in #204; #129 closed issue:129 - [pr](https://github.com/edheltzel/Echo/pull/204)
+- [x] 2026-10-15 Detect Herdr: stay as today if missing, talk to Herdr if present. Shipped in #133; documented in #215; #191 closed issue:191 - [pr](https://github.com/edheltzel/Echo/pull/215)
+- [x] 2026-10-15 Route Echo notifications through Herdr with pane-aware context and focus. Herdr-first route shipped in #133; click-to-focus closed not planned; see docs/http-api.md for the limitation issue:95 - [pr](https://github.com/edheltzel/Echo/pull/216)
+- [x] 2026-10-15 herdr socket api for agent types. Closed not planned; see docs/adapters.md for the upstream limitation issue:96 - [pr](https://github.com/edheltzel/Echo/pull/217)
+- [x] 2026-10-15 Jev seats: interrupt/duck, mute gate, wake vs ignore. Spike delivered in #220; #194 closed; see docs/plans/2026-10-09-jev-decision-seats-spike.md for the verdicts issue:194 - [pr](https://github.com/edheltzel/Echo/pull/220)
+- [x] 2026-10-15 Publish playback state as a cross-process signal file. Shipped in #218; #106 closed issue:106 - [pr](https://github.com/edheltzel/Echo/pull/218)
+- [x] 2026-10-15 Regroup doc branch docs/regroup-2026-10-07. Regroup record landed in #227; branch pruning remains in todo.txt - [report](regroup/2026-10-07-regroup-echo.md), [pr](https://github.com/edheltzel/Echo/pull/227)
+- [x] 2026-10-15 Installed daemon branch on BigMac. Verified 2026-10-15: BigMac runs payload 0.12.0 with /mode
+- [x] 2026-10-15 fix: keep test daemons' banners off the operator's screen. Merged as #213 - [pr](https://github.com/edheltzel/Echo/pull/213)
+- [x] 2026-10-15 FM-352 / FM-356 Pi extension finish + RedTeam review. Merged as #174 - [pr](https://github.com/edheltzel/Echo/pull/174)
+- [x] 2026-10-15 FM-353 Thin Claude Code plugin. Merged as #176 - [pr](https://github.com/edheltzel/Echo/pull/176)
+- [x] 2026-10-15 FM-365 Echo extension API / surface. Merged as #177 - [pr](https://github.com/edheltzel/Echo/pull/177)
 - [x] 2026-10-15 Promote dev to master for #226-#228. Squash-merged (not a merge commit); master ancestry restored by #231; No Mistakes run was cancelled after a failed test step, not passed - [note](docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md), [pr](https://github.com/edheltzel/Echo/pull/230), [pr](https://github.com/edheltzel/Echo/pull/231)
