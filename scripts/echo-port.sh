@@ -172,6 +172,7 @@ echo_http() {
       body=""
     fi
   fi
+  # shellcheck disable=SC2034  # read by callers such as cli/echo after echo_http
   ECHO_HTTP_CODE="$code"
 
   if [ "$curl_rc" -eq 0 ] && [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ]; then
