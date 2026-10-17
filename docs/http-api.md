@@ -331,8 +331,10 @@ malformed file, or a dead `pid`, as idle. See [`configuration.md`](configuration
 existed, and - because a key that fails validation is dropped on its own rather than
 discarding the file - exactly which keys were ignored and why. `valid: false` with a
 non-empty `ignored_keys` is the machine-readable form of "your config partly applied", so a
-typo is discoverable without reading `~/Library/Logs/echo.log`. `retired_keys` lists keys
-Echo itself stopped reading; those do not warn and do not make `valid` false.
+typo is discoverable without reading `~/Library/Logs/echo.log`. `retired_keys` lists
+retired properties separately from `ignored_keys` and `errors`; `valid` is true when
+`errors` is empty. Retirement and cleanup behavior:
+[`Invalid keys`](configuration.md#invalid-keys).
 
 ```bash
 curl -fsS http://localhost:3246/health | jq '.config'

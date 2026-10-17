@@ -123,7 +123,7 @@ const DOTENV_EXCLUDED_KEYS = new Set(["PORT"]);
 export interface EchoConfigStatus {
   path: string;
   present: boolean;
-  /** Keys dropped from an otherwise-usable file; every other key still applies. */
+  /** Keys rejected by validation; accepted settings still apply. Excludes retired keys. */
   ignored: string[];
   /** Retired keys Echo itself no longer reads. Harmless; not a validation failure. */
   retired: string[];
@@ -176,7 +176,7 @@ function parseConfigPort(entry: EchoConfigValue): number | null {
   return CANONICAL_DECIMAL.test(text) ? Number(text) : null;
 }
 
-/** The single per-key rule; both validation and loading go through it. */
+/** Per-key diagnostics; loading handles retired keys separately without errors. */
 function validateEchoConfigEntry(key: string, entry: unknown): string | null {
   if (key === "ELEVENLABS_API_KEY") {
     return "ELEVENLABS_API_KEY is a secret and must not be stored in config.json";
@@ -209,7 +209,7 @@ export function validateEchoConfig(value: unknown): string[] {
 }
 
 /**
- * Read config.json, dropping ONLY the keys that fail validation. An unknown key
+ * Read config.json, dropping rejected and retired keys. An unknown key
  * (a typo, or a setting written by a newer Echo) must not revert every other
  * setting to its built-in default - the ignored keys and their reasons are
  * reported through EchoConfigStatus and surfaced in GET /health. A key Echo

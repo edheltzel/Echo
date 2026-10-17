@@ -77,20 +77,15 @@ Do not commit .env files or put API keys in config.json.
 
 A key that fails validation (an unknown name, a typo, a compound value, or the secret above)
 is **dropped on its own**; every other setting in the file still applies. The daemon logs
-one warning naming each dropped key, and reports the same thing in `GET /health`:
+one warning naming each rejected key, and reports them in the
+[`GET /health` configuration audit](http-api.md#get-health):
 
     curl -fsS http://localhost:3246/health | jq '.config'
-    {
-      "path": "/Users/you/.config/echo/config.json",
-      "present": true,
-      "valid": false,
-      "ignored_keys": ["ECHO_VOICE_PERSONNA_NAME"],
-      "errors": ["ECHO_VOICE_PERSONNA_NAME is not an Echo configuration key"]
-    }
 
-A key Echo itself retired (`ECHO_VOICE_CATCHPHRASE`, `ECHO_VOICE_SAY_NAME`) is also dropped,
-but it is not a typo: startup stays quiet, `valid` stays true, and `retired_keys` names it
-so `echo doctor` can tell you to delete the line. An unknown key still warns.
+Properties listed in [`RETIRED_CONFIG_KEYS`](../shared/echo-env.ts) are ignored silently
+and add no validation errors. `echo doctor` scans the file and displays an informational
+`! config` row naming them; that row does not fail the run. Echo leaves these properties
+in place, including during migration, so cleanup is manual. Unknown keys still warn.
 
 A file that is not valid JSON, or not a JSON object, cannot be partially applied: the whole
 file is skipped, `valid` reads false, and the built-in defaults are used.
