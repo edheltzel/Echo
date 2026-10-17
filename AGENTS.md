@@ -91,7 +91,6 @@ This checkout is a GitButler workspace (`but`). Fetch target is `origin/dev` (`b
 - Stop only for protected-path or test-unvalidated-work refusals or a real ask-user product decision.
 - Run from a plain clone with the feature branch checked out because GitButler's workspace branch hides feature branches from the gate. Do not use it for dev-to-master promotion PRs: the pipeline rebases onto its base and breaks the required merge commit.
 
-
 ```bash
 git checkout dev
 bun install                 # links @echo/shared into each adapter package (required)
