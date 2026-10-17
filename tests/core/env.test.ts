@@ -8,11 +8,9 @@ import {
   ECHO_CONFIG_KEYS,
   MAX_CONFIG_PORT,
   MIN_CONFIG_PORT,
-  RETIRED_CONFIG_KEYS,
   echoConfigPath,
   loadEchoConfiguration,
   loadEchoConfigurationWithStatus,
-  retiredConfigKeyMessage,
   validateEchoConfig,
 } from "../../shared/echo-env";
 
@@ -323,8 +321,9 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
       expect(config.retired).toEqual(["ECHO_VOICE_CATCHPHRASE", "ECHO_VOICE_SAY_NAME"]);
       expect(config.ignored).toEqual([]);
       expect(config.errors).toEqual([]);
-      expect(validateEchoConfig({ ECHO_VOICE_SAY_NAME: true })).toEqual([
-        retiredConfigKeyMessage("ECHO_VOICE_SAY_NAME"),
+      expect(validateEchoConfig({ ECHO_VOICE_CATCHPHRASE: "Atlas online.", ECHO_VOICE_SAY_NAME: true })).toEqual([
+        "ECHO_VOICE_CATCHPHRASE is a retired Echo configuration key and is ignored",
+        "ECHO_VOICE_SAY_NAME is a retired Echo configuration key and is ignored",
       ]);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -360,7 +359,6 @@ describe("resolveEchoEnv - import-pure config resolution", () => {
       const message = String(warn.mock.calls[0]?.[0]);
       expect(message).toContain("NOT_A_KEY is not an Echo configuration key");
       expect(message).not.toContain("ECHO_VOICE_SAY_NAME");
-      expect(Object.keys(RETIRED_CONFIG_KEYS)).toContain("ECHO_VOICE_SAY_NAME");
     } finally {
       warn.mockRestore();
       rmSync(home, { recursive: true, force: true });

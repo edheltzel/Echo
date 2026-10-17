@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { RETIRED_CONFIG_KEYS } from "../../shared/echo-env";
 
 // The `echo` CLI is a thin bash wrapper over scripts/*.sh + the daemon API.
 // Every test runs in a temp HOME with stubbed launchctl/curl - it never touches
@@ -150,35 +149,84 @@ describe("echo doctor", () => {
     }
   });
 
-  test("a retired config key is informational and does not fail doctor", async () => {
+  test.each([
+    { label: "say-name property", config: '{"ECHO_VOICE_SAY_NAME":true}', retired: "ECHO_VOICE_SAY_NAME" },
+    { label: "catchphrase property", config: '{"ECHO_VOICE_CATCHPHRASE":"Hello"}', retired: "ECHO_VOICE_CATCHPHRASE" },
+    {
+      label: "both properties with multiline whitespace",
+      config: '{\n  "ECHO_VOICE_SAY_NAME"\n  : true,\r\n  "ECHO_VOICE_CATCHPHRASE"\t:\t"Hello"\n}',
+      retired: "ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME",
+    },
+    { label: "say-name string value", config: '{"ECHO_DEFAULT_TITLE":"ECHO_VOICE_SAY_NAME"}', retired: "" },
+    { label: "catchphrase string value", config: '{"ECHO_DEFAULT_TITLE":"ECHO_VOICE_CATCHPHRASE"}', retired: "" },
+    {
+      label: "quoted property text in a value",
+      config: JSON.stringify({ ECHO_DEFAULT_TITLE: '{"ECHO_VOICE_SAY_NAME":true,"ECHO_VOICE_CATCHPHRASE":true}' }),
+      retired: "",
+    },
+    {
+      label: "similar property names",
+      config: JSON.stringify({ ECHO_VOICE_SAY_NAME_OLD: true, ECHO_VOICE_CATCHPHRASE_OLD: true }),
+      retired: "",
+    },
+    {
+      label: "retired names inside other property names",
+      config: JSON.stringify({ 'other "ECHO_VOICE_SAY_NAME': true, 'other "ECHO_VOICE_CATCHPHRASE': true }),
+      retired: "",
+    },
+    {
+      label: "overridden config path",
+      config: '{"ECHO_VOICE_SAY_NAME":false,"ECHO_VOICE_CATCHPHRASE":""}',
+      retired: "ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME",
+    },
+    { label: "no retired properties", config: '{"ECHO_DEFAULT_TITLE":"Kept"}', retired: "" },
+  ])("doctor reports only retired properties without failing: $label", async ({ label, config, retired }) => {
     const root = mkdtempSync(join(tmpdir(), "echo-doctor-retired-"));
     try {
       const home = join(root, "home");
       const bin = join(root, "bin");
+      const payload = join(home, "Library", "Application Support", "echo", "payload", "current");
+      const launchagents = join(home, "Library", "LaunchAgents");
+      const configPath = label === "overridden config path"
+        ? join(root, "operator-config.json")
+        : join(home, ".config", "echo", "config.json");
       mkdirSync(join(home, ".config", "echo"), { recursive: true });
       mkdirSync(bin, { recursive: true });
-      writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({
-        ECHO_VOICE_SAY_NAME: true,
-        ECHO_DEFAULT_TITLE: "Kept",
-      }));
-      writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 7\n");
+      mkdirSync(join(payload, "core"), { recursive: true });
+      mkdirSync(launchagents, { recursive: true });
+      writeFileSync(join(payload, "core", "server.ts"), "");
+      writeFileSync(join(payload, "manifest.json"), JSON.stringify({ version: "0.12.0" }));
+      writeFileSync(join(launchagents, "com.echo.plist"), `<plist version="1.0"><dict>
+<key>ProgramArguments</key><array><string>${join(payload, "core", "server.ts")}</string></array>
+<key>WorkingDirectory</key>
+<string>${payload}</string>
+</dict></plist>\n`);
+      writeFileSync(configPath, config);
+      writeExecutable(join(bin, "uname"), '#!/bin/bash\ncase "$1" in -s) echo Darwin ;; -r) echo 26.0 ;; esac\n');
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; *) exit 1 ;; esac\n');
+      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\n');
 
-      const r = await runCli(["doctor"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
-      expect(r.stdout).toContain("retired key(s) ignored: ECHO_VOICE_SAY_NAME");
-      expect(r.stdout).toContain("Harmless");
+      const r = await runCli(["doctor"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin`,
+        ECHO_CONVERSE_SOX_BIN: "/usr/bin/true",
+        ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
+        ...(label === "overridden config path" ? { ECHO_CONFIG_FILE: configPath } : {}),
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("Result: READY");
+      if (retired) {
+        expect(r.stdout).toContain(`retired key(s) ignored: ${retired}`);
+        expect(r.stdout).toMatch(/!\s+config/);
+        expect(r.stdout).toContain(`Harmless. Remove them from ${configPath}.`);
+      } else {
+        expect(r.stdout).not.toContain("retired key(s)");
+        expect(r.stdout).not.toContain("Harmless");
+      }
       expect(r.stdout).not.toContain("not an Echo configuration key");
-      // Other missing pieces still degrade the run; the retired key is not a ✗ row.
-      expect(r.stdout).not.toMatch(/✗\s+config/);
+      expect(readFileSync(configPath, "utf8")).toBe(config);
     } finally {
       rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  test("doctor names every retired config key", () => {
-    const cli = readFileSync("cli/echo", "utf8");
-    for (const key of Object.keys(RETIRED_CONFIG_KEYS)) {
-      expect(cli).toContain(key);
     }
   });
 

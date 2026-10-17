@@ -158,10 +158,11 @@ converse_configured() {
 # Retired keys Echo itself no longer reads. Informational only: a leftover does
 # not fail the run. Names stay in step with RETIRED_CONFIG_KEYS in shared/echo-env.ts.
 retired_config_keys() {
-  local config_path="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}" found="" key
+  local config_path="${ECHO_CONFIG_FILE:-$HOME/.config/echo/config.json}" found="" key config
   [ -f "$config_path" ] || return 0
+  config="$(tr -d '\r\n' < "$config_path")"
   for key in ECHO_VOICE_CATCHPHRASE ECHO_VOICE_SAY_NAME; do
-    if grep -q "\"${key}\"" "$config_path"; then
+    if grep -qE "(^|[{,])[[:space:]]*\"${key}\"[[:space:]]*:" <<< "$config"; then
       found="${found:+$found, }$key"
     fi
   done
