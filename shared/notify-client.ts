@@ -109,7 +109,12 @@ async function postNotification(
   payload: NotifyPayload,
   signal?: AbortSignal,
 ): Promise<NotifyResult> {
-  if (isAutomationSession()) return skippedNotification();
+  if (isAutomationSession()) {
+    try {
+      config.visualContext?.writer?.close?.();
+    } catch {}
+    return skippedNotification();
+  }
   let nativeResult: NativeVisualResult | undefined;
   const title = typeof payload.title === "string" ? payload.title : "Echo Notification";
   try {
