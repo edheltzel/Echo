@@ -76,7 +76,8 @@ Primary host-neutral endpoint. Body (every field optional):
 
 ### Native terminal visual delivery
 
-Host adapters attempt visual delivery before they POST to `/notify`, in this order:
+For notifications allowed by the [automation policy](configuration.md#schema-reference),
+host adapters attempt visual delivery before they POST to `/notify`, in this order:
 
 1. Herdr's `notification.show` route, when the adapter has a documented Herdr session or
    socket context and Herdr returns `shown: true`.

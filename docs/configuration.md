@@ -135,13 +135,17 @@ Settings whose behavior is not obvious from the name:
   so isolated test daemons never show a banner. Unset means `/usr/bin/osascript`.
 
 - **ECHO_AUTOMATION_ENV** is a comma-separated string of environment variable names. If any
-  listed name is present and non-empty in the agent process, adapters skip startup greetings,
-  completion lines, and needs-input announcements. Unset means `NO_MISTAKES_GATE`. Example:
+  listed variable has a non-whitespace value in the agent process, adapters skip their
+  notifications, including startup greetings, completion lines, and needs-input announcements.
+  No speech, notification sound, or native or macOS banner is delivered for those notifications.
+  Names are trimmed and blank entries ignored. Unset means `NO_MISTAKES_GATE`. Example:
   `"CI_GATE, NO_MISTAKES_GATE"`. `""` disables the check, so a marker that is still set does
-  not silence Echo. `NO_MISTAKES_GATE` is an undocumented no-mistakes diagnostic (value is
-  always `1`; presence is the signal) and can be renamed or removed upstream. This does not
-  silence a plain `claude -p` session that lacks the marker. Resolution is the usual
-  config.json precedence. Echo never writes this key into `process.env`.
+  not silence Echo. No-mistakes stamps `NO_MISTAKES_GATE=1` on its agent children; this is an
+  undocumented diagnostic marker and can be renamed or removed upstream. This policy does
+  not silence a plain `claude -p` session that lacks a marker. It is adapter-side: direct
+  HTTP callers and opt-in `echo_ask` are unaffected. Resolution is the usual config.json
+  precedence. Echo never writes this key into `process.env`.
+
 - **ECHO_PREFERRED_NAME** is the human name Claude Code, Pi, and omp put at the front of a
   needs-input / approval / attention line (`Ed, …`). Unset or blank stays nameless. Echo
   never guesses a name.
