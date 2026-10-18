@@ -25,6 +25,7 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_VOICE_PERSONA_NAME", "ECHO_VOICE_ID", "ECHO_VOICE_TITLE", "ECHO_PYTHON3_PATH",
   "ECHO_PREFERRED_NAME", "ECHO_VOICE_ENABLED", "ECHO_VOICE_GREET_ON_START",
   "ECHO_VOICE_SPEAK_COMPLETIONS", "ECHO_VOICE_SUPPRESS", "ECHO_VOICE_SUPPRESS_SUBAGENTS",
+  "ECHO_AUTOMATION_ENV",
   "ECHO_DEFAULT_TITLE",
   "ECHO_EDGETTS_TIMEOUT_MS", "ECHO_EDGETTS_TIMEOUT_MAX_MS", "ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS",
   "ECHO_EDGETTS_HEALTH_TIMEOUT_MS", "ECHO_EDGETTS_SYNTH_RETRIES", "ECHO_EDGETTS_SYNTH_BACKOFF_MS",
@@ -460,6 +461,29 @@ export function shouldSuppressSubagentVoice(
   env: EchoEnvironment = loadEchoConfiguration(),
 ): boolean {
   return parseEchoBoolean(env.ECHO_VOICE_SUPPRESS_SUBAGENTS, true);
+}
+
+/** Comma-separated env names. Unset means the no-mistakes diagnostic marker. Empty disables. */
+export const DEFAULT_AUTOMATION_ENV = "NO_MISTAKES_GATE";
+
+export function automationEnvNames(configured: string | undefined): string[] {
+  const raw = configured === undefined ? DEFAULT_AUTOMATION_ENV : configured;
+  return raw.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
+}
+
+/**
+ * True when the agent process carries any configured automation marker.
+ * Names come from resolved config (config.json wins). Values are read from
+ * `env` (the live process), never written back into it.
+ */
+export function isAutomationSession(
+  env: EchoEnvironment = process.env,
+  config: EchoEnvironment = loadEchoConfiguration(),
+): boolean {
+  return automationEnvNames(config.ECHO_AUTOMATION_ENV).some((name) => {
+    const value = env[name];
+    return typeof value === "string" && value.trim().length > 0;
+  });
 }
 
 // Compatibility name for adapters and extensions written against the Stage 1

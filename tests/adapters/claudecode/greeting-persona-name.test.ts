@@ -88,6 +88,10 @@ describe("Claude Code startup speech", () => {
     expect(await runGreeting("startup", {}, { CLAUDE_CODE_AGENT_TASK_ID: "child-task" })).toEqual([]);
   });
 
+  test("an automation marker exits cleanly and posts nothing", async () => {
+    expect(await runGreeting("startup", {}, { NO_MISTAKES_GATE: "1" })).toEqual([]);
+  });
+
   test("completion suppression matches only the complete startup announcement", () => {
     expect(matchesStartupGreeting("CLAUDE CODE, ready!")).toBe(true);
     expect(matchesStartupGreeting("Claude code, ready. The tests passed.")).toBe(false);

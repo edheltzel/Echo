@@ -105,7 +105,7 @@ Feature register hooks (reuse these; do not add a second factory):
 
 | Feature | Register hook | Notes |
 | --- | --- | --- |
-| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
+| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. Skips the POST when `isAutomationSession` is true (`ECHO_AUTOMATION_ENV`, default `NO_MISTAKES_GATE`, an undocumented no-mistakes marker that can change). Claude hooks exit 0 before they POST. `echo_ask` is not on this path. |
 | mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
 | mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
