@@ -46,10 +46,10 @@ describe("automation session silence", () => {
   test("default marker skips the POST and reports success", async () => {
     process.env.NO_MISTAKES_GATE = "1";
     let fetched = false;
-    globalThis.fetch = async () => {
+    globalThis.fetch = Object.assign(async () => {
       fetched = true;
       return new Response("nope", { status: 500 });
-    };
+    }, { preconnect: originalFetch.preconnect });
     const result = await sendNotification(notifyConfig, "hello", "codex");
     expect(fetched).toBe(false);
     expect(result).toEqual({ ok: true, status: 0, body: "skipped", skipped: true });
@@ -57,10 +57,10 @@ describe("automation session silence", () => {
 
   test("a missing marker still sends", async () => {
     let fetched = false;
-    globalThis.fetch = async () => {
+    globalThis.fetch = Object.assign(async () => {
       fetched = true;
       return new Response("accepted", { status: 202 });
-    };
+    }, { preconnect: originalFetch.preconnect });
     const result = await sendNotification(notifyConfig, "hello", "codex", undefined, undefined, { env: {} });
     expect(fetched).toBe(true);
     expect(result.ok).toBe(true);
@@ -72,10 +72,10 @@ describe("automation session silence", () => {
     configFile({ ECHO_AUTOMATION_ENV: "" });
     expect(isAutomationSession()).toBe(false);
     let fetched = false;
-    globalThis.fetch = async () => {
+    globalThis.fetch = Object.assign(async () => {
       fetched = true;
       return new Response("accepted", { status: 202 });
-    };
+    }, { preconnect: originalFetch.preconnect });
     await sendNotification(notifyConfig, "hello", "grok", undefined, undefined, { env: {} });
     expect(fetched).toBe(true);
   });
@@ -91,10 +91,10 @@ describe("automation session silence", () => {
         const fd = openSync(path, "w");
         let posts = 0;
         let banners = 0;
-        globalThis.fetch = async () => {
+        globalThis.fetch = Object.assign(async () => {
           posts += 1;
           return new Response("accepted", { status: 202 });
-        };
+        }, { preconnect: originalFetch.preconnect });
         const context: TerminalNotificationContext = {
           env: { TERM_PROGRAM: "Ghostty" },
           writer: {
@@ -125,7 +125,7 @@ describe("automation session silence", () => {
 
   test("a writer cleanup failure still reports a successful skip", async () => {
     process.env.NO_MISTAKES_GATE = "1";
-    globalThis.fetch = async () => { throw new Error("must not POST"); };
+    globalThis.fetch = Object.assign(async () => { throw new Error("must not POST"); }, { preconnect: originalFetch.preconnect });
     const result = await sendNotification(notifyConfig, "hello", "pi", undefined, undefined, {
       writer: {
         isTTY: true,
