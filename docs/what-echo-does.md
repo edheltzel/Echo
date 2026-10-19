@@ -74,6 +74,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 - The adapter has `ECHO_VOICE_SPEAK_COMPLETIONS` off, or greetings off
 - `ECHO_VOICE_ENABLED` is false, or this request sent `voice_enabled: false`
 - A subagent turn (suppressed by default)
+- The agent process matches the [automation policy](configuration.md#schema-reference).
 - A capture is in progress. Echo will not talk over an open microphone. The banner can still appear.
 - The play queue dropped a stale or superseded line. The request was accepted. The audio was not played.
 - The host is waiting on a permission or approval UI inside a turn, and that host is not Claude Code, Pi, or omp. Completions still fire at turn end. [When an agent needs you](#when-an-agent-needs-you).

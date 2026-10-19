@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { getIdentity } from "../lib/identity";
 import { classifyClaudeHil, type ClaudeHilInput } from "../lib/hil-event";
 import { extractPendingAskUserQuestion } from "../lib/TranscriptParser";
-import { shouldSuppressSubagentVoice, loadEchoConfiguration, type EchoEnvironment } from "@echo/shared/echo-env.ts";
+import { shouldSuppressSubagentVoice, loadEchoConfiguration, isAutomationSession, type EchoEnvironment } from "@echo/shared/echo-env.ts";
 import {
   defaultHilDedupeDir,
   formatHilMessage,
@@ -71,6 +71,7 @@ export function isMainSessionHil(input: ClaudeHilInput): boolean {
 
 export async function handleHil(input: ClaudeHilInput, deps: HilSpeakDeps = {}): Promise<boolean> {
   if (!isMainSessionHil(input)) return false;
+  if (isAutomationSession(process.env, deps.env ?? loadEchoConfiguration())) return false;
 
   const env = deps.env ?? loadEchoConfiguration();
   const hint = transcriptHint(input, deps.readTranscript ?? defaultReadTranscript);

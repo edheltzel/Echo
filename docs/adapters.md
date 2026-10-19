@@ -105,7 +105,7 @@ Feature register hooks (reuse these; do not add a second factory):
 
 | Feature | Register hook | Notes |
 | --- | --- | --- |
-| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
+| notify | `sendNotification` / `sendNotificationPayload` (`@echo/shared/notify-client.ts`) | POST `/notify`. Both apply the [automation policy](configuration.md#schema-reference) before HTTP or native visual delivery. A skip closes any supplied terminal writer and returns `{ ok: true, status: 0, body: "skipped", skipped: true }`; callers must treat it as success. Claude hooks exit 0 before they POST. |
 | mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
 | mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
@@ -175,12 +175,9 @@ bash scripts/install.sh --check     # or: cli/echo doctor
 
 ## Native terminal visuals
 
-Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery. Before the
-HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
-then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
-adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
-`allow-passthrough` to be read as `on` or `all` before wrapping the OSC sequence. SSH/headless
-contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
+Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery.
+Its routing order, automation-policy check, and TTY safety constraints are documented in
+[Native terminal visual delivery](http-api.md#native-terminal-visual-delivery).
 
 Herdr 0.9.3 (socket protocol 22) names the agent in a pane via `agent` and `display_agent` on
 `AgentInfo` and `PaneInfo` (`agent.get`, `agent.list`, `pane.current`). `agent_session` carries
