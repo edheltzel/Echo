@@ -24,6 +24,7 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
 - [ ] 2026-10-19 Decide whether the /health limiter should stop trusting X-Forwarded-For and whether the daemon should bind localhost only - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
 - [ ] 2026-10-19 Decide whether to silence plain claude -p sessions outside automation - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
+- [ ] 2026-10-19 Research Echo support for Empryo sessions (https://empryo.com/docs/). Empryo loads Claude Code hooks from ~/.claude/settings.json unchanged (docs/tools/hooks: Stop, SessionStart, Notification permission_prompt), but this Empryo session produced no Echo delivery in echo.log or voice-events.jsonl. Find why (hook loading per surface, transcript_path format vs the Claude parser, hook env subset), then decide reuse of adapters/claudecode vs a new adapters/empryo. Automation silence needs EMPRYO_HOOK_ENV=NO_MISTAKES_GATE because hooks get a safe env subset @outstanding
 
 ## Done
 
