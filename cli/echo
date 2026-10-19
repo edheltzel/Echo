@@ -32,7 +32,7 @@ echo - control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${EC
 Usage: echo <command> [args]
 
 Commands:
-  install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
+  install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
                        Adapter ids: shared/extension.ts (HARNESS_IDS).

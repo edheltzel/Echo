@@ -9,10 +9,10 @@
  */
 
 import { handleHil } from "./handlers/VoiceHil";
-import { isAutomationSession } from "@echo/shared/echo-env.ts";
+import { isAutomationSession, isEmpryoHookProcess } from "@echo/shared/echo-env.ts";
 import type { ClaudeHilInput } from "./lib/hil-event";
 
-if (isAutomationSession()) process.exit(0);
+if (isAutomationSession() || isEmpryoHookProcess()) process.exit(0);
 
 async function readInput(): Promise<ClaudeHilInput | null> {
   try {

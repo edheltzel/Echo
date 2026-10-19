@@ -97,7 +97,7 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
 | `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`, `registerEchoAskTool`. |
-| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode, Empryo | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
 
 

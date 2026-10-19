@@ -28,6 +28,7 @@
     "ECHO_VOICE_SPEAK_COMPLETIONS": { "type": ["string", "boolean"] },
     "ECHO_VOICE_SUPPRESS": { "type": ["string", "boolean"] },
     "ECHO_VOICE_SUPPRESS_SUBAGENTS": { "type": ["string", "boolean"] },
+    "ECHO_VOICE_SUPPRESS_CHILD_TABS": { "type": ["string", "boolean"] },
     "ECHO_AUTOMATION_ENV": {
       "type": "string",
       "description": "Comma-separated env var names. If any is set and non-empty in the agent process, adapters skip greetings, completions, and needs-input speech. Default NO_MISTAKES_GATE. Empty string disables."
