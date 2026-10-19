@@ -24,8 +24,6 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
 - [ ] 2026-10-19 Decide whether the /health limiter should stop trusting X-Forwarded-For and whether the daemon should bind localhost only - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
 - [ ] 2026-10-19 Decide whether to silence plain claude -p sessions outside automation - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
-- [ ] 2026-10-19 Make Echo speak in Empryo sessions via the claudecode adapter: TranscriptParser reads Empryo event logs (k:assistant, ui.content, turnId); greeting accepts SessionStart source desktop/tui; hil-event maps plan_review. Needs Ed: should Empryo speak, and payload source claudecode or empryo
-- [ ] 2026-10-19 Document EMPRYO_HOOK_ENV=NO_MISTAKES_GATE so automation silence reaches Echo hooks under Empryo
 
 ## Done
 
@@ -35,6 +33,8 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [x] 2026-10-19 Merge #235 and #236, then cli/echo update and bun run restart - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md), [pr](https://github.com/edheltzel/Echo/pull/235), [pr](https://github.com/edheltzel/Echo/pull/236)
 - [x] 2026-10-19 Verify an automation run stays silent on the live daemon. NO_MISTAKES_GATE=1 claude -p ran with no new echo.log delivery; omp -p is already silent in print mode - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
 - [x] 2026-10-19 Research Echo support for Empryo sessions (https://empryo.com/docs/). Possible through adapters/claudecode: Empryo already runs Echo's ~/.claude/settings.json hooks, but Stop reads Empryo's event log with the Claude transcript parser (empty result) and SessionStart sends source desktop/tui/headless, which the greeting skips. A separate adapters/empryo would double-fire
+- [x] 2026-10-19 Add the Empryo adapter (adapters/empryo, --adapter empryo, source empryo): greeting on desktop/tui, completion from the session event log, approval/question/plan-review announcements, headless silent, child tabs behind ECHO_VOICE_SUPPRESS_CHILD_TABS; Claude Code and Codex hooks stand down under Empryo - [note](.scratch/empryo-support/research.md)
+- [x] 2026-10-19 Document EMPRYO_HOOK_ENV=NO_MISTAKES_GATE so automation silence reaches Echo hooks under Empryo - [note](.scratch/empryo-support/research.md)
 
 ## Archived (done.txt)
 
