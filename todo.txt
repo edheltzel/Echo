@@ -1,10 +1,9 @@
-2026-10-09 ATL-633 Daemon-owned notice (no name yet). @waiting on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue +echo atl:633
-2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet +echo @outstanding
-2026-10-09 OpenCode HIL announce (permission.asked). Regroup follow-up, no issue filed. Owner: Atlas +echo @outstanding
-2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
-2026-10-09 Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) +echo @waiting issue:126
-2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) +echo issue:28 dep:echo-npm-8
-2026-10-09 Publish NPM package for one-command install. @waiting on Ed: package name, Bun required or bootstrapped, publish flow +echo issue:8 id:echo-npm-8
+(B) 2026-10-09 ATL-633 Daemon-owned notice (no name yet). @waiting on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue +echo atl:633
+(C) 2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet +echo @outstanding due:2026-12-29
+(B) 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
+(B) 2026-10-09 Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) +echo @waiting issue:126
+(C) 2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) +echo issue:28 dep:echo-npm-8
+(A) 2026-10-09 Publish NPM package for one-command install. @waiting on Ed: package name, Bun required or bootstrapped, publish flow +echo issue:8 id:echo-npm-8
 2026-10-09 Roadmap: first-class speech-to-text (STT). Backlogged idea +echo @outstanding issue:179
 2026-10-09 Roadmap/explore: VoiceBar-class macOS surface. Backlogged idea +echo @outstanding issue:180
 2026-10-09 Roadmap/explore: published documentation site. Backlogged idea +echo @outstanding issue:181
@@ -14,11 +13,13 @@
 2026-10-09 Add OpenCode host adapter. Shipped (#198/#204); greeting on by default (#219). Left: headless opencode run greeting check (needs a live session) +echo @inprogress issue:17
 2026-10-09 [Epic] Make the voice system agent-agnostic. OpenCode is the last host; closes when #17 closes +echo @inprogress issue:30
 2026-10-09 Prune merged/duplicate remote branches (feat/notification-sounds, feat/install-onboarding-12, fix/test-preload-overrides, fix/test-xdg-leak, docs/low-risk-merge-rule, feat/preview-voices-help-13, fix/registrar-dedupe-63, chore/resync-dev-with-master, chore/restore-master-ancestry, feat/opencode-adapter, fix/opencode-prune-config-plugin(-dev), docs/regroup-2026-10-07, cursor/fm-352, fm-365). @waiting on Ed to confirm +echo
-2026-10-15 Add a no-mistakes axi --yes workflow line to AGENTS.md +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-15 Fix cli/echo --help backticks being evaluated by the shell +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
+x 2026-10-19 2026-10-15 Add a no-mistakes axi --yes workflow line to AGENTS.md +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
+x 2026-10-19 2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
+x 2026-10-19 2026-10-15 Fix cli/echo --help backticks being evaluated by the shell +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
 2026-10-15 Trial Pocket TTS through the Kokoro endpoint on an isolated daemon +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
 2026-10-17 Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check +echo @waiting pr:https://github.com/edheltzel/Echo/pull/230
-2026-10-19 Merge #235 and #236, then cli/echo update and bun run restart +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
+x 2026-10-19 2026-10-19 Merge #235 and #236, then cli/echo update and bun run restart +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md pr:https://github.com/edheltzel/Echo/pull/235 pr:https://github.com/edheltzel/Echo/pull/236
 2026-10-19 Decide whether the /health limiter should stop trusting X-Forwarded-For and whether the daemon should bind localhost only +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
 2026-10-19 Decide whether to silence plain claude -p sessions outside automation +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
+(C) 2026-10-19 ATL-642 Custom notification sounds. Config for custom audio files; play when a notification fires. Captain-hold until Echo is released. +echo atl:642 @waiting
+x 2026-10-19 2026-10-19 Verify an automation run stays silent on the live daemon. NO_MISTAKES_GATE=1 claude -p ran with no new echo.log delivery; omp -p is already silent in print mode +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
