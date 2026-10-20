@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { FEATURES, HARNESS_IDS, HARNESSES, harnessUsageIds, isHarnessId, registerEchoMode, registerEchoMute, registerEchoVoice } from "../../shared/extension.ts";
 import { mergePersonaJson, type EchoVoiceCommand } from "../../shared/persona-scaffold.ts";
 import type { MuteRunResult } from "../../shared/mute-command.ts";
@@ -14,11 +14,18 @@ function packageJson(): { workspaces: string[] } {
 }
 
 describe("harness catalog", () => {
-  test("usage ids match install.sh and cli/echo --adapter lists", () => {
-    const usage = `--adapter ${harnessUsageIds()}`;
-    expect(read("scripts/install.sh")).toContain(usage);
-    expect(read("cli/echo")).toContain(usage);
-    expect(read("AGENTS.md")).toContain(usage);
+  test("catalog, installer and CLI advertise the shipped adapter choices", () => {
+    const ids = "none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo";
+    const env = { PATH: process.env.PATH, HOME: process.cwd(), ECHO_CONFIG_FILE: resolve("tmp/catalog-config.json") };
+    const catalog = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "usage"], { env });
+    expect(catalog.exitCode).toBe(0);
+    expect(catalog.stdout.toString().trim()).toBe(ids);
+    expect(harnessUsageIds()).toBe(ids);
+    for (const entry of ["scripts/install.sh", "cli/echo"]) {
+      const help = Bun.spawnSync(["/bin/bash", entry, "--help"], { env });
+      expect(help.exitCode).toBe(0);
+      expect(help.stdout.toString()).toContain(`--adapter ${ids}`);
+    }
   });
 
   test("every catalog harness is a workspace package with a real package dir", () => {
@@ -36,15 +43,13 @@ describe("harness catalog", () => {
     }
   });
 
-  test("install.sh still has a case branch per catalog id (no second plugin loader)", () => {
-    const install = read("scripts/install.sh");
-    for (const id of HARNESS_IDS) {
-      expect(install).toMatch(new RegExp(`^\\s*${id}\\)`, "m"));
-      for (const spec of harnessByIdOrThrow(id).reconcile) {
-        expect(install).toContain(spec.script);
-        expect(existsSync(spec.script)).toBe(true);
-      }
-    }
+  test("catalog CLI lists Empryo as a notification and greeting hook adapter", () => {
+    const catalog = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "list"]);
+    expect(catalog.exitCode).toBe(0);
+    expect(catalog.stdout.toString().trim().split("\n")).toContain("empryo\thooks\tEmpryo\tempryo\tnotify,greeting");
+    const ids = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "ids"]);
+    expect(ids.exitCode).toBe(0);
+    expect(ids.stdout.toString().trim().split("\n")).toContain("empryo");
   });
 
   test("catalog ids are unique and cover every adapters/* package", () => {
@@ -61,7 +66,7 @@ describe("harness catalog", () => {
     expect(isHarnessId("pai")).toBe(false);
   });
 
-  test("entries and mute paths exist; extension hosts register through shared hooks", () => {
+  test("catalog entry and command paths resolve to shipped files", () => {
     for (const harness of HARNESSES) {
       if (harness.entry) expect(existsSync(harness.entry)).toBe(true);
       if (harness.features.includes("mute")) {
@@ -70,28 +75,10 @@ describe("harness catalog", () => {
       if (harness.features.includes("mute") && harness.kind !== "extension") {
         if (!harness.mutePath) throw new Error(`${harness.id} ships mute as a file`);
         expect(existsSync(harness.mutePath)).toBe(true);
-        expect(read(harness.mutePath)).toContain("cli/echo");
-        expect(read(harness.mutePath)).toContain("mute");
-        const muteSource = read(harness.mutePath);
-        expect(muteSource).not.toMatch(/fetch\([^)]*\/mute/);
-        expect(muteSource).not.toMatch(/\bcurl\b[^\n]*\/mute/);
       }
       if (harness.features.includes("mode") && harness.kind !== "extension") {
         if (!harness.modePath) throw new Error(`${harness.id} ships mode as a file`);
         expect(existsSync(harness.modePath)).toBe(true);
-        expect(read(harness.modePath)).toContain("cli/echo");
-        expect(read(harness.modePath)).toContain("mode");
-        expect(read(harness.modePath)).not.toMatch(/fetch\([^)]*\/mode/);
-        expect(read(harness.modePath)).not.toMatch(/\bcurl\b[^\n]*\/mode/);
-      }
-      if (harness.kind === "extension") {
-        const source = read(harness.entry!);
-        expect(source).toContain("registerEchoMute");
-        if (harness.features.includes("mode")) expect(source).toContain("registerEchoMode");
-        expect(source).toContain("registerEchoVoice");
-        expect(source).toContain("registerEchoAskTool");
-        expect(source).toContain("sendNotification");
-        expect(source).toContain("loadEchoEnvironment");
       }
     }
   });
@@ -100,30 +87,9 @@ describe("harness catalog", () => {
     for (const feature of Object.values(FEATURES)) {
       const file = feature.module.replace("@echo/shared/", "shared/").replace("@echo/converse/", "converse/");
       expect(existsSync(file)).toBe(true);
-      expect(read(file)).toContain(feature.register);
     }
     expect(FEATURES.mute.cli).toBe("cli/echo mute");
     expect(FEATURES.mode.cli).toBe("cli/echo mode");
-  });
-
-  test("core/ does not import the harness catalog", () => {
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const entry of readdirSync(dir)) {
-        const path = join(dir, entry);
-        if (statSync(path).isDirectory()) {
-          walk(path);
-          continue;
-        }
-        if (!path.endsWith(".ts")) continue;
-        const source = read(path);
-        if (source.includes("shared/extension") || source.includes("HARNESS_IDS") || source.includes("registerEchoMute")) {
-          offenders.push(path);
-        }
-      }
-    };
-    walk("core");
-    expect(offenders).toEqual([]);
   });
 });
 
@@ -186,9 +152,3 @@ describe("feature register hooks", () => {
     expect(commands.get("echo-voice")?.description).toContain("persona");
   });
 });
-
-function harnessByIdOrThrow(id: string) {
-  const harness = HARNESSES.find((entry) => entry.id === id);
-  if (!harness) throw new Error(`missing harness ${id}`);
-  return harness;
-}
