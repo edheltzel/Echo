@@ -154,7 +154,7 @@ Settings whose behavior is not obvious from the name:
   Unset or `true` means child tabs never speak; `false` lets them speak like any other tab.
   Tabs you open yourself always speak. Only the Empryo adapter reads it.
 
-- **ECHO_PREFERRED_NAME** is the human name Claude Code, Pi, and omp put at the front of a
+- **ECHO_PREFERRED_NAME** is the human name adapters put at the front of a
   needs-input / approval / attention line (`Ed, …`). Unset or blank stays nameless. Echo
   never guesses a name.
 

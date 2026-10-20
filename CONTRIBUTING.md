@@ -60,14 +60,8 @@ subject. One concern per commit when the history will be reviewed as-is.
 4. Update the nearest docs when providers, adapters, install, or HTTP contracts change.
    Documentation edits follow [`docs/dox.md`](docs/dox.md).
 5. Do not hand-write `CHANGELOG.md` on a feature branch.
-6. Wait for `verify` to pass. That job is:
-
-   - `bun install --frozen-lockfile`
-   - `bun test`
-   - `PORT=8889 tests/smoke-core.sh`
-   - `ECHO_E2E_PORT=8899 tests/e2e-adapters.sh`
-   - `ECHO_E2E_PORT=8921 ECHO_E2E_CONVERSE_PORT=8922 tests/e2e-converse.sh`
-   - bun builds for the pi, omp, mcp, jcode, grok, and codex adapters
+6. Wait for `verify` to pass. The check steps are defined in
+   [the workflow](.github/workflows/verify.yml).
 
 Local equivalent: [`docs/development.md`](docs/development.md). Spoken test lines begin
 `Echo Test engaged. Beep, boop, bop.` so anything audible is unmistakably a test.

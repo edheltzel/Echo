@@ -20,19 +20,19 @@ A request becomes speech only after it reaches the daemon with voice on, the run
 
 Typical spoken lines:
 
-- A turn-completion line from a wired host (the trailing `🗣️` line on Claude Code, Pi, oh-my-pi, Jcode, Grok Build, and Codex)
-- A needs-input, approval, or needs-attention line from Claude Code, Pi, or oh-my-pi ([When an agent needs you](#when-an-agent-needs-you))
-- A session-start greeting, when that host has greetings on (Pi and oh-my-pi default on. Claude Code, Jcode, Grok, and Codex default off.)
+- A turn-completion line from a wired host, usually the trailing `🗣️` line. Host-specific extraction is documented in each [adapter's README](../adapters/).
+- A needs-input, approval, or needs-attention line from a [host with wait announcements](#when-an-agent-needs-you)
+- A session-start greeting, when that host has greetings on. Startup eligibility is documented in each [adapter's README](../adapters/).
 - Anything you POST yourself, including the "Hello from Echo" smoke
 - A replay of the last N lines that actually played (`cli/echo replay [n]`, default 1, max 10). Muted lines and lines that played as a sound are not held for later replay. Replay speaks even in sounds-only mode.
 
 If that completion line is a question, it still speaks. `speak_mode` (`announce` / `brief` / `consult` / `think`) is notify density on that line, not a new lifecycle event. `consult` is the slightly faster density for a `?` or "about to" line. Adapters never infer `think` (silence is already `voice_enabled: false`).
 
-Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet. OpenCode speaks its completion when a session goes idle, and also exposes `/echo-mute` and `/echo-mode`. OpenCode subagent sessions stay quiet; OpenCode has no headless check yet, so `opencode run` still speaks its completion.
+Subagents stay quiet by default. Headless Pi and omp runs (`json` / `print`, or `hasUI === false`) stay quiet, as do Empryo headless runs. Empryo's agent-opened tabs follow the [child-tab policy](configuration.md#schema-reference). OpenCode speaks its completion when a session goes idle, and also exposes `/echo-mute` and `/echo-mode`. OpenCode subagent sessions stay quiet; OpenCode has no headless check yet, so `opencode run` still speaks its completion.
 
 ## When an agent needs you
 
-[#107](https://github.com/edheltzel/Echo/issues/107) is shipped for Claude Code, Pi, and oh-my-pi: Echo speaks once when the host cannot continue without you. The daemon stays host-neutral. Adapters detect the wait and POST `/notify`. Completions that happen to be questions still speak as the turn-end `🗣️` line.
+Echo announces waits from Claude Code, Pi, oh-my-pi, and Empryo. The daemon stays host-neutral. Adapters detect the wait and POST `/notify`. Completions that happen to be questions still speak as the turn-end `🗣️` line.
 
 The line uses `ECHO_PREFERRED_NAME` from `~/.config/echo/config.json` when set (`Ed, …`). Unset stays nameless. Echo never guesses a name. Persona and voice come from the requesting agent. Retries and duplicate host events for the same pending request do not speak again.
 
@@ -41,6 +41,7 @@ The line uses `ECHO_PREFERRED_NAME` from `~/.config/echo/config.json` when set (
 | Claude Code `AskUserQuestion`, or a permission dialog (and the delayed `permission_prompt` if the PermissionRequest already spoke) | One question or approval line. `AskUserQuestion` uses the host question text. |
 | Claude Code `idle_prompt` / `agent_needs_input` | `{persona} is paused and needs your attention: …` |
 | Pi / omp `tool_approval_requested`, or a blocking `ui_prompt_start` | Approval, question, or attention from the host title. Echo's own microphone-consent prompt stays quiet. |
+| Empryo approval, question, or plan-review prompt | An approval line or the host's question. Hook event names: [Empryo adapter](../adapters/empryo/README.md). |
 | The turn ended with a spoken question in the `🗣️` line | That completion line, at `consult` density if it contains `?` or "about to". Independent of the HIL ping. |
 | OpenCode, Jcode, Grok, Codex | No dedicated wait ping. Completions still speak at turn end where those adapters are wired. |
 | You want Echo to ask *you* a question out loud | That is opt-in [`echo_ask`](converse.md), the other direction. |
@@ -77,7 +78,7 @@ Quiet is a feature. These are the usual reasons you hear nothing:
 - The agent process matches the [automation policy](configuration.md#schema-reference).
 - A capture is in progress. Echo will not talk over an open microphone. The banner can still appear.
 - The play queue dropped a stale or superseded line. The request was accepted. The audio was not played.
-- The host is waiting on a permission or approval UI inside a turn, and that host is not Claude Code, Pi, or omp. Completions still fire at turn end. [When an agent needs you](#when-an-agent-needs-you).
+- The host has no dedicated wait announcement. Completions still fire at turn end. [When an agent needs you](#when-an-agent-needs-you).
 - Oh My Pi `/live` is talking on its own path. Muting Echo does not stop that live voice. It only stops Echo's completion line on top of it.
 
 Wrong voice is not silence. A request with no `voice_id` uses the identity voice (edge `en-GB-RyanNeural`), logged as `identity-default`. If you hear macOS `say` ("Daniel"), or Ava (`en-US-AvaNeural`, the edge provider `defaultVoice`), the chain did not use identity. That path is in the getting-started troubleshooting section and in [voices.md](voices.md).

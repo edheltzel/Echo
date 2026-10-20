@@ -14,7 +14,7 @@ Notifications report `source: "empryo"`.
   reload starts stay silent. `ECHO_VOICE_GREET_ON_START=false` disables it.
 - **Completion.** Empryo's `Stop` payload carries no response text, so the hook reads the
   session event log at `transcript_path` and speaks the turn's final `🗣️ Name: summary`
-  line, or a one-sentence fallback. Headless runs stay silent, like print mode on the other
+  line, or a short fallback summary. Headless runs stay silent, like print mode on the other
   hosts.
 - **Needs input.** `permission_prompt` and `plan_review` announce an approval,
   `elicitation_dialog` speaks the question. Each request speaks once.
