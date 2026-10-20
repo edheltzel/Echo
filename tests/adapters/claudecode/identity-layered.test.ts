@@ -36,6 +36,20 @@ const GLOBAL_ATLAS = {
   personality: { baseVoice: "en-US-Global", enthusiasm: 0.7 },
 };
 
+const voiceSpellings = [
+  { spelling: "voices.main.voiceId", identity: (voiceId: string) => ({ voices: { main: { voiceId } } }) },
+  { spelling: "voice.voiceId", identity: (voiceId: string) => ({ voice: { voiceId } }) },
+  { spelling: "voiceId", identity: (voiceId: string) => ({ voiceId }) },
+  { spelling: "mainDAVoiceID", identity: (voiceId: string) => ({ mainDAVoiceID: voiceId }) },
+];
+
+const voiceSpellingPairs = voiceSpellings.flatMap(lower => voiceSpellings.map(higher => ({
+  lowerSpelling: lower.spelling,
+  higherSpelling: higher.spelling,
+  lowerIdentity: lower.identity,
+  higherIdentity: higher.identity,
+})));
+
 afterEach(() => {
   clearCache();
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -165,5 +179,92 @@ describe("getIdentity - global ECHO_VOICE_ID is the fallback voice", () => {
     expect(getIdentity("", home, { ECHO_VOICE_ID: "  " }).mainDAVoiceID).toBe("");
     clearCache();
     expect(getIdentity("", home, {}).mainDAVoiceID).toBe("");
+  });
+
+  test("the fallback persona name cannot replace the Claude Code name", () => {
+    const home = tmp("echo-home-");
+    const id = getIdentity("", home, {
+      ECHO_VOICE_ID: "en-IN-PrabhatNeural",
+      ECHO_VOICE_PERSONA_NAME: "Fallback",
+    });
+    expect(id.name).toBe("Assistant");
+    expect(id.displayName).toBe("Assistant");
+    expect(id.mainDAVoiceID).toBe("en-IN-PrabhatNeural");
+  });
+});
+
+for (const [lowerLayer, higherLayer] of [
+  ["global", "project"],
+  ["global", "local"],
+  ["project", "local"],
+] as const) {
+  describe(`voice scope wins over spelling: ${lowerLayer} → ${higherLayer}`, () => {
+    test.each(voiceSpellingPairs)("$lowerSpelling → $higherSpelling", ({ lowerIdentity, higherIdentity }) => {
+      const home = tmp("echo-home-");
+      const project = tmp("echo-proj-");
+      const layers: Record<string, Record<string, unknown>> = {
+        global: { name: "Atlas" },
+        project: {},
+        local: {},
+      };
+      layers[lowerLayer] = { ...layers[lowerLayer], ...lowerIdentity("en-GB-ThomasNeural") };
+      layers[higherLayer] = higherIdentity("en-US-AvaMultilingualNeural");
+      writeClaudeSettings(home, "settings.json", { daidentity: layers.global });
+      writeClaudeSettings(project, "settings.json", { daidentity: layers.project });
+      writeClaudeSettings(project, "settings.local.json", { daidentity: layers.local });
+
+      const id = getIdentity(project, home, { ECHO_VOICE_ID: "en-IN-PrabhatNeural" });
+      expect(id.mainDAVoiceID).toBe("en-US-AvaMultilingualNeural");
+      expect(id.name).toBe("Atlas");
+    });
+  });
+}
+
+describe("unconfigured voice aliases inherit the broader voice", () => {
+  test.each(voiceSpellings)("blank $spelling does not hide the global voice", ({ identity }) => {
+    const home = fakeHome(GLOBAL_ATLAS);
+    const project = tmp("echo-proj-");
+    writeClaudeSettings(project, "settings.json", { daidentity: identity("  ") });
+    expect(getIdentity(project, home, {}).mainDAVoiceID).toBe("atlas-voice");
+  });
+
+  test("a prosody-only main voice does not hide a configured legacy voice", () => {
+    const home = fakeHome({
+      voices: { main: { speed: 0.9 } },
+      voice: { voiceId: "en-US-AvaMultilingualNeural" },
+    });
+    const id = getIdentity("", home, {});
+    expect(id.mainDAVoiceID).toBe("en-US-AvaMultilingualNeural");
+    expect(id.voice?.speed).toBe(0.9);
+  });
+});
+
+describe("identity voice consumers", () => {
+  test.each([false, true])("algorithm voice preserves an explicit override: %s", (explicitAlgorithm) => {
+    const home = fakeHome({
+      name: "Atlas",
+      voices: {
+        main: { voiceId: "en-GB-ThomasNeural" },
+        ...(explicitAlgorithm ? { algorithm: { voiceId: "en-US-AndrewNeural" } } : {}),
+      },
+    });
+    const project = tmp("echo-proj-");
+    writeClaudeSettings(project, "settings.json", { daidentity: { voiceId: "en-US-AvaMultilingualNeural" } });
+    const result = Bun.spawnSync([
+      process.execPath,
+      "--eval",
+      `import { getAlgorithmVoice, getSettings, getVoiceId } from ${JSON.stringify(join(process.cwd(), "adapters/claudecode/hooks/lib/identity.ts"))};
+       console.log(JSON.stringify({ algorithm: getAlgorithmVoice().voiceId, main: getVoiceId(), settings: getSettings().daidentity.mainDAVoiceID }));`,
+    ], {
+      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: project },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout.toString())).toEqual({
+      algorithm: explicitAlgorithm ? "en-US-AndrewNeural" : "en-US-AvaMultilingualNeural",
+      main: "en-US-AvaMultilingualNeural",
+      settings: "en-US-AvaMultilingualNeural",
+    });
   });
 });

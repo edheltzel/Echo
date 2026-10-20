@@ -46,7 +46,6 @@ const NO_CONFIG_STATUS: EchoConfigStatus = {
   path: "",
   present: false,
   ignored: [],
-  retired: [],
   errors: [],
   configured: [],
   deprecatedEnvironment: [],

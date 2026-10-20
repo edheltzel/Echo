@@ -9,7 +9,6 @@ const STARTUP_GREETINGS = {
   pi: "Pie, ready.",
   omp: "Oh em pee, ready.",
   opencode: "Open code, ready.",
-  empryo: "Empryo, ready.",
 } as const satisfies Record<Exclude<HarnessId, "mcp">, string>;
 
 /** Call only for eligible startup events, after applying the host's mute/suppression policy. */

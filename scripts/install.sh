@@ -51,7 +51,7 @@ CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -92,7 +92,7 @@ done
 
 case "$ADAPTER" in
   # Keep in lockstep with shared/extension.ts harnessUsageIds().
-  none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo) ;;
+  none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode) ;;
   *)
     echo "Unknown adapter: $ADAPTER" >&2
     usage >&2
@@ -288,17 +288,6 @@ opencode_installed() {
   [ -L "$OPENCODE_PLUGINS/echo-voice.ts" ] || [ -L "$OPENCODE_COMMANDS/echo-mute.md" ]
 }
 
-# Empryo hooks live in ~/.empryo/hooks.json (ECHO_EMPRYO_HOOKS_FILE overrides).
-empryo_hooks_file() {
-  printf '%s\n' "${ECHO_EMPRYO_HOOKS_FILE:-$HOME/.empryo/hooks.json}"
-}
-
-empryo_installed() {
-  local f
-  f="$(empryo_hooks_file)"
-  [ -f "$f" ] && grep -qE 'adapters/empryo/hook\.ts' "$f"
-}
-
 # Materialize the workspace links every adapter depends on. Each adapter package
 # declares `@echo/shared` as a dependency instead of reaching up the tree, so
 # `bun install` must have run before a host can load one. Idempotent and offline —
@@ -407,14 +396,6 @@ preflight() {
       fi
       echo "> Preflighting OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
-      ;;
-    empryo)
-      if ! command -v empryo >/dev/null 2>&1; then
-        echo "Empryo CLI is required for --adapter empryo" >&2
-        exit 1
-      fi
-      echo "> Preflighting Empryo lifecycle-hook registration"
-      bun run "$REPO_ROOT/adapters/empryo/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]
       ;;
   esac
 
@@ -601,10 +582,6 @@ install_adapter() {
       echo "> Reconciling OpenCode plugin + mute-command registration"
       bun run "$REPO_ROOT/adapters/opencode/reconcile.ts"
       ;;
-    empryo)
-      echo "> Reconciling Empryo lifecycle-hook registration"
-      bun run "$REPO_ROOT/adapters/empryo/reconcile.ts"
-      ;;
   esac
 }
 
@@ -658,11 +635,6 @@ refresh_installed_adapters() {
     echo "> Refreshing OpenCode plugin + mute-command registration"
     bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" \
       || echo "WARN: OpenCode registration refresh failed - run adapters/opencode/reconcile.ts manually" >&2
-  fi
-  if [ "$ADAPTER" != "empryo" ] && empryo_installed; then
-    echo "> Refreshing Empryo lifecycle-hook registration"
-    bun run "$REPO_ROOT/adapters/empryo/reconcile.ts" \
-      || echo "WARN: Empryo registration refresh failed - run adapters/empryo/reconcile.ts manually" >&2
   fi
 }
 
@@ -899,22 +871,6 @@ check_installation() {
       rc=0
       out="$(bun run "$REPO_ROOT/adapters/opencode/reconcile.ts" --check)" || rc=$?
       apply_adapter_check "Adapter registration" "$rc" "$out" "OpenCode registration check failed"
-    fi
-  fi
-
-  local show_empryo=0
-  [ "$ADAPTER" = "empryo" ] && show_empryo=1
-  empryo_installed && show_empryo=1
-  if ! skip_workspace_link && ! workspace_link_ok empryo; then
-    show_empryo=1
-  fi
-  if [ "$show_empryo" -eq 1 ]; then
-    begin_harness "Empryo"
-    report_workspace empryo
-    if [ "$ADAPTER" = "empryo" ] || empryo_installed; then
-      rc=0
-      out="$(bun run "$REPO_ROOT/adapters/empryo/reconcile.ts" --check)" || rc=$?
-      apply_adapter_check "Adapter registration" "$rc" "$out" "Empryo registration check failed"
     fi
   fi
 

@@ -7,7 +7,7 @@
  * project daidentity from `.codex/settings.json` (same shape as Pi/Claude).
  */
 
-import { isEmpryoHookProcess, loadEchoEnvironment } from "@echo/shared/echo-env.ts";
+import { loadEchoEnvironment } from "@echo/shared/echo-env.ts";
 import { startupGreeting } from "@echo/shared/greeting.ts";
 import { sendNotification } from "@echo/shared/notify-client.ts";
 import { extractVoiceLineFromText } from "@echo/shared/voice-line.ts";
@@ -122,9 +122,6 @@ export async function handleCodexHookResult(
   config: CodexVoiceConfig = resolveCodexConfig(),
   env: Record<string, string | undefined> = process.env,
 ): Promise<CodexHookResult> {
-  // Empryo also runs Codex hook files; the Empryo adapter speaks for it.
-  if (isEmpryoHookProcess(env)) return "skipped";
-
   const event = normalizeHookEvent(payload, env);
 
   if (event.includes("subagent")) return "skipped";

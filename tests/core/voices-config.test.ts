@@ -17,7 +17,7 @@ describe("voices.json edgetts mappings", () => {
   });
 
   test("edge voices are English-locale neural voice ids", () => {
-    const pattern = /^en-(US|GB|AU|IE|PH)-[A-Za-z]+Neural$/;
+    const pattern = /^en-(US|GB|AU|IE)-[A-Za-z]+Neural$/;
     for (const [name, mapping] of mappings) {
       expect(mapping.edgetts.voice, `${name} uses an en-* Neural voice`).toMatch(pattern);
     }

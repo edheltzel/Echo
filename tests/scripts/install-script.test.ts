@@ -29,100 +29,37 @@ async function runInstall(args: string[], env: Record<string, string>) {
 }
 
 describe("install script adapter support", () => {
-  test("Empryo install preflights, registers, checks and refreshes its three lifecycle events", () => {
-    mkdirSync("tmp", { recursive: true });
-    const root = mkdtempSync(resolve("tmp/echo-install-empryo-"));
-    try {
-      const home = join(root, "home");
-      const bin = join(root, "bin");
-      const hooksFile = join(home, ".empryo/hooks.json");
-      const plistPath = join(home, "Library/LaunchAgents/com.echo.plist");
-      const launchctlLog = join(root, "launchctl.log");
-      mkdirSync(dirname(hooksFile), { recursive: true });
-      mkdirSync(bin);
-      const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
-      writeExecutable(join(bin, "bun"), `#!/bin/bash\nexec ${quote(process.execPath)} "$@"\n`);
-      writeExecutable(join(bin, "curl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "launchctl"), `#!/bin/bash
-echo "$@" >> ${quote(launchctlLog)}
-case "$1" in list) echo "111 0 com.echo" ;; esac
-exit 0
-`);
-      const run = (...args: string[]) => Bun.spawnSync(["/bin/bash", "cli/echo", ...args], {
-        env: {
-          HOME: home,
-          PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`,
-          ECHO_SKIP_WORKSPACE_LINK: "1",
-          ECHO_CONFIG_FILE: join(home, ".config/echo/config.json"),
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+  const script = readFileSync("scripts/install.sh", "utf8");
 
-      const missingCli = run("install", "--adapter", "empryo");
-      expect(missingCli.exitCode).toBe(1);
-      expect(missingCli.stderr.toString()).toContain("Empryo CLI is required");
-      expect(existsSync(plistPath)).toBe(false);
-      expect(existsSync(launchctlLog)).toBe(false);
-      expect(existsSync(hooksFile)).toBe(false);
+  test("supports core, Claude Code, Jcode, Grok, Codex, MCP, Pi, omp, and OpenCode adapter modes", () => {
+    expect(script).toContain("--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode");
+    expect(script).toContain("adapters/claudecode/restore-hooks.ts\" --check");
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/claudecode/reconcile-commands.ts" --check)" || rc=$?');
+    expect(script).toContain("adapters/jcode/reconcile.ts");
+    expect(script).toContain("adapters/grok/reconcile.ts");
+    expect(script).toContain("adapters/codex/reconcile.ts");
+    expect(script).toContain("adapters/opencode/reconcile.ts");
+    expect(script).toContain('adapters/opencode/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain("pi install");
+    expect(script).toContain("adapters/omp/reconcile.ts");
+    // omp preflight runs --check (tolerating exit 3 = pending) so a FATAL
+    // registration state aborts before any host state is mutated.
+    expect(script).toContain('adapters/omp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
+    // The MCP server (Claude Code's only route to a model-invokable ask) plugs
+    // into the same three places every adapter must: preflight, install, check.
+    expect(script).toContain('adapters/mcp/reconcile.ts" --check >/dev/null || [ $? -eq 3 ]');
+    expect(script).toContain('adapters/mcp/reconcile.ts" --check)" || rc=$?');
+  });
 
-      writeExecutable(join(bin, "empryo"), "#!/bin/bash\nexit 0\n");
-      writeFileSync(hooksFile, "{ invalid JSON");
-      const invalid = run("install", "--adapter", "empryo");
-      expect(invalid.exitCode).not.toBe(0);
-      expect(invalid.stderr.toString()).toContain("is not valid JSON");
-      expect(readFileSync(hooksFile, "utf8")).toBe("{ invalid JSON");
-      expect(existsSync(plistPath)).toBe(false);
-      expect(existsSync(launchctlLog)).toBe(false);
-
-      const foreign = { hooks: [{ type: "command", command: "echo foreign-stop" }] };
-      const initial = JSON.stringify({ hooks: { Stop: [foreign] }, disableAllHooks: false });
-      writeFileSync(hooksFile, initial);
-      expect(run("install", "--adapter", "empryo", "--check").exitCode).toBe(3);
-      expect(readFileSync(hooksFile, "utf8")).toBe(initial);
-      expect(existsSync(launchctlLog)).toBe(false);
-
-      const installed = run("install", "--adapter", "empryo");
-      expect(installed.exitCode).toBe(0);
-      expect(existsSync(plistPath)).toBe(true);
-      const registered = readFileSync(hooksFile, "utf8");
-      const hook = (timeout: number) => ({
-        type: "command", command: `bun ${quote(resolve("adapters/empryo/hook.ts"))}`, timeout, async: true,
-      });
-      const expected = {
-        hooks: {
-          SessionStart: [{ hooks: [hook(10)] }],
-          Stop: [foreign, { hooks: [hook(30)] }],
-          Notification: [{ hooks: [hook(10)] }],
-        },
-        disableAllHooks: false,
-      };
-      expect(JSON.parse(registered)).toEqual(expected);
-
-      const serviceLog = readFileSync(launchctlLog, "utf8");
-      expect(run("install", "--adapter", "empryo", "--check").exitCode).toBe(0);
-      expect(readFileSync(hooksFile, "utf8")).toBe(registered);
-      expect(readFileSync(launchctlLog, "utf8")).toBe(serviceLog);
-
-      const stale = JSON.parse(registered);
-      delete stale.hooks.Notification;
-      stale.hooks.Stop[1].hooks[0].command = "bun '/old/clone/adapters/empryo/hook.ts'";
-      const staleText = JSON.stringify(stale);
-      writeFileSync(hooksFile, staleText);
-      expect(run("update", "--check").exitCode).toBe(3);
-      expect(readFileSync(hooksFile, "utf8")).toBe(staleText);
-      expect(readFileSync(launchctlLog, "utf8")).toBe(serviceLog);
-      expect(run("update").exitCode).toBe(0);
-      expect(JSON.parse(readFileSync(hooksFile, "utf8"))).toEqual(expected);
-      const refreshed = readFileSync(hooksFile, "utf8");
-      const refreshedServiceLog = readFileSync(launchctlLog, "utf8");
-      expect(run("update", "--check").exitCode).toBe(0);
-      expect(readFileSync(hooksFile, "utf8")).toBe(refreshed);
-      expect(readFileSync(launchctlLog, "utf8")).toBe(refreshedServiceLog);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }, INSTALL_TIMEOUT_MS);
+  test("uses the com.echo service name and migrates both legacy labels", () => {
+    expect(script).toContain('SERVICE_NAME="com.echo"');
+    // Both former labels are quarantined on install: the PAI-named service and
+    // the prior "Atlas" name.
+    expect(script).toContain("com.pai.voice-server");
+    expect(script).toContain("com.atlas.voicesystem");
+    expect(script).toContain("Quarantining legacy LaunchAgent plist");
+  });
 
   // Voice-ask is optional and the daemon does not need sox at all, so a missing
   // recorder warns and the install continues. The hard error still fires at call

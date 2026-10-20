@@ -57,9 +57,6 @@ jobs:
       - name: Build OpenCode adapter
         id: opencode
         run: bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
-      - name: Build Empryo adapter
-        id: empryo
-        run: bun build adapters/empryo/hook.ts adapters/empryo/reconcile.ts --target=bun --outdir /tmp/echo-empryo-build
       - name: Fail closed unless every check ran
         if: always() && !cancelled()
         env:
@@ -75,10 +72,9 @@ jobs:
           GROK: ${{ steps.grok.outcome }}
           CODEX: ${{ steps.codex.outcome }}
           OPENCODE: ${{ steps.opencode.outcome }}
-          EMPRYO: ${{ steps.empryo.outcome }}
         run: |
           rc=0
-          for pair in install:"$INSTALL" unit:"$UNIT" smoke:"$SMOKE" adapters:"$ADAPTERS" converse:"$CONVERSE" pi:"$PI" omp:"$OMP" mcp:"$MCP" jcode:"$JCODE" grok:"$GROK" codex:"$CODEX" opencode:"$OPENCODE" empryo:"$EMPRYO"; do
+          for pair in install:"$INSTALL" unit:"$UNIT" smoke:"$SMOKE" adapters:"$ADAPTERS" converse:"$CONVERSE" pi:"$PI" omp:"$OMP" mcp:"$MCP" jcode:"$JCODE" grok:"$GROK" codex:"$CODEX" opencode:"$OPENCODE"; do
             name=${pair%%:*}
             outcome=${pair#*:}
             if [ "$outcome" != success ]; then

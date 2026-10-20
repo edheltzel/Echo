@@ -157,8 +157,8 @@ You installed Echo as a self-starting macOS service, confirmed `/health`, heard 
 
 ## Next steps
 
-- Wire a supported host so it speaks on its own. [How to install Echo](install-human.md)
-- Hear a waiting agent from across the desk on hosts with needs-input support. Set `ECHO_PREFERRED_NAME` if you want the line to start with your name. [When an agent needs you](what-echo-does.md#when-an-agent-needs-you)
+- Wire a host so Claude Code, Pi, oh-my-pi, Jcode, Grok Build, or Codex speaks on its own. [How to install Echo](install-human.md)
+- Hear a waiting Claude Code, Pi, or omp agent from across the desk. Set `ECHO_PREFERRED_NAME` if you want the line to start with your name. [When an agent needs you](what-echo-does.md#when-an-agent-needs-you)
 - After wiring Claude Code, Pi, or omp, give this project a persona with `/echo-voice [name] [voice]` inside the repo. [Voices](voices.md#per-project-persona--voice-local-override)
 - Pick voices by ear in [voices.md](voices.md)
 - Start, stop, restart, mute vs daemon disable, and update after a pull in [operations.md](operations.md#mute-vs-daemon-disable)

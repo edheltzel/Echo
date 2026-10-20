@@ -33,14 +33,13 @@ import { hookLog } from './lib/hook-logger';
 import { getIdentity } from './lib/identity';
 import { startupGreeting } from '@echo/shared/greeting.ts';
 import { resolveNotifyUrl, resolvePersonalityUrl } from '@echo/shared/daemon-endpoints.ts';
-import { loadEchoConfiguration, parseEchoBoolean, isAutomationSession, isEmpryoHookProcess } from '@echo/shared/echo-env.ts';
+import { loadEchoConfiguration, parseEchoBoolean } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { createHookNativeVisualContext } from './lib/native-terminal';
 
 const CLAUDE_DIR = join(process.env.HOME!, '.claude');
 const ECHO_CONFIG = loadEchoConfiguration();
 if (!parseEchoBoolean(ECHO_CONFIG.ECHO_VOICE_GREET_ON_START, true)) process.exit(0);
-if (isAutomationSession() || isEmpryoHookProcess()) process.exit(0);
 // The daemon returns 202 on receipt (synth+play run async), so this POST resolves
 // in ~tens of ms. A short guard is enough to avoid hanging if the daemon is down;
 // it no longer needs to cover synthesis + playback (that was the old 12 s wait

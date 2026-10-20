@@ -16,7 +16,7 @@ Hear your agents.
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
+Echo speaks the completion line when the turn ends. When Claude Code, Pi, or oh-my-pi cannot continue without you, it also speaks that wait. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
 
 open source · local daemon · macOS · Bun
 
@@ -30,7 +30,7 @@ Ambient completion audio, not a conversation loop.
 | --- | --- |
 | The turn ends and the room stays quiet. | The completion line is spoken when the agent is done. |
 | You notice the wait only when you look at the terminal. | You hear that completion line from across the desk. |
-| The agent is blocked on a permission UI inside the turn. | [Hosts with needs-input support](docs/what-echo-does.md#when-an-agent-needs-you) announce the wait. |
+| The agent is blocked on a permission UI inside the turn. | Claude Code, Pi, and oh-my-pi speak that wait once. Other hosts stay quiet until the turn ends. |
 | Each host, if it notifies at all, does it a different way. | One daemon on `:3246` for Claude Code, Pi, oh-my-pi, Codex, and a `curl`. |
 
 Prefer typing? Leave the adapter off. Already installed, and someone just sat down nearby? Mute it:
@@ -43,7 +43,7 @@ That silences Echo audio on the whole machine, not one session. Notifications st
 
 ## Hosts
 
-Empryo and the other [supported hosts](docs/install-human.md#what-gets-installed) can speak through Echo, as can a raw HTTP caller. Wiring a host is optional. The three steps below use `curl` only.
+Claude Code, Pi, oh-my-pi, Jcode, Grok Build, Codex, and a raw HTTP caller can speak through Echo. OpenCode gets mute. Wiring a host is optional. The three steps below use `curl` only.
 
 First-class speech-to-text is [roadmap](https://github.com/edheltzel/Echo/issues/179), not this README. Echo can already ask one question and transcribe one reply. That is an opt-in extra, not the reason to install.
 
@@ -117,13 +117,18 @@ The universal core is in `core/`. Host lifecycle lives in an adapter that calls 
 
 New to Echo? Stay in [Hear your first spoken notification](docs/getting-started.md). Want a coding agent to do the setup? Point it at [docs/install-agent.md](docs/install-agent.md).
 
-Wire a host (after you have heard the smoke), for example Empryo:
+Wire a host (after you have heard the smoke):
 
 ```bash
-cli/echo install --adapter empryo
+cli/echo install --adapter claudecode   # Claude Code hooks
+cli/echo install --adapter pi           # Pi extension
+cli/echo install --adapter omp          # oh-my-pi
+cli/echo install --adapter jcode
+cli/echo install --adapter grok
+cli/echo install --adapter codex
+cli/echo install --adapter opencode
+cli/echo install --adapter mcp        # optional one-shot voice ask for Claude Code
 ```
-
-See [How to install Echo](docs/install-human.md) for each host's setup and the optional voice-ask tool.
 
 Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. `/echo-mode [speech|sounds|status]` is the same `cli/echo mode` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 

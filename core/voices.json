@@ -324,17 +324,6 @@
         "voice": "en-US-AvaNeural",
         "speed": 1.0
       }
-    },
-    "empryo": {
-      "description": "Empryo host voice",
-      "kokoro": {
-        "voice": "am_michael",
-        "speed": 1.0
-      },
-      "edgetts": {
-        "voice": "en-PH-JamesNeural",
-        "speed": 1.0
-      }
     }
   }
 }

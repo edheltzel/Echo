@@ -7,16 +7,9 @@ in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, 
 [`configuration.md`](configuration.md) for the config the server reads at startup.
 
 **Rate limit:** 10 requests per 60s per client; exceeding it returns
-`429 {"status":"error","message":"Rate limit exceeded"}`. The bucket key is the
-`X-Forwarded-For` header when the caller sets one, otherwise `localhost`, so
-every local caller that does not set that header shares one bucket. Carve-outs:
+`429 {"status":"error","message":"Rate limit exceeded"}`. All local callers share one
+`localhost` bucket, with six carve-outs that each get their own:
 
-- `GET /health` from a loopback peer is not limited. It is a read-only diagnostic
-  (`cli/echo status`, `doctor`, `mute status`, `mode status`, install, converse)
-  and must not spend the notification budget. All other `GET /health` requests have
-  their own bucket at the same 10/60s, so they still cannot spend `/notify`. The
-  exemption uses the socket address, not `X-Forwarded-For`. `GET /health` runs
-  provider health checks, so the exemption is loopback-only.
 - `POST /mute` - so a notification flood can never starve the mute control (#83).
 - `POST /mode` - same reason: switching to sounds-only is most wanted during a burst.
 - `POST /replay` - operator re-hear during a flood; abusive `n` is rejected in the handler.
@@ -69,15 +62,14 @@ Primary host-neutral endpoint. Body (every field optional):
 | `voice_id` | - (identity voice) | Short persona **name key** (e.g. `"themis"`), not a raw provider voice id - resolution order and traps in [`voices.md`](voices.md). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
 | `voice_settings` | - | Pass-through override, see below |
 | `session_id`, `source` | - | Echoed into the daemon log for correlation |
-| `speak_mode` | - (today's density) | Optional notify density borrowed from VoiceLayer's speak names, not a fifth TTS taxonomy. `announce` (short ping, speed ×1.10), `brief` (longer explanation, ×0.90), `consult` (checkpoint/question, ×1.05), `think` (banner only, no TTS). Omitted keeps the resolved persona speed. Invalid is `400`. Adapters fill a mode when they shape a notify; they never infer `think` (silence is already `voice_enabled: false`). Converse stays out of this field. Needs-input announcements also use ordinary `/notify`; supported hosts and behavior: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you). |
+| `speak_mode` | - (today's density) | Optional notify density borrowed from VoiceLayer's speak names, not a fifth TTS taxonomy. `announce` (short ping, speed ×1.10), `brief` (longer explanation, ×0.90), `consult` (checkpoint/question, ×1.05), `think` (banner only, no TTS). Omitted keeps the resolved persona speed. Invalid is `400`. Adapters fill a mode when they shape a notify; they never infer `think` (silence is already `voice_enabled: false`). Converse stays out of this field. Claude Code, Pi, and omp also POST ordinary `/notify` lines when the host is waiting on a human; that is adapter lifecycle, not a new daemon event. Human truth: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you). |
 | `slot` | `generic` | Which notification sound this line earns when Echo plays sounds instead of speech: `request` (an agent needs a response, approval, or attention), `done` (an agent finished its turn), or `generic` (everything else). Adapters set it; omitted means `generic`. Invalid is `400`. In speech mode it changes nothing. See [`POST /mode`](#post-mode) |
 | `visual_delivery` | - | Only the exact value `"native"` is recognized; an adapter sets it after it has already shown the notification through a native terminal route (Herdr, or a supported terminal's OSC sequence - see `shared/terminal-notify.ts`), and the daemon skips its own macOS banner for that request. Any other value, or omitting the field, keeps the legacy banner - raw HTTP callers are unaffected |
 | `capture_reservation` | - | Optional converse-only reservation: client-known `reservation_id`, positive `owner_pid`, and positive `lease_ms` (at most 300000, five minutes - a completed reservation holds every later voice line, so the daemon rejects a lease that could silence it indefinitely). It opts this request into exact completion tracking and holds the play queue for the capture owner after playback completes. Ordinary callers should omit it |
 
 ### Native terminal visual delivery
 
-For notifications allowed by the [automation policy](configuration.md#schema-reference),
-host adapters attempt visual delivery before they POST to `/notify`, in this order:
+Host adapters attempt visual delivery before they POST to `/notify`, in this order:
 
 1. Herdr's `notification.show` route, when the adapter has a documented Herdr session or
    socket context and Herdr returns `shown: true`.
@@ -334,15 +326,12 @@ disables writes): `{ "state": "idle" | "speaking", "queue_depth": <n>, "pid": <d
 "updated_at": "<ISO>" }`. `queue_depth` matches `play_queue.depth`. Readers treat a missing or
 malformed file, or a dead `pid`, as idle. See [`configuration.md`](configuration.md).
 
-`config: {path, present, valid, ignored_keys, retired_keys, errors}` reports what
+`config: {path, present, valid, ignored_keys, errors}` reports what
 `~/.config/echo/config.json` contributed at startup: where it was resolved from, whether it
 existed, and - because a key that fails validation is dropped on its own rather than
 discarding the file - exactly which keys were ignored and why. `valid: false` with a
 non-empty `ignored_keys` is the machine-readable form of "your config partly applied", so a
-typo is discoverable without reading `~/Library/Logs/echo.log`. `retired_keys` lists
-retired properties separately from `ignored_keys` and `errors`; `valid` is true when
-`errors` is empty. Retirement and cleanup behavior:
-[`Invalid keys`](configuration.md#invalid-keys).
+typo is discoverable without reading `~/Library/Logs/echo.log`:
 
 ```bash
 curl -fsS http://localhost:3246/health | jq '.config'

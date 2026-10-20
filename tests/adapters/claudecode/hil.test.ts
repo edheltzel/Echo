@@ -96,7 +96,7 @@ describe("handleHil notify payloads", () => {
     writeFileSync(transcript, askTranscript("What is the first Echo problem or improvement you want tracked?"));
     const payloads: Array<Record<string, unknown>> = [];
     const dedupe = new HilDedupe({ persistDir: dir });
-    const env = { ECHO_AUTOMATION_ENV: "", ECHO_PREFERRED_NAME: "Ed" };
+    const env = { ECHO_PREFERRED_NAME: "Ed" };
     const send = async (payload: Record<string, unknown>) => {
       payloads.push(payload);
       return { ok: true };
@@ -139,7 +139,7 @@ describe("handleHil notify payloads", () => {
       payloads.push(payload);
       return { ok: true };
     };
-    const env = { ECHO_AUTOMATION_ENV: "", ECHO_PREFERRED_NAME: "Ed" };
+    const env = { ECHO_PREFERRED_NAME: "Ed" };
 
     await handleHil({
       hook_event_name: "PermissionRequest",
@@ -168,7 +168,7 @@ describe("handleHil notify payloads", () => {
       tool_name: "AskUserQuestion",
       tool_input: { questions: [{ question: "What is the first Echo problem?" }] },
     }, {
-      env: { ECHO_AUTOMATION_ENV: "" },
+      env: {},
       dedupe: new HilDedupe(),
       send: async (payload) => {
         payloads.push(payload);

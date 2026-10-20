@@ -105,15 +105,14 @@ its own spoken identity - **name + voice** - in that repo only:
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 | Grok Build | `<project>/.grok/settings.json` | `~/.grok/settings.json` (see [`adapters/grok/README.md`](../adapters/grok/README.md)) |
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
-| Empryo | `<project>/.empryo/settings.json` | `~/.empryo/settings.json` (see [`adapters/empryo/README.md`](../adapters/empryo/README.md)) |
 | OpenCode | `opencode.json(c)` from the worktree root down to the session folder, plus `.opencode/opencode.json(c)` | `~/.config/opencode/config.json`, `opencode.json`, and `opencode.jsonc`, merged (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
 Every host reads a **`daidentity` block from its native config**, project layered over
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
-Grok, Codex, and Empryo use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
+Grok, and Codex use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
 
 Each genuine harness startup says one fixed line: `Claude code, ready.`, `Jay code, ready.`,
-`Grok, ready.`, `Codex, ready.`, `Pie, ready.`, `Oh em pee, ready.`, `Open code, ready.`, or `Empryo, ready.`.
+`Grok, ready.`, `Codex, ready.`, `Pie, ready.`, `Oh em pee, ready.`, or `Open code, ready.`.
 The line identifies the harness, not the persona. Persona name and voice still apply to normal
 per-turn speech; the startup line uses the resolved voice. Set `ECHO_VOICE_GREET_ON_START` to
 `false` to silence it. Resume, reload, compact, and known child sessions stay silent.
@@ -142,7 +141,6 @@ Harness keys in `core/voices.json`, used only when `ECHO_VOICE_ID` is unset:
 | Codex | `codex` | `en-GB-ThomasNeural` |
 | Pi, omp | `pi` | `en-GB-RyanNeural` @ 0.92 |
 | OpenCode | `opencode` | `en-US-AvaNeural` |
-| Empryo | `empryo` | `en-PH-JamesNeural` |
 
 ### Claude Code
 
@@ -153,6 +151,9 @@ precedence, tightest scope wins **per key**:
 2. `<project>/.claude/settings.json` (checked in, shared)
 3. `~/.claude/settings.json` (global)
 4. the global fallback `ECHO_VOICE_ID` for the voice (never the name), then neutral defaults
+
+Voice scope wins across all supported spellings: `voices.main.voiceId`, `voice.voiceId`,
+`voiceId`, and `mainDAVoiceID`.
 
 So a repo can override the global persona **in that repo only**. The resolved voice
 applies to the startup line and per-turn speech. Every other repo keeps the global

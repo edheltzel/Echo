@@ -21,13 +21,6 @@
         "@echo/shared": "workspace:*",
       },
     },
-    "adapters/empryo": {
-      "name": "@echo/empryo-adapter",
-      "version": "0.1.0",
-      "dependencies": {
-        "@echo/shared": "workspace:*",
-      },
-    },
     "adapters/grok": {
       "name": "@echo/grok-adapter",
       "version": "0.1.0",
@@ -102,8 +95,6 @@
     "@echo/codex-adapter": ["@echo/codex-adapter@workspace:adapters/codex"],
 
     "@echo/converse": ["@echo/converse@workspace:converse"],
-
-    "@echo/empryo-adapter": ["@echo/empryo-adapter@workspace:adapters/empryo"],
 
     "@echo/grok-adapter": ["@echo/grok-adapter@workspace:adapters/grok"],
 

@@ -14,10 +14,10 @@ request flow see [`ARCHITECTURE.md`](ARCHITECTURE.md); for egress detail see
 - **CORS restricted to localhost.** `Access-Control-Allow-Origin` is hard-set to
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
   cannot read responses.
-- **Rate limiting.** This is a flood guard against runaway loops, not an authentication
-  mechanism. The daemon trusts caller-supplied `X-Forwarded-For` for bucket keys, so changing
-  that header can evade the limits. Bucket rules and the socket-based health exemption are
-  defined in [`docs/http-api.md`](docs/http-api.md).
+- **Rate limiting.** `checkRateLimit` allows 10 requests per 60s per client IP (`429` on
+  breach). Without a proxy header, all local callers share one `localhost` bucket, apart from
+  the control/read carve-outs listed in [`docs/http-api.md`](docs/http-api.md) - this is a
+  flood guard against runaway loops, not an authentication mechanism.
 - **Input sanitization.** Every spoken message passes `validateInput` (non-empty string, ≤500
   chars) and `sanitizeForSpeech`, which strips `<script`, `../`, shell metacharacters
   (`; & | > < \` $ \`), and markdown before the text reaches a provider or the macOS banner.

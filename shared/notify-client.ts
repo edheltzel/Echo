@@ -12,7 +12,6 @@ import {
   type NativeVisualResult,
   type TerminalNotificationContext,
 } from "./terminal-notify.ts";
-import { isAutomationSession } from "./echo-env.ts";
 
 export const DEFAULT_NOTIFY_TIMEOUT_MS = 10_000;
 
@@ -48,8 +47,6 @@ export interface NotifyResult {
   body: string;
   /** Bounded native-route diagnostics; HTTP callers may ignore this field. */
   visual?: NativeVisualResult;
-  /** Set when an automation marker skipped the POST. Callers must treat this as success. */
-  skipped?: boolean;
 }
 
 export function buildNotifyPayload(
@@ -100,21 +97,11 @@ export interface NotifyRequestConfig {
   visualContext?: TerminalNotificationContext;
 }
 
-function skippedNotification(): NotifyResult {
-  return { ok: true, status: 0, body: "skipped", skipped: true };
-}
-
 async function postNotification(
   config: NotifyRequestConfig,
   payload: NotifyPayload,
   signal?: AbortSignal,
 ): Promise<NotifyResult> {
-  if (isAutomationSession()) {
-    try {
-      config.visualContext?.writer?.close?.();
-    } catch {}
-    return skippedNotification();
-  }
   let nativeResult: NativeVisualResult | undefined;
   const title = typeof payload.title === "string" ? payload.title : "Echo Notification";
   try {

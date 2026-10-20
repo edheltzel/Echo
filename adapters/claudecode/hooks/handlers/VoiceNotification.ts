@@ -19,7 +19,7 @@ import { getISOTimestamp } from '../lib/time';
 import { isValidVoiceCompletion, getVoiceFallback } from '../lib/output-validators';
 import { parseFinalVoiceLine, type ParsedTranscript } from '../lib/TranscriptParser';
 import { resolveNotifyUrl, resolveVoicesUrl } from '@echo/shared/daemon-endpoints.ts';
-import { loadEchoConfiguration, isAutomationSession, type EchoEnvironment } from '@echo/shared/echo-env.ts';
+import { loadEchoConfiguration, type EchoEnvironment } from '@echo/shared/echo-env.ts';
 import { sendNotificationPayload, type NotifyPayload } from '@echo/shared/notify-client.ts';
 import { detectSpeakMode, type SpeakMode } from '@echo/shared/speak-mode.ts';
 import type { NotifySlot } from '@echo/shared/notify-slot.ts';
@@ -338,7 +338,6 @@ export async function handleVoice(
   sessionId: string,
   projectDir?: string,
 ): Promise<void> {
-  if (isAutomationSession()) return;
   const identity = getIdentity(projectDir);
   let voiceCompletion = parsed.voiceCompletion;
 
