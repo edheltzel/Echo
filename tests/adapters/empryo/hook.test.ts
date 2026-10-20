@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handleEmpryoHookResult, type EmpryoHookPayload } from "../../../adapters/empryo/hook.ts";
-import { loadEmpryoVoiceConfig, loadProjectPersona, type EmpryoVoiceConfig } from "../../../adapters/empryo/config.ts";
+import { loadProjectPersona, type EmpryoVoiceConfig } from "../../../adapters/empryo/config.ts";
 import { HilDedupe } from "../../../shared/hil.ts";
 import { isEmpryoHookProcess } from "../../../shared/echo-env.ts";
 import { handleCodexHookResult } from "../../../adapters/codex/hook.ts";
@@ -107,13 +107,10 @@ describe("Empryo lifecycle hook adapter", () => {
     expect(payloads).toEqual([]);
   });
 
-  test("a child tab is silent by default and speaks when ECHO_VOICE_SUPPRESS_CHILD_TABS=false", async () => {
+  test("a child tab is silent by default and speaks when child-tab suppression is disabled", async () => {
     const payloads = capture();
     const log = sessionLog({ tabId: "t_child", childTab: true });
     expect(await handleEmpryoHookResult(stop, config, {}, deps(log))).toBe("skipped");
-    const optedIn = loadEmpryoVoiceConfig({ ECHO_VOICE_SUPPRESS_CHILD_TABS: "false" });
-    expect(optedIn.suppressChildTabs).toBe(false);
-    expect(optedIn.voiceId).toBe("empryo");
     expect(await handleEmpryoHookResult(stop, { ...config, suppressChildTabs: false }, {}, deps(log))).toBe("sent");
     expect(payloads).toHaveLength(1);
   });
@@ -167,6 +164,42 @@ describe("Empryo lifecycle hook adapter", () => {
 });
 
 describe("Empryo persona", () => {
+  test("voice defaults and overrides resolve in an isolated startup home", () => {
+    const home = mkdtempSync(join(tmpdir(), "echo-empryo-persona-"));
+    dirs.push(home);
+    const configModule = new URL("../../../adapters/empryo/config.ts", import.meta.url).href;
+    const child = Bun.spawnSync([process.execPath, "--eval", `
+      import { mkdirSync, writeFileSync } from "node:fs";
+      import { join } from "node:path";
+      import { loadEmpryoVoiceConfig } from ${JSON.stringify(configModule)};
+
+      const home = process.env.HOME;
+      const project = join(home, "project");
+      const defaults = loadEmpryoVoiceConfig({}, project);
+      const env = { ECHO_VOICE_ID: "themis" };
+      const envOverride = loadEmpryoVoiceConfig(env, project);
+      const optedIn = loadEmpryoVoiceConfig({ ECHO_VOICE_SUPPRESS_CHILD_TABS: "false" }, project);
+      mkdirSync(join(home, ".empryo"), { recursive: true });
+      writeFileSync(join(home, ".empryo", "settings.json"), JSON.stringify({ daidentity: { voiceId: "atlas" } }));
+      const globalOverride = loadEmpryoVoiceConfig(env, project);
+      mkdirSync(join(project, ".empryo"), { recursive: true });
+      writeFileSync(join(project, ".empryo", "settings.json"), JSON.stringify({ daidentity: { voices: { main: { voiceId: "engineer" } } } }));
+      const projectOverride = loadEmpryoVoiceConfig(env, project);
+      console.log(JSON.stringify([defaults, envOverride, optedIn, globalOverride, projectOverride]));
+    `], {
+      env: { ...process.env, HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5_000,
+    });
+    expect(child.stderr.toString()).toBe("");
+    expect(child.exitCode).toBe(0);
+    const configs = JSON.parse(child.stdout.toString()) as EmpryoVoiceConfig[];
+    expect(configs.map((config) => config.voiceId)).toEqual(["empryo", "themis", "empryo", "atlas", "engineer"]);
+    expect(configs[0].suppressChildTabs).toBe(true);
+    expect(configs[2].suppressChildTabs).toBe(false);
+  });
+
   test("project daidentity wins per key over global", () => {
     const files: Record<string, string> = {
       "/home/.empryo/settings.json": JSON.stringify({ daidentity: { name: "Atlas", voiceId: "atlas" } }),
