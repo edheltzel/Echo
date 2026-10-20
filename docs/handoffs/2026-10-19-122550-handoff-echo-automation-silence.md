@@ -8,7 +8,7 @@ Date: 2026-10-19. Snapshot only. Do not start the next step from this file.
 - `origin/master` is still the v0.12.0 promotion (`2152491`, #230). Those three merges are on `dev` only.
 - Open, waiting for Ed's merge. Both `mergeStateStatus` CLEAN as of this handoff:
   - [#235](https://github.com/edheltzel/Echo/pull/235) `fix/health-rate-limit` (`ef43807`): loopback `GET /health` exempt from the 10/60s notify bucket; non-loopback `/health` has its own bucket. X-Forwarded-For trust flagged, not changed. Live daemon listens on `*:3246`, not localhost; flagged against SECURITY.md.
-  - [#236](https://github.com/edheltzel/Echo/pull/236) `feat/automation-silence` (`0279618`): `ECHO_AUTOMATION_ENV` is a comma-separated string, default `NO_MISTAKES_GATE`. It silences greeting, completion, and HIL for automation-launched agent sessions. Check is `isAutomationSession` in `shared/echo-env.ts`, called by `shared/notify-client.ts` and the Claude hooks. The AGENTS.md invariant is on that branch at line 227 (not in the current checkout until #236 merges). Research: [.scratch/nm-exclusion/research.md](../../.scratch/nm-exclusion/research.md).
+  - [#236](https://github.com/edheltzel/Echo/pull/236) `feat/automation-silence` (`0279618`): `ECHO_AUTOMATION_ENV` is a comma-separated string, default `NO_MISTAKES_GATE`. It silences greeting, completion, and HIL for automation-launched agent sessions. Check is `isAutomationSession` in `shared/echo-env.ts`, called by `shared/notify-client.ts` and the Claude hooks. The AGENTS.md invariant is on that branch at line 227 (not in the current checkout until #236 merges). Policy: [configuration.md](../configuration.md#schema-reference).
 - `gh pr list --state open` showed only #235 and #236.
 - Machine-local: daemon payload is `~/Library/Application Support/echo/payload/versions/0.12.0` (`readlink` of `payload/current`). Needs `cli/echo update` after #235 and #236 merge. `~/Library/Logs/echo.log` is gone from Logs; the daemon (pid holding `payload/current/core/server.ts`) still has stdout/stderr open on `~/.Trash/echo.log`. `ls` of that Trash path failed from this session; `lsof` still names it. `bun run restart` restores a normal log. Homebrew `but-axi` is absent (`/opt/homebrew/bin/but-axi` missing, not on PATH). Use `node ~/Developer/ButAxi/dist/bin/but-axi.js`.
 
@@ -34,7 +34,7 @@ Ed merges #235 and #236, then `cli/echo update` and `bun run restart`, then veri
 
 - [#235](https://github.com/edheltzel/Echo/pull/235): health rate-limit isolation. Head `ef43807`.
 - [#236](https://github.com/edheltzel/Echo/pull/236): automation silence. Head `0279618`. Invariant on that branch: `AGENTS.md:227`.
-- [.scratch/nm-exclusion/research.md](../../.scratch/nm-exclusion/research.md): why the exclusion is an env marker, not a host name.
+- [Automation policy](../configuration.md#schema-reference): the marker-based exclusion.
 - [docs/configuration.md](../configuration.md): `ECHO_AUTOMATION_ENV` (lands with #236).
 - [docs/http-api.md](../http-api.md): rate limits.
 - [regroup/2026-10-15-regroup-echo.md](../../regroup/2026-10-15-regroup-echo.md): prior status snapshot.

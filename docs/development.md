@@ -75,27 +75,19 @@ git worktree add -b fix/example .worktrees/fix-example origin/dev
 
 ## Tests
 
-After `bun install`, `bun run verify` runs the checks below. Individual check aliases are defined in
+After `bun install`, `bun run verify` runs the repository's validation checks. Individual check aliases are defined in
 [package.json](../package.json); other script runners follow the
 [README usage](../README.md#commands-after-that).
 
 ```bash
 bun install                  # required before bun test - adapters import @echo/shared
-bun test
-PORT=8889 tests/smoke-core.sh  # isolated test-harness injection, not user configuration
-tests/e2e-adapters.sh        # adapter boundary e2e against an isolated daemon
-tests/e2e-converse.sh        # one voice-ask turn against an isolated core + coordinator
-bun build adapters/pi/index.ts --target=bun --external @earendil-works/pi-coding-agent --outdir /tmp/echo-pi-build
-bun build adapters/omp/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outdir /tmp/echo-omp-build
-bun build adapters/mcp/server.ts --target=bun --outdir /tmp/echo-mcp-build
-bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
-bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
-bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
-bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
+bun run verify
 ```
 
-CI runs exactly that set headlessly on every PR into `dev`/`master` and every push to those
-branches - see `.github/workflows/verify.yml`.
+The script definitions in [package.json](../package.json) own the individual commands,
+including the adapter build list. CI runs the corresponding checks headlessly on every PR
+into `dev`/`master` and every push to those branches; its steps live in
+[verify.yml](../.github/workflows/verify.yml).
 
 ### Never test against the running daemon
 

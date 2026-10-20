@@ -97,7 +97,7 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
 | `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`, `registerEchoAskTool`. |
-| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode, Empryo | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
 
 
@@ -325,13 +325,15 @@ The full design rationale is catalogued in
 
 ## Needs-input announce (#107)
 
-Claude Code, Pi, and omp detect a wait in the adapter and POST ordinary `/notify`.
-Wording and one-announce-per-request live in `shared/hil.ts`. Detection:
+Adapters detect a wait and POST ordinary `/notify`.
+Wording and one-announce-per-request live in `shared/hil.ts`. Claude Code, Pi, and omp detection:
 
 | Host | Question | Approval | Attention |
 | --- | --- | --- | --- |
 | Claude Code | `PermissionRequest` `AskUserQuestion`, plus transcript `awaitingInput` on `permission_prompt` | `PermissionRequest` (other tools) | `Notification` `idle_prompt` / `agent_needs_input` |
 | Pi / omp | `ui_prompt_start` select/input/editor | `tool_approval_requested` (omp; Pi when the host emits it) | `ui_prompt_start` custom |
+
+Empryo's notification event mapping is documented in its [adapter README](../adapters/empryo/README.md).
 
 Jcode, Grok, Codex, and OpenCode are unchanged.
 

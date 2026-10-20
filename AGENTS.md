@@ -38,7 +38,7 @@ bun install
 # (`install:echo`, not `install`, so it never shadows the package manager's install).
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
+cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
@@ -105,6 +105,7 @@ bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
 bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
 bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
+bun build adapters/empryo/hook.ts adapters/empryo/reconcile.ts --target=bun --outdir /tmp/echo-empryo-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -130,7 +131,7 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** for TypeScript execution; package-script runners follow the Quick commands rules above. Run
-`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, and Codex builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, Codex, OpenCode, and Empryo builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
@@ -187,7 +188,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks, slash commands + reconcilers; mute and mode plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/`, `adapters/empryo/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload · harness catalog CLI | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`, `harness-catalog.ts`) |

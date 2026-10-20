@@ -21,6 +21,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` and `/echo-mode` are skills.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 - **OpenCode adapter** - OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands.
+- **Empryo adapter** - Empryo lifecycle hooks speak the session greeting, turn completions, and approval, question, and plan-review prompts.
 
 ## Prerequisites
 
@@ -142,6 +143,23 @@ bash scripts/install.sh --adapter codex
 This installs the core server and reconciles Echo-owned `SessionStart` and `Stop` hooks in the
 project's `.codex/hooks.json` when it exists, or in `~/.codex/hooks.json` otherwise. It requires
 the `codex` CLI on your PATH.
+
+## Add the Empryo adapter
+
+```bash
+cli/echo install --adapter empryo
+```
+
+The equivalent underlying command is:
+
+```bash
+bash scripts/install.sh --adapter empryo
+```
+
+This installs the core server and reconciles Echo-owned `SessionStart`, `Stop`, and
+`Notification` hooks in `~/.empryo/hooks.json`. It requires the `empryo` CLI on your PATH.
+Empryo also runs Claude Code and Codex hook files; those Echo hooks stay quiet under Empryo, so
+nothing speaks twice. See [`adapters/empryo/README.md`](../adapters/empryo/README.md).
 
 ## Add the voice-ask tool (Claude Code)
 

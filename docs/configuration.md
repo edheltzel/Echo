@@ -14,6 +14,7 @@ shell CLI share one unambiguous format:
       "ECHO_VOICE_ID": "echo",
       "ECHO_VOICE_ENABLED": true,
       "ECHO_VOICE_SUPPRESS_SUBAGENTS": true,
+      "ECHO_VOICE_SUPPRESS_CHILD_TABS": true,
       "ECHO_VOICE_GREET_ON_START": true,
       "ECHO_AUTOMATION_ENV": "NO_MISTAKES_GATE",
       "ECHO_EDGETTS_TIMEOUT_MS": 15000,
@@ -113,7 +114,7 @@ at runtime; invalid values use the defaults below.
 | Server | PORT, VOICES_PATH, PRONUNCIATIONS_PATH, ECHO_SAY_BIN, ECHO_OSASCRIPT_BIN | 3246; the two JSON files next to core/server.ts; /usr/bin/say; /usr/bin/osascript |
 | Developer tools | ECHO_PYTHON3_PATH | Python interpreter used by scripts/preview-voices.ts; /opt/homebrew/bin/python3 |
 | Identity | ECHO_VOICE_PERSONA_NAME, ECHO_VOICE_ID, ECHO_VOICE_TITLE, ECHO_PREFERRED_NAME | Adapter defaults apply when unset; ECHO_PREFERRED_NAME is the human name for needs-input announces and stays unset unless you set it |
-| Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_AUTOMATION_ENV, ECHO_DEFAULT_TITLE | Voice and genuine harness startup lines are enabled by default; subagent voice is suppressed by default; automation silence defaults to NO_MISTAKES_GATE; title defaults to Voice Notification |
+| Voice policy | ECHO_VOICE_ENABLED, ECHO_VOICE_GREET_ON_START, ECHO_VOICE_SPEAK_COMPLETIONS, ECHO_VOICE_SUPPRESS, ECHO_VOICE_SUPPRESS_SUBAGENTS, ECHO_VOICE_SUPPRESS_CHILD_TABS, ECHO_AUTOMATION_ENV, ECHO_DEFAULT_TITLE | Voice and genuine harness startup lines are enabled by default; subagent voice is suppressed by default; automation silence defaults to NO_MISTAKES_GATE; title defaults to Voice Notification |
 | Edge TTS | ECHO_EDGETTS_TIMEOUT_MS, ECHO_EDGETTS_TIMEOUT_MAX_MS, ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS, ECHO_EDGETTS_HEALTH_TIMEOUT_MS, ECHO_EDGETTS_SYNTH_RETRIES, ECHO_EDGETTS_SYNTH_BACKOFF_MS, ECHO_CIRCUIT_BREAKER_THRESHOLD | 15000, 60000, 20, 3000, 1, 250, 2; floors are in reliability.md |
 | Queue | ECHO_PLAY_QUEUE_MAX_DEPTH, ECHO_PLAY_QUEUE_AGE_CAP_MS, ECHO_PLAY_QUEUE_PLAYER_TIMEOUT_MS, ECHO_AUDIO_PROCESS_TIMEOUT_MS, ECHO_NOTIFICATION_PROCESS_TIMEOUT_MS | 20, 300000, 120000, 60000, 10000 |
 | Cache | ECHO_TTS_CACHE_DIR, ECHO_TTS_CACHE_MAX_BYTES, ECHO_TTS_CACHE_MAX_TEXT_CHARS, ECHO_AUDIO_CACHE_DIR | User-owned Echo cache directories; 20 MB and 80 characters for TTS cache limits |
@@ -145,8 +146,15 @@ Settings whose behavior is not obvious from the name:
   not silence a plain `claude -p` session that lacks a marker. It is adapter-side: direct
   HTTP callers and opt-in `echo_ask` are unaffected. Resolution is the usual config.json
   precedence. Echo never writes this key into `process.env`.
+  Empryo passes hooks only a safe subset of its environment, so a marker reaches Echo's Empryo
+  hook only when Empryo starts with that name in `EMPRYO_HOOK_ENV`, for example
+  `EMPRYO_HOOK_ENV="NO_MISTAKES_GATE"`.
 
-- **ECHO_PREFERRED_NAME** is the human name Claude Code, Pi, and omp put at the front of a
+- **ECHO_VOICE_SUPPRESS_CHILD_TABS** keeps tabs that Empryo's agent opened for itself silent.
+  Unset or `true` means child tabs never speak; `false` lets them speak like any other tab.
+  Tabs you open yourself always speak. Only the Empryo adapter reads it.
+
+- **ECHO_PREFERRED_NAME** is the human name adapters put at the front of a
   needs-input / approval / attention line (`Ed, …`). Unset or blank stays nameless. Echo
   never guesses a name.
 

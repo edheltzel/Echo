@@ -25,7 +25,7 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_VOICE_PERSONA_NAME", "ECHO_VOICE_ID", "ECHO_VOICE_TITLE", "ECHO_PYTHON3_PATH",
   "ECHO_PREFERRED_NAME", "ECHO_VOICE_ENABLED", "ECHO_VOICE_GREET_ON_START",
   "ECHO_VOICE_SPEAK_COMPLETIONS", "ECHO_VOICE_SUPPRESS", "ECHO_VOICE_SUPPRESS_SUBAGENTS",
-  "ECHO_AUTOMATION_ENV",
+  "ECHO_VOICE_SUPPRESS_CHILD_TABS", "ECHO_AUTOMATION_ENV",
   "ECHO_DEFAULT_TITLE",
   "ECHO_EDGETTS_TIMEOUT_MS", "ECHO_EDGETTS_TIMEOUT_MAX_MS", "ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS",
   "ECHO_EDGETTS_HEALTH_TIMEOUT_MS", "ECHO_EDGETTS_SYNTH_RETRIES", "ECHO_EDGETTS_SYNTH_BACKOFF_MS",
@@ -489,3 +489,12 @@ export function isAutomationSession(
 // Compatibility name for adapters and extensions written against the Stage 1
 // API. It now means "resolved Echo configuration", not just dotenv parsing.
 export const loadEchoEnvironment = loadEchoConfiguration;
+/**
+ * True when Empryo is running this hook. Empryo also executes Claude Code and
+ * Codex hook files, so those adapters stand down and the Empryo adapter speaks.
+ * Empryo sets EMPRYO_PROJECT_DIR for every hook it runs; its shell tool does not.
+ */
+export function isEmpryoHookProcess(env: EchoEnvironment = process.env): boolean {
+  const value = env.EMPRYO_PROJECT_DIR;
+  return typeof value === "string" && value.trim().length > 0;
+}
