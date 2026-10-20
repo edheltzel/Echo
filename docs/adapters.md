@@ -229,8 +229,8 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
 - **SessionStart** says `Grok, ready.` for new sessions (`source` of `new` / `startup` /
   `create`) unless `ECHO_VOICE_GREET_ON_START=false`. Captured against grok 1.0.0 where
   `source` is `"new"`.
-- **Voice:** `voice_id` defaults to `"grok"` (`ECHO_VOICE_ID` overrides), resolved by the daemon
-  through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
+- **Voice:** a `daidentity` voice wins, then the global fallback `ECHO_VOICE_ID`. With neither
+  set, `voice_id` is `"grok"`, resolved by the daemon through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
   payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
@@ -303,8 +303,8 @@ Pi speaks per-turn completions like the Claude Code path, not just the startup g
 - **Startup line:** Pi says `Pie, ready.` only for process `startup`; new, resume, fork, and
   reload stay silent. omp says `Oh em pee, ready.`; resume, attach, compact, reload, and known child agents stay silent.
   Set `ECHO_VOICE_GREET_ON_START` to `false` to disable it.
-- **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
-  (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
+- **Distinct voice (issue #76, retuned in #81):** with no `daidentity` voice and no global
+  fallback `ECHO_VOICE_ID`, `voiceId` is `"pi"`, which the daemon resolves via `agents.pi` in `core/voices.json`
   → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
   the injection feature above, #76 also touched `core/voices.json` data - a running daemon
   loads voices.json once at startup, from its staged payload, so run `cli/echo update` to

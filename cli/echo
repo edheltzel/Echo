@@ -46,7 +46,8 @@ Commands:
                        \`sounds\` plays slot cues instead. \`status\` reads /health.
   replay [n]           Re-speak the last n spoken notify lines (default 1, max 10).
   voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
-                       Set the default persona and ask whether subagents may speak.
+                       Set the fallback persona for harnesses without their own,
+                       and ask whether subagents may speak.
   update [--check]     Re-stage the payload from this checkout and reload the service.
                        --check is read-only and verifies that the plist and host
                        adapter paths still resolve - it does NOT detect a payload

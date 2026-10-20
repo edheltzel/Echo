@@ -136,3 +136,34 @@ describe("getIdentity - cache is keyed by (home, projectDir)", () => {
     expect(getIdentity(other, home).name).toBe("Atlas");
   });
 });
+
+describe("getIdentity - global ECHO_VOICE_ID is the fallback voice", () => {
+  test("no daidentity voice → the global ECHO_VOICE_ID", () => {
+    const home = fakeHome({ name: "Atlas" });
+    const id = getIdentity("", home, { ECHO_VOICE_ID: "en-IN-PrabhatNeural" });
+    expect(id.mainDAVoiceID).toBe("en-IN-PrabhatNeural");
+  });
+
+  test("a global daidentity voice beats the global ECHO_VOICE_ID", () => {
+    const home = fakeHome(GLOBAL_ATLAS);
+    const id = getIdentity("", home, { ECHO_VOICE_ID: "en-IN-PrabhatNeural" });
+    expect(id.mainDAVoiceID).toBe("atlas-voice");
+  });
+
+  test("a project-only daidentity voice beats the global ECHO_VOICE_ID", () => {
+    const home = tmp("echo-home-");
+    const proj = tmp("echo-proj-");
+    writeClaudeSettings(proj, "settings.json", {
+      daidentity: { voices: { main: { voiceId: "en-US-AndrewNeural" } } },
+    });
+    const id = getIdentity(proj, home, { ECHO_VOICE_ID: "en-IN-PrabhatNeural" });
+    expect(id.mainDAVoiceID).toBe("en-US-AndrewNeural");
+  });
+
+  test("blank ECHO_VOICE_ID is unset → no voice_id, the daemon identity voice", () => {
+    const home = tmp("echo-home-");
+    expect(getIdentity("", home, { ECHO_VOICE_ID: "  " }).mainDAVoiceID).toBe("");
+    clearCache();
+    expect(getIdentity("", home, {}).mainDAVoiceID).toBe("");
+  });
+});

@@ -32,8 +32,8 @@ Same `daidentity` shape as Claude Code / Pi / Grok. Drop into
 }
 ```
 
-Project wins over `~/.codex/settings.json`, then env defaults
-(`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`, ...).
+Project wins over `~/.codex/settings.json`, then the global fallback
+(`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`, ...), then the `codex` voice key.
 
 ## Ownership
 

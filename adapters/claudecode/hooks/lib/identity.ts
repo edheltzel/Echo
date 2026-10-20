@@ -9,7 +9,8 @@
  *   1. $projectDir/.claude/settings.local.json  (gitignored, per-machine)
  *   2. $projectDir/.claude/settings.json         (checked in, shared)
  *   3. ~/.claude/settings.json                   (global)
- *   4. neutral defaults
+ *   4. the global ECHO_VOICE_ID, for the voice only
+ *   5. neutral defaults
  * A project's `daidentity` overrides the global one PER KEY (deep merge, local
  * leaf wins) - the same "tightest source wins per key" precedence shared/echo-env.ts
  * commits to. A repo can set just its name + voice and inherit everything else
@@ -18,6 +19,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { loadEchoConfiguration, type EchoEnvironment } from '@echo/shared/echo-env.ts';
 
 const HOME = process.env.HOME!;
 
@@ -176,7 +178,11 @@ function loadProjectDaidentity(projectDir?: string, home: string = HOME): Record
  * Get DA (Digital Assistant) identity, resolved with layered precedence
  * (project.local → project → global → defaults), per key.
  */
-export function getIdentity(projectDir?: string, home: string = HOME): Identity {
+export function getIdentity(
+  projectDir?: string,
+  home: string = HOME,
+  env: EchoEnvironment = loadEchoConfiguration(),
+): Identity {
   const settings = loadSettings(projectDir, home);
 
   // Prefer settings.daidentity, fall back to env.DA for backward compat
@@ -190,6 +196,11 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
   // Support both old (daidentity.voice) and new (daidentity.voices.main) structures
   const voices = (daidentity as any).voices || {};
   const voiceConfig = voices.main || (daidentity as any).voice;
+  // ECHO_VOICE_ID is the global fallback for every harness, so any daidentity voice beats it
+  // (docs/voices.md#which-voice-a-harness-speaks). Do not add an ECHO_VOICE_PERSONA_NAME
+  // fallback for the name: `name` decides which 🗣️ line is the DA's (resolvePersonaKey), so a
+  // global name meant for other harnesses would reroute this DA's own lines.
+  const fallbackVoiceId = env.ECHO_VOICE_ID?.trim() || DEFAULT_IDENTITY.mainDAVoiceID;
 
   return {
     name: daidentity.name || envDA || DEFAULT_IDENTITY.name,
@@ -198,7 +209,7 @@ export function getIdentity(projectDir?: string, home: string = HOME): Identity 
     // name - so the project's name/displayName wins over an inherited global displayName.
     displayName: projectDai.displayName || projectDai.name
       || daidentity.displayName || daidentity.name || envDA || DEFAULT_IDENTITY.displayName,
-    mainDAVoiceID: voiceConfig?.voiceId || (daidentity as any).voiceId || daidentity.mainDAVoiceID || DEFAULT_IDENTITY.mainDAVoiceID,
+    mainDAVoiceID: voiceConfig?.voiceId || (daidentity as any).voiceId || daidentity.mainDAVoiceID || fallbackVoiceId,
     color: daidentity.color || DEFAULT_IDENTITY.color,
     voice: voiceConfig as VoiceProsody | undefined,
     personality: (daidentity as any).personality as VoicePersonality | undefined,

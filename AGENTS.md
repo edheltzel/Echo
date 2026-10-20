@@ -46,7 +46,7 @@ cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
 cli/echo mode speech|sounds|status          # global: sounds plays request/done/generic sounds instead of speech
 /echo-mode [speech|sounds|status]           # same, from a session
 cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
-cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
+cli/echo voice <name> <edge-tts-voice-id>   # fallback persona for any harness without its own → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
 

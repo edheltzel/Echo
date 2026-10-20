@@ -261,11 +261,10 @@ Inside the repo, in your host (Claude Code, Pi, or omp):
 ```
 
 This auditions edge-tts voices and merge-writes a `daidentity` block into that project's own
-config, preserving every other setting; it takes effect on the next session there. For a global
-Pi/omp default rather than one repo's, use `cli/echo voice <name> <edge-tts-voice-id>`. Claude Code
-ignores those persona values; configure its global persona and voice in
-`~/.claude/settings.json`. Both paths are covered in
-[`voices.md`](voices.md#per-project-persona--voice-local-override).
+config, preserving every other setting; it takes effect on the next session there.
+`cli/echo voice <name> <edge-tts-voice-id>` sets the global fallback instead: every harness with
+no `daidentity` voice of its own speaks with it (Claude Code takes the voice, not the name).
+Both paths are covered in [`voices.md`](voices.md#which-voice-a-harness-speaks).
 
 ## Uninstall
 

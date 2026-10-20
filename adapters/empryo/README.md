@@ -28,4 +28,15 @@ Echo hooks detect `EMPRYO_PROJECT_DIR`, which Empryo sets for every hook it runs
 down so nothing speaks twice.
 
 Persona: `daidentity` from `<project>/.empryo/settings.json` over `~/.empryo/settings.json`,
-the same shape as the other hosts.
+the same shape as the other hosts:
+
+```json
+{
+  "daidentity": {
+    "voices": { "main": { "voiceId": "en-US-AvaMultilingualNeural" } }
+  }
+}
+```
+
+With no `daidentity` voice, Empryo uses the global fallback `ECHO_VOICE_ID`, then the
+`empryo` key in `core/voices.json`.

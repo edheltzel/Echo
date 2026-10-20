@@ -30,8 +30,8 @@ Same `daidentity` shape as Claude Code / Pi / Codex. Drop into
 }
 ```
 
-Project wins over `~/.grok/settings.json`, then env defaults
-(`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`, ...).
+Project wins over `~/.grok/settings.json`, then the global fallback
+(`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`, ...), then the `grok` voice key.
 
 ## Ownership
 
