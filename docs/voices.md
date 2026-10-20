@@ -116,6 +116,7 @@ Default adapter personas in `core/voices.json`:
 | Codex | `codex` | `en-GB-ThomasNeural` |
 | Pi | `pi` | `en-GB-RyanNeural` @ 0.92 |
 | OpenCode | `opencode` | `en-US-AvaNeural` |
+| Empryo | `empryo` | `en-PH-JamesNeural` |
 
 Layering is project daidentity, then global daidentity, then env / adapter defaults.
 A set project key wins over env. That matches Pi and omp.

@@ -113,6 +113,7 @@ describe("Empryo lifecycle hook adapter", () => {
     expect(await handleEmpryoHookResult(stop, config, {}, deps(log))).toBe("skipped");
     const optedIn = loadEmpryoVoiceConfig({ ECHO_VOICE_SUPPRESS_CHILD_TABS: "false" });
     expect(optedIn.suppressChildTabs).toBe(false);
+    expect(optedIn.voiceId).toBe("empryo");
     expect(await handleEmpryoHookResult(stop, { ...config, suppressChildTabs: false }, {}, deps(log))).toBe("sent");
     expect(payloads).toHaveLength(1);
   });

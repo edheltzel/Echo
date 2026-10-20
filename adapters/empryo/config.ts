@@ -64,7 +64,7 @@ export function loadEmpryoVoiceConfig(
     title: env.ECHO_VOICE_TITLE ?? "Empryo Notification",
     personaName: env.ECHO_VOICE_PERSONA_NAME ?? "Empryo",
     preferredName: preferredHumanName(env),
-    voiceId: env.ECHO_VOICE_ID,
+    voiceId: env.ECHO_VOICE_ID ?? "empryo",
     voiceEnabled: booleanEnv(env.ECHO_VOICE_ENABLED, true),
     greetOnSessionStart: booleanEnv(env.ECHO_VOICE_GREET_ON_START, true),
     speakCompletions: booleanEnv(env.ECHO_VOICE_SPEAK_COMPLETIONS, true),
