@@ -54,7 +54,7 @@ and a single `writeResolutionEvent` call in `speakNotification` (the play queue'
 - **Best-effort:** all write/prune errors are swallowed - logging must never break a
   `/notify`.
 - **Fields:** `ts`, `requested_voice_id` (`null` if omitted), `resolution`
-  (`identity-default` \| `identity` \| `agent-key` \| `elevenlabs-id` \| `fallback`),
+  (`identity-default` \| `identity` \| `agent-key` \| `elevenlabs-id` \| `edgetts-explicit` \| `fallback`),
   `resolution_reason` (fallback only), `provider` (or `none`), `voice` (actual, or `null`),
   `hops` (providers skipped/failed before the chosen one), `attempts[]` (`{provider,
   outcome}` where outcome ∈ `success`/`failed`/`unhealthy`/`circuit-open`/`disabled`),

@@ -59,7 +59,7 @@ Primary host-neutral endpoint. Body (every field optional):
 | `title` | `Voice Notification` (`ECHO_DEFAULT_TITLE`) | macOS notification title |
 | `message` | `"Task completed"` | The spoken/displayed text |
 | `voice_enabled` | `true` | `false` = silent (notification only, no TTS, **no resolution-log event**) |
-| `voice_id` | - (identity voice) | Short persona **name key** (e.g. `"themis"`), not a raw provider voice id - resolution order and traps in [`voices.md`](voices.md). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
+| `voice_id` | - (identity voice) | Voice identifier; supported formats, resolution order, and traps are in [How a `voice_id` resolves](voices.md#how-a-voice_id-resolves). `voice_name` is accepted as an alias; `voice_id` wins when both are present |
 | `voice_settings` | - | Pass-through override, see below |
 | `session_id`, `source` | - | Echoed into the daemon log for correlation |
 | `speak_mode` | - (today's density) | Optional notify density borrowed from VoiceLayer's speak names, not a fifth TTS taxonomy. `announce` (short ping, speed ×1.10), `brief` (longer explanation, ×0.90), `consult` (checkpoint/question, ×1.05), `think` (banner only, no TTS). Omitted keeps the resolved persona speed. Invalid is `400`. Adapters fill a mode when they shape a notify; they never infer `think` (silence is already `voice_enabled: false`). Converse stays out of this field. Claude Code, Pi, and omp also POST ordinary `/notify` lines when the host is waiting on a human; that is adapter lifecycle, not a new daemon event. Human truth: [`what-echo-does.md`](what-echo-does.md#when-an-agent-needs-you). |
@@ -364,7 +364,7 @@ or a different `VOICES_PATH` than the caller can see.
 
 | Field | Notes |
 | --- | --- |
-| `agents` | Sorted persona **name keys** from `voices.json` - exactly the values `/notify` resolves as `voice_id`. Never a raw provider voice id |
+| `agents` | Sorted configured persona **name keys** from `voices.json`; excludes provider voice ids |
 | `default_provider` | Same value `/health` reports as `activeProvider` |
 
 Unlike `/health`, this route probes no provider, so it is cheap enough to call per turn, and

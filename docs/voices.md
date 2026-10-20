@@ -7,18 +7,10 @@ the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page needs the daemon reloaded** - `voices.json` and the configuration
-file are read once at startup. Editing the checkout's `core/voices.json` is not enough on its
-own: the daemon runs from a staged copy, so that edit has to be re-staged before it can take
-effect. `~/.config/echo/config.json` is read from your home directory, so a plain reload
-applies it.
-
-```bash
-cli/echo update                              # after editing core/voices.json - re-stage + reload
-launchctl kickstart -k "gui/$UID/com.echo"   # enough for config.json, which is read in place
-```
-
-Why the copy exists, and what a failed re-stage does: [`operations.md`](operations.md).
+Daemon voice mappings and provider settings require a reload; checkout files may also need
+re-staging. See [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
+Adapter persona settings, including the global fallback, take effect in a new host session
+without reloading the daemon.
 
 ## How a `voice_id` resolves
 
@@ -32,8 +24,9 @@ exact order:
 2. `agents.<voice_id>` - the name-key match.
 3. Any agent whose `elevenlabs.voice_id` equals the value.
 4. `identity` when the value equals `identity.elevenlabs.voice_id`.
-5. Otherwise **no mapping**: each provider uses its own default voice - except ElevenLabs,
-   where the unresolved value is passed through **raw** as an ElevenLabs voice id.
+5. Otherwise **no mapping**: `speakWithFallback` passes a literal edge-tts voice name
+   (such as `en-IN-PrabhatNeural`) directly to edge-tts. ElevenLabs receives an unresolved
+   value as a raw voice id; other providers use their defaults.
 
 Two traps:
 
@@ -43,14 +36,14 @@ Two traps:
   `en-US-AvaNeural`; change either, or make ElevenLabs the active provider (the raw
   pass-through then sends `atlas` as an invalid ElevenLabs id, that attempt fails, and the
   chain falls through), and they diverge. To get the identity voice, **omit `voice_id`**.
-- Send the **name key**, not a raw provider voice id - the raw pass-through in step 5 is an
-  ElevenLabs-only escape hatch, not the contract.
+- A **name key** selects a mapping across providers. A literal edge-tts voice name selects
+  that edge voice without a mapping; it does not configure the other providers' voices.
 
 The resolved mapping supplies the per-provider voice and settings; a caller-supplied
 `voice_settings` object or an emotional marker can override them (see
-[`http-api.md`](http-api.md)). Every voice-enabled `/notify` logs how it resolved
-(`identity-default` | `identity` | `agent-key` | `elevenlabs-id` | `fallback`) - see
-"Debug" below.
+[`http-api.md`](http-api.md)). Every voice-enabled `/notify` logs how it resolved; fields
+and resolution values are documented in the
+[voice-resolution log reference](providers-observability.md#voice-resolution-drop-off-log-24).
 
 ## Audition edge voices
 
@@ -95,7 +88,7 @@ scripts/preview-voices.ts --dry-run --voices en-GB-RyanNeural   # print synth co
 
 ## Per-project persona & voice (local override)
 
-Each host adapter reads its own **native** project config, so a repo can give itself
+The adapters below read their own **native** project config, so a repo can give itself
 its own spoken identity - **name + voice** - in that repo only:
 
 | Host | Project file | Global |
@@ -107,7 +100,7 @@ its own spoken identity - **name + voice** - in that repo only:
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
 | OpenCode | `opencode.json(c)` from the worktree root down to the session folder, plus `.opencode/opencode.json(c)` | `~/.config/opencode/config.json`, `opencode.json`, and `opencode.jsonc`, merged (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
-Every host reads a **`daidentity` block from its native config**, project layered over
+These hosts read a **`daidentity` block from their native config**, project layered over
 global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
 Grok, and Codex use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
 
@@ -121,7 +114,7 @@ per-turn speech; the startup line uses the resolved voice. Set `ECHO_VOICE_GREET
 
 Every harness picks its voice in the same order, and the first one set wins:
 
-1. The project `daidentity` voice (table above).
+1. The project `daidentity` voice, where supported (table above).
 2. The global `daidentity` voice in the host's own config.
 3. The global fallback, `ECHO_VOICE_ID` in `~/.config/echo/config.json` (set it with
    `cli/echo voice`).
@@ -131,9 +124,11 @@ Every harness picks its voice in the same order, and the first one set wins:
 The global fallback is only for a harness that has no voice of its own. Give it a voice no
 persona uses, and you hear at once when a harness's own voice is missing or not being read.
 The persona name follows the same order with `ECHO_VOICE_PERSONA_NAME`, except in Claude Code,
-which takes its name only from `daidentity`.
+which keeps its DA name and ignores `ECHO_VOICE_PERSONA_NAME`. Jcode has no `daidentity`
+reader and starts at the global fallback.
 
-Harness keys in `core/voices.json`, used only when `ECHO_VOICE_ID` is unset:
+Harness keys in `core/voices.json`, used when neither a `daidentity` voice nor
+`ECHO_VOICE_ID` is set:
 
 | Host | `voice_id` key | edge-tts voice |
 |---|---|---|
@@ -198,11 +193,9 @@ config aborts rather than being clobbered. Unlike Claude Code's symlinked markdo
 command, this one ships with the adapter itself, so there is no installer step. Takes
 effect on the next session in that repo.
 
-`cli/echo voice <name> <voice-id>` does not set a Pi or omp persona. It writes the global
-fallback, `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` in `~/.config/echo/config.json`
-(validating the edge-tts voice first), which every harness uses only when its own
-`daidentity` sets nothing. See [Which voice a harness speaks](#which-voice-a-harness-speaks),
-[`adapters/pi/README.md`](../adapters/pi/README.md), and
+For the [global fallback](#which-voice-a-harness-speaks), use
+`cli/echo voice <name> <voice-id>`, which validates the edge-tts voice first. Host-specific details:
+[`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
 
 ### Grok Build
@@ -301,8 +294,8 @@ Three signals, in order:
 
 1. **Resolution log** - `tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq` (fields:
    [`providers-observability.md`](providers-observability.md)). Branch on `resolution`:
-   - `requested_voice_id` is the global `ECHO_VOICE_ID` → the harness found no `daidentity`
-     voice of its own. Check its config file in
+   - `requested_voice_id` matches the global `ECHO_VOICE_ID`, but you expected a different
+     voice → check the harness's `daidentity` in its config file under
      [Per-project persona & voice](#per-project-persona--voice-local-override).
    - `fallback` + `resolution_reason` → the `voice_id` isn't a configured name key. List
      valid keys with `jq -r '.agents | keys[]' core/voices.json`, fix the key or add the
@@ -322,8 +315,8 @@ Three signals, in order:
 3. **Daemon log** - `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).
 
-After any config change: reload the daemon as described at the top of this page, then re-send
-the test notify.
+After changing config, apply it as described at the top of this page, then repeat the
+notification from the affected caller.
 
 ## Reference: `core/voices.json`
 
@@ -410,11 +403,11 @@ the words extractor consume it so the chosen voice and the spoken words can neve
 **voice**; `extractVoiceCompletion` (same parser) yields the **words**. When `<Name>` is a
 non-DA persona (e.g. `🗣️ Themis:`), the hook sends that lowercase **name key** as `voice_id`
 (daemon resolves `themis` → `en-US-MichelleNeural`) and speaks the persona's own line. When
-the speaker is the DA (Atlas) or there is no tag, both voice (`mainDAVoiceID` + prosody) and
-words are the unchanged Atlas path.
+the speaker matches the configured DA name or there is no tag, the hook uses the
+[resolved DA voice](#which-voice-a-harness-speaks) (`mainDAVoiceID` + prosody) and the DA's words.
 
 This is DRY and self-cleaning: the signal is the response the hook already parses (no marker
-files, env vars, or registries), so dropping a persona reverts to Atlas on the next turn
+files, env vars, or registries), so dropping a persona reverts to the resolved DA voice on the next turn
 automatically. For a **main-session** persona to be voiced, its turns must carry the
 `🗣️ <Persona>:` tag (the global response format already does this).
 `parseFinalVoiceLine`/`resolvePersonaKey`/`selectVoice` are covered by

@@ -127,4 +127,4 @@ Mute is the product answer for a shared office. Daemon disable is taking the ser
 
 Adapters translate host lifecycle into `POST /notify`. They add `source` and `session_id` when they have them. Notify failures are warnings in the host session, never a broken turn.
 
-Persona and voice resolution, including the trap of sending a raw provider id, live in [voices.md](voices.md). Provider egress (edge-tts is online by default) is [providers-observability.md](providers-observability.md).
+Persona and voice resolution live in [voices.md](voices.md). Provider egress (edge-tts is online by default) is [providers-observability.md](providers-observability.md).

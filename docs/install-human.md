@@ -244,9 +244,8 @@ Inside the repo, in your host (Claude Code, Pi, or omp):
 
 This auditions edge-tts voices and merge-writes a `daidentity` block into that project's own
 config, preserving every other setting; it takes effect on the next session there.
-`cli/echo voice <name> <edge-tts-voice-id>` sets the global fallback instead: every harness with
-no `daidentity` voice of its own speaks with it (Claude Code takes the voice, not the name).
-Both paths are covered in [`voices.md`](voices.md#which-voice-a-harness-speaks).
+`cli/echo voice <name> <edge-tts-voice-id>` sets the
+[global fallback](voices.md#which-voice-a-harness-speaks) instead.
 
 ## Uninstall
 
