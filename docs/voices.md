@@ -7,18 +7,9 @@ the Claude Code Stop hook speaks each turn in the right persona's voice. See
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the request flow, and
 [`adapters.md`](adapters.md) for the adapter wiring.
 
-**Every change on this page needs the daemon reloaded** - `voices.json` and the configuration
-file are read once at startup. Editing the checkout's `core/voices.json` is not enough on its
-own: the daemon runs from a staged copy, so that edit has to be re-staged before it can take
-effect. `~/.config/echo/config.json` is read from your home directory, so a plain reload
-applies it.
-
-```bash
-cli/echo update                              # after editing core/voices.json - re-stage + reload
-launchctl kickstart -k "gui/$UID/com.echo"   # enough for config.json, which is read in place
-```
-
-Why the copy exists, and what a failed re-stage does: [`operations.md`](operations.md).
+For daemon configuration edits, follow
+[Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
+Start a new host session after changing its `daidentity` or the global voice fallback.
 
 ## How a `voice_id` resolves
 
@@ -105,39 +96,61 @@ its own spoken identity - **name + voice** - in that repo only:
 | omp | `<project>/.omp/config.yml` (YAML) | `~/.omp/agent/config.yml` (see [`adapters/omp/README.md`](../adapters/omp/README.md)) |
 | Grok Build | `<project>/.grok/settings.json` | `~/.grok/settings.json` (see [`adapters/grok/README.md`](../adapters/grok/README.md)) |
 | Codex | `<project>/.codex/settings.json` | `~/.codex/settings.json` (see [`adapters/codex/README.md`](../adapters/codex/README.md)) |
+| Empryo | `<project>/.empryo/settings.json` | `~/.empryo/settings.json` (see [`adapters/empryo/README.md`](../adapters/empryo/README.md)) |
 | OpenCode | `opencode.json(c)` from the worktree root down to the session folder, plus `.opencode/opencode.json(c)` | `~/.config/opencode/config.json`, `opencode.json`, and `opencode.jsonc`, merged (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
-Default adapter personas in `core/voices.json`:
-
-| Host | `voice_id` key | edge-tts voice |
-|---|---|---|
-| Grok Build | `grok` | `en-US-GuyNeural` |
-| Codex | `codex` | `en-GB-ThomasNeural` |
-| Pi | `pi` | `en-GB-RyanNeural` @ 0.92 |
-| OpenCode | `opencode` | `en-US-AvaNeural` |
-
-Layering is project daidentity, then global daidentity, then env / adapter defaults.
-A set project key wins over env. That matches Pi and omp.
-
-Every host reads a **`daidentity` block from its native config**, project layered over
-global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
-Grok, and Codex use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
+The hosts in the table read a **`daidentity` block from their native config**, project layered
+over global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
+Grok, Codex, and Empryo use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
 
 Each genuine harness startup says one fixed line: `Claude code, ready.`, `Jay code, ready.`,
-`Grok, ready.`, `Codex, ready.`, `Pie, ready.`, `Oh em pee, ready.`, or `Open code, ready.`.
+`Grok, ready.`, `Codex, ready.`, `Pie, ready.`, `Oh em pee, ready.`, `Open code, ready.`, or `Empryo, ready.`.
 The line identifies the harness, not the persona. Persona name and voice still apply to normal
 per-turn speech; the startup line uses the resolved voice. Set `ECHO_VOICE_GREET_ON_START` to
 `false` to silence it. Resume, reload, compact, and known child sessions stay silent.
 
+### Which voice a harness speaks
+
+Harnesses with native `daidentity` support pick their voice in this order:
+
+1. The project `daidentity` voice (table above).
+2. The global `daidentity` voice in the host's own config.
+3. The global fallback, `ECHO_VOICE_ID` in `~/.config/echo/config.json` (set it with
+   `cli/echo voice <name> <edge-tts-voice-id>`).
+4. The harness's own key in `core/voices.json` (below). Claude Code and Jcode have no key and
+   send no `voice_id` when no voice is configured, so the daemon speaks the `identity` voice.
+
+Jcode has no native `daidentity` reader: it uses `ECHO_VOICE_ID`, then the daemon's
+`identity` voice.
+
+The global fallback is only for a harness that has no voice of its own. Give it a voice no
+persona uses, and you hear at once when a harness's own voice is missing or not being read.
+Names and voices fall back independently: a `daidentity` name alone does not override
+`ECHO_VOICE_ID`, and a voice alone does not override `ECHO_VOICE_PERSONA_NAME`. Claude Code
+deliberately ignores `ECHO_VOICE_PERSONA_NAME` so the global name cannot change which
+response lines belong to its DA.
+
+Harness keys apply when no `daidentity` voice or global fallback is configured. Their
+provider voices and speeds live in [`core/voices.json`](../core/voices.json).
+
+| Host | `voice_id` key |
+|---|---|
+| Grok Build | `grok` |
+| Codex | `codex` |
+| Pi, omp | `pi` |
+| OpenCode | `opencode` |
+| Empryo | `empryo` |
+
 ### Claude Code
 
 The Claude Code adapter resolves the DA identity - **name and voice** - with layered
-precedence, tightest scope wins **per key**:
+precedence as [described above](#which-voice-a-harness-speaks), tightest scope wins **per key**.
+Within a project, `.claude/settings.local.json` (gitignored, per-machine) overrides
+`.claude/settings.json` (checked in, shared).
 
-1. `<project>/.claude/settings.local.json` (gitignored, per-machine)
-2. `<project>/.claude/settings.json` (checked in, shared)
-3. `~/.claude/settings.json` (global)
-4. neutral defaults
+Each settings file selects the first nonblank string from `voices.main.voiceId`,
+`voice.voiceId`, `voiceId`, and `mainDAVoiceID` inside `daidentity` before layers merge.
+A project voice therefore overrides a global voice even when they use different spellings.
 
 So a repo can override the global persona **in that repo only**. The resolved voice
 applies to the startup line and per-turn speech. Every other repo keeps the global
@@ -182,25 +195,21 @@ config aborts rather than being clobbered. Unlike Claude Code's symlinked markdo
 command, this one ships with the adapter itself, so there is no installer step. Takes
 effect on the next session in that repo.
 
-For the **global** pi/omp default rather than one repo's, `cli/echo voice <name> <voice-id>`
-writes `ECHO_VOICE_PERSONA_NAME` and `ECHO_VOICE_ID` into `~/.config/echo/config.json`
-(validating the edge-tts voice first). Claude Code ignores it; its persona comes from
-`~/.claude/settings.json`, above. See
+For the global fallback, use [`cli/echo voice`](#which-voice-a-harness-speaks), which
+validates the edge-tts voice before writing it. See
 [`adapters/pi/README.md`](../adapters/pi/README.md) and
 [`adapters/omp/README.md`](../adapters/omp/README.md).
 
 ### Grok Build
 
-Same `daidentity` shape. Project `<cwd>/.grok/settings.json` wins per key over
-`~/.grok/settings.json`, then env defaults (`ECHO_VOICE_PERSONA_NAME`,
-`ECHO_VOICE_ID`, ...). There is no `config.toml` path. New sessions say `Grok, ready.` unless
+Use the `daidentity` shape and [voice order above](#which-voice-a-harness-speaks).
+There is no `config.toml` path. New sessions say `Grok, ready.` unless
 `ECHO_VOICE_GREET_ON_START=false`. See [`adapters/grok/README.md`](../adapters/grok/README.md).
 
 ### Codex
 
-Same `daidentity` shape. Project `<cwd>/.codex/settings.json` wins per key over
-`~/.codex/settings.json`, then env defaults. The override file is
-`.codex/settings.json`, not Codex `config.toml`. `SessionStart` source `startup` says
+Use the `daidentity` shape and [voice order above](#which-voice-a-harness-speaks).
+The override file is `.codex/settings.json`, not Codex `config.toml`. `SessionStart` source `startup` says
 `Codex, ready.` unless `ECHO_VOICE_GREET_ON_START=false`. See [`adapters/codex/README.md`](../adapters/codex/README.md).
 
 When `cli/echo voice` runs in a terminal it also asks **“Enable voice for subagents?”**;
@@ -285,6 +294,9 @@ Three signals, in order:
 
 1. **Resolution log** - `tail -1 ~/Library/Logs/echo/voice-resolution.jsonl | jq` (fields:
    [`providers-observability.md`](providers-observability.md)). Branch on `resolution`:
+   - `requested_voice_id` matches the global `ECHO_VOICE_ID` → check whether the harness
+     loaded its own voice or explicitly configured the same value. Find its config file in
+     [Per-project persona & voice](#per-project-persona--voice-local-override).
    - `fallback` + `resolution_reason` → the `voice_id` isn't a configured name key. List
      valid keys with `jq -r '.agents | keys[]' core/voices.json`, fix the key or add the
      persona.
@@ -303,8 +315,8 @@ Three signals, in order:
 3. **Daemon log** - `~/Library/Logs/echo.log` for the human-readable per-request narrative
    (`📨 Notification`, `⏭️ Skipping <provider> (…)`, provider errors).
 
-After any config change: reload the daemon as described at the top of this page, then re-send
-the test notify.
+After a config change, follow the reload or new-session guidance at the top of this page,
+then repeat the notification from the affected host.
 
 ## Reference: `core/voices.json`
 

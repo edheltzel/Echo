@@ -25,6 +25,7 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_VOICE_PERSONA_NAME", "ECHO_VOICE_ID", "ECHO_VOICE_TITLE", "ECHO_PYTHON3_PATH",
   "ECHO_PREFERRED_NAME", "ECHO_VOICE_ENABLED", "ECHO_VOICE_GREET_ON_START",
   "ECHO_VOICE_SPEAK_COMPLETIONS", "ECHO_VOICE_SUPPRESS", "ECHO_VOICE_SUPPRESS_SUBAGENTS",
+  "ECHO_VOICE_SUPPRESS_CHILD_TABS", "ECHO_AUTOMATION_ENV",
   "ECHO_DEFAULT_TITLE",
   "ECHO_EDGETTS_TIMEOUT_MS", "ECHO_EDGETTS_TIMEOUT_MAX_MS", "ECHO_EDGETTS_TIMEOUT_PER_CHAR_MS",
   "ECHO_EDGETTS_HEALTH_TIMEOUT_MS", "ECHO_EDGETTS_SYNTH_RETRIES", "ECHO_EDGETTS_SYNTH_BACKOFF_MS",
@@ -50,6 +51,17 @@ export const ECHO_CONFIG_KEYS = new Set([
   "ECHO_CONVERSE_REC_BIN", "ECHO_CONVERSE_SOX_BIN", "ECHO_CONVERSE_YAP_BIN",
   "ECHO_CONVERSE_WHISPER_BIN", "ECHO_CONVERSE_WHISPER_MODEL",
 ]);
+
+// Canonical keys Echo used to write and no longer reads. An old config.json may
+// still contain them; they are harmless and must not warn on every host start.
+export const RETIRED_CONFIG_KEYS: Record<string, true> = {
+  ECHO_VOICE_CATCHPHRASE: true,
+  ECHO_VOICE_SAY_NAME: true,
+};
+
+export function retiredConfigKeyMessage(key: string): string {
+  return `${key} is a retired Echo configuration key and is ignored`;
+}
 
 // Alias names are rejected by config.json validation, so the deprecation
 // warning must point each one at the canonical key the user has to write
@@ -112,8 +124,10 @@ const DOTENV_EXCLUDED_KEYS = new Set(["PORT"]);
 export interface EchoConfigStatus {
   path: string;
   present: boolean;
-  /** Keys dropped from an otherwise-usable file; every other key still applies. */
+  /** Keys rejected by validation; accepted settings still apply. Excludes retired keys. */
   ignored: string[];
+  /** Retired keys Echo itself no longer reads. Harmless; not a validation failure. */
+  retired: string[];
   errors: string[];
   /** Canonical keys accepted from config.json; used to preserve precedence in core. */
   configured: string[];
@@ -163,11 +177,12 @@ function parseConfigPort(entry: EchoConfigValue): number | null {
   return CANONICAL_DECIMAL.test(text) ? Number(text) : null;
 }
 
-/** The single per-key rule; both validation and loading go through it. */
+/** Per-key diagnostics; loading handles retired keys separately without errors. */
 function validateEchoConfigEntry(key: string, entry: unknown): string | null {
   if (key === "ELEVENLABS_API_KEY") {
     return "ELEVENLABS_API_KEY is a secret and must not be stored in config.json";
   }
+  if (RETIRED_CONFIG_KEYS[key] === true) return retiredConfigKeyMessage(key);
   if (!ECHO_CONFIG_KEYS.has(key)) return `${key} is not an Echo configuration key`;
   if (!isConfigPrimitive(entry)) return `${key} must be a string, number, or boolean`;
   if (key === "PORT") {
@@ -195,16 +210,18 @@ export function validateEchoConfig(value: unknown): string[] {
 }
 
 /**
- * Read config.json, dropping ONLY the keys that fail validation. An unknown key
+ * Read config.json, dropping rejected and retired keys. An unknown key
  * (a typo, or a setting written by a newer Echo) must not revert every other
  * setting to its built-in default - the ignored keys and their reasons are
- * reported through EchoConfigStatus and surfaced in GET /health.
+ * reported through EchoConfigStatus and surfaced in GET /health. A key Echo
+ * itself retired is dropped the same way, but it is not an error and does not warn.
  */
 function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>; status: EchoConfigStatus } {
   const status: EchoConfigStatus = {
     path,
     present: false,
     ignored: [],
+    retired: [],
     errors: [],
     configured: [],
     deprecatedEnvironment: [],
@@ -238,6 +255,10 @@ function readJsonConfig(path: string): { values: Record<string, EchoConfigValue>
 
   const values: Record<string, EchoConfigValue> = {};
   for (const [key, entry] of Object.entries(parsed as Record<string, unknown>)) {
+    if (RETIRED_CONFIG_KEYS[key] === true) {
+      status.retired.push(key);
+      continue;
+    }
     const error = validateEchoConfigEntry(key, entry);
     if (error) {
       status.ignored.push(key);
@@ -416,6 +437,7 @@ function copyConfigStatus(status: EchoConfigStatus): EchoConfigStatus {
   return {
     ...status,
     ignored: [...status.ignored],
+    retired: [...status.retired],
     errors: [...status.errors],
     configured: [...status.configured],
     deprecatedEnvironment: [...status.deprecatedEnvironment],
@@ -441,6 +463,38 @@ export function shouldSuppressSubagentVoice(
   return parseEchoBoolean(env.ECHO_VOICE_SUPPRESS_SUBAGENTS, true);
 }
 
+/** Comma-separated env names. Unset means the no-mistakes diagnostic marker. Empty disables. */
+export const DEFAULT_AUTOMATION_ENV = "NO_MISTAKES_GATE";
+
+export function automationEnvNames(configured: string | undefined): string[] {
+  const raw = configured === undefined ? DEFAULT_AUTOMATION_ENV : configured;
+  return raw.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
+}
+
+/**
+ * True when the agent process carries any configured automation marker.
+ * Names come from resolved config (config.json wins). Values are read from
+ * `env` (the live process), never written back into it.
+ */
+export function isAutomationSession(
+  env: EchoEnvironment = process.env,
+  config: EchoEnvironment = loadEchoConfiguration(),
+): boolean {
+  return automationEnvNames(config.ECHO_AUTOMATION_ENV).some((name) => {
+    const value = env[name];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
 // Compatibility name for adapters and extensions written against the Stage 1
 // API. It now means "resolved Echo configuration", not just dotenv parsing.
 export const loadEchoEnvironment = loadEchoConfiguration;
+/**
+ * True when Empryo is running this hook. Empryo also executes Claude Code and
+ * Codex hook files, so those adapters stand down and the Empryo adapter speaks.
+ * Empryo sets EMPRYO_PROJECT_DIR for every hook it runs; its shell tool does not.
+ */
+export function isEmpryoHookProcess(env: EchoEnvironment = process.env): boolean {
+  const value = env.EMPRYO_PROJECT_DIR;
+  return typeof value === "string" && value.trim().length > 0;
+}

@@ -149,6 +149,89 @@ describe("echo doctor", () => {
     }
   });
 
+  test.each([
+    { label: "say-name property", config: '{"ECHO_VOICE_SAY_NAME":true}', retired: "ECHO_VOICE_SAY_NAME" },
+    { label: "catchphrase property", config: '{"ECHO_VOICE_CATCHPHRASE":"Hello"}', retired: "ECHO_VOICE_CATCHPHRASE" },
+    { label: "escaped say-name property", config: '{"ECHO_VOICE_SAY_NAM\\u0045":true}', retired: "ECHO_VOICE_SAY_NAME" },
+    { label: "escaped catchphrase property", config: '{"ECHO_VOICE_CATCHPHRAS\\u0045":"Hello"}', retired: "ECHO_VOICE_CATCHPHRASE" },
+    {
+      label: "both properties with multiline whitespace",
+      config: '{\n  "ECHO_VOICE_SAY_NAME"\n  : true,\r\n  "ECHO_VOICE_CATCHPHRASE"\t:\t"Hello"\n}',
+      retired: "ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME",
+    },
+    { label: "say-name string value", config: '{"ECHO_DEFAULT_TITLE":"ECHO_VOICE_SAY_NAME"}', retired: "" },
+    { label: "catchphrase string value", config: '{"ECHO_DEFAULT_TITLE":"ECHO_VOICE_CATCHPHRASE"}', retired: "" },
+    {
+      label: "quoted property text in a value",
+      config: JSON.stringify({ ECHO_DEFAULT_TITLE: '{"ECHO_VOICE_SAY_NAME":true,"ECHO_VOICE_CATCHPHRASE":true}' }),
+      retired: "",
+    },
+    {
+      label: "similar property names",
+      config: JSON.stringify({ ECHO_VOICE_SAY_NAME_OLD: true, ECHO_VOICE_CATCHPHRASE_OLD: true }),
+      retired: "",
+    },
+    {
+      label: "retired names inside other property names",
+      config: JSON.stringify({ 'other "ECHO_VOICE_SAY_NAME': true, 'other "ECHO_VOICE_CATCHPHRASE': true }),
+      retired: "",
+    },
+    {
+      label: "overridden config path",
+      config: '{"ECHO_VOICE_SAY_NAME":false,"ECHO_VOICE_CATCHPHRASE":""}',
+      retired: "ECHO_VOICE_CATCHPHRASE, ECHO_VOICE_SAY_NAME",
+    },
+    { label: "no retired properties", config: '{"ECHO_DEFAULT_TITLE":"Kept"}', retired: "" },
+  ])("doctor reports only retired properties without failing: $label", async ({ label, config, retired }) => {
+    const root = mkdtempSync(join(tmpdir(), "echo-doctor-retired-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const payload = join(home, "Library", "Application Support", "echo", "payload", "current");
+      const launchagents = join(home, "Library", "LaunchAgents");
+      const configPath = label === "overridden config path"
+        ? join(root, "operator-config.json")
+        : join(home, ".config", "echo", "config.json");
+      mkdirSync(join(home, ".config", "echo"), { recursive: true });
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(join(payload, "core"), { recursive: true });
+      mkdirSync(launchagents, { recursive: true });
+      writeFileSync(join(payload, "core", "server.ts"), "");
+      writeFileSync(join(payload, "manifest.json"), JSON.stringify({ version: "0.12.0" }));
+      writeFileSync(join(launchagents, "com.echo.plist"), `<plist version="1.0"><dict>
+<key>ProgramArguments</key><array><string>${join(payload, "core", "server.ts")}</string></array>
+<key>WorkingDirectory</key>
+<string>${payload}</string>
+</dict></plist>\n`);
+      writeFileSync(configPath, config);
+      writeExecutable(join(bin, "uname"), '#!/bin/bash\ncase "$1" in -s) echo Darwin ;; -r) echo 26.0 ;; esac\n');
+      writeExecutable(join(bin, "launchctl"), '#!/bin/bash\ncase "$1" in list) echo "111 0 com.echo" ;; *) exit 1 ;; esac\n');
+      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\n');
+
+      const r = await runCli(["doctor"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin`,
+        ECHO_CONVERSE_SOX_BIN: "/usr/bin/true",
+        ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
+        ...(label === "overridden config path" ? { ECHO_CONFIG_FILE: configPath } : {}),
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("Result: READY");
+      if (retired) {
+        expect(r.stdout).toContain(`retired key(s) ignored: ${retired}`);
+        expect(r.stdout).toMatch(/!\s+config/);
+        expect(r.stdout).toContain(`Harmless. Remove them from ${configPath}.`);
+      } else {
+        expect(r.stdout).not.toContain("retired key(s)");
+        expect(r.stdout).not.toContain("Harmless");
+      }
+      expect(r.stdout).not.toContain("not an Echo configuration key");
+      expect(readFileSync(configPath, "utf8")).toBe(config);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // The port is occupied and /health is silent. These three launchd states are
   // indistinguishable from outside - a foreign owner on :3246 is what stops our
   // service binding, so launchd respawns it and reports no stable PID. Doctor
@@ -200,6 +283,74 @@ describe("echo doctor", () => {
       }
     });
   }
+
+  test.each([
+    { state: "Echo owns the listener", service: "4242 0 com.echo", listeners: "4242", ready: true },
+    { state: "Echo owns both address families", service: "4242 0 com.echo", listeners: "4242\n4242", ready: true },
+    { state: "Echo is crash-looping", service: "- 1 com.echo", listeners: "4242", ready: false },
+    { state: "Echo is not loaded", service: "", listeners: "4242", ready: false },
+    { state: "another process owns the listener", service: "111 0 com.echo", listeners: "4242", ready: false },
+    { state: "Echo shares the port with another listener", service: "4242 0 com.echo", listeners: "4242\n5151", ready: false },
+    { state: "listener ownership is unavailable", service: "4242 0 com.echo", listeners: "", ready: false },
+    { state: "a similarly named service owns the listener", service: "4242 0 com.echo.other", listeners: "4242", ready: false },
+  ])("rate-limited health verifies ownership when $state", async ({ service, listeners, ready }) => {
+    const root = mkdtempSync(join(process.cwd(), ".echo-doctor-rate-limit-"));
+    const requests: string[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return Response.json({ status: "error", message: "Rate limit exceeded" }, { status: 429 });
+      },
+    });
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      const payload = join(home, "Library/Application Support/echo/payload/current");
+      const plist = join(home, "Library/LaunchAgents/com.echo.plist");
+      const config = join(home, ".config/echo/config.json");
+      for (const dir of [bin, join(payload, "core"), dirname(plist), dirname(config)]) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(join(payload, "core/server.ts"), "");
+      writeFileSync(join(payload, "manifest.json"), JSON.stringify({ version: "test" }));
+      writeFileSync(plist, `<plist version="1.0"><dict>
+<key>ProgramArguments</key><array><string>${join(payload, "core/server.ts")}</string></array>
+<key>WorkingDirectory</key>
+<string>${payload}</string>
+</dict></plist>\n`);
+      writeFileSync(config, JSON.stringify({ PORT: endpoint.port }));
+      writeExecutable(join(bin, "uname"), '#!/bin/bash\necho Darwin\n');
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\nprintf '%s\\n' '${service}'\n`);
+      writeExecutable(join(bin, "lsof"), `#!/bin/bash\nprintf '%s\\n' '${listeners}'\n`);
+
+      const r = await runCli(["doctor"], {
+        HOME: home,
+        PATH: `${bin}:${bunDir}:/bin:/usr/bin`,
+        ECHO_CONVERSE_SOX_BIN: "/usr/bin/true",
+        ECHO_CONVERSE_REC_BIN: "/usr/bin/true",
+      });
+      expect(requests).toEqual(["GET /health"]);
+      expect(r.stdout).toContain("plist + host adapter paths current");
+      expect(r.stdout).not.toContain("configured TTS providers healthy");
+      expect(r.stdout).not.toContain("is occupied but not answering Echo's /health");
+      if (ready) {
+        expect(r.stdout).toContain("service healthy, retry in a minute");
+        expect(r.stdout).toContain("Result: READY");
+        expect(r.exitCode).toBe(0);
+      } else {
+        expect(r.stdout).toContain("HTTP 429");
+        expect(r.stdout).toContain("Echo health unverified");
+        expect(r.stdout).not.toContain("service healthy");
+        expect(r.stdout).toContain("Result: DEGRADED");
+        expect(r.exitCode).toBe(1);
+      }
+    } finally {
+      endpoint.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   test("flags an enabled-but-unhealthy provider whatever order /health serialized the keys in", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-doctor-providers-"));

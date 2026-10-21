@@ -8,7 +8,7 @@ import {
 // Echo's extension surface. New harnesses and new features plug in through the
 // seams already proven in-tree: Pi/omp in-process registerCommand, Claude's thin
 // plugin (hooks + slash commands), Jcode/Grok/Codex lifecycle hooks, OpenCode's
-// plugin event hook plus mute and mode commands, MCP's stdio server, and doctor/env via echo-env.ts.
+// plugin event hook plus mute and mode commands, Empryo's lifecycle hooks, MCP's stdio server, and doctor/env via echo-env.ts.
 //
 // This is not a second plugin loader and it is not imported by core/. The daemon
 // stays host-neutral. Install still delegates to each adapter's own reconciler.
@@ -25,6 +25,7 @@ export const HARNESS_IDS = [
   "pi",
   "omp",
   "opencode",
+  "empryo",
 ] as const;
 
 export type HarnessId = (typeof HARNESS_IDS)[number];
@@ -158,6 +159,16 @@ export const HARNESSES: readonly HarnessManifest[] = [
     features: ["notify", "mute", "mode", "persona", "greeting"],
     mutePath: "adapters/opencode/commands/echo-mute.md",
     modePath: "adapters/opencode/commands/echo-mode.md",
+  },
+  {
+    id: "empryo",
+    displayName: "Empryo",
+    packageDir: "adapters/empryo",
+    kind: "hooks",
+    entry: "adapters/empryo/hook.ts",
+    requiredCli: "empryo",
+    reconcile: [{ script: "adapters/empryo/reconcile.ts", label: "Adapter registration" }],
+    features: ["notify", "greeting"],
   },
 ];
 

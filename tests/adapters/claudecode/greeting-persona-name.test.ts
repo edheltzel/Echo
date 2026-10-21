@@ -35,7 +35,7 @@ async function runGreeting(
     },
   });
   const configPath = join(home, "config.json");
-  writeFileSync(configPath, JSON.stringify({ ECHO_DAEMON_URL: `http://127.0.0.1:${receiver.port}`, ...config }));
+  writeFileSync(configPath, JSON.stringify({ ECHO_AUTOMATION_ENV: "", ECHO_DAEMON_URL: `http://127.0.0.1:${receiver.port}`, ...config }));
   try {
     const child = Bun.spawn([process.execPath, "adapters/claudecode/hooks/VoiceGreeting.hook.ts"], {
       env: {
@@ -86,6 +86,10 @@ describe("Claude Code startup speech", () => {
 
   test("a task worker does not announce the parent harness", async () => {
     expect(await runGreeting("startup", {}, { CLAUDE_CODE_AGENT_TASK_ID: "child-task" })).toEqual([]);
+  });
+
+  test("an automation marker exits cleanly and posts nothing", async () => {
+    expect(await runGreeting("startup", { ECHO_AUTOMATION_ENV: "NO_MISTAKES_GATE" }, { NO_MISTAKES_GATE: "1" })).toEqual([]);
   });
 
   test("completion suppression matches only the complete startup announcement", () => {

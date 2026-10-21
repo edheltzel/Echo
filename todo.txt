@@ -1,34 +1,30 @@
-2026-10-09 Promote dev → master. master is still abdac2d (Sep 28) and all Oct 7–8 work is dev-only. Owner: Ed. ⚠ a promotion may be staged locally in GitButler +echo @outstanding
-2026-10-09 OpenCode adapter: runtime persona & voice. Needs Ed's decision: close by hand or switch to env-wins precedence +echo @outstanding issue:129
-2026-10-09 ATL-633 Daemon-owned notice (no name yet). Blocked until Ed names the mechanism (not AppleScript, terminal, or Herdr); then spec + issue. Keep separate from #95 +echo @outstanding atl:633
-2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet +echo @outstanding
-2026-10-09 OpenCode HIL announce (permission.asked). Regroup follow-up, no issue filed. Owner: Atlas +echo @outstanding
-2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
-2026-10-09 Detect Herdr: stay as today if missing, talk to Herdr if present. Not started +echo @outstanding issue:191
-2026-10-09 Route Echo notifications through Herdr with pane-aware context and focus. Not started; separate from ATL-633 +echo @outstanding issue:95
-2026-10-09 herdr socket api for agent types. Not started; assigned Atlas-Key +echo @outstanding issue:96
-2026-10-09 Jev seats: interrupt/duck, mute gate, wake vs ignore. Not started +echo @outstanding issue:194
-2026-10-09 Auto detect meetings. Not started; assigned Atlas-Key +echo @outstanding issue:126
-2026-10-09 Zero-touch UX: install/update without bash scripts or git. Not started +echo @outstanding issue:28
-2026-10-09 Publish NPM package for one-command install. Not started +echo @outstanding issue:8
+(B) 2026-10-09 ATL-633 Daemon-owned notice (no name yet). @waiting on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue +echo atl:633
+(C) 2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet +echo @outstanding due:2026-12-29
+(B) 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
+(B) 2026-10-09 Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) +echo @waiting issue:126
+(C) 2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) +echo issue:28 dep:echo-npm-8
+(A) 2026-10-09 Publish NPM package for one-command install. @waiting on Ed: package name, Bun required or bootstrapped, publish flow +echo issue:8 id:echo-npm-8
 2026-10-09 Roadmap: first-class speech-to-text (STT). Backlogged idea +echo @outstanding issue:179
 2026-10-09 Roadmap/explore: VoiceBar-class macOS surface. Backlogged idea +echo @outstanding issue:180
 2026-10-09 Roadmap/explore: published documentation site. Backlogged idea +echo @outstanding issue:181
 2026-10-09 Roadmap/explore: VoiceStudio as a local edge-tts replacement. Backlogged idea, needs-triage +echo @outstanding issue:195
 2026-10-09 ATL-632 Grok as a speech provider (xAI TTS). On Oct 4 the xAI key "Echo" went into Echo's env file on BigMac, but there's no xAI/Grok TTS code on any GitHub branch and no issue. Check BigMac for local or uncommitted work +echo @check atl:632
-2026-10-09 Publish playback state as a cross-process signal file. Branch cursor/fm-456-playback-state-6c32 (tip 1733444, Sep 10) is unmerged and the factory says awaiting-redteam, but the Oct 7 regroup says not started +echo @check issue:106
-2026-10-09 8 baseline test failures on master. Reported in the #213 body (same 8 fail on clean master); no issue. Confirm they reproduce and who owns them +echo @check
-2026-10-09 Regroup doc branch docs/regroup-2026-10-07. Never merged to dev; check whether it was meant to land +echo @check
-2026-10-09 Installed daemon branch on BigMac. Sounds-only mode and /mode exist only on dev; confirm what BigMac runs before building the Tern button +echo @check
-2026-10-09 fix: keep test daemons' banners off the operator's screen. Open, mergeable (clean), adds ECHO_OSASCRIPT_BIN. Waiting on Ed's merge (or Atlas under the #212 low-risk rule) +echo @inprogress pr:213
-2026-10-09 Add OpenCode host adapter. The adapter ships on dev (#198/#199/#201/#204). Left: headless opencode run suppression (needs a live session) and the greeting-default decision (Ed) +echo @inprogress issue:17
+2026-10-09 6 local test failures on BigMac (bun test 2026-10-14): Claude plugin validate, runEchoMute, omp HIL announce, 2x Pi lifecycle, 1 integration override. Compare against clean dev; no issue +echo @check
+2026-10-09 Add OpenCode host adapter. Shipped (#198/#204); greeting on by default (#219). Left: headless opencode run greeting check (needs a live session) +echo @inprogress issue:17
 2026-10-09 [Epic] Make the voice system agent-agnostic. OpenCode is the last host; closes when #17 closes +echo @inprogress issue:30
-2026-10-09 FM-352 / FM-356 Pi extension finish + RedTeam review. Still "underway" in factory.db, but cursor/fm-352-pi-install-prove-72b2 is an ancestor of dev +echo @close
-2026-10-09 FM-353 Thin Claude Code plugin. Still "underway" in factory.db; merged as PR #176 +echo @close
-2026-10-09 FM-365 Echo extension API / surface. Still "underway" in factory.db; merged as #177 +echo @close
-2026-10-09 Merged/duplicate remote branches. feat/notification-sounds, feat/install-onboarding-12, fix/test-preload-overrides, fix/test-xdg-leak (duplicate), docs/low-risk-merge-rule, feat/preview-voices-help-13, fix/registrar-dedupe-63, chore/resync-dev-with-master, chore/restore-master-ancestry, feat/opencode-adapter, fix/opencode-prune-config-plugin(-dev), cursor/fm-352, fm-365. Prune only after Ed confirms +echo @close
-2026-10-15 Promote dev to master for #226-#228 (merge commit), validated with No Mistakes --yes +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-15 Add a no-mistakes axi --yes workflow line to AGENTS.md +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
-2026-10-15 Fix cli/echo --help backticks being evaluated by the shell note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md +echo
+2026-10-09 Prune merged/duplicate remote branches (feat/notification-sounds, feat/install-onboarding-12, fix/test-preload-overrides, fix/test-xdg-leak, docs/low-risk-merge-rule, feat/preview-voices-help-13, fix/registrar-dedupe-63, chore/resync-dev-with-master, chore/restore-master-ancestry, feat/opencode-adapter, fix/opencode-prune-config-plugin(-dev), docs/regroup-2026-10-07, cursor/fm-352, fm-365). @waiting on Ed to confirm +echo
+x 2026-10-19 2026-10-15 Add a no-mistakes axi --yes workflow line to AGENTS.md +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
+x 2026-10-19 2026-10-15 Fix cli/echo doctor reporting a /health 429 as a foreign port owner +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
+x 2026-10-19 2026-10-15 Fix cli/echo --help backticks being evaluated by the shell +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md pr:https://github.com/edheltzel/Echo/pull/233
 2026-10-15 Trial Pocket TTS through the Kokoro endpoint on an isolated daemon +echo note:docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md
+2026-10-17 Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check +echo @waiting pr:https://github.com/edheltzel/Echo/pull/230
+x 2026-10-19 2026-10-19 Merge #235 and #236, then cli/echo update and bun run restart +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md pr:https://github.com/edheltzel/Echo/pull/235 pr:https://github.com/edheltzel/Echo/pull/236
+2026-10-19 Decide whether the /health limiter should stop trusting X-Forwarded-For and whether the daemon should bind localhost only +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
+2026-10-19 Decide whether to silence plain claude -p sessions outside automation +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
+(C) 2026-10-19 ATL-642 Custom notification sounds. Config for custom audio files; play when a notification fires. Captain-hold until Echo is released. +echo atl:642 @waiting
+x 2026-10-19 2026-10-19 Verify an automation run stays silent on the live daemon. NO_MISTAKES_GATE=1 claude -p ran with no new echo.log delivery; omp -p is already silent in print mode +echo note:docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md
+x 2026-10-19 2026-10-19 Research Echo support for Empryo sessions (https://empryo.com/docs/). Possible through adapters/claudecode: Empryo already runs Echo's ~/.claude/settings.json hooks, but Stop reads Empryo's event log with the Claude transcript parser (empty result) and SessionStart sends source desktop/tui/headless, which the greeting skips. A separate adapters/empryo would double-fire +echo report:.scratch/empryo-support/research.md
+x 2026-10-19 2026-10-19 Add the Empryo adapter (adapters/empryo, --adapter empryo, source empryo): greeting on desktop/tui, completion from the session event log, approval/question/plan-review announcements, headless silent, child tabs behind ECHO_VOICE_SUPPRESS_CHILD_TABS; Claude Code and Codex hooks stand down under Empryo +echo note:.scratch/empryo-support/research.md
+x 2026-10-19 2026-10-19 Document EMPRYO_HOOK_ENV=NO_MISTAKES_GATE so automation silence reaches Echo hooks under Empryo +echo note:.scratch/empryo-support/research.md
+(C) 2026-10-20 Isolate HOME in pi/omp adapter tests: pi-adapter, pi-project-persona and omp-hil read the operator's real ~/.pi and ~/.omp daidentity and fail on a machine with a global persona +echo
+(A) 2026-10-20 Re-publish fix/global-voice-fallback: PR #244 targeted master and its review commit stripped dev work. Closed #244, reset the remote branch to a5e1e6a, fixed the /echo-voice wording. Republishing against master with --base-branch dev so the dev work stays. +echo pr:https://github.com/edheltzel/Echo/pull/244

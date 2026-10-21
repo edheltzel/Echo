@@ -56,7 +56,8 @@ cli/echo doctor
 
 The canonical "did my install work" check. It prints one row per check - platform, `bun`,
 converse dependencies, staged payload version, LaunchAgent, service, health, providers, and
-adapter registrations - and a healthy run ends with:
+adapter registrations - plus a config row when retired properties are present
+([retirement and cleanup rules](configuration.md#invalid-keys)). A healthy run ends with:
 
 ```
 Result: READY
@@ -65,6 +66,12 @@ Result: READY
 A failing row prints its own recovery command indented underneath it, and the run ends with
 `Result: DEGRADED - fix the ✗ rows above, then rerun: echo doctor`, exiting non-zero. The
 `payload` row reports which daemon payload is staged.
+
+If `/health` returns HTTP `429`, doctor reports a healthy, rate-limited service only when
+`launchctl` lists a running PID for `com.echo` and `lsof` identifies that PID as the port's
+only listener. This warning allows `READY` if the other checks pass; retry in a minute.
+Without that ownership evidence, doctor reports `Echo health unverified` and `DEGRADED`.
+Provider health is not checked on a rate-limited response.
 
 ## Start
 
@@ -330,8 +337,9 @@ To pick up daemon-source or config changes, re-stage:
 ```bash
 cli/echo update                          # re-stage the payload from this checkout + reload
 cli/echo install --adapter claudecode    # first install, or to (re)wire a host adapter
-# the scripts underneath: bash scripts/install.sh --adapter <none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode>
 ```
+
+Adapter choices and setup: [How to install Echo](install-human.md).
 
 - Daemon source or config change (`core/`, `shared/`, `core/voices.json`) → `cli/echo update`.
 - Adapter-only change (`adapters/`, registration behavior) → rerun the installer with your
@@ -363,7 +371,7 @@ once with any `--adapter` value - it re-reconciles every installed adapter regis
 re-stages the payload from the new location):
 
 ```bash
-bash scripts/install.sh --adapter <none|claudecode|jcode|grok|mcp|pi|omp>
+cli/echo update
 ```
 
 To audit without changing anything (`cli/echo doctor` wraps this and explains each row):
@@ -402,9 +410,12 @@ Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `e
 symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
 `turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
 `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
-omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. There is no deregistration
-tool; remove those entries by hand before deleting the repo directory, or hosts will keep
-pointing at dead paths.
+omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. So do the
+[Codex hooks and skills](../adapters/codex/README.md#ownership),
+[OpenCode plugin and command links](../adapters/opencode/README.md), and
+[Empryo hook registrations](../adapters/empryo/README.md). There is no deregistration tool;
+remove those entries by hand before deleting the repo directory, or hosts will keep pointing
+at dead paths.
 
 ## Legacy services
 

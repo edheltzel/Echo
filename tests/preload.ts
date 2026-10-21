@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "echo-test-config-"));
 process.env.ECHO_CONFIG_FILE = join(scratch, "config.json");
+process.env.ECHO_AUTOMATION_ENV = "";
 // The output mode is read on every dequeue; never let the operator's real
 // mode.json switch in-process daemon tests to sounds-only.
 process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");

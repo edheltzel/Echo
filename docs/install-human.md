@@ -21,6 +21,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` and `/echo-mode` are skills.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 - **OpenCode adapter** - OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands.
+- **Empryo adapter** - Empryo lifecycle hooks speak the session greeting, turn completions, and approval, question, and plan-review prompts.
 
 ## Prerequisites
 
@@ -143,6 +144,23 @@ This installs the core server and reconciles Echo-owned `SessionStart` and `Stop
 project's `.codex/hooks.json` when it exists, or in `~/.codex/hooks.json` otherwise. It requires
 the `codex` CLI on your PATH.
 
+## Add the Empryo adapter
+
+```bash
+cli/echo install --adapter empryo
+```
+
+The equivalent underlying command is:
+
+```bash
+bash scripts/install.sh --adapter empryo
+```
+
+This installs the core server and reconciles Echo-owned `SessionStart`, `Stop`, and
+`Notification` hooks in `~/.empryo/hooks.json`. It requires the `empryo` CLI on your PATH.
+Empryo also runs Claude Code and Codex hook files; those Echo hooks stay quiet under Empryo, so
+nothing speaks twice. See [`adapters/empryo/README.md`](../adapters/empryo/README.md).
+
 ## Add the voice-ask tool (Claude Code)
 
 ```bash
@@ -243,11 +261,8 @@ Inside the repo, in your host (Claude Code, Pi, or omp):
 ```
 
 This auditions edge-tts voices and merge-writes a `daidentity` block into that project's own
-config, preserving every other setting; it takes effect on the next session there. For a global
-Pi/omp default rather than one repo's, use `cli/echo voice <name> <edge-tts-voice-id>`. Claude Code
-ignores those persona values; configure its global persona and voice in
-`~/.claude/settings.json`. Both paths are covered in
-[`voices.md`](voices.md#per-project-persona--voice-local-override).
+config, preserving every other setting; it takes effect on the next session there.
+For the global fallback, use [`cli/echo voice`](voices.md#which-voice-a-harness-speaks).
 
 ## Uninstall
 

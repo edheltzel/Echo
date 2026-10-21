@@ -436,8 +436,8 @@ export function createConverseServer(options: ConverseServerOptions): ConverseSe
       status: "healthy",
       capability: "echo-converse",
       port: handle.port,
-      // Not probed: core's /health shares its /notify rate-limit bucket, so a
-      // status check must not spend the operator's notification budget.
+      // Not probed: core GET /health runs provider health checks. Coordinator
+      // status must not wait on that.
       core: { base_url: config.coreBaseUrl },
       booking: { held: booking !== null, held_by: heldByView(booking) },
       turns: { active: active.size, ...counts },

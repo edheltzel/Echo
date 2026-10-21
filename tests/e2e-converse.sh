@@ -185,7 +185,7 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in {1..40}; do
-  curl -fsS -H 'X-Forwarded-For: e2e-converse-probe' "http://localhost:${PORT}/health" >/dev/null 2>&1 && break
+  curl -fsS "http://localhost:${PORT}/health" >/dev/null 2>&1 && break
   sleep 0.25
 done
 for _ in {1..40}; do
@@ -196,7 +196,7 @@ done
 # ---------------------------------------------------------------------------
 # Isolation proof, run BEFORE anything is sent, audible or not.
 # ---------------------------------------------------------------------------
-core_health="$(curl -fsS -H 'X-Forwarded-For: e2e-converse-probe' "http://localhost:${PORT}/health")" || fail "test core never came up (see $CORE_LOG)"
+core_health="$(curl -fsS "http://localhost:${PORT}/health")" || fail "test core never came up (see $CORE_LOG)"
 converse_health="$(curl -fsS "http://localhost:${CONVERSE_PORT}/health")" || fail "test coordinator never came up (see $CONVERSE_LOG)"
 
 reported_core_port="$(echo "$core_health" | bun -e 'console.log(JSON.parse(await Bun.stdin.text()).port)')"
@@ -314,10 +314,9 @@ bun -e '
   const responses = [first, second];
 
   // Exactly one ask may hold the booking. The winner may still fail later in the
-  // turn: by this point the script has spent several requests against core, and
-  // core rate-limits one client to ten a minute across /notify and /health. That
-  // is a real property of the capability (see docs/converse.md), so the winner
-  // may come back 200 or 503 - what must never happen is two winners.
+  // turn: core still rate-limits /notify and completion polls to ten a minute.
+  // A loopback GET /health does not spend that budget. The winner may come back
+  // 200 or 503; what must never happen is two winners.
   const refused = responses.filter((response) => response.status === 409);
   const admitted = responses.filter((response) => response.status !== 409);
   if (refused.length !== 1 || admitted.length !== 1) {

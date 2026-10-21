@@ -19,9 +19,12 @@
  * pipeline end-to-end. Registered into settings.json by restore-hooks.ts.
  */
 
+import { isAutomationSession, isEmpryoHookProcess } from '@echo/shared/echo-env.ts';
 import { readHookInput, parseTranscriptFromInput } from './lib/hook-io';
 import { handleVoice } from './handlers/VoiceNotification';
 import { extractVoiceCompletion } from './lib/TranscriptParser';
+
+if (isAutomationSession() || isEmpryoHookProcess()) process.exit(0);
 
 /**
  * Extract a speakable summary from response text when no 🗣️ line exists.

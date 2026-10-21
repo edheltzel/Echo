@@ -44,7 +44,8 @@ daidentity:
       voiceId: en-GB-LibbyNeural
 ```
 
-Resolved at `session_start` from `ctx.cwd`, per key: project → global → env config.
+Resolved at `session_start` from `ctx.cwd` using the shared
+[voice precedence](../../docs/voices.md#which-voice-a-harness-speaks).
 `voiceId` is a real edge-tts voice name (`bun scripts/preview-voices.ts --list`) - the
 daemon speaks it literally, no `core/voices.json` edit needed. Takes effect on the next
 omp session started in that repo.

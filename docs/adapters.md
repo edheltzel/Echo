@@ -97,7 +97,7 @@ calls each adapter's own reconciler, and the daemon still never imports a host.
 | Kind | As-built hosts | How it plugs in |
 | --- | --- | --- |
 | `extension` | Pi, omp | In-process host `registerCommand` / `on` / `registerTool`. Prefer `registerEchoMute`, `registerEchoMode`, `registerEchoVoice`, `registerEchoAskTool`. |
-| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
+| `hooks` | Claude Code, Jcode, Grok, Codex, OpenCode, Empryo | Lifecycle interceptors (OpenCode: an in-process plugin `event` hook) plus optional slash-command / skill files. Claude stays a thin plugin. |
 | `mcp` | MCP | Stdio server. Claude Code's only route to `echo_ask`. |
 
 
@@ -105,7 +105,7 @@ Feature register hooks (reuse these; do not add a second factory):
 
 | Feature | Register hook | Notes |
 | --- | --- | --- |
-| notify | `sendNotification` (`@echo/shared/notify-client.ts`) | POST `/notify`. Config from `loadEchoEnvironment`. |
+| notify | `sendNotification` / `sendNotificationPayload` (`@echo/shared/notify-client.ts`) | POST `/notify`. Both apply the [automation policy](configuration.md#schema-reference) before HTTP or native visual delivery. A skip closes any supplied terminal writer and returns `{ ok: true, status: 0, body: "skipped", skipped: true }`; callers must treat it as success. Claude hooks exit 0 before they POST. |
 | mute | `registerEchoMute` (command hosts) or a file that runs `cli/echo mute` | One child_process path. Never POST `/mute` from a harness. |
 | mode | `registerEchoMode` (command hosts) or a file that runs `cli/echo mode` | Same runner as mute. Never POST `/mode` from a harness. |
 | persona | `registerEchoVoice` or Claude's `/echo-voice` markdown | Writes host-native `daidentity`. |
@@ -175,12 +175,9 @@ bash scripts/install.sh --check     # or: cli/echo doctor
 
 ## Native terminal visuals
 
-Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery. Before the
-HTTP POST, it tries Herdr's `notification.show` when a documented Herdr context is present,
-then the adapter-owned controlling TTY. The TTY route is deliberately conservative: it never
-adopts arbitrary `stdout`/`stderr`, never performs focus-stealing actions, and requires tmux
-`allow-passthrough` to be read as `on` or `all` before wrapping the OSC sequence. SSH/headless
-contexts and unsupported terminals fall through to the daemon's normal AppleScript banner.
+Pi, omp, Claude Code, Jcode, and Grok adapters use the shared notify client for visual delivery.
+Its routing order, automation-policy check, and TTY safety constraints are documented in
+[Native terminal visual delivery](http-api.md#native-terminal-visual-delivery).
 
 Herdr 0.9.3 (socket protocol 22) names the agent in a pane via `agent` and `display_agent` on
 `AgentInfo` and `PaneInfo` (`agent.get`, `agent.list`, `pane.current`). `agent_session` carries
@@ -232,9 +229,9 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
 - **SessionStart** says `Grok, ready.` for new sessions (`source` of `new` / `startup` /
   `create`) unless `ECHO_VOICE_GREET_ON_START=false`. Captured against grok 1.0.0 where
   `source` is `"new"`.
-- **Voice:** `voice_id` defaults to `"grok"` (`ECHO_VOICE_ID` overrides), resolved by the daemon
-  through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
-  payload, so a fresh `agents` entry needs a re-stage before it resolves - see
+- **Voice:** follows the shared [voice precedence](voices.md#which-voice-a-harness-speaks).
+  The default mapping is `agents.grok` in `core/voices.json`. That file is read once at startup
+  from the staged payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
   and `~/.grok/skills/echo-mode` (bash `cli/echo mute` / `cli/echo mode`) via `adapters/grok/reconcile.ts`. Sibling files (for
@@ -299,16 +296,15 @@ older runtimes) telling the model to end each response with `🗣️ <Name>: <8-
 summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line - so
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
-- **Persona name** comes from config: `personaName` ← `ECHO_VOICE_PERSONA_NAME` (default
-  `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
-  `~/.config/echo/config.json` is the durable local configuration surface and wins over
-  the one-release environment fallback; an existing host process must be relaunched after edits.
+- **Persona name and voice** follow the shared
+  [voice precedence](voices.md#which-voice-a-harness-speaks). Echo settings use the
+  [configuration precedence](configuration.md#precedence-and-secrets); an existing host
+  process must be relaunched after edits.
 - **Startup line:** Pi says `Pie, ready.` only for process `startup`; new, resume, fork, and
   reload stay silent. omp says `Oh em pee, ready.`; resume, attach, compact, reload, and known child agents stay silent.
   Set `ECHO_VOICE_GREET_ON_START` to `false` to disable it.
-- **Distinct voice (issue #76, retuned in #81):** `voiceId` defaults to `"pi"`
-  (`ECHO_VOICE_ID` in config.json overrides), which the daemon resolves via `agents.pi` in `core/voices.json`
-  → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
+- **Distinct voice (issue #76, retuned in #81):** Pi and omp share the default `agents.pi`
+  mapping in [`core/voices.json`](../core/voices.json). Unlike
   the injection feature above, #76 also touched `core/voices.json` data - a running daemon
   loads voices.json once at startup, from its staged payload, so run `cli/echo update` to
   pick up the `pi` entry; until then the adapter's `voice_id: "pi"` is unresolvable and falls
@@ -328,13 +324,15 @@ The full design rationale is catalogued in
 
 ## Needs-input announce (#107)
 
-Claude Code, Pi, and omp detect a wait in the adapter and POST ordinary `/notify`.
-Wording and one-announce-per-request live in `shared/hil.ts`. Detection:
+Adapters detect a wait and POST ordinary `/notify`.
+Wording and one-announce-per-request live in `shared/hil.ts`. Claude Code, Pi, and omp detection:
 
 | Host | Question | Approval | Attention |
 | --- | --- | --- | --- |
 | Claude Code | `PermissionRequest` `AskUserQuestion`, plus transcript `awaitingInput` on `permission_prompt` | `PermissionRequest` (other tools) | `Notification` `idle_prompt` / `agent_needs_input` |
 | Pi / omp | `ui_prompt_start` select/input/editor | `tool_approval_requested` (omp; Pi when the host emits it) | `ui_prompt_start` custom |
+
+Empryo's notification event mapping is documented in its [adapter README](../adapters/empryo/README.md).
 
 Jcode, Grok, Codex, and OpenCode are unchanged.
 

@@ -38,7 +38,7 @@ bun install
 # (`install:echo`, not `install`, so it never shadows the package manager's install).
 
 # Stable human surface - cli/echo wraps the scripts + daemon API (never reimplements them)
-cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode] [--check]
+cli/echo install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
 cli/echo doctor              # canonical "did my install work" check; recovery cmd per row
 cli/echo status
 cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
@@ -46,7 +46,7 @@ cli/echo mute on|off|toggle|status | 30m|1h [tts|mic|all]
 cli/echo mode speech|sounds|status          # global: sounds plays request/done/generic sounds instead of speech
 /echo-mode [speech|sounds|status]           # same, from a session
 cli/echo replay [n]         # re-speak last n spoken lines (default 1, max 10)
-cli/echo voice <name> <edge-tts-voice-id>   # default pi/omp persona → ~/.config/echo/config.json
+cli/echo voice <name> <edge-tts-voice-id>   # fallback persona for any harness without its own → ~/.config/echo/config.json
 cli/echo update [--check]    # re-stage payload + reload
 cli/echo uninstall [--check]
 
@@ -87,6 +87,9 @@ The installer unloads and quarantines the legacy `com.pai.voice-server` and
 ## Development workflow
 This checkout is a GitButler workspace (`but`). Fetch target is `origin/dev` (`but pull`), so feature branches stack on `dev` and their PRs go into `dev`; `dev` → `master` is the promotion PR. Never push `master`. Use `but` for git writes.
 
+- Validate changes autonomously with `no-mistakes axi run --yes --intent "<full user intent and decisions>"`. If the 8m wait times out, rerun `no-mistakes axi run` to reattach, not as a failure. Follow `branch_sync.next_action`.
+- Stop only for protected-path or test-unvalidated-work refusals or a real ask-user product decision.
+- Run from a plain clone with the feature branch checked out because GitButler's workspace branch hides feature branches from the gate. Do not use it for dev-to-master promotion PRs: the pipeline rebases onto its base and breaks the required merge commit.
 
 ```bash
 git checkout dev
@@ -102,6 +105,7 @@ bun build adapters/jcode/hook.ts --target=bun --outdir /tmp/echo-jcode-build
 bun build adapters/grok/hook.ts --target=bun --outdir /tmp/echo-grok-build
 bun build adapters/codex/hook.ts --target=bun --outdir /tmp/echo-codex-build
 bun build adapters/opencode/plugin.ts adapters/opencode/reconcile.ts --target=bun --outdir /tmp/echo-opencode-build
+bun build adapters/empryo/hook.ts adapters/empryo/reconcile.ts --target=bun --outdir /tmp/echo-empryo-build
 ```
 
 **`bun install` is a prerequisite, not an optimization.** Adapters resolve `@echo/shared`
@@ -127,7 +131,7 @@ After changing `core/server.ts`, re-stage: `cli/echo update` (tail `~/Library/Lo
 A bare `launchctl kickstart -k "gui/$UID/com.echo"` reloads the *staged payload* and so
 restarts the old code; it only applies changes the daemon reads from outside the payload,
 such as the JSON config file. Use **Bun only** for TypeScript execution; package-script runners follow the Quick commands rules above. Run
-`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, and Codex builds before shipping; CI
+`bun test` + the smoke + both e2e scripts + the Pi, omp, MCP, Jcode, Grok, Codex, OpenCode, and Empryo builds before shipping; CI
 machine-runs the same set on every PR into `dev`/`master` (`.github/workflows/verify.yml`).
 
 ## Release & versioning
@@ -184,7 +188,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | Voice / pronunciation config | `core/voices.json`, `core/pronunciations.json` |
 | Shared notify client / wire types | `core/notify-client.ts`, `core/types.ts` |
 | Claude Code hooks, slash commands + reconcilers; mute and mode plugin | `adapters/claudecode/hooks/`, `adapters/claudecode/commands/`, `adapters/claudecode/{restore-hooks,reconcile-commands}.ts`, `adapters/claudecode/plugin/` |
-| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/` |
+| Host adapter packages (each declares its own dependencies) | `adapters/claudecode/`, `adapters/jcode/`, `adapters/grok/`, `adapters/codex/`, `adapters/pi/`, `adapters/omp/`, `adapters/mcp/`, `adapters/opencode/`, `adapters/empryo/` |
 | `@echo/converse` one-shot voice ask: mic-free coordinator (`:32468`) · booking lock · capture + local STT in the caller · the shared `echo_ask` tool | `converse/` (contract: `converse/AGENTS.md`) |
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload · harness catalog CLI | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`, `harness-catalog.ts`) |
@@ -210,7 +214,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
   `tests/core/architecture-invariants.test.ts` (source scan) plus
   `tests/core/import-purity.test.ts` (isolated import of the daemon proves nothing leaks).
 - Keep daemon and adapter configuration precedence in `shared/echo-env.ts`: `~/.config/echo/config.json` wins, followed for one release by deprecated process and legacy dotenv fallbacks. `PORT` is never read from dotenv, and `ELEVENLABS_API_KEY` is never accepted from config.json. Test-only environment injection remains plumbing, not user configuration; the complete classification is recorded in the configuration audit commit and summarized in `docs/configuration.md`.
-- Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`).
+- Do not make one bad key in `config.json` discard the file. Validation drops only the offending keys, keeps every other setting, and reports what it dropped through `GET /health` (`config.ignored_keys`). Keys Echo itself retired (`RETIRED_CONFIG_KEYS`) are ignored without a startup warning and reported separately as `config.retired_keys`; unknown keys still warn.
 - Do not let an adapter reach outside its own package root. `adapters/*` are workspace packages: every relative import stays inside the package, and shared behavior is imported by name from `@echo/shared` and declared in that adapter's `package.json`. A `../../shared/...` import is a boundary violation, not a shortcut.
 - Do not read the daemon's files from an adapter - no `core/voices.json`, no `core/` path of any kind. The daemon may run from another clone or another `VOICES_PATH`, so its own answer is the only correct one: `GET /voices` for configured persona keys. Adapters may import `shared/`, never `core/`.
 - Do not duplicate a `core/` invariant into `shared/` with a "keep in sync" note. `shared/` sits below both, so a rule both sides enforce (e.g. the edge-tts voice grammar in `shared/edge-voice.ts`) lives there once and `core/` imports it.
@@ -221,6 +225,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Do not let an always-on process open the microphone. macOS attributes a microphone request to the responsible process, and a background service gets none: a spike measured "Failed to fetch responsible file descriptor", no prompt surface and no grant, while the same capture spawned from the host terminal attributed to the terminal app and delivered audio. So `echo-converse`'s coordinator books and sequences, the calling host captures, and there is no LaunchAgent for it. Source-level regression checks in `tests/converse/architecture-invariants.test.ts` catch direct coordinator capture imports and subprocess calls; they are not runtime ancestry enforcement.
 - Do not let `echo_ask` reach capture without a live host-session consent grant. Pi and omp keep the grant only in their active extension instance; MCP keeps it only for its stdio process because the protocol publishes no narrower conversation lifecycle. Denials are sticky for that session, missing UI fails closed, and no consent state is persisted. Exact surfaces and expiry: `docs/converse.md`.
 - Do not speak a converse question while capture state is non-idle, and do not open the microphone before this request's playback completes and core grants its reservation. The coordinator generates the reservation id before `/notify`, releases it on every pre-grant exit, and rebases both core and booking leases at the capture grant. Core's guard would otherwise hold back the question, or a lost response could strand playback. The capture owner writes its OWN pid because core honors a non-idle state only while that pid is alive.
+- Do not deliver adapter notifications for agent processes matching the [automation policy](docs/configuration.md#schema-reference). The check is `isAutomationSession` in `shared/echo-env.ts`; `shared/notify-client.ts` and the Claude Code hooks call it.
 - Do not push directly to `master`; work on `dev` and open PRs from `dev` to `master`.
 
 ## Agent skills

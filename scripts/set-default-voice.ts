@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
-// `echo voice <name> <voice-id>` - set the default Echo persona (name + edge-tts
-// voice) in ~/.config/echo/config.json for pi and omp agent sessions. Claude Code
-// reads its persona from ~/.claude/settings.json instead. Interactive runs also
-// ask whether subagents may speak; the safe default is no.
+// Global fallback precedence: docs/voices.md#which-voice-a-harness-speaks.
+// Interactive runs also ask whether subagents may speak; the safe default is no.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -101,10 +99,11 @@ async function main(): Promise<void> {
   writeFileSync(tmp, next);
   renameSync(tmp, CONFIG_FILE);
 
-  console.log(`Set default persona "${name}" (${voice}) in ${CONFIG_FILE}.`);
+  console.log(`Set fallback persona "${name}" (${voice}) in ${CONFIG_FILE}.`);
   console.log(`Subagent voice: ${allowSubagents ? "enabled" : "disabled (default)"}.`);
-  console.log("Applies to pi and omp sessions. Claude Code reads its persona from");
-  console.log("~/.claude/settings.json - set it there or with the /echo-voice command.");
+  console.log("Every harness without its own daidentity voice uses it. Claude Code takes");
+  console.log("the voice, not the name. Claude Code, Pi, and omp set their own persona");
+  console.log("with /echo-voice; the other harnesses set it in their own config file.");
   console.log("Start a new agent session to hear it.");
 }
 

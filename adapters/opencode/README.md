@@ -40,8 +40,8 @@ The plugin `client` is the v1 SDK: calls take `{ path: { id } }` and return
 
 ## Persona and voice
 
-Default persona `OpenCode`, voice key `opencode` in `core/voices.json`. Override it with a
-`daidentity` block in any config file OpenCode reads (JSONC is accepted):
+Set the persona with a `daidentity` block in any config file OpenCode reads (JSONC is
+accepted). See [voice precedence and the global fallback](../../docs/voices.md#which-voice-a-harness-speaks).
 
 ```json
 {
@@ -56,8 +56,7 @@ Echo merges `daidentity` across the same files, in the same order, that OpenCode
 own config (objects per key, later files win): the three global files, `OPENCODE_CONFIG`,
 `opencode.json(c)` from the worktree root down to the session's folder, every `.opencode/`
 folder from that folder up plus `~/.opencode/`, then `OPENCODE_CONFIG_DIR`.
-`OPENCODE_DISABLE_PROJECT_CONFIG` drops the project and project `.opencode/` layers. The
-result wins over env and adapter defaults (`ECHO_VOICE_PERSONA_NAME`, `ECHO_VOICE_ID`).
+`OPENCODE_DISABLE_PROJECT_CONFIG` drops the project and project `.opencode/` layers.
 Other `daidentity` keys are left in the file and not read.
 
 ## Ownership

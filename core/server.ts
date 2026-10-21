@@ -1709,6 +1709,14 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+// Numeric peer from Bun.serve requestIP, not a hostname and not a header.
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  if (address === "::1") return true;
+  const v4 = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address;
+  return v4.startsWith("127.");
+}
+
 // =============================================================================
 // Play Queue — global playback serialization (#202 receipt + plan R7 no-overlap)
 // =============================================================================
@@ -1903,9 +1911,10 @@ const CAPTURE_RESERVATION_PATH = /^\/notify\/capture-reservations\/[^/]+\/(grant
 
 export const server = serve({
   port: PORT,
-  async fetch(req) {
+  async fetch(req, bunServer) {
     const url = new URL(req.url);
     const clientIp = req.headers.get('x-forwarded-for') || 'localhost';
+    const peer = bunServer.requestIP(req)?.address;
 
     const corsHeaders = {
       "Access-Control-Allow-Origin": "http://localhost",
@@ -1939,15 +1948,24 @@ export const server = serve({
     // POST /replay is operator control (re-hear during a notify flood) so it
     // has its own bucket, same reason as /mute. Abusive N is rejected in the
     // handler; this bucket only bounds how often a caller may ask.
-    const rateKey =
-      url.pathname === "/mute" ? `mute:${clientIp}`
+    // GET /health from loopback is not limited. cli status/doctor/mute status/
+    // mode status and install probes are read-only and were sharing the
+    // notification bucket (10/60s), so a short diagnostic burst 429'd /health
+    // and /notify together. Non-loopback GET /health has its own bucket: it
+    // still cannot spend /notify, and each call can spawn a provider probe so
+    // it stays capped. Exemption uses the socket address, not X-Forwarded-For.
+    const healthGet = req.method === "GET" && url.pathname === "/health";
+    const exemptHealth = healthGet && isLoopbackAddress(peer);
+    const rateKey = exemptHealth ? null
+      : healthGet ? `health:${clientIp}`
+      : url.pathname === "/mute" ? `mute:${clientIp}`
       : url.pathname === "/mode" ? `mode:${clientIp}`
       : url.pathname === "/replay" ? `replay:${clientIp}`
       : url.pathname === "/voices" ? `voices:${clientIp}`
       : COMPLETION_PATH.test(url.pathname) ? `notify-status:${clientIp}`
       : CAPTURE_RESERVATION_PATH.test(url.pathname) ? `capture-reservation:${clientIp}`
       : clientIp;
-    if (!checkRateLimit(rateKey)) {
+    if (rateKey !== null && !checkRateLimit(rateKey)) {
       return new Response(
         JSON.stringify({ status: "error", message: "Rate limit exceeded" }),
         {
@@ -2324,6 +2342,7 @@ export const server = serve({
             present: CONFIG_STATUS.present,
             valid: CONFIG_STATUS.errors.length === 0,
             ignored_keys: CONFIG_STATUS.ignored,
+            retired_keys: CONFIG_STATUS.retired,
             errors: CONFIG_STATUS.errors,
           },
           activeProvider: voicesConfig.defaultProvider,

@@ -135,20 +135,21 @@ not a review nit.
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |
 | MCP adapter | `adapters/mcp/` | An MCP server exposing `echo_ask` plus its registrar. Claude Code's only route to a two-way turn: its hooks are one-shot lifecycle interceptors with no channel for returning a transcript to the model. |
 | OpenCode adapter | `adapters/opencode/` | An OpenCode plugin (`plugin.ts`, owned `plugins/echo-voice.ts` symlink) that speaks on `session.idle`, opt-in greets on `session.created`, and stays silent for subagents; plus the `/echo-mute` and `/echo-mode` commands. |
+| Empryo adapter | `adapters/empryo/` | Lifecycle hooks, session-event-log reader, and registration reconciler. Host contract: [adapter README](adapters/empryo/README.md). |
 | `@echo/converse` voice ask | `converse/` | The one-shot voice ask. Coordinator side (`server.ts`, `booking.ts`, `playback.ts`) books the microphone, speaks through core and waits for that request's exact playback completion, and never opens the microphone. Caller side (`client.ts`, `capture.ts`, `capture-state.ts`, `host-tool.ts`) records in the host's own process tree, transcribes locally (`yap` Tier 1, `whisper-cli` Tier 2) and publishes the capture state. Local contract: `converse/AGENTS.md`. |
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute,replay}.sh` | Service install/lifecycle + runtime mute (#83) + last-N replay (FM-449); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: config.json port first, deprecated process PORT second, then 3246; also owns the shared occupied-port report. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
-| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
+| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the global fallback persona, used by every harness without its own daidentity voice. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/converse/`, `tests/scripts/`, `tests/shared/` | `bun test`, plus `tests/e2e-adapters.sh` and `tests/e2e-converse.sh`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
 
 A `POST /notify` runs through `core/server.ts` roughly in this order:
 
-1. **Rate-limit** - `checkRateLimit(clientIp)`: 10 requests per 60s per client IP, 429 on
-   breach. With no proxy header, all local callers share one `localhost` bucket; the
-   per-endpoint carve-outs are in [`docs/http-api.md`](docs/http-api.md).
+1. **Rate-limit** - `checkRateLimit` applies the notification bucket before validation.
+   Bucket keys, limits, and endpoint exemptions are defined in
+   [`docs/http-api.md`](docs/http-api.md).
 2. **Validate + sanitize** - `validateInput` (non-empty string, ≤500 chars) then
    `sanitizeForSpeech` (strips `<script`, `../`, shell metacharacters, markdown). Invalid
    input is a 4xx **before** anything is queued. Optional `speak_mode`
