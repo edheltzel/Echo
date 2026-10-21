@@ -186,7 +186,7 @@ function loadProjectDaidentity(projectDir?: string, home: string = HOME): Record
 
 /**
  * Get DA (Digital Assistant) identity, resolved with layered precedence
- * (project.local → project → global → defaults), per key.
+ * using the settings layers above and the voice-only Echo fallback.
  */
 export function getIdentity(
   projectDir?: string,

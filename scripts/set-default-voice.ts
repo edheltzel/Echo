@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
-// `echo voice <name> <voice-id>` - set the global fallback Echo persona (name +
-// edge-tts voice) in ~/.config/echo/config.json. Every harness uses it only when
-// its own daidentity sets nothing; Claude Code takes the voice, not the name.
+// Global fallback precedence: docs/voices.md#which-voice-a-harness-speaks.
 // Interactive runs also ask whether subagents may speak; the safe default is no.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

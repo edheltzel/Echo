@@ -38,5 +38,4 @@ the same shape as the other hosts:
 }
 ```
 
-With no `daidentity` voice, Empryo uses the global fallback `ECHO_VOICE_ID`, then the
-`empryo` key in `core/voices.json`.
+See [voice precedence and the global fallback](../../docs/voices.md#which-voice-a-harness-speaks).

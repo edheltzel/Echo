@@ -229,9 +229,9 @@ from stdin and translates events into `/notify` with `source: "grok"` and the Gr
 - **SessionStart** says `Grok, ready.` for new sessions (`source` of `new` / `startup` /
   `create`) unless `ECHO_VOICE_GREET_ON_START=false`. Captured against grok 1.0.0 where
   `source` is `"new"`.
-- **Voice:** a `daidentity` voice wins, then the global fallback `ECHO_VOICE_ID`. With neither
-  set, `voice_id` is `"grok"`, resolved by the daemon through `agents.grok` in `core/voices.json`. That file is read once at startup from the staged
-  payload, so a fresh `agents` entry needs a re-stage before it resolves - see
+- **Voice:** follows the shared [voice precedence](voices.md#which-voice-a-harness-speaks).
+  The default mapping is `agents.grok` in `core/voices.json`. That file is read once at startup
+  from the staged payload, so a fresh `agents` entry needs a re-stage before it resolves - see
   [Which config changes need a re-stage](operations.md#which-config-changes-need-a-re-stage).
 - **Registration:** Echo-owned `~/.grok/hooks/echo-voice.json` plus `~/.grok/skills/echo-mute`
   and `~/.grok/skills/echo-mode` (bash `cli/echo mute` / `cli/echo mode`) via `adapters/grok/reconcile.ts`. Sibling files (for
@@ -296,16 +296,15 @@ older runtimes) telling the model to end each response with `🗣️ <Name>: <8-
 summary>`. The existing `message_end`/`turn_end` path then extracts and speaks that line - so
 Pi speaks per-turn completions like the Claude Code path, not just the startup greeting.
 
-- **Persona name** comes from config: `personaName` ← `ECHO_VOICE_PERSONA_NAME` (default
-  `"Pi"`), never hard-coded. Pi/omp resolve configuration exactly as the daemon does, so
-  `~/.config/echo/config.json` is the durable local configuration surface and wins over
-  the one-release environment fallback; an existing host process must be relaunched after edits.
+- **Persona name and voice** follow the shared
+  [voice precedence](voices.md#which-voice-a-harness-speaks). Echo settings use the
+  [configuration precedence](configuration.md#precedence-and-secrets); an existing host
+  process must be relaunched after edits.
 - **Startup line:** Pi says `Pie, ready.` only for process `startup`; new, resume, fork, and
   reload stay silent. omp says `Oh em pee, ready.`; resume, attach, compact, reload, and known child agents stay silent.
   Set `ECHO_VOICE_GREET_ON_START` to `false` to disable it.
-- **Distinct voice (issue #76, retuned in #81):** with no `daidentity` voice and no global
-  fallback `ECHO_VOICE_ID`, `voiceId` is `"pi"`, which the daemon resolves via `agents.pi` in `core/voices.json`
-  → `en-GB-RyanNeural` at speed `0.92` (edge-tts rate `-8%` via `core/edge-rate.ts`). Unlike
+- **Distinct voice (issue #76, retuned in #81):** Pi and omp share the default `agents.pi`
+  mapping in [`core/voices.json`](../core/voices.json). Unlike
   the injection feature above, #76 also touched `core/voices.json` data - a running daemon
   loads voices.json once at startup, from its staged payload, so run `cli/echo update` to
   pick up the `pi` entry; until then the adapter's `voice_id: "pi"` is unresolvable and falls
