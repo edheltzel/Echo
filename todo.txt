@@ -3,7 +3,7 @@
 (B) 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
 (B) 2026-10-09 Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) +echo @waiting issue:126
 (C) 2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) +echo issue:28 dep:echo-npm-8
-(A) 2026-10-09 Publish NPM package for one-command install. @waiting on Ed: package name, Bun required or bootstrapped, publish flow +echo issue:8 id:echo-npm-8
+(A) 2026-10-09 Publish NPM package for one-command install. @waiting on Ed: package name, Bun required or bootstrapped, publish flow +echo issue:8 id:echo-npm-8 note:docs/handoffs/2026-10-21-120730-handoff-echo-v0-13-0.md
 2026-10-09 Roadmap: first-class speech-to-text (STT). Backlogged idea +echo @outstanding issue:179
 2026-10-09 Roadmap/explore: VoiceBar-class macOS surface. Backlogged idea +echo @outstanding issue:180
 2026-10-09 Roadmap/explore: published documentation site. Backlogged idea +echo @outstanding issue:181
@@ -27,4 +27,4 @@ x 2026-10-19 2026-10-19 Research Echo support for Empryo sessions (https://empry
 x 2026-10-19 2026-10-19 Add the Empryo adapter (adapters/empryo, --adapter empryo, source empryo): greeting on desktop/tui, completion from the session event log, approval/question/plan-review announcements, headless silent, child tabs behind ECHO_VOICE_SUPPRESS_CHILD_TABS; Claude Code and Codex hooks stand down under Empryo +echo note:.scratch/empryo-support/research.md
 x 2026-10-19 2026-10-19 Document EMPRYO_HOOK_ENV=NO_MISTAKES_GATE so automation silence reaches Echo hooks under Empryo +echo note:.scratch/empryo-support/research.md
 (C) 2026-10-20 Isolate HOME in pi/omp adapter tests: pi-adapter, pi-project-persona and omp-hil read the operator's real ~/.pi and ~/.omp daidentity and fail on a machine with a global persona +echo
-(A) 2026-10-20 Re-publish fix/global-voice-fallback: PR #244 targeted master and its review commit stripped dev work. Closed #244, reset the remote branch to a5e1e6a, fixed the /echo-voice wording. Republishing against master with --base-branch dev so the dev work stays. +echo pr:https://github.com/edheltzel/Echo/pull/244
+x 2026-10-21 2026-10-20 Re-publish fix/global-voice-fallback: PR #244 targeted master and its review commit stripped dev work. Closed #244, reset the remote branch to a5e1e6a, fixed the /echo-voice wording. Republishing against master with --base-branch dev so the dev work stays. +echo pr:https://github.com/edheltzel/Echo/pull/244 pr:https://github.com/edheltzel/Echo/pull/245
