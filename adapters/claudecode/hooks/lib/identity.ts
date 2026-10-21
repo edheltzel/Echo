@@ -96,7 +96,17 @@ const settingsCache = new Map<string, Settings>();
 function readSettingsFile(path: string): Settings | null {
   try {
     if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, 'utf-8')) as Settings;
+    const settings = JSON.parse(readFileSync(path, 'utf-8')) as Settings;
+    const daidentity = settings.daidentity as Record<string, any> | undefined;
+    if (isPlainObject(daidentity)) {
+      daidentity.mainDAVoiceID = [
+        daidentity.voices?.main?.voiceId,
+        daidentity.voice?.voiceId,
+        daidentity.voiceId,
+        daidentity.mainDAVoiceID,
+      ].find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
+    }
+    return settings;
   } catch {
     return null;
   }
@@ -209,7 +219,7 @@ export function getIdentity(
     // name - so the project's name/displayName wins over an inherited global displayName.
     displayName: projectDai.displayName || projectDai.name
       || daidentity.displayName || daidentity.name || envDA || DEFAULT_IDENTITY.displayName,
-    mainDAVoiceID: voiceConfig?.voiceId || (daidentity as any).voiceId || daidentity.mainDAVoiceID || fallbackVoiceId,
+    mainDAVoiceID: daidentity.mainDAVoiceID || fallbackVoiceId,
     color: daidentity.color || DEFAULT_IDENTITY.color,
     voice: voiceConfig as VoiceProsody | undefined,
     personality: (daidentity as any).personality as VoicePersonality | undefined,
@@ -271,7 +281,7 @@ export function getAlgorithmVoice(): { voiceId: string; voiceName?: string } {
   const voices = (settings.daidentity as any)?.voices || {};
   const algVoice = voices.algorithm || voices.main;
   return {
-    voiceId: algVoice?.voiceId || getVoiceId(),
+    voiceId: voices.algorithm?.voiceId || getVoiceId(),
     voiceName: algVoice?.voiceName,
   };
 }

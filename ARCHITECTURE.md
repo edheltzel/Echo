@@ -140,7 +140,7 @@ not a review nit.
 | Lifecycle scripts | `scripts/{install,start,stop,restart,status,uninstall,mute,replay}.sh` | Service install/lifecycle + runtime mute (#83) + last-N replay (FM-449); `install.sh --adapter <host>` delegates host registration to the adapter's own registrar/reconciler, and stages the daemon payload the LaunchAgent points at (see Invariants). |
 | Shell port helper | `scripts/echo-port.sh` | Sourced by every lifecycle script and `cli/echo`: config.json port first, deprecated process PORT second, then 3246; also owns the shared occupied-port report. |
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
-| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the default pi/omp persona. |
+| Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the global fallback persona, used by every harness without its own daidentity voice. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/converse/`, `tests/scripts/`, `tests/shared/` | `bun test`, plus `tests/e2e-adapters.sh` and `tests/e2e-converse.sh`; see [`docs/development.md`](docs/development.md). |
 
 ## Request & voice-resolution flow
