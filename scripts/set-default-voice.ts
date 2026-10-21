@@ -104,7 +104,8 @@ async function main(): Promise<void> {
   console.log(`Set fallback persona "${name}" (${voice}) in ${CONFIG_FILE}.`);
   console.log(`Subagent voice: ${allowSubagents ? "enabled" : "disabled (default)"}.`);
   console.log("Every harness without its own daidentity voice uses it. Claude Code takes");
-  console.log("the voice, not the name. Set a harness's own persona with /echo-voice.");
+  console.log("the voice, not the name. Claude Code, Pi, and omp set their own persona");
+  console.log("with /echo-voice; the other harnesses set it in their own config file.");
   console.log("Start a new agent session to hear it.");
 }
 
