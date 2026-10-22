@@ -43,10 +43,10 @@ describe("harness catalog", () => {
     }
   });
 
-  test("catalog CLI lists Empryo as a notification and greeting hook adapter", () => {
+  test("catalog CLI lists Empryo as a hook adapter with mute and mode", () => {
     const catalog = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "list"]);
     expect(catalog.exitCode).toBe(0);
-    expect(catalog.stdout.toString().trim().split("\n")).toContain("empryo\thooks\tEmpryo\tempryo\tnotify,greeting");
+    expect(catalog.stdout.toString().trim().split("\n")).toContain("empryo\thooks\tEmpryo\tempryo\tnotify,mute,mode,greeting");
     const ids = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "ids"]);
     expect(ids.exitCode).toBe(0);
     expect(ids.stdout.toString().trim().split("\n")).toContain("empryo");

@@ -14,14 +14,14 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
   slash commands. A mute and mode plugin at `adapters/claudecode/plugin/` is optional
   (`/echo:echo-mute`, `/echo:echo-mode`; bare `/echo-mute` and `/echo-mode` stay the installer
   commands) and does not replace this install.
-- **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks.
+- **Jcode adapter** - explicit `🗣️` completion lines speak through Jcode lifecycle hooks; `/echo-mute` and `/echo-mode` are skills.
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions; `/echo-mute` and `/echo-mode` are skills.
 - **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` and `/echo-mode` are skills.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 - **OpenCode adapter** - OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands.
-- **Empryo adapter** - Empryo lifecycle hooks speak the session greeting, turn completions, and approval, question, and plan-review prompts.
+- **Empryo adapter** - Empryo lifecycle hooks speak the session greeting, turn completions, and approval, question, and plan-review prompts; mute and mode are the skills `$echo-mute` and `$echo-mode`.
 
 ## Prerequisites
 

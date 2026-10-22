@@ -213,6 +213,36 @@ describe("Jcode hook registration reconcile", () => {
     }
   });
 
+  test("links /echo-mute and /echo-mode into the skills folder beside config.toml", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-jcode-skills-"));
+    try {
+      const path = join(root, "config.toml");
+      writeFileSync(path, "");
+      expect((await run(path)).exitCode).toBe(0);
+      for (const name of ["echo-mute", "echo-mode"]) {
+        const link = join(root, "skills", name);
+        expect(lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(readFileSync(join(link, "SKILL.md"), "utf8")).toContain(`name: ${name}`);
+      }
+      expect((await run(path, ["--check"])).exitCode).toBe(0);
+
+      rmSync(join(root, "skills", "echo-mode"));
+      const pending = await run(path, ["--check"]);
+      expect(pending.exitCode).toBe(3);
+      expect(lstatSync(join(root, "skills", "echo-mute")).isSymbolicLink()).toBe(true);
+
+      rmSync(join(root, "skills", "echo-mute"));
+      mkdirSync(join(root, "skills", "echo-mute"));
+      writeFileSync(join(root, "skills", "echo-mute", "SKILL.md"), "---\nname: echo-mute\n---\nmine\n");
+      const foreign = await run(path);
+      expect(foreign.exitCode).toBe(2);
+      expect(foreign.stderr).toContain("not an Echo-owned symlink");
+      expect(readFileSync(join(root, "skills", "echo-mute", "SKILL.md"), "utf8")).toContain("mine");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("refuses a dead config symlink without replacing it", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-jcode-dead-symlink-"));
     try {
