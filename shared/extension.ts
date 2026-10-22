@@ -88,7 +88,9 @@ export const HARNESSES: readonly HarnessManifest[] = [
     entry: "adapters/jcode/hook.ts",
     requiredCli: "jcode",
     reconcile: [{ script: "adapters/jcode/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "greeting"],
+    features: ["notify", "mute", "mode", "greeting"],
+    mutePath: "adapters/jcode/skills/echo-mute/SKILL.md",
+    modePath: "adapters/jcode/skills/echo-mode/SKILL.md",
   },
   {
     id: "grok",
@@ -168,7 +170,9 @@ export const HARNESSES: readonly HarnessManifest[] = [
     entry: "adapters/empryo/hook.ts",
     requiredCli: "empryo",
     reconcile: [{ script: "adapters/empryo/reconcile.ts", label: "Adapter registration" }],
-    features: ["notify", "greeting"],
+    features: ["notify", "mute", "mode", "greeting"],
+    mutePath: "adapters/empryo/skills/echo-mute/SKILL.md",
+    modePath: "adapters/empryo/skills/echo-mode/SKILL.md",
   },
 ];
 
