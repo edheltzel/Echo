@@ -43,7 +43,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Empryo).
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -274,8 +274,9 @@ spoken completion line layered on top of it, not the live voice itself.
 **Host slash command.** Claude Code, Pi, and omp expose
 `/echo-mute [on|off|toggle|status|duration]`. Claude Code's mute plugin is the same CLI
 at `/echo:echo-mute` (plugin skills are always namespaced); bare `/echo-mute` stays the
-installer command. Grok, Codex, and OpenCode register the same
-`cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
+installer command. Grok, Jcode, Codex, and OpenCode register the same
+`cli/echo mute` path when the host can surface it. Empryo's terminal UI has no user-defined
+slash commands, so there it is the skill `$echo-mute`. Empty args → `toggle`. Harnesses do not
 POST `/mute`.
 
 ### The underlying script
