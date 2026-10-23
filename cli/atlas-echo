@@ -1,0 +1,126 @@
+#!/bin/bash
+# atlas-echo - the npm entry point for Echo (`npx atlas-echo install`).
+#
+# npx runs this from a throwaway cache directory, but host adapters register hook
+# paths into the tree they were installed from. So install and update first copy
+# this package into a stable source directory and run that copy's cli/echo; every
+# other command runs the installed copy's cli/echo. Bash on purpose, like
+# cli/echo: `doctor` must still report a missing Bun.
+set -euo pipefail
+
+resolve_self() {
+  local path="$1" dir
+  while [ -L "$path" ]; do
+    dir="$(cd "$(dirname "$path")" && pwd)"
+    path="$(readlink "$path")"
+    case "$path" in /*) ;; *) path="$dir/$path" ;; esac
+  done
+  cd "$(dirname "$path")/.." && pwd
+}
+
+PACKAGE_ROOT="$(resolve_self "${BASH_SOURCE[0]}")"
+SOURCE_HOME="${ECHO_SOURCE_HOME:-$HOME/Library/Application Support/echo/source}"
+VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/package.json" | head -1)"
+
+usage() {
+  cat <<EOF
+atlas-echo ${VERSION} - install and control the Echo voice daemon
+
+Usage: atlas-echo <command> [args]
+First install: npx atlas-echo install --adapter <id>
+
+  install [--adapter <id>] [--check]
+                Copy Echo to ${SOURCE_HOME}
+                and install the daemon from there. Requires Bun.
+  update [--check]
+                Copy this version over the installed one and reload the daemon.
+  stage         Copy Echo to the source directory only, then print its path.
+  where         Print the installed source directory.
+  doctor | status | mute | mode | replay | voice | uninstall
+                Run the installed copy's cli/echo command.
+  --version     Print the package version.
+
+Every cli/echo command and flag works the same way: atlas-echo help-echo
+prints the full reference. ECHO_SOURCE_HOME overrides the source directory.
+EOF
+}
+
+require_bun() {
+  command -v bun >/dev/null 2>&1 && return 0
+  echo "Bun is required. Install it from https://bun.sh/ (curl -fsSL https://bun.sh/install | bash), then rerun." >&2
+  exit 1
+}
+
+# Replace the source directory with this package, atomically enough that a hook
+# firing mid-update sees either the old tree or the new one.
+stage_source() {
+  local parent stage old
+  if [ "$PACKAGE_ROOT" = "$(cd "$SOURCE_HOME" 2>/dev/null && pwd)" ]; then
+    return 0
+  fi
+  parent="$(dirname "$SOURCE_HOME")"
+  stage="$SOURCE_HOME.stage.$$"
+  old="$SOURCE_HOME.old.$$"
+  mkdir -p "$parent"
+  rm -rf "$stage"
+  mkdir -p "$stage"
+  (cd "$PACKAGE_ROOT" && tar --exclude=./node_modules --exclude='./adapters/*/node_modules' -cf - .) \
+    | (cd "$stage" && tar -xf -)
+  if [ -e "$SOURCE_HOME" ]; then mv "$SOURCE_HOME" "$old"; fi
+  mv "$stage" "$SOURCE_HOME"
+  rm -rf "$old"
+}
+
+installed_cli() {
+  if [ -x "$SOURCE_HOME/cli/echo" ]; then
+    printf '%s\n' "$SOURCE_HOME/cli/echo"
+  else
+    printf '%s\n' "$PACKAGE_ROOT/cli/echo"
+  fi
+}
+
+has_flag() {
+  local want="$1"
+  shift
+  local arg
+  for arg in "$@"; do [ "$arg" = "$want" ] && return 0; done
+  return 1
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$command" in
+  ""|-h|--help|help)
+    usage
+    ;;
+  --version|-v|version)
+    printf '%s\n' "$VERSION"
+    ;;
+  help-echo)
+    exec "$(installed_cli)" help
+    ;;
+  where)
+    if [ -x "$SOURCE_HOME/cli/echo" ]; then
+      printf '%s\n' "$SOURCE_HOME"
+    else
+      echo "Echo is not installed from npm yet. Run: npx atlas-echo install" >&2
+      exit 1
+    fi
+    ;;
+  stage)
+    stage_source
+    printf '%s\n' "$SOURCE_HOME"
+    ;;
+  install|update)
+    require_bun
+    if has_flag --check "$@"; then
+      exec "$(installed_cli)" "$command" "$@"
+    fi
+    stage_source
+    exec "$SOURCE_HOME/cli/echo" "$command" "$@"
+    ;;
+  *)
+    exec "$(installed_cli)" "$command" "$@"
+    ;;
+esac
