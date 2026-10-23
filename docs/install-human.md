@@ -18,7 +18,7 @@ The installer writes a macOS LaunchAgent for the universal core server and optio
 - **Pi adapter** - Pi session start and `🗣️` completion lines speak.
 - **oh-my-pi (omp) adapter** - the omp counterpart of the Pi adapter; same behavior, its own package.
 - **Grok Build adapter** - Grok Build lifecycle hooks speak turn completions; `/echo-mute` and `/echo-mode` are skills.
-- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; `/echo-mute` and `/echo-mode` are skills.
+- **Codex adapter** - Codex lifecycle hooks speak turn completions and opt-in session starts; mute and mode are the skills `$echo-mute` and `$echo-mode`.
 - **MCP adapter** - gives Claude Code the voice-ask tool (Pi and omp already have it).
 - **OpenCode adapter** - OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands.
 - **Empryo adapter** - Empryo lifecycle hooks speak the session greeting, turn completions, and approval, question, and plan-review prompts; mute and mode are the skills `$echo-mute` and `$echo-mode`.
