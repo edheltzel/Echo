@@ -1,8 +1,33 @@
 {
-  "name": "echo",
+  "name": "atlas-echo",
   "version": "0.13.0",
-  "private": true,
+  "description": "Local voice daemon that speaks coding-agent notifications on macOS",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edheltzel/Echo.git"
+  },
+  "homepage": "https://github.com/edheltzel/Echo#readme",
+  "bugs": "https://github.com/edheltzel/Echo/issues",
+  "keywords": ["voice", "tts", "notifications", "coding-agent", "claude-code", "codex", "empryo"],
+  "bin": {
+    "atlas-echo": "cli/atlas-echo"
+  },
+  "files": [
+    "cli/",
+    "core/",
+    "shared/",
+    "converse/",
+    "adapters/",
+    "scripts/",
+    "!**/node_modules/",
+    "!**/.empryo/",
+    "!**/.DS_Store"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "workspaces": ["shared", "converse", "adapters/claudecode", "adapters/jcode", "adapters/grok", "adapters/codex", "adapters/mcp", "adapters/omp", "adapters/pi", "adapters/opencode", "adapters/empryo"],
   "scripts": {
     "install:echo": "cli/echo install",
