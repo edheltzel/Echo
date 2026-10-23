@@ -1,6 +1,6 @@
 {
   "name": "atlas-echo",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Local voice daemon that speaks coding-agent notifications on macOS",
   "type": "module",
   "repository": {

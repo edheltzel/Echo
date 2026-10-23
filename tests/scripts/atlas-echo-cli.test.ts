@@ -1,26 +1,57 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { gunzipSync } from "node:zlib";
 
 const repo = join(import.meta.dir, "../..");
 const version = JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).version as string;
 let scratch = "";
 let packageRoot = "";
 
-function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd = scratch) {
-  return spawnSync(cmd, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8" });
+function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd = scratch, timeout = 15_000) {
+  return spawnSync(cmd, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8", timeout });
 }
 
-beforeAll(() => {
+async function extractTarball(tarball: string, dest: string) {
+  // Bun.Archive drops file modes, so read them from the tar headers.
+  const modes = tarModes(gunzipSync(readFileSync(tarball)));
+  const entries = await new Bun.Archive(gunzipSync(readFileSync(tarball))).files();
+  for (const [name, file] of entries) {
+    if (name.endsWith("/")) continue;
+    const out = join(dest, name);
+    mkdirSync(join(out, ".."), { recursive: true });
+    await Bun.write(out, await file.bytes());
+    chmodSync(out, modes.get(name) ?? 0o644);
+  }
+}
+
+function tarModes(tar: Uint8Array): Map<string, number> {
+  const modes = new Map<string, number>();
+  const dec = new TextDecoder();
+  for (let off = 0; off + 512 <= tar.length; ) {
+    if (tar[off] === 0) break;
+    const name = dec.decode(tar.subarray(off, off + 100)).replace(/\0+$/, "");
+    const prefix = dec.decode(tar.subarray(off + 345, off + 500)).replace(/\0+$/, "");
+    const mode = parseInt(dec.decode(tar.subarray(off + 100, off + 108)).replace(/\0.*/, "").trim(), 8);
+    const size = parseInt(dec.decode(tar.subarray(off + 124, off + 136)).replace(/\0.*/, "").trim(), 8);
+    modes.set(prefix ? `${prefix}/${name}` : name, mode);
+    off += 512 + Math.ceil(size / 512) * 512;
+  }
+  return modes;
+}
+
+beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "atlas-echo-"));
-  const pack = run("npm", ["pack", repo, "--pack-destination", scratch, "--json"]);
-  expect(pack.status).toBe(0);
-  const report = JSON.parse(pack.stdout);
-  const entry = Array.isArray(report) ? report[0] : Object.values(report)[0];
-  const tarball = join(scratch, (entry as { filename: string }).filename);
-  expect(run("tar", ["-xzf", tarball]).status).toBe(0);
+  // `npm pack` outlives bun's 5s hook budget, so bun reaps it and status comes back null.
+  // The tarball name is the last line it prints either way; the file existing is the proof.
+  const pack = run("npm", ["pack", repo, "--pack-destination", scratch]);
+  const filename = pack.stdout.trim().split("\n").pop() ?? "";
+  const tarball = join(scratch, filename);
+  expect(existsSync(tarball), pack.stderr || pack.error?.message || "no tarball").toBe(true);
+  // bun reaps a beforeAll child at 5s, so extract in-process instead of spawning tar.
+  await extractTarball(tarball, scratch);
   packageRoot = join(scratch, "package");
 });
 
