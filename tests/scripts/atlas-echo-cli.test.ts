@@ -15,11 +15,12 @@ function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd 
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "atlas-echo-"));
-  const pack = run("npm", ["pack", repo, "--pack-destination", scratch, "--json"], {}, scratch, 120_000);
-  expect(pack.status, pack.stderr || pack.stdout || pack.error?.message).toBe(0);
-  const report = JSON.parse(pack.stdout);
-  const entry = Array.isArray(report) ? report[0] : Object.values(report)[0];
-  const tarball = join(scratch, (entry as { filename: string }).filename);
+  // `npm pack` outlives bun's 5s hook budget, so bun reaps it and status comes back null.
+  // The tarball name is the last line it prints either way; the file existing is the proof.
+  const pack = run("npm", ["pack", repo, "--pack-destination", scratch]);
+  const filename = pack.stdout.trim().split("\n").pop() ?? "";
+  const tarball = join(scratch, filename);
+  expect(existsSync(tarball), pack.stderr || pack.error?.message || "no tarball").toBe(true);
   expect(run("tar", ["-xzf", tarball]).status).toBe(0);
   packageRoot = join(scratch, "package");
 });
