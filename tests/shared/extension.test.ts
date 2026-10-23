@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { FEATURES, HARNESS_IDS, HARNESSES, harnessUsageIds, isHarnessId, registerEchoMode, registerEchoMute, registerEchoVoice } from "../../shared/extension.ts";
 import { mergePersonaJson, type EchoVoiceCommand } from "../../shared/persona-scaffold.ts";
 import type { MuteRunResult } from "../../shared/mute-command.ts";
@@ -16,15 +17,21 @@ function packageJson(): { workspaces: string[] } {
 describe("harness catalog", () => {
   test("catalog, installer and CLI advertise the shipped adapter choices", () => {
     const ids = "none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo";
-    const env = { PATH: process.env.PATH, HOME: process.cwd(), ECHO_CONFIG_FILE: resolve("tmp/catalog-config.json") };
-    const catalog = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "usage"], { env });
-    expect(catalog.exitCode).toBe(0);
-    expect(catalog.stdout.toString().trim()).toBe(ids);
-    expect(harnessUsageIds()).toBe(ids);
-    for (const entry of ["scripts/install.sh", "cli/echo"]) {
-      const help = Bun.spawnSync(["/bin/bash", entry, "--help"], { env });
-      expect(help.exitCode).toBe(0);
-      expect(help.stdout.toString()).toContain(`--adapter ${ids}`);
+    // A scratch HOME: Bun writes its transpiler cache under $HOME/Library/Caches, which landed in the repo when HOME was the checkout.
+    const home = mkdtempSync(join(tmpdir(), "echo-catalog-home-"));
+    try {
+      const env = { PATH: process.env.PATH, HOME: home, ECHO_CONFIG_FILE: join(home, "config.json") };
+      const catalog = Bun.spawnSync([process.execPath, "scripts/harness-catalog.ts", "usage"], { env });
+      expect(catalog.exitCode).toBe(0);
+      expect(catalog.stdout.toString().trim()).toBe(ids);
+      expect(harnessUsageIds()).toBe(ids);
+      for (const entry of ["scripts/install.sh", "cli/echo"]) {
+        const help = Bun.spawnSync(["/bin/bash", entry, "--help"], { env });
+        expect(help.exitCode).toBe(0);
+        expect(help.stdout.toString()).toContain(`--adapter ${ids}`);
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 
