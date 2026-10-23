@@ -1,10 +1,10 @@
 # To-do
 
-Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (archive), managed with `tuxedo`. Synced 2026-10-19.
+Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (archive), managed with `tuxedo`. Synced 2026-10-22.
 
 ## Open
 
-- [ ] 2026-10-09 **Waiting:** Publish NPM package for one-command install. on Ed: package name, Bun required or bootstrapped, publish flow issue:8
+- [ ] 2026-10-09 **Waiting:** Publish NPM package for one-command install. on Ed: package name, Bun required or bootstrapped, publish flow issue:8 - [note](docs/handoffs/2026-10-21-120730-handoff-echo-v0-13-0.md)
 - [ ] 2026-10-09 **Waiting:** ATL-633 Daemon-owned notice (no name yet). on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue atl:633
 - [ ] 2026-10-09 **Waiting:** Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) issue:126
 - [ ] 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas @outstanding
@@ -24,6 +24,7 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [ ] 2026-10-17 **Waiting:** Decide promotion validation: #230's No Mistakes run was cancelled (pipeline rebases, breaking the merge commit). Ed to waive NM for dev-to-master promotions or name another promotion check - [pr](https://github.com/edheltzel/Echo/pull/230)
 - [ ] 2026-10-19 Decide whether the /health limiter should stop trusting X-Forwarded-For and whether the daemon should bind localhost only - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
 - [ ] 2026-10-19 Decide whether to silence plain claude -p sessions outside automation - [note](docs/handoffs/2026-10-19-122550-handoff-echo-automation-silence.md)
+- [ ] 2026-10-20 Isolate HOME in pi/omp adapter tests: pi-adapter, pi-project-persona and omp-hil read the operator's real ~/.pi and ~/.omp daidentity and fail on a machine with a global persona
 
 ## Done
 
@@ -35,6 +36,11 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [x] 2026-10-19 Research Echo support for Empryo sessions (https://empryo.com/docs/). Possible through adapters/claudecode: Empryo already runs Echo's ~/.claude/settings.json hooks, but Stop reads Empryo's event log with the Claude transcript parser (empty result) and SessionStart sends source desktop/tui/headless, which the greeting skips. A separate adapters/empryo would double-fire
 - [x] 2026-10-19 Add the Empryo adapter (adapters/empryo, --adapter empryo, source empryo): greeting on desktop/tui, completion from the session event log, approval/question/plan-review announcements, headless silent, child tabs behind ECHO_VOICE_SUPPRESS_CHILD_TABS; Claude Code and Codex hooks stand down under Empryo - [adapter](adapters/empryo/README.md)
 - [x] 2026-10-19 Document EMPRYO_HOOK_ENV=NO_MISTAKES_GATE so automation silence reaches Echo hooks under Empryo - [configuration](docs/configuration.md#schema-reference)
+- [x] 2026-10-21 Re-publish fix/global-voice-fallback: PR #244 targeted master and its review commit stripped dev work. Closed #244, reset the remote branch to a5e1e6a, fixed the /echo-voice wording. Republishing against master with --base-branch dev so the dev work stays. - [pr](https://github.com/edheltzel/Echo/pull/244), [pr](https://github.com/edheltzel/Echo/pull/245)
+- [x] 2026-10-21 v0.13.0 released: tag on master f800126, GitHub release published, dev resynced with merge commit 7469780 after squashed promotion #248 - [report](https://github.com/edheltzel/Echo/releases/tag/v0.13.0)
+- [x] 2026-10-21 Updated the local daemon to the staged 0.13.0 payload (versions/0.13.0, not a symlink to the checkout). com.echo healthy on :3246 - [report](https://github.com/edheltzel/Echo/releases/tag/v0.13.0)
+- [x] 2026-10-22 Restarted com.echo. The staged 0.13.0 payload already matched the checkout file for file, so no re-stage was needed. New pid listens on :3246 and is healthy
+- [x] 2026-10-22 Echo mute/mode in every harness. Jcode: /echo-mute and /echo-mode skills. Empryo terminal UI: $echo-mute and $echo-mode skills (no user slash commands; Empryo issue dropped). Installed and verified on this Mac
 
 ## Archived (done.txt)
 
