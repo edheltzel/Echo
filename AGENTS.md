@@ -154,6 +154,15 @@ divergence that makes the *next* promotion phantom-conflict (bit us on #74). If 
 squashed anyway, immediately resync with a real merge commit: `git merge origin/master` into
 `dev` (favor master's version/CHANGELOG) and push `dev`, restoring `master` as an ancestor.
 
+**npm.** The root package publishes as `atlas-echo` (`bin: atlas-echo` → `cli/atlas-echo`). The
+`v*` tag push runs `.github/workflows/publish.yml`, which checks that the tag matches
+`package.json`, runs `bun test`, and calls `npm publish` through npm trusted publishing (OIDC,
+provenance), so there is no npm token in CI. The trusted publisher is configured on npmjs.com
+(repo `edheltzel/Echo`, workflow `publish.yml`). A trusted publisher can only be added to a package that already exists, so the very first `atlas-echo` release is a one-time manual `npm publish` by Ed. npm drops `bun.lock` from tarballs, so
+`scripts/install.sh` links the workspace without `--frozen-lockfile` when no lockfile is present.
+`tests/scripts/atlas-echo-cli.test.ts` packs the tarball and checks its contents and the staged
+source tree.
+
 ## Documentation map
 
 | Topic | Doc |
@@ -193,7 +202,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | MCP server + registrar for Claude Code (hooks structurally cannot return a transcript) | `adapters/mcp/` |
 | Neutral install/lifecycle · clone-independent payload staging · rollback on an unhealthy reload · harness catalog CLI | `scripts/` (`install.sh` `stage_payload`, `rollback_payload`, `harness-catalog.ts`) |
 | Port every lifecycle script + `cli/echo` talks to (config.json, deprecated process PORT, then 3246; never parses dotenv files) | `scripts/echo-port.sh` |
-| Stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
+| npm entry point `atlas-echo` (stages a stable source copy, then delegates to `cli/echo`) · stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/atlas-echo`, `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Isolated voice-ask e2e (own core + own coordinator, stand-in recorder) | `tests/e2e-converse.sh` |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |

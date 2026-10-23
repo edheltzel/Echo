@@ -318,7 +318,13 @@ link_workspace() {
     return 0
   fi
   echo "> Linking workspace packages (@echo/shared)"
-  (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
+  # The npm package ships without bun.lock (npm drops lockfiles from tarballs),
+  # so a source tree installed by atlas-echo resolves from package.json instead.
+  if [ -f "$REPO_ROOT/bun.lock" ]; then
+    (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
+  else
+    (cd "$REPO_ROOT" && bun install) >/dev/null
+  fi
 }
 
 # Drain legacy dotenv Echo settings into ~/.config/echo/config.json before
