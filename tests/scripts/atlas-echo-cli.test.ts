@@ -9,14 +9,14 @@ const version = JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).ver
 let scratch = "";
 let packageRoot = "";
 
-function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd = scratch) {
-  return spawnSync(cmd, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8" });
+function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd = scratch, timeout = 15_000) {
+  return spawnSync(cmd, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8", timeout });
 }
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "atlas-echo-"));
-  const pack = run("npm", ["pack", repo, "--pack-destination", scratch, "--json"]);
-  expect(pack.status).toBe(0);
+  const pack = run("npm", ["pack", repo, "--pack-destination", scratch, "--json"], {}, scratch, 120_000);
+  expect(pack.status, pack.stderr || pack.stdout || pack.error?.message).toBe(0);
   const report = JSON.parse(pack.stdout);
   const entry = Array.isArray(report) ? report[0] : Object.values(report)[0];
   const tarball = join(scratch, (entry as { filename: string }).filename);
