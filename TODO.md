@@ -4,7 +4,7 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 
 ## Open
 
-- [ ] 2026-10-09 **Waiting:** Publish NPM package for one-command install. on Ed: package name, Bun required or bootstrapped, publish flow issue:8 - [note](docs/handoffs/2026-10-21-120730-handoff-echo-v0-13-0.md)
+- [ ] 2026-10-09 **Waiting:** Publish npm package atlas-echo for one-command install (npx atlas-echo install). Name decided by Ed 2026-10-23; package, bin, publish workflow and docs in the feat/npm-atlas-echo PR. Left: Ed merges and tags, then the one-time manual npm publish and the npmjs.com trusted publisher (edheltzel/Echo, publish.yml) on Ed issue:8
 - [ ] 2026-10-09 **Waiting:** ATL-633 Daemon-owned notice (no name yet). on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue atl:633
 - [ ] 2026-10-09 **Waiting:** Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) issue:126
 - [ ] 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas @outstanding
