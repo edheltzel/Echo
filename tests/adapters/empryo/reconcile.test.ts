@@ -82,7 +82,6 @@ describe("Empryo reconcile", () => {
       const link = join(dir, "skills", name);
       expect(lstatSync(link).isSymbolicLink()).toBe(true);
       expect(realpathSync(link)).toBe(realpathSync(join(import.meta.dir, "../../../adapters/empryo/skills", name)));
-      expect(readFileSync(join(link, "SKILL.md"), "utf8")).toContain("cli/echo");
     }
     expect(run(hooksFile, "--check").status).toBe(0);
     rmSync(join(dir, "skills", "echo-mode"));

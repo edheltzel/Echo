@@ -43,7 +43,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Empryo).
+   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Codex and Empryo).
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -271,13 +271,12 @@ that same switch, not a second mute path.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp expose
+**Host command.** Claude Code, Pi, omp, Grok, Jcode, and OpenCode expose
 `/echo-mute [on|off|toggle|status|duration]`. Claude Code's mute plugin is the same CLI
 at `/echo:echo-mute` (plugin skills are always namespaced); bare `/echo-mute` stays the
-installer command. Grok, Jcode, Codex, and OpenCode register the same
-`cli/echo mute` path when the host can surface it. Empryo's terminal UI has no user-defined
-slash commands, so there it is the skill `$echo-mute`. Empty args → `toggle`. Harnesses do not
-POST `/mute`.
+installer command. Codex and Empryo use the skill `$echo-mute`; Empryo's terminal UI has no
+user-defined slash commands. All use the same `cli/echo mute` path. Empty args → `toggle`.
+Harnesses do not POST `/mute`.
 
 ### The underlying script
 
@@ -302,7 +301,8 @@ Stream Deck) are in [`http-api.md`](http-api.md).
 
 Sounds-only mode replaces spoken notifications with a short sound: request (an agent needs
 you), done (an agent finished), or generic (everything else). It is global and survives
-restarts. `/echo-mode` in a session is the same command:
+restarts. `/echo-mode` in Claude Code, Pi, omp, Grok, Jcode, and OpenCode is the same command;
+Codex and Empryo use the skill `$echo-mode`:
 
 ```bash
 cli/echo mode status     # Mode: speech|sounds

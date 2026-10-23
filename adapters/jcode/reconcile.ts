@@ -267,7 +267,7 @@ const result = reconcileText(input);
 
 // Jcode turns every skill under its skills folder into a `/<name>` command. The folder sits
 // beside config.toml, so a test that only sets JCODE_CONFIG_PATH never writes to the real ~/.jcode.
-const SKILLS_DIR = process.env.ECHO_JCODE_SKILLS_DIR?.trim() || join(dirname(CONFIG_PATH), "skills");
+const SKILLS_DIR = join(dirname(CONFIG_PATH), "skills");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
 const skillPlans = (["echo-mute", "echo-mode"] as const).map((name) => {
   const sourceDir = join(ADAPTER_DIR, "skills", name);

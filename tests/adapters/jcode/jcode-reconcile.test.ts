@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -222,7 +222,7 @@ describe("Jcode hook registration reconcile", () => {
       for (const name of ["echo-mute", "echo-mode"]) {
         const link = join(root, "skills", name);
         expect(lstatSync(link).isSymbolicLink()).toBe(true);
-        expect(readFileSync(join(link, "SKILL.md"), "utf8")).toContain(`name: ${name}`);
+        expect(realpathSync(link)).toBe(realpathSync(resolve("adapters/jcode/skills", name)));
       }
       expect((await run(path, ["--check"])).exitCode).toBe(0);
 
