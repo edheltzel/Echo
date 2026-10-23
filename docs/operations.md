@@ -408,13 +408,13 @@ Durable daemon disable: removes the LaunchAgent **and the daemon payload**. Pref
 (`~/Library/Logs/echo.log`) and persona config (`~/.config/echo/config.json`) stay. Adapter
 registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
-symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
-`turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
+symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`,
+[Jcode hooks and skill links](../adapters/jcode/README.md), Grok Build's
 `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
 omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. So do the
 [Codex hooks and skills](../adapters/codex/README.md#ownership),
 [OpenCode plugin and command links](../adapters/opencode/README.md), and
-[Empryo hook registrations](../adapters/empryo/README.md). There is no deregistration tool;
+[Empryo hooks and skill links](../adapters/empryo/README.md). There is no deregistration tool;
 remove those entries by hand before deleting the repo directory, or hosts will keep pointing
 at dead paths.
 

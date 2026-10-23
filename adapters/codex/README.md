@@ -37,8 +37,9 @@ See [voice precedence and the global fallback](../../docs/voices.md#which-voice-
 ## Ownership
 
 Reconcile adds/updates the Echo `adapters/codex/hook.ts` command entries and
-links `~/.codex/skills/echo-mute` and `~/.codex/skills/echo-mode` (`/echo-mute` → bash `cli/echo mute`, `/echo-mode` → bash `cli/echo mode`; the bun
-hook is not the mute path). Other hooks are preserved.
+links `~/.codex/skills/echo-mute` and `~/.codex/skills/echo-mode`. Invocation is documented
+under [Mute](../../docs/operations.md#mute) and [Sounds-only mode](../../docs/operations.md#sounds-only-mode).
+Other hooks are preserved.
 
 ## Environment overrides (tests)
 
