@@ -43,7 +43,7 @@ function tarModes(tar: Uint8Array): Map<string, number> {
 }
 
 beforeAll(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "atlas-echo-"));
+  scratch = mkdtempSync(join(tmpdir(), "agent-echo-"));
   // `npm pack` outlives bun's 5s hook budget, so bun reaps it and status comes back null.
   // The tarball name is the last line it prints either way; the file existing is the proof.
   const pack = run("npm", ["pack", repo, "--pack-destination", scratch]);
@@ -59,9 +59,9 @@ afterAll(() => {
   if (scratch) rmSync(scratch, { recursive: true, force: true });
 });
 
-describe("atlas-echo npm package", () => {
+describe("agent-echo npm package", () => {
   test("ships the runtime tree and nothing test- or tool-local", () => {
-    for (const path of ["cli/atlas-echo", "cli/echo", "core/server.ts", "scripts/install.sh", "adapters/empryo/hook.ts", "shared/echo-env.ts"]) {
+    for (const path of ["cli/agent-echo", "cli/echo", "core/server.ts", "scripts/install.sh", "adapters/empryo/hook.ts", "shared/echo-env.ts"]) {
       expect(existsSync(join(packageRoot, path))).toBe(true);
     }
     for (const path of ["tests", "docs", "node_modules", "adapters/claudecode/.empryo", "todo.txt"]) {
@@ -70,18 +70,18 @@ describe("atlas-echo npm package", () => {
   });
 
   test("the bin runs through an npm-style symlink and reports the package version", () => {
-    const bin = join(scratch, "atlas-echo-link");
-    expect(run("ln", ["-s", join(packageRoot, "cli/atlas-echo"), bin]).status).toBe(0);
+    const bin = join(scratch, "agent-echo-link");
+    expect(run("ln", ["-s", join(packageRoot, "cli/agent-echo"), bin]).status).toBe(0);
     const result = run(bin, ["--version"]);
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(version);
-    expect(run(bin, ["--help"]).stdout).toContain("atlas-echo install");
+    expect(run(bin, ["--help"]).stdout).toContain("agent-echo install");
   });
 
   test("stage copies the package to a stable source directory and replaces it on update", () => {
     const sourceHome = join(scratch, "home", "source");
     const env = { ECHO_SOURCE_HOME: sourceHome };
-    const bin = join(packageRoot, "cli/atlas-echo");
+    const bin = join(packageRoot, "cli/agent-echo");
     expect(run(bin, ["where"], env).status).toBe(1);
 
     const first = run(bin, ["stage"], env);
@@ -97,7 +97,7 @@ describe("atlas-echo npm package", () => {
 
   test("a staged tree links the workspace without a lockfile", () => {
     const sourceHome = join(scratch, "linked", "source");
-    expect(run(join(packageRoot, "cli/atlas-echo"), ["stage"], { ECHO_SOURCE_HOME: sourceHome }).status).toBe(0);
+    expect(run(join(packageRoot, "cli/agent-echo"), ["stage"], { ECHO_SOURCE_HOME: sourceHome }).status).toBe(0);
     expect(existsSync(join(sourceHome, "bun.lock"))).toBe(false);
     const install = run("bun", ["install", "--production"], {}, sourceHome);
     expect(install.status).toBe(0);

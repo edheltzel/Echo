@@ -1,5 +1,5 @@
 #!/bin/bash
-# atlas-echo - the npm entry point for Echo (`npx atlas-echo install`).
+# agent-echo - the npm entry point for Echo (`npx agent-echo install`).
 #
 # npx runs this from a throwaway cache directory, but host adapters register hook
 # paths into the tree they were installed from. So install and update first copy
@@ -24,10 +24,10 @@ VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$PA
 
 usage() {
   cat <<EOF
-atlas-echo ${VERSION} - install and control the Echo voice daemon
+agent-echo ${VERSION} - install and control the Echo voice daemon
 
-Usage: atlas-echo <command> [args]
-First install: npx atlas-echo install --adapter <id>
+Usage: agent-echo <command> [args]
+First install: npx agent-echo install --adapter <id>
 
   install [--adapter <id>] [--check]
                 Copy Echo to ${SOURCE_HOME}
@@ -40,7 +40,7 @@ First install: npx atlas-echo install --adapter <id>
                 Run the installed copy's cli/echo command.
   --version     Print the package version.
 
-Every cli/echo command and flag works the same way: atlas-echo help-echo
+Every cli/echo command and flag works the same way: agent-echo help-echo
 prints the full reference. ECHO_SOURCE_HOME overrides the source directory.
 EOF
 }
@@ -104,7 +104,7 @@ case "$command" in
     if [ -x "$SOURCE_HOME/cli/echo" ]; then
       printf '%s\n' "$SOURCE_HOME"
     else
-      echo "Echo is not installed from npm yet. Run: npx atlas-echo install" >&2
+      echo "Echo is not installed from npm yet. Run: npx agent-echo install" >&2
       exit 1
     fi
     ;;

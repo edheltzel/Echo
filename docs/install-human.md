@@ -42,19 +42,19 @@ host adapters, and the Whisper setup are described in `docs/dependencies.md`.
 ## Install from npm
 
 ```bash
-npx atlas-echo install --adapter none    # or --adapter claudecode, codex, empryo, ...
+npx agent-echo install --adapter none    # or --adapter claudecode, codex, empryo, ...
 ```
 
-npx runs the package from a temporary cache, so `atlas-echo install` first copies Echo to
+npx runs the package from a temporary cache, so `agent-echo install` first copies Echo to
 `~/Library/Application Support/echo/source` and installs from that copy. Host adapters
 register paths into it, which keeps them working after the npx cache is cleared. Every other
-command runs that installed copy: `npx atlas-echo doctor`, `npx atlas-echo status`,
-`npx atlas-echo mute on`. Upgrade with `npx atlas-echo@latest update`. `npx atlas-echo where`
-prints the installed source directory. `atlas-echo uninstall` removes the daemon and its
+command runs that installed copy: `npx agent-echo doctor`, `npx agent-echo status`,
+`npx agent-echo mute on`. Upgrade with `npx agent-echo@latest update`. `npx agent-echo where`
+prints the installed source directory. `agent-echo uninstall` removes the daemon and its
 payload but keeps the source directory, because adapter registrations still point into it.
 
 Bun is still required; the installer stops with an install hint when it is missing. The rest of
-this page shows `cli/echo` from a clone. Under npm, use `npx atlas-echo` in its place.
+this page shows `cli/echo` from a clone. Under npm, use `npx agent-echo` in its place.
 
 ## Install core only
 
