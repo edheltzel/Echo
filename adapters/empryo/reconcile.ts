@@ -6,13 +6,16 @@
  * Echo owns bun '<repo>/adapters/empryo/hook.ts' under SessionStart, Stop and
  * Notification in ~/.empryo/hooks.json (ECHO_EMPRYO_HOOKS_FILE overrides).
  * Sibling hooks are preserved, stale Echo spellings are pruned, and a symlinked
- * hooks file is edited at its target. --check: exit 0 current, 3 pending, 2 fatal.
+ * hooks file is edited at its target. It also links skills/echo-mute and skills/echo-mode into
+ * ~/.empryo/skills, which the terminal UI runs as $echo-mute and $echo-mode.
+ * --check: exit 0 current, 3 pending, 2 fatal.
  */
 
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOwnedSymlink, ownedLinkLog, planOwnedSymlink } from "@echo/shared/owned-symlink.ts";
 
 const CHECK_ONLY = process.argv.includes("--check");
 const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +48,14 @@ function hooksFilePath(): string {
   } catch {
     return path;
   }
+}
+
+// Beside the hooks file, so a test that only sets ECHO_EMPRYO_HOOKS_FILE never writes to the real ~/.empryo.
+function skillsDir(): string {
+  const override = process.env.ECHO_EMPRYO_SKILLS_DIR?.trim();
+  if (override) return override;
+  const hooks = process.env.ECHO_EMPRYO_HOOKS_FILE?.trim();
+  return hooks ? join(dirname(hooks), "skills") : join(homedir(), ".empryo", "skills");
 }
 
 function canonicalHookPath(): string {
@@ -129,14 +140,35 @@ let changed = false;
 for (const { event, timeout } of EVENTS) changed = ensureEvent(root, event, command, timeout) || changed;
 changed = pruneStaleEcho(root, command) || changed;
 
+const skillPlans = (["echo-mute", "echo-mode"] as const).map((name) => {
+  const sourceDir = join(ADAPTER_DIR, "skills", name);
+  let source: string;
+  try {
+    source = realpathSync(sourceDir);
+  } catch {
+    fatal(`the Empryo ${name} skill is missing at ${sourceDir}`);
+  }
+  return planOwnedSymlink({
+    destination: join(skillsDir(), name),
+    source,
+    isEchoSpelling: (target) => new RegExp(`(^|/)adapters/empryo/skills/${name}/?$`).test(target),
+    fatal,
+  });
+});
+const skillsChanged = skillPlans.some((plan) => plan.kind !== "current");
+const skillLog = skillPlans.map((plan) => ownedLinkLog(plan, `skills/${plan.destination.split("/").pop()}`));
+
 if (CHECK_ONLY) {
-  if (changed) {
-    console.log("pending: Empryo Echo hook registration needs update");
+  if (changed || skillsChanged) {
+    console.log([...skillLog, "pending: Empryo Echo registration needs update"].join("\n"));
     process.exit(3);
   }
-  console.log("✓ preflight passed - Empryo hooks already current");
+  console.log([...skillLog, "✓ preflight passed - Empryo hooks already current"].join("\n"));
   process.exit(0);
 }
+
+for (const plan of skillPlans) applyOwnedSymlink(plan);
+console.log(skillLog.join("\n"));
 
 if (changed) {
   mkdirSync(dirname(hooksFile), { recursive: true });
