@@ -54,11 +54,11 @@ Requires macOS and [Bun](https://bun.sh/). The guided tutorial, including "I hea
 **1. Install the core**
 
 ```bash
-npx atlas-echo install --adapter none
+npx agent-echo install --adapter none
 ```
 
 Or from a clone: `git clone https://github.com/edheltzel/Echo.git && cd Echo && cli/echo install --adapter none`.
-Under npm, run `npx atlas-echo <command>` wherever this page says `cli/echo <command>`.
+Under npm, run `npx agent-echo <command>` wherever this page says `cli/echo <command>`.
 
 The output ends with `OK echo is healthy on :3246`.
 

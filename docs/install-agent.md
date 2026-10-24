@@ -29,9 +29,9 @@ tools are absent so notification-only installs still work.
 
 ## 2. Install core only
 
-From npm, with no clone: `npx atlas-echo install --adapter none`. It copies Echo to
+From npm, with no clone: `npx agent-echo install --adapter none`. It copies Echo to
 `~/Library/Application Support/echo/source` and runs that copy's `cli/echo install`; use
-`npx atlas-echo <command>` wherever this checklist says `cli/echo <command>`. From a clone:
+`npx agent-echo <command>` wherever this checklist says `cli/echo <command>`. From a clone:
 
 ```bash
 bash scripts/install.sh --adapter none

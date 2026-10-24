@@ -1,6 +1,6 @@
 {
-  "name": "atlas-echo",
-  "version": "0.13.2",
+  "name": "agent-echo",
+  "version": "0.13.3",
   "description": "Local voice daemon that speaks coding-agent notifications on macOS",
   "type": "module",
   "repository": {
@@ -11,7 +11,7 @@
   "bugs": "https://github.com/edheltzel/Echo/issues",
   "keywords": ["voice", "tts", "notifications", "coding-agent", "claude-code", "codex", "empryo"],
   "bin": {
-    "atlas-echo": "cli/atlas-echo"
+    "agent-echo": "cli/agent-echo"
   },
   "files": [
     "cli/",
