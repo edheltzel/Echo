@@ -319,7 +319,7 @@ link_workspace() {
   fi
   echo "> Linking workspace packages (@echo/shared)"
   # The npm package ships without bun.lock (npm drops lockfiles from tarballs),
-  # so a source tree installed by atlas-echo resolves from package.json instead.
+  # so a source tree installed by agent-echo resolves from package.json instead.
   if [ -f "$REPO_ROOT/bun.lock" ]; then
     (cd "$REPO_ROOT" && bun install --frozen-lockfile) >/dev/null
   else
