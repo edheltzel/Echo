@@ -43,7 +43,7 @@ calls. In the order you need them:
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
-   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Codex and Empryo).
    See [Mute](#mute).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
@@ -271,12 +271,12 @@ that same switch, not a second mute path.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp expose
+**Host command.** Claude Code, Pi, omp, Grok, Jcode, and OpenCode expose
 `/echo-mute [on|off|toggle|status|duration]`. Claude Code's mute plugin is the same CLI
 at `/echo:echo-mute` (plugin skills are always namespaced); bare `/echo-mute` stays the
-installer command. Grok, Codex, and OpenCode register the same
-`cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
-POST `/mute`.
+installer command. Codex and Empryo use the skill `$echo-mute`; Empryo's terminal UI has no
+user-defined slash commands. All use the same `cli/echo mute` path. Empty args → `toggle`.
+Harnesses do not POST `/mute`.
 
 ### The underlying script
 
@@ -301,7 +301,8 @@ Stream Deck) are in [`http-api.md`](http-api.md).
 
 Sounds-only mode replaces spoken notifications with a short sound: request (an agent needs
 you), done (an agent finished), or generic (everything else). It is global and survives
-restarts. `/echo-mode` in a session is the same command:
+restarts. `/echo-mode` in Claude Code, Pi, omp, Grok, Jcode, and OpenCode is the same command;
+Codex and Empryo use the skill `$echo-mode`:
 
 ```bash
 cli/echo mode status     # Mode: speech|sounds
@@ -407,13 +408,13 @@ Durable daemon disable: removes the LaunchAgent **and the daemon payload**. Pref
 (`~/Library/Logs/echo.log`) and persona config (`~/.config/echo/config.json`) stay. Adapter
 registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
-symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
-`turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
+symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`,
+[Jcode hooks and skill links](../adapters/jcode/README.md), Grok Build's
 `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
 omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. So do the
 [Codex hooks and skills](../adapters/codex/README.md#ownership),
 [OpenCode plugin and command links](../adapters/opencode/README.md), and
-[Empryo hook registrations](../adapters/empryo/README.md). There is no deregistration tool;
+[Empryo hooks and skill links](../adapters/empryo/README.md). There is no deregistration tool;
 remove those entries by hand before deleting the repo directory, or hosts will keep pointing
 at dead paths.
 

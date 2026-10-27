@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -208,6 +208,36 @@ describe("Jcode hook registration reconcile", () => {
       expect(lstatSync(nominal).isSymbolicLink()).toBe(true);
       expect(readlinkSync(nominal)).toBe(relative(dirname(nominal), real));
       expect((Bun.TOML.parse(readFileSync(real, "utf8")) as any).hooks.turn_end).toBe(HOOK_COMMAND);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("links /echo-mute and /echo-mode into the skills folder beside config.toml", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-jcode-skills-"));
+    try {
+      const path = join(root, "config.toml");
+      writeFileSync(path, "");
+      expect((await run(path)).exitCode).toBe(0);
+      for (const name of ["echo-mute", "echo-mode"]) {
+        const link = join(root, "skills", name);
+        expect(lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(realpathSync(link)).toBe(realpathSync(resolve("adapters/jcode/skills", name)));
+      }
+      expect((await run(path, ["--check"])).exitCode).toBe(0);
+
+      rmSync(join(root, "skills", "echo-mode"));
+      const pending = await run(path, ["--check"]);
+      expect(pending.exitCode).toBe(3);
+      expect(lstatSync(join(root, "skills", "echo-mute")).isSymbolicLink()).toBe(true);
+
+      rmSync(join(root, "skills", "echo-mute"));
+      mkdirSync(join(root, "skills", "echo-mute"));
+      writeFileSync(join(root, "skills", "echo-mute", "SKILL.md"), "---\nname: echo-mute\n---\nmine\n");
+      const foreign = await run(path);
+      expect(foreign.exitCode).toBe(2);
+      expect(foreign.stderr).toContain("not an Echo-owned symlink");
+      expect(readFileSync(join(root, "skills", "echo-mute", "SKILL.md"), "utf8")).toContain("mine");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

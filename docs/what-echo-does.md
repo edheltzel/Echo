@@ -60,7 +60,7 @@ Echo can tell you what happened with a short sound instead of a sentence. There 
 
 Sounds play in two cases:
 
-- **Sounds-only mode.** `cli/echo mode sounds`, or `/echo-mode sounds` in a session. Echo stops speaking notifications and plays their sound. `cli/echo mode speech` switches back. The mode is global, survives restarts, and `cli/echo mode status` shows it.
+- **Sounds-only mode.** `cli/echo mode sounds`, or the equivalent [host command](operations.md#sounds-only-mode). Echo stops speaking notifications and plays their sound. `cli/echo mode speech` switches back. The mode is global, survives restarts, and `cli/echo mode status` shows it.
 - **`mute tts`.** The speaker mute now swaps speech for sounds instead of going silent, in either mode.
 
 `mute all` is still total silence. A voice-ask question (`echo_ask`) and `cli/echo replay` always speak; they ignore the mode, and mute still silences them. Requests sent silent (`voice_enabled: false`) stay silent. Echo ships its own three sounds; point `ECHO_SOUND_REQUEST`, `ECHO_SOUND_DONE`, or `ECHO_SOUND_GENERIC` in `~/.config/echo/config.json` at your own files. A file that will not play falls back to a macOS system sound.
