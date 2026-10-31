@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { edgeRateFromSpeed } from "./edge-rate";
 import { echoConfigStatus, parseBoundedInt, resolveEchoEnv } from "./env";
-import { isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, toggleMuteState } from "./mute";
+import { formatMuteUntilLocal, isMicMuted, isMuteScope, isTtsMuted, readMuteState, setMuteState, setMuteUntil, toggleMuteState } from "./mute";
 import { isOutputMode, readOutputMode, writeOutputMode } from "./output-mode";
 import { isCaptureActive, readCaptureState, resolveCaptureStatePath } from "./capture-guard";
 import { PlayQueue } from "./play-queue";
@@ -53,6 +53,7 @@ import {
   type CaptureReservationRequest,
 } from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
+import { isLocalHostHeader, isSameOriginWrite, readDashboardConfig } from "./dashboard";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
   applySpeakModeSpeed,
@@ -218,6 +219,19 @@ function log(level: 'info' | 'warn' | 'error', message: string, ctx?: LogContext
 // against a live value throwing inside Bun.serve and crash-looping the daemon.
 const PORT = parseBoundedInt(resolveEchoEnv("PORT"), 3246, 0, 65535);
 const CONFIG_STATUS = echoConfigStatus();
+const DASHBOARD_HTML_PATH = join(import.meta.dir, 'dashboard.html');
+const DASHBOARD_PATHS = new Set(["/", "/dashboard", "/dashboard/config"]);
+const GUARDED_WRITE_PATHS = new Set(["/mute", "/mode", "/replay"]);
+const ECHO_VERSION: string | null = (() => {
+  // Staged payload carries manifest.json; a checkout run has package.json.
+  for (const f of ['manifest.json', 'package.json']) {
+    try {
+      const v = JSON.parse(readFileSync(join(import.meta.dir, '..', f), 'utf-8')).version;
+      if (typeof v === 'string') return v;
+    } catch {}
+  }
+  return null;
+})();
 const VOICES_PATH = resolveEchoEnv("VOICES_PATH") || join(import.meta.dir, 'voices.json');
 const DEFAULT_MACOS_VOICE = 'Daniel (Enhanced)';
 const ELEVENLABS_TIMEOUT_MS = 10_000;
@@ -1955,7 +1969,13 @@ export const server = serve({
     // still cannot spend /notify, and each call can spawn a provider probe so
     // it stays capped. Exemption uses the socket address, not X-Forwarded-For.
     const healthGet = req.method === "GET" && url.pathname === "/health";
-    const exemptHealth = healthGet && isLoopbackAddress(peer);
+    // Dashboard page + its read-only config view: loopback only, and exempt
+    // from rate limiting the same way loopback /health is (the page polls).
+    const dashboardGet = req.method === "GET" && DASHBOARD_PATHS.has(url.pathname);
+    if (dashboardGet && (!isLoopbackAddress(peer) || !isLocalHostHeader(req.headers.get("host"), bunServer.port))) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    const exemptHealth = (healthGet || dashboardGet) && isLoopbackAddress(peer);
     const rateKey = exemptHealth ? null
       : healthGet ? `health:${clientIp}`
       : url.pathname === "/mute" ? `mute:${clientIp}`
@@ -1973,6 +1993,33 @@ export const server = serve({
           status: 429
         }
       );
+    }
+
+    // Same-origin write guard (ATL-ECHO-SNOOZE-DASH-01). A browser page on
+    // another origin must not drive the controls the dashboard uses. Requests
+    // without Origin/Referer (CLI, curl, host adapters) are unchanged.
+    if (req.method === "POST" && GUARDED_WRITE_PATHS.has(url.pathname) &&
+        !isSameOriginWrite(req.headers.get("origin"), req.headers.get("referer"), url.port)) {
+      return new Response(
+        JSON.stringify({ status: "error", message: "Cross-origin write rejected" }),
+        { headers: { "Content-Type": "application/json" }, status: 403 }
+      );
+    }
+
+    if (dashboardGet && url.pathname === "/dashboard/config") {
+      return new Response(JSON.stringify(readDashboardConfig(CONFIG_STATUS.path)), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+    if (dashboardGet) {
+      return new Response(Bun.file(DASHBOARD_HTML_PATH), {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Frame-Options": "DENY",
+          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
+        },
+      });
     }
 
     if (url.pathname === "/notify" && req.method === "POST") {
@@ -2242,7 +2289,18 @@ export const server = serve({
           if (data.scope !== undefined && !isMuteScope(data.scope)) {
             throw new Error("Invalid body: 'scope' must be tts, mic, or all");
           }
-          if (data.muted === undefined && isMuteScope(data.scope) && data.duration_minutes === undefined) {
+          if (data.until !== undefined) {
+            // Absolute mute (ATL-ECHO-SNOOZE-DASH-01): one deadline, two inputs.
+            // `until` with a duration is ambiguous; `until` with muted:false is
+            // contradictory. Both are 400 with state untouched.
+            if (data.duration_minutes !== undefined) {
+              throw new Error("Invalid body: send 'until' or 'duration_minutes', not both");
+            }
+            if (data.muted !== undefined && data.muted !== true) {
+              throw new Error("Invalid body: 'until' requires muted true (or omitted)");
+            }
+            state = setMuteUntil(data.until, undefined, data.scope ?? "all");
+          } else if (data.muted === undefined && isMuteScope(data.scope) && data.duration_minutes === undefined) {
             state = toggleMuteState(undefined, data.scope);
           } else {
             if (typeof data?.muted !== "boolean") {
@@ -2332,6 +2390,7 @@ export const server = serve({
         JSON.stringify({
           status: "healthy",
           port: PORT,
+          version: ECHO_VERSION,
           voice_system: `Multi-provider TTS (${voicesConfig.fallbackOrder.join(" → ")})`,
           config_source: "voices.json",
           // Additive: config.json's contribution. `ignored_keys` non-empty means
@@ -2352,6 +2411,8 @@ export const server = serve({
           pronunciation_rules: pronunciationRules.length,
           emotional_presets: Object.keys(EMOTIONAL_PRESETS).length,
           mute: readMuteState(),
+          // Additive: the mute deadline in the daemon's local zone ("3:30 PM").
+          mute_until_local: formatMuteUntilLocal(readMuteState().muted_until),
           mode: readOutputMode(),
           // Additive: the capture guard's resolved state file and current
           // reading (idle unless a live external mic capture is in progress).

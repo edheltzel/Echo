@@ -184,3 +184,26 @@ describe("FM-601 - scripts/mute.sh daemon HTTP errors", () => {
     }
   });
 });
+
+describe("ATL-ECHO-SNOOZE-DASH-01 - scripts/mute.sh until", () => {
+  test("until HH:MM → future muted_until, scope all, local Until line", async () => {
+    const result = await runMute(["until", "23:59"]);
+    expect(result.exitCode).toBe(0);
+    const state = readMuteState(MUTE_PATH);
+    expect(state).toMatchObject({ muted: true, scope: "all" });
+    expect(Date.parse(state.muted_until!)).toBeGreaterThan(Date.now());
+    expect(Date.parse(state.muted_until!) - Date.now()).toBeLessThanOrEqual(24 * 3600_000);
+    expect(result.stdout).toMatch(/Until: \w{3} \d{1,2}:59 PM \(/);
+  });
+
+  // Scope pass-through (`until HH:MM tts`) is covered at the endpoint level:
+  // this file's daemon bucket is already near the 10/min /mute limit.
+
+  test("bad time → exit 2, state untouched", async () => {
+    for (const bad of [["until", "25:00"], ["until", "soon"], ["until"], ["until", "10:00", "bogus"]]) {
+      const result = await runMute(bad);
+      expect(result.exitCode).toBe(2);
+      expect(existsSync(MUTE_PATH)).toBe(false);
+    }
+  });
+});

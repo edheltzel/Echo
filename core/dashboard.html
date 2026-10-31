@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo dashboard</title>
+<style>
+  /* Palettes match mockups v3 (src/pal.css). Neutral is the default theme. */
+  .neutral.dark{--bg:#131313;--card:#1F1F1F;--in:#181818;--sel:#313131;--b:#2E2E2E;--t:#EDEDED;--m:#A3A3A3;--f:#7A7A7A;--pri:#EDEDED;--pt:#181818;--err:#E0948D}
+  .neutral.light{--bg:#F7F7F6;--card:#FFFFFF;--in:#F7F7F6;--sel:#EBEBEA;--b:#E3E3E1;--t:#1A1A1A;--m:#5E5E5E;--f:#767676;--pri:#1A1A1A;--pt:#FFFFFF;--err:#A4413A}
+  .hc.dark{--bg:#000000;--card:#0A0A0A;--in:#000000;--sel:#2A2A2A;--b:#8A8A8A;--t:#FFFFFF;--m:#D4D4D4;--f:#BDBDBD;--pri:#FFFFFF;--pt:#000000;--err:#FF9B94}
+  .hc.light{--bg:#FFFFFF;--card:#FFFFFF;--in:#FFFFFF;--sel:#E0E0E0;--b:#3D3D3D;--t:#000000;--m:#2B2B2B;--f:#454545;--pri:#000000;--pt:#FFFFFF;--err:#9E1B12}
+  .slate.dark{--bg:#0F141A;--card:#18202A;--in:#121920;--sel:#253244;--b:#2A3644;--t:#E6EDF5;--m:#9AA8B8;--f:#7B8999;--pri:#7DB3F0;--pt:#0B1A2B;--err:#F09A90}
+  .slate.light{--bg:#F4F7FA;--card:#FFFFFF;--in:#F4F7FA;--sel:#E2EAF3;--b:#D9E1EA;--t:#15202B;--m:#4F5D6C;--f:#68778A;--pri:#1F5FA8;--pt:#FFFFFF;--err:#A8352C}
+  .amber.dark{--bg:#161310;--card:#211D18;--in:#1A1713;--sel:#342D24;--b:#352E25;--t:#F0EAE2;--m:#AFA595;--f:#8E8475;--pri:#E3B262;--pt:#1E1607;--err:#EE9A8F}
+  .amber.light{--bg:#FAF7F2;--card:#FFFFFF;--in:#FAF7F2;--sel:#EFE8DC;--b:#E6DECF;--t:#221C14;--m:#5F5648;--f:#7A705F;--pri:#8A5A0B;--pt:#FFFFFF;--err:#A33A2E}
+  .dark{color-scheme:dark}.light{color-scheme:light}
+  *{box-sizing:border-box}[hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--t);font:400 14px/20px Geist,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+  .mono,pre{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .w{max-width:1160px;margin:auto;padding:32px}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+  .logo{width:32px;height:32px;border-radius:8px;border:1px solid var(--b);background:var(--card);display:grid;place-items:center;font-weight:600}
+  h1{font-size:18px;line-height:28px;font-weight:600;margin:0}
+  .cap{font-size:12px;line-height:16px;color:var(--m)}.sp{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:9999px;border:1px solid var(--b);font-size:12px;line-height:16px;font-weight:500;color:var(--m)}
+  .dot{width:8px;height:8px;border-radius:9999px;background:var(--m)}
+  .grid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+  .col{display:grid;gap:16px;align-content:start}
+  .c{background:var(--card);border:1px solid var(--b);border-radius:16px;padding:24px}
+  .c h2{font-size:12px;line-height:16px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--m);margin:0 0 16px;display:flex;justify-content:space-between;gap:8px}
+  .hero{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+  .ico{width:48px;height:48px;flex:none;border-radius:12px;background:var(--in);border:1px solid var(--b);display:grid;place-items:center;color:var(--m)}
+  .big{font-size:24px;line-height:32px;font-weight:600}
+  button,input,select{font:inherit;color:var(--t)}
+  button{cursor:pointer}
+  .btn{border:1px solid var(--b);background:var(--card);padding:8px 12px;border-radius:8px;font-weight:600}
+  .pri{background:var(--pri);border-color:var(--pri);color:var(--pt)}
+  :focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+  .tabs{display:flex;background:var(--in);border:1px solid var(--b);border-radius:12px;padding:4px;margin-bottom:16px}
+  .tab{flex:1;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--m);font-weight:500}
+  .tab[aria-selected="true"]{background:var(--sel);color:var(--t)}
+  .row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}.f{flex:1;min-width:140px}
+  .lab{display:block;font-size:12px;line-height:16px;font-weight:500;color:var(--m);margin-bottom:8px}
+  .inp{width:100%;background:var(--in);border:1px solid var(--b);border-radius:8px;padding:8px 12px}
+  .inp[aria-invalid="true"]{border-color:var(--err)}
+  .res{padding:12px;border-radius:8px;background:var(--in);border:1px solid var(--b);margin:8px 0 16px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .res b{font-weight:600}
+  .err{color:var(--err);font-size:12px;line-height:16px;font-weight:500;margin:0 0 16px}
+  .err:empty{display:none}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .chip{padding:4px 12px;border-radius:9999px;border:1px solid var(--b);background:transparent;font-size:12px;line-height:16px;font-weight:500;color:var(--m)}
+  .seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid var(--b);border-radius:12px;background:var(--in)}
+  .seg button{padding:4px 12px;border:0;border-radius:8px;background:transparent;font-size:12px;line-height:16px;font-weight:500;color:var(--m)}
+  .seg button[aria-pressed="true"]{background:var(--sel);color:var(--t)}
+  .foot{display:flex;justify-content:flex-end;gap:8px}
+  .li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b)}.li:last-child{border:0}
+  ul{list-style:none;margin:0;padding:0}
+  .m{color:var(--m)}
+  .later{opacity:.6;border-style:dashed}
+  .tag{font-size:12px;line-height:16px;font-weight:500;padding:0 8px;border-radius:4px;border:1px solid var(--b);color:var(--m);text-transform:none;letter-spacing:0}
+  pre{overflow:auto;margin:0;background:var(--in);border:1px solid var(--b);padding:12px;border-radius:8px;font-size:12px;line-height:16px}
+  .theme{display:flex;gap:8px;align-items:center}
+  .theme select{background:var(--card);border:1px solid var(--b);border-radius:8px;padding:4px 8px;font-size:12px}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  @media (max-width:760px){.w{padding:16px}.grid{grid-template-columns:1fr}.hero{flex-wrap:wrap}.hero .btn{width:100%}.v{display:none}}
+</style>
+<script>
+  // Apply the saved theme before first paint. Neutral is the default palette;
+  // light/dark follows the system until the user picks one.
+  (function () {
+    var p = localStorage.getItem("echo.palette"), s = localStorage.getItem("echo.scheme");
+    if (["neutral", "hc", "slate", "amber"].indexOf(p) < 0) p = "neutral";
+    if (s !== "light" && s !== "dark") s = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.className = p + " " + s;
+  })();
+</script>
+</head>
+<body>
+<div class="w">
+<header class="top">
+  <div class="logo" aria-hidden="true">E</div>
+  <div><h1>Echo</h1><div class="cap mono" id="meta">localhost &middot; machine wide</div></div>
+  <div class="sp"></div>
+  <span class="pill" id="health-pill"><span class="dot" aria-hidden="true"></span><span id="health-text">Checking daemon</span></span>
+  <span class="pill v mono" id="version" hidden></span>
+  <div class="theme">
+    <label class="sr" for="palette">Theme</label>
+    <select id="palette">
+      <option value="neutral">Neutral</option><option value="hc">High contrast</option>
+      <option value="slate">Cool slate</option><option value="amber">Warm amber</option>
+    </select>
+    <div class="seg" role="group" aria-label="Light or dark">
+      <button type="button" data-scheme="light">Light</button><button type="button" data-scheme="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<section class="c hero" aria-live="polite">
+  <div class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 9h4l5-4v14l-5-4H4z"/><path id="ico-waves" d="M17 9a4 4 0 010 6M19.5 6.5a8 8 0 010 11"/></svg></div>
+  <div style="flex:1"><div class="big" id="mute-line">Checking</div><div class="cap" style="font-size:14px;line-height:20px" id="health-line"></div></div>
+  <button type="button" id="wake" class="btn pri" hidden>Wake now</button>
+  <button type="button" id="open-snooze" class="btn pri" hidden>Snooze</button>
+</section>
+
+<div class="grid">
+<section class="c" aria-labelledby="h-snooze">
+  <h2 id="h-snooze">Snooze all notifications</h2>
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab" role="tab" id="tab-date" aria-selected="true" aria-controls="pane-date">Date and time</button>
+    <button type="button" class="tab" role="tab" id="tab-dur" aria-selected="false" aria-controls="pane-dur">Duration</button>
+  </div>
+  <div id="pane-date" role="tabpanel" aria-labelledby="tab-date" class="row">
+    <div class="f"><label class="lab" for="snooze-date">Date</label><input class="inp" type="date" id="snooze-date"></div>
+    <div class="f"><label class="lab" for="snooze-time" id="time-label">Time</label><input class="inp" type="time" id="snooze-time"></div>
+  </div>
+  <div id="pane-dur" role="tabpanel" aria-labelledby="tab-dur" class="row" hidden>
+    <div class="f"><label class="lab" for="dur-n">Amount</label><input class="inp mono" type="number" id="dur-n" min="1" step="1" value="2"></div>
+    <div class="f"><span class="lab" id="unit-label">Unit</span>
+      <div class="seg" role="group" aria-labelledby="unit-label">
+        <button type="button" data-unit="1">Minutes</button><button type="button" data-unit="60" aria-pressed="true">Hours</button><button type="button" data-unit="1440">Days</button>
+      </div></div>
+  </div>
+  <span class="lab">Quick picks</span>
+  <div class="chips">
+    <button type="button" class="chip" data-preset="30">30m</button><button type="button" class="chip" data-preset="60">1h</button>
+    <button type="button" class="chip" data-preset="120">2h</button><button type="button" class="chip" data-preset="tomorrow9">Tomorrow 9 AM</button>
+  </div>
+  <span class="lab" id="scope-label">Scope</span>
+  <div class="seg" role="group" aria-labelledby="scope-label" style="margin-bottom:16px">
+    <button type="button" data-scope="all" aria-pressed="true">All</button><button type="button" data-scope="tts">Speech (tts)</button><button type="button" data-scope="mic">Mic</button>
+  </div>
+  <div class="res" id="result"><span>Snooze until <b id="result-text"></b></span><span class="m mono">muted_until</span></div>
+  <div class="err" id="snooze-err" role="alert"></div>
+  <div class="foot"><button type="button" class="btn" id="cancel">Cancel</button><button type="button" class="btn pri" id="snooze">Snooze</button></div>
+</section>
+
+<div class="col">
+  <section class="c" aria-labelledby="h-mode"><h2 id="h-mode">Output mode</h2>
+    <div class="seg" role="group" aria-labelledby="h-mode"><button type="button" data-mode="speech">Speech</button><button type="button" data-mode="sounds">Sounds</button></div>
+  </section>
+  <section class="c" aria-labelledby="h-mute"><h2 id="h-mute">Mute now <span class="tag mono">POST /mute</span></h2>
+    <div class="seg" role="group" aria-labelledby="h-mute"><button type="button" data-mute="all">All</button><button type="button" data-mute="tts">Speech (tts)</button><button type="button" data-mute="mic">Mic</button></div>
+  </section>
+  <section class="c" aria-labelledby="h-replay"><h2 id="h-replay">Replay recent <span class="tag mono">POST /replay</span></h2>
+    <div class="row" style="margin:0;align-items:center"><label class="m" for="replay-n">Last</label><input class="inp mono" style="width:72px" type="number" id="replay-n" min="1" max="10" value="1"><button type="button" class="btn" id="replay">Replay</button><span class="cap" id="replay-msg" role="status"></span></div>
+  </section>
+  <section class="c" aria-labelledby="h-voices"><h2 id="h-voices">Voices <span class="tag">Read only</span></h2><ul id="voices"><li class="li m">Loading</li></ul></section>
+  <section class="c" aria-labelledby="h-config"><h2 id="h-config">Config <span class="tag">Read only</span></h2>
+    <p class="cap" style="margin:0 0 8px">config.json only. Secret-looking keys are redacted; .env is never read.</p><pre id="config">Loading</pre></section>
+  <section class="c later" aria-labelledby="h-later"><h2 id="h-later">Per agent snooze <span class="tag">Later</span></h2><div class="m">Today one machine wide mute covers every agent.</div></section>
+</div>
+</div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const all = (sel) => document.querySelectorAll(sel);
+const pad = (n) => String(n).padStart(2, "0");
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const fmtLocal = (iso) => {
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString() ? fmtTime(d)
+    : d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + " " + fmtTime(d);
+};
+const fmtFull = (d) => d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+const fmtLeft = (ms) => { const m = Math.max(1, Math.round(ms / 60000)), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m left` : `${m}m left`; };
+const press = (sel, attr, val) => all(sel).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+
+// Theme: four palettes, each light and dark. Neutral is the default.
+function applyTheme(p, s) {
+  document.documentElement.className = p + " " + s;
+  localStorage.setItem("echo.palette", p); localStorage.setItem("echo.scheme", s);
+  $("palette").value = p; press("[data-scheme]", "scheme", s);
+}
+const [curP, curS] = document.documentElement.className.split(" ");
+applyTheme(curP, curS);
+$("palette").onchange = () => applyTheme($("palette").value, document.documentElement.className.split(" ")[1]);
+all("[data-scheme]").forEach((b) => b.onclick = () => applyTheme($("palette").value, b.dataset.scheme));
+$("time-label").textContent = `Time (${TZ})`;
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? "" : JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.message || ("HTTP " + r.status));
+  return j;
+}
+
+async function refresh() {
+  try {
+    const h = await (await fetch("/health", { cache: "no-store" })).json();
+    $("meta").textContent = `localhost:${h.port ?? location.port} \u00b7 machine wide`;
+    $("version").textContent = h.version ? `v${String(h.version).replace(/^v/, "")}` : "";
+    $("version").hidden = !h.version;
+    $("health-text").textContent = h.status === "healthy" ? "Daemon healthy" : `Daemon ${h.status ?? "unknown"}`;
+    const m = h.mute || {};
+    const on = Boolean(m.muted || m.scope === "mic");
+    const what = m.scope === "tts" ? "Speech quiet" : m.scope === "mic" ? "Mic quiet" : "Speech and mic quiet";
+    if (on) {
+      $("mute-line").textContent = `Muted (${m.scope})` + (m.muted_until ? ` until ${fmtLocal(m.muted_until)}` : "");
+      $("health-line").textContent = m.muted_until
+        ? `${what} \u00b7 ${fmtLeft(Date.parse(m.muted_until) - Date.now())} \u00b7 resumes on its own`
+        : `${what} \u00b7 until you wake it`;
+    } else {
+      $("mute-line").textContent = "Speaking";
+      $("health-line").textContent = `Not muted \u00b7 mode: ${h.mode ?? "speech"}`;
+    }
+    $("ico-waves").setAttribute("d", on ? "M17 9l4 6M21 9l-4 6" : "M17 9a4 4 0 010 6M19.5 6.5a8 8 0 010 11");
+    $("wake").hidden = !on; $("open-snooze").hidden = on;
+    press("[data-mode]", "mode", h.mode);
+    press("[data-mute]", "mute", on ? m.scope : "");
+  } catch {
+    $("health-text").textContent = "Daemon unreachable";
+    $("mute-line").textContent = "Daemon unreachable";
+    $("health-line").textContent = "Start it with: echo start";
+  }
+}
+
+let mode = "date", unit = 60, scope = "all";
+function clearErr() { $("snooze-err").textContent = ""; $("snooze-time").removeAttribute("aria-invalid"); $("dur-n").removeAttribute("aria-invalid"); $("result").hidden = false; }
+function showErr(msg, field) { $("snooze-err").textContent = msg; if (field) $(field).setAttribute("aria-invalid", "true"); $("result").hidden = true; }
+
+function pickedDate() {
+  const [y, mo, d] = ($("snooze-date").value || "").split("-").map(Number);
+  const [hh, mm] = ($("snooze-time").value || "").split(":").map(Number);
+  const t = new Date(y, mo - 1, d, hh, mm);
+  return y && !Number.isNaN(t.getTime()) ? t : null;
+}
+function durMinutes() { return Number($("dur-n").value) * unit; }
+
+function preview() {
+  clearErr();
+  if (mode === "date") {
+    const t = pickedDate();
+    if (!t) return showErr("Pick a date and time.", "snooze-time");
+    if (t.getTime() <= Date.now()) return showErr(`That time has passed. Pick a time after ${fmtTime(new Date())} today.`, "snooze-time");
+    $("result-text").textContent = fmtFull(t);
+  } else {
+    const n = durMinutes();
+    if (!Number.isFinite(n) || n <= 0) return showErr("Duration must be a positive number.", "dur-n");
+    const label = unit === 1 ? "m" : unit === 60 ? "h" : "d";
+    $("result-text").textContent = `${fmtFull(new Date(Date.now() + n * 60000))} (now plus ${$("dur-n").value}${label})`;
+  }
+  return true;
+}
+
+function setDefaults() {
+  const d = new Date(Date.now() + 3600_000); // T3 default: now + 1 h
+  $("snooze-date").value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  $("snooze-time").value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $("dur-n").value = 2; unit = 60; press("[data-unit]", "unit", "60");
+  scope = "all"; press("[data-scope]", "scope", "all");
+  preview();
+}
+
+function tab(which) {
+  mode = which;
+  $("tab-date").setAttribute("aria-selected", String(which === "date"));
+  $("tab-dur").setAttribute("aria-selected", String(which === "dur"));
+  $("pane-date").hidden = which !== "date";
+  $("pane-dur").hidden = which !== "dur";
+  preview();
+}
+$("tab-date").onclick = () => tab("date");
+$("tab-dur").onclick = () => tab("dur");
+["snooze-date", "snooze-time", "dur-n"].forEach((id) => $(id).oninput = preview);
+all("[data-unit]").forEach((b) => b.onclick = () => { unit = Number(b.dataset.unit); press("[data-unit]", "unit", b.dataset.unit); preview(); });
+all("[data-scope]").forEach((b) => b.onclick = () => { scope = b.dataset.scope; press("[data-scope]", "scope", scope); });
+$("cancel").onclick = setDefaults;
+$("open-snooze").onclick = () => $("tab-date").focus();
+
+async function act(fn) {
+  try { await fn(); } catch (e) { showErr(e.message); }
+  refresh();
+}
+
+$("snooze").onclick = () => { if (preview() === true) act(async () => {
+  if (mode === "date") await post("/mute", { muted: true, until: pickedDate().toISOString(), scope });
+  else await post("/mute", { muted: true, duration_minutes: durMinutes(), scope });
+}); };
+
+all("[data-preset]").forEach((b) => b.onclick = () => act(async () => {
+  clearErr();
+  if (b.dataset.preset === "tomorrow9") {
+    const n = new Date(); const t = new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1, 9, 0);
+    await post("/mute", { muted: true, until: t.toISOString(), scope });
+  } else {
+    await post("/mute", { muted: true, duration_minutes: Number(b.dataset.preset), scope });
+  }
+}));
+
+$("wake").onclick = () => act(() => post("/mute", { muted: false }));
+all("[data-mute]").forEach((b) => b.onclick = () => act(() => post("/mute", { muted: true, scope: b.dataset.mute })));
+all("[data-mode]").forEach((b) => b.onclick = () => act(() => post("/mode", { mode: b.dataset.mode })));
+$("replay").onclick = async () => {
+  try { const j = await post("/replay", { n: Number($("replay-n").value) }); $("replay-msg").textContent = `Replaying ${j.n ?? ""}`; }
+  catch (e) { $("replay-msg").textContent = e.message; }
+};
+
+function li(text, note) {
+  const el = document.createElement("li"); el.className = "li";
+  const a = document.createElement("span"); a.textContent = text; el.appendChild(a);
+  if (note) { const b = document.createElement("span"); b.className = "m"; b.textContent = note; el.appendChild(b); }
+  return el;
+}
+
+async function loadStatic() {
+  try {
+    const v = await (await fetch("/voices")).json();
+    const names = Array.isArray(v.voices) ? v.voices.map((x) => x.name ?? x.id ?? JSON.stringify(x))
+      : Array.isArray(v.agents) ? v.agents : Object.keys(v);
+    $("voices").replaceChildren(...(names.length ? names.map((n) => li(String(n))) : [li("None")]));
+  } catch { $("voices").replaceChildren(li("Unavailable")); }
+  try {
+    const c = await (await fetch("/dashboard/config")).json();
+    $("config").textContent = c.present ? JSON.stringify(c.config, null, 2) + (c.error ? "\n" + c.error : "") : `No config.json (${c.path || "not resolved"})`;
+  } catch { $("config").textContent = "Unavailable"; }
+}
+
+setDefaults(); refresh(); loadStatic();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

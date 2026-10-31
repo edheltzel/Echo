@@ -42,9 +42,10 @@ calls. In the order you need them:
 1. **Install or update** - `cli/echo update` after a `git pull`, `cli/echo install --adapter <host>`
    the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
-3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`.
+3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`, or `until 15:30` (local time; tomorrow if past).
    Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
-   See [Mute](#mute).
+   See [Mute](#mute). `cli/echo dashboard` opens the local control page at
+   `http://localhost:3246/` (status, snooze by date and time or duration, Wake now, mode, replay).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
    See [`voices.md`](voices.md#per-project-persona--voice-local-override).
 

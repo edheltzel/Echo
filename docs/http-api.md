@@ -207,6 +207,16 @@ default title, identity voice; same validation and response shape (success messa
 `202` on receipt; a `session_id` here coalesces against `/notify` lines from the same
 session (one queue, one key).
 
+## Dashboard and the same-origin guard
+
+`GET /` (and `/dashboard`) serves the local control page; `GET /dashboard/config` returns a
+read-only view of `config.json` with secret-looking keys redacted. `.env` is never read. Both
+answer loopback peers whose `Host` is `localhost:3246` or `127.0.0.1:3246` only (`403` otherwise, which blocks DNS rebinding). Open the page with `cli/echo dashboard`.
+
+`POST /mute`, `/mode`, and `/replay` reject a browser request whose `Origin` (or, without one,
+`Referer`) is not `http://localhost:3246` or `http://127.0.0.1:3246` with `403`. Requests with
+neither header (CLI, curl, host adapters) are unchanged. This is a guard, not authentication.
+
 ## `POST /mute`
 
 Runtime mute (#83, FM-446). Scopes:
@@ -226,6 +236,9 @@ An explicit JSON body sets state; an **empty body toggles `all`** (a one-keystro
 - `muted` (boolean, required in a non-empty body unless toggling by `scope` alone) - target state.
 - `scope` (`tts` | `mic` | `all`, optional) - omitted = `all`. Legacy `{ "muted": true }` files without `scope` read as `all`.
 - `duration_minutes` (positive number, optional) - timed mute; omitted = indefinite.
+- `until` (ISO 8601 string, optional) - absolute end time, stored as `muted_until`. It must be in
+  the future and cannot be combined with `duration_minutes`; either mistake returns `400` and
+  changes nothing.
   The mute auto-expires **silently** at the deadline (lazy - voice simply resumes on the
   next notification). Invalid bodies return `400` and leave state untouched.
 

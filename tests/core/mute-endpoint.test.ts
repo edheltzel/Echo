@@ -282,3 +282,110 @@ describe("FM-446 - POST /mute scopes", () => {
     expect(res.status).toBe(202);
   });
 });
+
+describe("ATL-ECHO-SNOOZE-DASH-01 - POST /mute until (absolute)", () => {
+  test("future until sets muted_until (default scope all)", async () => {
+    const until = new Date(Date.now() + 90 * 60_000).toISOString();
+    const res = await postMute(JSON.stringify({ muted: true, until }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ muted: true, muted_until: until, scope: "all" });
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: until, scope: "all" });
+  });
+
+  test("until without muted, with scope tts", async () => {
+    const until = new Date(Date.now() + 60_000 * 5).toISOString();
+    const res = await postMute(JSON.stringify({ until, scope: "tts" }));
+    expect(res.status).toBe(200);
+    expect(readMuteState(MUTE_PATH)).toEqual({ muted: true, muted_until: until, scope: "tts" });
+  });
+
+  for (const [label, body] of [
+    ["past until", { muted: true, until: new Date(Date.now() - 60_000).toISOString() }],
+    ["garbage until", { muted: true, until: "15:30" }],
+    ["numeric until", { muted: true, until: 1234 }],
+    ["until + duration", { muted: true, until: new Date(Date.now() + 3600_000).toISOString(), duration_minutes: 30 }],
+    ["until + muted:false", { muted: false, until: new Date(Date.now() + 3600_000).toISOString() }],
+  ] as const) {
+    test(`${label} → 400, state untouched`, async () => {
+      writeMuteState({ muted: true, muted_until: null, scope: "mic" }, MUTE_PATH);
+      const res = await postMute(JSON.stringify(body));
+      expect(res.status).toBe(400);
+      expect(readMuteState(MUTE_PATH)).toEqual({ muted: false, muted_until: null, scope: "mic" });
+    });
+  }
+
+  test("/health reports mute_until_local", async () => {
+    const until = new Date(Date.now() + 2 * 3600_000).toISOString();
+    await postMute(JSON.stringify({ muted: true, until }));
+    const h = await (await fetch(`http://localhost:${PORT}/health`)).json();
+    expect(h.mute.muted_until).toBe(until);
+    expect(h.mute_until_local).toMatch(/\d{1,2}:\d{2}\s?[AP]M/);
+  });
+
+  test("Wake now (muted:false) clears an absolute mute", async () => {
+    await postMute(JSON.stringify({ muted: true, until: new Date(Date.now() + 3600_000).toISOString() }));
+    const res = await postMute(JSON.stringify({ muted: false }));
+    expect(await res.json()).toEqual({ muted: false, muted_until: null, scope: "all" });
+  });
+});
+
+describe("ATL-ECHO-SNOOZE-DASH-01 - same-origin write guard + dashboard", () => {
+  test("cross-origin browser POST /mute → 403, state untouched", async () => {
+    const res = await fetch(`http://localhost:${PORT}/mute`, {
+      method: "POST",
+      headers: { ...HEADERS, Origin: "http://evil.example" },
+      body: JSON.stringify({ muted: true }),
+    });
+    expect(res.status).toBe(403);
+    expect(readMuteState(MUTE_PATH).muted).toBe(false);
+  });
+
+  test("cross-origin Referer on /mode and /replay → 403", async () => {
+    for (const path of ["/mode", "/replay"]) {
+      const res = await fetch(`http://localhost:${PORT}${path}`, {
+        method: "POST",
+        headers: { ...HEADERS, Referer: "http://localhost:9999/x" },
+        body: "{}",
+      });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  test("same-origin POST /mute is allowed", async () => {
+    const res = await fetch(`http://localhost:${PORT}/mute`, {
+      method: "POST",
+      headers: { ...HEADERS, Origin: `http://localhost:${PORT}` },
+      body: JSON.stringify({ muted: true }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("no-Origin /notify still 202 (hosts unchanged)", async () => {
+    const res = await fetch(`http://localhost:${PORT}/notify`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ message: "host line", voice_enabled: false }),
+    });
+    expect(res.status).toBe(202);
+  });
+
+  test("GET / serves the dashboard page; /dashboard/config is JSON", async () => {
+    const page = await fetch(`http://localhost:${PORT}/`);
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    const html = await page.text();
+    expect(html).toContain("Date and time");
+    expect(html).toContain("Duration");
+    expect(html).toContain("Wake now");
+    const cfg = await fetch(`http://localhost:${PORT}/dashboard/config`);
+    expect(cfg.status).toBe(200);
+    expect(await cfg.json()).toHaveProperty("present");
+  });
+
+  test("dashboard GETs with a foreign Host header are 403 (DNS rebinding)", async () => {
+    for (const path of ["/", "/dashboard/config"]) {
+      const res = await fetch(`http://localhost:${PORT}${path}`, { headers: { Host: `evil.example:${PORT}` } });
+      expect(res.status).toBe(403);
+    }
+  });
+});

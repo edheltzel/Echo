@@ -6,7 +6,6 @@ import {
   createEchoMuteCommand,
   createEchoModeCommand,
   parseMuteArgs,
-  runEchoMute,
   type MuteRunResult,
 } from "../../shared/mute-command";
 import type { ScaffoldContext } from "../../shared/persona-scaffold";
@@ -36,7 +35,14 @@ describe("runEchoMute", () => {
     roots.push(root);
     const cli = join(root, "echo");
     writeFileSync(cli, "#!/bin/bash\nprintf 'argv:%s\\n' \"$*\"\nexit 0\n", { mode: 0o755 });
-    const result = await runEchoMute(cli, ["30m"]);
+    // Run in a fresh bun process: other test files mock.module("node:child_process")
+    // and bun leaks that mock process-wide, which would stub out the real spawn here.
+    const mod = join(process.cwd(), "shared", "mute-command.ts");
+    const script = `const { runEchoMute } = await import(${JSON.stringify(mod)}); console.log(JSON.stringify(await runEchoMute(${JSON.stringify(cli)}, ["30m"])));`;
+    const proc = Bun.spawn([process.execPath, "-e", script], { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(proc.stdout).text();
+    await proc.exited;
+    const result = JSON.parse(out.trim().split("\n").pop() ?? "{}");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("argv:mute 30m");
   });
