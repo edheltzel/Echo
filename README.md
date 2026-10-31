@@ -13,7 +13,7 @@
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
+Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you, and with [voice ask](docs/converse.md) an agent can ask you a question and hear your spoken answer. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
 
 open source · local daemon · macOS · Bun
 
@@ -42,7 +42,19 @@ That silences Echo audio on the whole machine, not one session. Notifications st
 
 Empryo and the other [supported hosts](docs/install-human.md#what-gets-installed) can speak through Echo, as can a raw HTTP caller. Wiring a host is optional. The three steps below use `curl` only.
 
-First-class speech-to-text is [roadmap](https://github.com/edheltzel/Echo/issues/179), not this README. Echo can already ask one question and transcribe one reply. That is an opt-in extra, not the reason to install.
+## Two voice features
+
+Echo has two separate voice features. They use different ports, different dependencies, and different mute scopes.
+
+| | Notifications (text-to-speech) | Voice ask (speech-to-text) |
+| --- | --- | --- |
+| Direction | Echo talks to you | An agent asks you one question, and your spoken reply comes back as text |
+| Surface | `POST /notify` on `:3246` (the daemon) | `echo_ask` through the converse coordinator on `:32468` |
+| Needs | Echo core only | `sox` (`rec`) plus `yap` or `whisper-cli`, and macOS mic permission |
+| Mute | `cli/echo mute on tts` swaps speech for sounds | `cli/echo mute on mic` blocks capture |
+| Docs | [What Echo does](docs/what-echo-does.md), [voices](docs/voices.md) | [Voice ask](docs/converse.md) |
+
+Speech-to-text ships today as voice ask. An agent asks you one question out loud, you answer by voice, and the reply is transcribed on your Mac and handed back to the agent. Each ask is one exchange (one question, one reply), not a conversation loop or a dictation mode. Install `sox` plus `yap` or `whisper-cli` to turn it on; see [Voice ask](docs/converse.md).
 
 ## Three steps
 
