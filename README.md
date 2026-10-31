@@ -75,7 +75,8 @@ You should hear "Hello from Echo" and see JSON with `"status":"accepted"`. A lin
 
 ```bash
 cli/echo doctor          # one row per check, ends in Result: READY
-cli/echo mute on         # also: off | toggle | status | 30m | on tts | on mic
+cli/echo mute on         # also: off | toggle | status | 30m | until 15:30 | on tts | on mic
+cli/echo dashboard       # local control page: snooze, Wake now, mode, replay
 cli/echo replay          # last spoken line; `replay 3` for last three
 curl -fsS http://localhost:3246/health
 ```
