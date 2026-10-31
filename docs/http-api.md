@@ -211,7 +211,7 @@ session (one queue, one key).
 
 `GET /` (and `/dashboard`) serves the local control page; `GET /dashboard/config` returns a
 read-only view of `config.json` with secret-looking keys redacted. `.env` is never read. Both
-answer loopback peers only (`403` otherwise). Open the page with `cli/echo dashboard`.
+answer loopback peers whose `Host` is `localhost:3246` or `127.0.0.1:3246` only (`403` otherwise, which blocks DNS rebinding). Open the page with `cli/echo dashboard`.
 
 `POST /mute`, `/mode`, and `/replay` reject a browser request whose `Origin` (or, without one,
 `Referer`) is not `http://localhost:3246` or `http://127.0.0.1:3246` with `403`. Requests with

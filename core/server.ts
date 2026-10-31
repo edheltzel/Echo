@@ -53,7 +53,7 @@ import {
   type CaptureReservationRequest,
 } from "./playback-reservation";
 import { readTtsCache, writeTtsCache } from "./tts-cache";
-import { isSameOriginWrite, readDashboardConfig } from "./dashboard";
+import { isLocalHostHeader, isSameOriginWrite, readDashboardConfig } from "./dashboard";
 import { looksLikeEdgeVoice } from "../shared/edge-voice";
 import {
   applySpeakModeSpeed,
@@ -1972,7 +1972,7 @@ export const server = serve({
     // Dashboard page + its read-only config view: loopback only, and exempt
     // from rate limiting the same way loopback /health is (the page polls).
     const dashboardGet = req.method === "GET" && DASHBOARD_PATHS.has(url.pathname);
-    if (dashboardGet && !isLoopbackAddress(peer)) {
+    if (dashboardGet && (!isLoopbackAddress(peer) || !isLocalHostHeader(req.headers.get("host"), bunServer.port))) {
       return new Response("Forbidden", { status: 403 });
     }
     const exemptHealth = (healthGet || dashboardGet) && isLoopbackAddress(peer);

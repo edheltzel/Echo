@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatMuteUntilLocal, parseMuteUntil, readMuteState, resolveClockUntil, setMuteState, setMuteUntil } from "../../core/mute.ts";
-import { isSameOriginWrite, readDashboardConfig } from "../../core/dashboard.ts";
+import { isLocalHostHeader, isSameOriginWrite, readDashboardConfig } from "../../core/dashboard.ts";
 
 const TMP = mkdtempSync(join(tmpdir(), "mute-until-"));
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));
@@ -121,5 +121,16 @@ describe("dashboard page themes (mockups v3)", () => {
   });
   test("no emoji in the page", () => {
     expect(/\p{Extended_Pictographic}/u.test(html)).toBe(false);
+  });
+});
+
+describe("dashboard Host pin (DNS rebinding)", () => {
+  test("only localhost / 127.0.0.1 on the daemon port", () => {
+    expect(isLocalHostHeader("localhost:3246", 3246)).toBe(true);
+    expect(isLocalHostHeader("127.0.0.1:3246", "3246")).toBe(true);
+    expect(isLocalHostHeader("evil.example:3246", 3246)).toBe(false);
+    expect(isLocalHostHeader("localhost:9999", 3246)).toBe(false);
+    expect(isLocalHostHeader("localhost", 3246)).toBe(false);
+    expect(isLocalHostHeader(null, 3246)).toBe(false);
   });
 });

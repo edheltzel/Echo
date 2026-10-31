@@ -31,6 +31,15 @@ export function isSameOriginWrite(origin: string | null, referer: string | null,
   return true;
 }
 
+/**
+ * DNS-rebinding pin for the dashboard reads (/, /dashboard, /dashboard/config).
+ * A rebound name still reaches loopback, but its Host header names the
+ * attacker's domain, so only localhost / 127.0.0.1 on the daemon port pass.
+ */
+export function isLocalHostHeader(host: string | null, port: string | number | undefined): boolean {
+  return host === `localhost:${port}` || host === `127.0.0.1:${port}`;
+}
+
 const SECRET_KEY = /key|token|secret|password|passwd|auth|credential/i;
 
 function redact(value: unknown): unknown {

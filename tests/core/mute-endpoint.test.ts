@@ -381,4 +381,11 @@ describe("ATL-ECHO-SNOOZE-DASH-01 - same-origin write guard + dashboard", () => 
     expect(cfg.status).toBe(200);
     expect(await cfg.json()).toHaveProperty("present");
   });
+
+  test("dashboard GETs with a foreign Host header are 403 (DNS rebinding)", async () => {
+    for (const path of ["/", "/dashboard/config"]) {
+      const res = await fetch(`http://localhost:${PORT}${path}`, { headers: { Host: `evil.example:${PORT}` } });
+      expect(res.status).toBe(403);
+    }
+  });
 });
