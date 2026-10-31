@@ -159,3 +159,76 @@ export function toggleMuteState(path?: string, scope: MuteScope = "all"): MuteSt
     : current.muted && current.scope === "tts";
   return setMuteState(!currentlyOn, undefined, path, scope);
 }
+
+// -----------------------------------------------------------------------------
+// Absolute mute ("mute until", ATL-ECHO-SNOOZE-DASH-01). Same stored deadline
+// as a duration mute: `muted_until` is UTC ISO; display is local. Two inputs,
+// one deadline (T3-style snooze).
+// -----------------------------------------------------------------------------
+
+/**
+ * Validate an absolute `until` value. Returns the deadline as UTC ISO, or
+ * throws an `Invalid ...` error (mapped to HTTP 400) when it is not a string,
+ * not a parseable ISO 8601 timestamp, or not strictly in the future.
+ */
+export function parseMuteUntil(value: unknown, now: number = Date.now()): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error("Invalid body: 'until' must be an ISO 8601 timestamp");
+  }
+  // Require a date + time shape; Date.parse alone accepts loose strings.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value.trim())) {
+    throw new Error("Invalid body: 'until' must be an ISO 8601 timestamp");
+  }
+  const deadline = Date.parse(value);
+  if (Number.isNaN(deadline)) {
+    throw new Error("Invalid body: 'until' must be an ISO 8601 timestamp");
+  }
+  if (deadline <= now) {
+    throw new Error("Invalid body: 'until' must be in the future");
+  }
+  return new Date(deadline).toISOString();
+}
+
+/**
+ * Resolve a local wall-clock `HH:MM` to the next future instant: today if it
+ * is still ahead, otherwise tomorrow. Uses calendar-day arithmetic (not +24h)
+ * so a DST change between now and the target lands on the right wall time.
+ * Throws on a malformed clock or a wall time that does not exist (spring
+ * forward gap).
+ */
+export function resolveClockUntil(clock: string, now: Date = new Date()): string {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(clock.trim());
+  if (!m) throw new Error(`Invalid time '${clock}': use HH:MM (24-hour)`);
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  for (const dayOffset of [0, 1]) {
+    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, hh, mm, 0, 0);
+    if (t.getHours() !== hh || t.getMinutes() !== mm) {
+      throw new Error(`Invalid time '${clock}': that local time does not exist (DST change)`);
+    }
+    if (t.getTime() > now.getTime()) return t.toISOString();
+  }
+  throw new Error(`Invalid time '${clock}'`);
+}
+
+/** Absolute mute: same stored shape as a duration mute. */
+export function setMuteUntil(
+  untilIso: string,
+  path?: string,
+  scope: MuteScope = "all",
+): MuteState {
+  const state = activeMute(parseMuteUntil(untilIso), scope);
+  writeMuteState(state, path);
+  return state;
+}
+
+/** "3:30 PM" (today) or "Sat 3:30 PM" in the daemon's local zone. */
+export function formatMuteUntilLocal(untilIso: string | null, now: Date = new Date()): string | null {
+  if (!untilIso) return null;
+  const d = new Date(untilIso);
+  if (Number.isNaN(d.getTime())) return null;
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === now.toDateString()
+    ? time
+    : `${d.toLocaleDateString("en-US", { weekday: "short" })} ${time}`;
+}

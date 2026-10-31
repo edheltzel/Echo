@@ -1,6 +1,7 @@
 #!/bin/bash
 # Runtime mute control (#83 / FM-446 / FM-601) - thin curl wrapper over POST /mute + GET /health.
 #   mute.sh on [tts|mic|all] [minutes] | on [minutes] [tts|mic|all]
+#   mute.sh until HH:MM [tts|mic|all]   (absolute; today, or tomorrow if past)
 #   mute.sh off | toggle [tts|mic|all] | status
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/echo-port.sh"
 
 usage() {
-  echo "Usage: $(basename "$0") on [tts|mic|all] [minutes] | off | toggle [tts|mic|all] | status" >&2
+  echo "Usage: $(basename "$0") on [tts|mic|all] [minutes] | until HH:MM [tts|mic|all] | off | toggle [tts|mic|all] | status" >&2
   exit 2
 }
 
@@ -92,8 +93,75 @@ print_mute_human() {
     echo "Mode: ${mode}"
   fi
   if [ -n "$until" ]; then
-    echo "Until: ${until}"
+    local local_until
+    local_until="$(local_clock "$until")"
+    if [ -n "$local_until" ]; then
+      echo "Until: ${local_until} (${until})"
+    else
+      echo "Until: ${until}"
+    fi
   fi
+}
+
+
+# --- absolute mute (ATL-ECHO-SNOOZE-DASH-01) ---------------------------------
+# GNU date (-d) vs BSD/macOS date (-j -f / -v / -r). ECHO_NOW_EPOCH pins "now"
+# for tests only.
+date_is_gnu() { date --version >/dev/null 2>&1; }
+
+now_epoch() { printf '%s' "${ECHO_NOW_EPOCH:-$(date +%s)}"; }
+
+# Local calendar day for epoch + N days (calendar arithmetic, DST-safe).
+local_day() {
+  local epoch="$1" add="$2"
+  if date_is_gnu; then
+    date -d "@$epoch $add days" +%Y-%m-%d 2>/dev/null || date -d "$(date -d "@$epoch" +%Y-%m-%d) +$add days" +%Y-%m-%d
+  else
+    date -j -r "$epoch" -v+"${add}"d +%Y-%m-%d
+  fi
+}
+
+# Local "YYYY-MM-DD HH:MM" -> epoch; fails for a wall time that does not exist.
+local_epoch() {
+  local e back
+  if date_is_gnu; then
+    e="$(date -d "$1" +%s 2>/dev/null)" || return 1
+    back="$(date -d "@$e" '+%Y-%m-%d %H:%M')"
+  else
+    e="$(date -j -f '%Y-%m-%d %H:%M:%S' "$1:00" +%s 2>/dev/null)" || return 1
+    back="$(date -j -r "$e" '+%Y-%m-%d %H:%M')"
+  fi
+  [ "$back" = "$1" ] || return 1 # DST gap: the wall time was shifted
+  printf '%s' "$e"
+}
+
+utc_iso() {
+  if date_is_gnu; then date -u -d "@$1" +%Y-%m-%dT%H:%M:%S.000Z
+  else date -u -r "$1" +%Y-%m-%dT%H:%M:%S.000Z; fi
+}
+
+# HH:MM -> UTC ISO of the next future occurrence (today, else tomorrow).
+resolve_clock_until() {
+  local clock="$1" now day e add
+  [[ "$clock" =~ ^([01]?[0-9]|2[0-3]):([0-5][0-9])$ ]] || return 1
+  clock="$(printf '%02d:%s' "$((10#${BASH_REMATCH[1]}))" "${BASH_REMATCH[2]}")"
+  now="$(now_epoch)"
+  for add in 0 1; do
+    day="$(local_day "$now" "$add")" || return 1
+    e="$(local_epoch "$day $clock")" || return 1
+    if [ "$e" -gt "$now" ]; then utc_iso "$e"; return 0; fi
+  done
+  return 1
+}
+
+# UTC ISO -> "3:30 PM" in local time (blank if unparseable).
+local_clock() {
+  local iso="${1%.*}" e
+  iso="${iso%Z}"
+  if date_is_gnu; then e="$(date -u -d "${iso/T/ }" +%s 2>/dev/null)" || return 0
+  else e="$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "$iso" +%s 2>/dev/null)" || return 0; fi
+  if date_is_gnu; then date -d "@$e" '+%a %-I:%M %p'
+  else date -j -r "$e" '+%a %-I:%M %p'; fi
 }
 
 cmd="${1:-}"
@@ -125,6 +193,20 @@ case "$cmd" in
       body="{\"muted\": true, \"scope\": \"$scope\"}"
     else
       body='{"muted": true}'
+    fi
+    ;;
+  until)
+    shift
+    [ $# -ge 1 ] && [ $# -le 2 ] || usage
+    if [ $# -eq 2 ]; then is_scope "$2" || usage; scope="$2"; fi
+    if ! until_iso="$(resolve_clock_until "$1")"; then
+      echo "Invalid time '$1' - use HH:MM (24-hour local time), e.g. 15:30." >&2
+      exit 2
+    fi
+    if [ -n "$scope" ]; then
+      body="{\"muted\": true, \"until\": \"$until_iso\", \"scope\": \"$scope\"}"
+    else
+      body="{\"muted\": true, \"until\": \"$until_iso\"}"
     fi
     ;;
   off) body='{"muted": false}' ;;

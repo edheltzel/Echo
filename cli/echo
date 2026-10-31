@@ -38,8 +38,8 @@ Commands:
                        Adapter ids: shared/extension.ts (HARNESS_IDS).
   doctor               Diagnose every degraded state with a concrete recovery command.
   status               Service + health snapshot with recent logs.
-  mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]
-                       Runtime mute. Default scope \`all\` (speaker + mic, fully silent). \`tts\`
+  mute on|off|toggle|status | <duration, e.g. 30m or 1h> | until HH:MM [tts|mic|all]
+                       Runtime mute. \`until 15:30\` mutes to that local time (tomorrow if past). Default scope \`all\` (speaker + mic, fully silent). \`tts\`
                        swaps speech for notification sounds; \`mic\` holds capture/converse; notifications still log.
   mode speech|sounds|status
                        Output mode for every session. \`speech\` speaks (default);
@@ -52,6 +52,8 @@ Commands:
                        --check is read-only and verifies that the plist and host
                        adapter paths still resolve - it does NOT detect a payload
                        staged from older source at the same version.
+  dashboard [--print]  Open the local control panel (${ECHO_BASE_URL}/) in the browser.
+                       --print only prints the URL.
   uninstall [--check]  Unload ${SERVICE_NAME} and remove its payload (logs + config kept).
 EOF
 }
@@ -73,10 +75,10 @@ cmd_mute() {
   local arg="${1:-}"
   case "$arg" in
     ""|-h|--help)
-      echo "Usage: echo mute on|off|toggle|status | <duration, e.g. 30m or 1h> [tts|mic|all]" >&2
+      echo "Usage: echo mute on|off|toggle|status | <duration, e.g. 30m or 1h> | until HH:MM [tts|mic|all]" >&2
       exit 2
       ;;
-    on|off|toggle|status)
+    on|off|toggle|status|until)
       exec bash "$SCRIPTS/mute.sh" "$@"
       ;;
     *)
@@ -92,6 +94,21 @@ cmd_mute() {
       exec bash "$SCRIPTS/mute.sh" on "$minutes"
       ;;
   esac
+}
+
+# --- dashboard --------------------------------------------------------------
+# The daemon serves the page (loopback only, same port). This only opens it.
+cmd_dashboard() {
+  local url="$ECHO_BASE_URL/"
+  if [ "${1:-}" = "--print" ]; then echo "$url"; return 0; fi
+  if ! curl -fsS -m 2 "$HEALTH_URL" >/dev/null 2>&1; then
+    echo "Echo daemon is not answering on $HEALTH_URL - run: echo doctor" >&2
+    exit 1
+  fi
+  echo "Opening $url"
+  if command -v open >/dev/null 2>&1; then open "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
+  else echo "Open $url in your browser."; fi
 }
 
 # --- voice ------------------------------------------------------------------
@@ -308,6 +325,7 @@ case "$cmd" in
   uninstall)  exec bash "$SCRIPTS/uninstall.sh" "$@" ;;
   status)     exec bash "$SCRIPTS/status.sh" "$@" ;;
   mute)       cmd_mute "$@" ;;
+  dashboard)  cmd_dashboard "$@" ;;
   mode)       exec bash "$SCRIPTS/mode.sh" "$@" ;;
   replay)     exec bash "$SCRIPTS/replay.sh" "$@" ;;
   voice)      cmd_voice "$@" ;;
