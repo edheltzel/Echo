@@ -39,8 +39,7 @@ describe("runEchoMute", () => {
     const result = await runEchoMute(cli, ["30m"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("argv:mute 30m");
-    // A cold bash spawn on a loaded macOS CI runner can exceed bun's 5s default.
-  }, 20_000);
+  });
 
   test("source uses node:child_process.spawn and does not POST /mute", () => {
     const src = readFileSync("shared/mute-command.ts", "utf8");

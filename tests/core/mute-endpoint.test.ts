@@ -25,7 +25,14 @@ function stubSpawn(): any {
   child.stdin = { write() {}, end() {} };
   child.kill = () => {};
   child.pid = 4242;
-  queueMicrotask(() => child.emit("exit", 0));
+  // bun's mock.module leaks across files: emit end/close too so a later real-spawn
+  // caller (shared/mute-command runEchoCli waits on "close") cannot hang.
+  queueMicrotask(() => {
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", 0);
+    child.emit("close", 0);
+  });
   return child;
 }
 
