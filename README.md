@@ -13,7 +13,7 @@
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
+Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you, and with [voice ask](docs/converse.md) an agent can ask you a question and hear your spoken answer. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
 
 open source · local daemon · macOS · Bun
 
@@ -54,7 +54,7 @@ Echo has two separate voice features. They use different ports, different depend
 | Mute | `cli/echo mute on tts` swaps speech for sounds | `cli/echo mute on mic` blocks capture |
 | Docs | [What Echo does](docs/what-echo-does.md), [voices](docs/voices.md) | [Voice ask](docs/converse.md) |
 
-Voice ask is one exchange: one question, one reply, transcribed on your Mac. It is not a conversation loop or a dictation mode. First-class speech-to-text is on the [roadmap (#179)](https://github.com/edheltzel/Echo/issues/179). Voice ask is an opt-in extra, not the reason to install.
+Speech-to-text ships today as voice ask. An agent asks you one question out loud, you answer by voice, and the reply is transcribed on your Mac and handed back to the agent. Each ask is one exchange (one question, one reply), not a conversation loop or a dictation mode. Install `sox` plus `yap` or `whisper-cli` to turn it on; see [Voice ask](docs/converse.md).
 
 ## Three steps
 
