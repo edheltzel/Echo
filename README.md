@@ -42,7 +42,19 @@ That silences Echo audio on the whole machine, not one session. Notifications st
 
 Empryo and the other [supported hosts](docs/install-human.md#what-gets-installed) can speak through Echo, as can a raw HTTP caller. Wiring a host is optional. The three steps below use `curl` only.
 
-First-class speech-to-text is [roadmap](https://github.com/edheltzel/Echo/issues/179), not this README. Echo can already ask one question and transcribe one reply. That is an opt-in extra, not the reason to install.
+## Two voice features
+
+Echo has two separate voice features. They use different ports, different dependencies, and different mute scopes.
+
+| | Notifications (text-to-speech) | Voice ask (speech-to-text) |
+| --- | --- | --- |
+| Direction | Echo talks to you | An agent asks you one question, and your spoken reply comes back as text |
+| Surface | `POST /notify` on `:3246` (the daemon) | `echo_ask` through the converse coordinator on `:32468` |
+| Needs | Echo core only | `sox` (`rec`) plus `yap` or `whisper-cli`, and macOS mic permission |
+| Mute | `cli/echo mute on tts` swaps speech for sounds | `cli/echo mute on mic` blocks capture |
+| Docs | [What Echo does](docs/what-echo-does.md), [voices](docs/voices.md) | [Voice ask](docs/converse.md) |
+
+Voice ask is one exchange: one question, one reply, transcribed on your Mac. It is not a conversation loop or a dictation mode. First-class speech-to-text is on the [roadmap (#179)](https://github.com/edheltzel/Echo/issues/179). Voice ask is an opt-in extra, not the reason to install.
 
 ## Three steps
 

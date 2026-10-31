@@ -4,6 +4,10 @@ Echo speaks. `echo-converse` lets it ask. One question out loud, one spoken repl
 one transcript returned to the calling agent. Local transcription, no cloud rung, no
 conversational loop in v1.
 
+This is Echo's speech-to-text feature. It is separate from notification text-to-speech (`/notify` on
+`:3246`, see [what-echo-does.md](what-echo-does.md)): different port, different dependencies, and
+its own mute scope (`cli/echo mute on mic`).
+
 ```bash
 bun converse/main.ts                       # start the coordinator on :32468
 curl -fsS http://localhost:32468/health    # capability, booking state, core address

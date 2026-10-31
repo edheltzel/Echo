@@ -65,6 +65,10 @@ Sounds play in two cases:
 
 `mute all` is still total silence. A voice-ask question (`echo_ask`) and `cli/echo replay` always speak; they ignore the mode, and mute still silences them. Requests sent silent (`voice_enabled: false`) stay silent. Echo ships its own three sounds; point `ECHO_SOUND_REQUEST`, `ECHO_SOUND_DONE`, or `ECHO_SOUND_GENERIC` in `~/.config/echo/config.json` at your own files. A file that will not play falls back to a macOS system sound.
 
+## Voice ask (speech-to-text)
+
+Everything above is notification text-to-speech: Echo talks to you. Voice ask is the separate speech-to-text feature, and it goes the other way. A host calls `echo_ask` (Pi and omp through their adapters, Claude Code through `--adapter mcp`). The converse coordinator on `:32468` speaks one question, the host process records one reply with `rec`, and `yap` or `whisper-cli` transcribes it on your Mac. The transcript returns to the calling agent only. It is opt-in, needs `sox`, and is blocked by `cli/echo mute on mic`. While a capture is live, notification speech holds (see [When it stays quiet](#when-it-stays-quiet)). Full reference: [converse.md](converse.md).
+
 ## When it stays quiet
 
 Quiet is a feature. These are the usual reasons you hear nothing:
