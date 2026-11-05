@@ -181,6 +181,98 @@ async function withStatusFixture(
 }
 
 describe("echo status", () => {
+  test.each([false, true])("drains service lists with Echo registrations %s", async (registered) => {
+    await withStatusFixture(async ({ root, env, write, run }) => {
+      const services = ["com.echo", "com.pai.voice-server", "com.atlas.voicesystem"];
+      env.ECHO_STATUS_SERVICES = join(root, "services.txt");
+      write(env.ECHO_STATUS_SERVICES, [
+        ...(registered ? services.map((name) => `111 0 ${name}`) : []),
+        ...Array.from({ length: 16_384 }, (_, i) => `111 0 com.example.unrelated-service-${i}`),
+      ].join("\n") + "\n");
+      writeExecutable(join(root, "bin/launchctl"), '#!/bin/bash\nexec cat "$ECHO_STATUS_SERVICES"\n');
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toBe("");
+      expect(r.stdout).toMatch(registered
+        ? /Daemon\s+running on :3246\s+loaded\n/
+        : /Daemon\s+running on :3246\s+not loaded\n/);
+      for (const name of services.slice(1)) {
+        if (registered) expect(r.stdout).toContain(`legacy service still loaded: ${name}`);
+        else expect(r.stdout).not.toContain(`legacy service still loaded: ${name}`);
+      }
+    });
+  });
+
+  test.each(["unset", "empty", "custom"])("uses Claude's reconciled settings with selector %s", async (selector) => {
+    await withStatusFixture(async ({ home, root, env, write, run }) => {
+      const settingsPath = selector === "custom" ? join(root, "custom/settings.json") : join(home, ".claude/settings.json");
+      if (selector !== "unset") env.PAI_SETTINGS_PATH = selector === "empty" ? "" : settingsPath;
+      write(settingsPath, JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }));
+      const proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../adapters/claudecode/restore-hooks.ts")], {
+        cwd: root,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exitCode, , stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      const reconciled = readFileSync(settingsPath, "utf8");
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/Claude\s+registered\s/);
+      expect(r.stdout).toContain(settingsPath);
+      expect(readFileSync(settingsPath, "utf8")).toBe(reconciled);
+      if (selector === "custom") {
+        write(join(home, ".claude/settings.json"), reconciled);
+        write(settingsPath, "{}");
+        expect((await run()).stdout).toMatch(/Claude\s+not registered/);
+      }
+    });
+  });
+
+  test.each(["", "1"])("styles only terminal output with NO_COLOR=%s and preserves alignment", async (noColor) => {
+    await withStatusFixture(async ({ project, env, run }) => {
+      env.NO_COLOR = noColor;
+      const plain = await run();
+      expect(plain.exitCode).toBe(0);
+      expect(plain.stdout).not.toContain("\x1b[");
+      const chunks: Uint8Array[] = [];
+      const closed = Promise.withResolvers<void>();
+      const proc = Bun.spawn(["/bin/bash", "-c", 'test -t 1 && exec /bin/bash "$1" status', "echo-status-pty", CLI], {
+        cwd: project,
+        env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env },
+        terminal: {
+          cols: 160,
+          rows: 40,
+          data(_terminal, data) { chunks.push(data.slice()); },
+          exit() { closed.resolve(); },
+        },
+      });
+      try {
+        const [exitCode] = await Promise.all([proc.exited, closed.promise]);
+        expect(exitCode).toBe(0);
+        const output = Buffer.concat(chunks).toString("utf8").replaceAll("\r\n", "\n");
+        if (noColor) expect(output).not.toContain("\x1b[");
+        else {
+          expect(output).toContain("\x1b[1mOutput\x1b[0m");
+          expect(output).toContain("\x1b[32mrunning\x1b[0m");
+        }
+        const visible = Bun.stripANSI(output);
+        expect(visible).toBe(plain.stdout);
+        expect(visible).toContain("  Mute        unmuted\n");
+        expect(visible).toContain("  Provider    edgetts\n");
+        expect(visible).toContain("  elevenlabs  off\n");
+      } finally {
+        proc.terminal?.close();
+      }
+    });
+  });
+
   test("renders health and source metadata with Bun and no Python, using only GET /health", async () => {
     await withStatusFixture(async ({ home, root, write, run }) => {
       const sourcePackage = join(home, "Library/Application Support/echo/source/package.json");

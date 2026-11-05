@@ -7,12 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/echo-port.sh
 . "$SCRIPT_DIR/echo-port.sh"
 
-use_color() { [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; }
+use_color=false
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then use_color=true; fi
 
 # dim, ok (green), warn (yellow), bad (red), label (bold). Plain when not a TTY.
 paint() {
   local code="$1" text="$2"
-  if use_color; then printf '\033[%sm%s\033[0m' "$code" "$text"; else printf '%s' "$text"; fi
+  if "$use_color"; then printf '\033[%sm%s\033[0m' "$code" "$text"; else printf '%s' "$text"; fi
 }
 dim()   { paint "2" "$1"; }
 ok()    { paint "32" "$1"; }
@@ -20,14 +21,18 @@ warn()  { paint "33" "$1"; }
 bad()   { paint "31" "$1"; }
 label() { paint "1" "$1"; }
 
-row() { printf '  %-11s %s\n' "$(label "$1")" "$2"; }
+row() {
+  local heading
+  printf -v heading '%-11s' "$1"
+  printf '  %s %s\n' "$(label "$heading")" "$2"
+}
 
 # --- daemon ---------------------------------------------------------------
 SERVICE_NAME="com.echo"
 SOURCE_HOME="${ECHO_SOURCE_HOME:-$HOME/Library/Application Support/echo/source}"
 
 loaded="not loaded"
-if launchctl list 2>/dev/null | grep -q "$SERVICE_NAME"; then
+if launchctl list 2>/dev/null | grep "$SERVICE_NAME" >/dev/null; then
   loaded="loaded"
 fi
 
@@ -41,7 +46,7 @@ fi
 row "Daemon" "$daemon_state on :${ECHO_PORT}  $(dim "$loaded")"
 
 for legacy in com.pai.voice-server com.atlas.voicesystem; do
-  if launchctl list 2>/dev/null | grep -q "$legacy"; then
+  if launchctl list 2>/dev/null | grep "$legacy" >/dev/null; then
     row "" "$(warn "legacy service still loaded: $legacy")"
   fi
 done
@@ -131,7 +136,7 @@ harness() {
   else row "$1" "$(dim "not registered")"; fi
 }
 
-claude_settings="$HOME/.claude/settings.json"
+claude_settings="${PAI_SETTINGS_PATH:-$HOME/.claude/settings.json}"
 pi_settings="${PI_SETTINGS_PATH:-$HOME/.pi/agent/settings.json}"
 omp_ext="${OMP_EXTENSIONS_DIR:-$HOME/.omp/agent/extensions}"
 jcode_config="${JCODE_CONFIG_PATH:-${JCODE_HOME:-$HOME/.jcode}/config.toml}"
