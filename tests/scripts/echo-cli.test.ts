@@ -58,12 +58,11 @@ describe("echo CLI dispatch", () => {
       mkdirSync(bin, { recursive: true });
       writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({ PORT: 3457 }));
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","port":3457}\'\nexit 0\n');
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
       const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("Health: OK on :3457");
-      expect(r.stdout).toContain('"port":3457');
+      expect(r.stdout).toContain("running on :3457");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -84,11 +83,11 @@ describe("echo CLI dispatch", () => {
         mkdirSync(bin, { recursive: true });
         writeFileSync(join(home, ".config", "echo", "config.json"), `{"PORT": "${port}"}`);
         writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-        writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
+        writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
         const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
         expect(r.exitCode).toBe(0);
-        expect(r.stdout).toContain("Health: OK on :3246");
+        expect(r.stdout).toContain("running on :3246");
         expect(r.stdout).not.toContain(`:${port}`);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -110,11 +109,11 @@ describe("echo CLI dispatch", () => {
         JSON.stringify({ ECHO_DEFAULT_TITLE: "First", PORT: 3457 }, null, 2) + "\n",
       );
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
       const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("Health: OK on :3457");
+      expect(r.stdout).toContain("running on :3457");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
