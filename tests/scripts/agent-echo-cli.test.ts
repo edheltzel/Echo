@@ -44,16 +44,14 @@ function tarModes(tar: Uint8Array): Map<string, number> {
 
 beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "agent-echo-"));
-  // `npm pack` outlives bun's 5s hook budget, so bun reaps it and status comes back null.
-  // The tarball name is the last line it prints either way; the file existing is the proof.
   const pack = run("npm", ["pack", repo, "--pack-destination", scratch]);
+  expect(pack.status, pack.stderr || pack.error?.message || "npm pack failed").toBe(0);
   const filename = pack.stdout.trim().split("\n").pop() ?? "";
   const tarball = join(scratch, filename);
   expect(existsSync(tarball), pack.stderr || pack.error?.message || "no tarball").toBe(true);
-  // bun reaps a beforeAll child at 5s, so extract in-process instead of spawning tar.
   await extractTarball(tarball, scratch);
   packageRoot = join(scratch, "package");
-});
+}, 30_000);
 
 afterAll(() => {
   if (scratch) rmSync(scratch, { recursive: true, force: true });
