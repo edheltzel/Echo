@@ -37,7 +37,7 @@ Commands:
                        wait for /health, and reconcile installed host adapters.
                        Adapter ids: shared/extension.ts (HARNESS_IDS).
   doctor               Diagnose every degraded state with a concrete recovery command.
-  status               Service + health snapshot with recent logs.
+  status               Read-only daemon, output, providers, harnesses, and install/config dashboard.
   mute on|off|toggle|status | <duration, e.g. 30m or 1h> | until HH:MM [tts|mic|all]
                        Runtime mute. \`until 15:30\` mutes to that local time (tomorrow if past). Default scope \`all\` (speaker + mic, fully silent). \`tts\`
                        swaps speech for notification sounds; \`mic\` holds capture/converse; notifications still log.
