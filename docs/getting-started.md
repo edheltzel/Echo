@@ -103,7 +103,7 @@ Work through these checks in order.
    bash scripts/status.sh
    ```
 
-   You should see `Service: com.echo` with a loaded entry and `Health: OK`. If it shows `not loaded` or `Health: FAIL`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
+   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior. If it says `not running`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
 
 2. Check the daemon log:
 

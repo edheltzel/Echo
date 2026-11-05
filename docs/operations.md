@@ -112,11 +112,28 @@ a source or `voices.json` change needs `cli/echo update` (see
 ## Status
 
 ```bash
-bash scripts/status.sh
+cli/echo status
 ```
 
-Shows the `launchctl` entry for `com.echo`, warns about still-loaded legacy services,
-runs a health check, and prints the log path with the last five log lines.
+Shows a read-only terminal dashboard from `GET /health`, local installation metadata, and
+host registration files. `bash scripts/status.sh` is the same command.
+
+| Section | What it shows |
+| --- | --- |
+| Daemon | Whether the daemon answers on the configured port, whether `com.echo` is loaded, and warnings about still-loaded legacy services. |
+| Output | Mute scope and deadline when active (including microphone-only mute), output mode, active provider, waiting queue depth, and capture state. |
+| Providers | `ok` for enabled, healthy providers, `unhealthy` for enabled providers that fail their health check, and `off` for disabled providers. |
+| Harnesses | Detected Echo registrations for each shipped harness, including MCP, with the registration path when detected. This does not verify that the host can load the adapter; use [Doctor](#doctor) for installation checks. |
+| Install | The npm source copy's package name, version, and path when present, otherwise a checkout indicator; configuration validity and ignored or retired keys reported by the daemon. |
+
+When the daemon is offline, harness registrations and local source information remain visible;
+daemon-derived fields, including configuration validity, show `unavailable`. Missing Bun or an
+unreadable health response also makes parsed fields unavailable. Color is enabled only on a
+terminal and can be disabled with `NO_COLOR=1`.
+
+An offline snapshot exits zero. A received health response exits nonzero unless it can be
+parsed and reports `healthy`. Use [Doctor](#doctor) for the overall readiness result, and
+[Logs](#logs) to inspect recent log lines.
 
 ## Health
 

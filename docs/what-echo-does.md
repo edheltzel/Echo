@@ -97,7 +97,7 @@ These are the states a human can usefully ask about. They are not a second produ
 | Speaking | A line is in the speaker | `play_queue.in_flight_ms` is a number. The audio-lifecycle log later records `played`. |
 | Muted | Requests succeed, speaker stays off (sounds still play under `tts`) | `cli/echo mute status`. `/health` `mute.muted` is true (`tts` or `all`). |
 | Sounds only | You hear a short sound per notification, no speech | `cli/echo mode status`. `/health` `mode` is `sounds`. Lifecycle disposition `played-sound`. |
-| Stopped | `/health` does not connect. Nothing Echo-produced speaks. | `bash scripts/status.sh` shows `com.echo` not loaded. Daemon disable, not mute. |
+| Stopped | `/health` does not connect. Nothing Echo-produced speaks. | `cli/echo status` reports `not running`; see [Status](operations.md#status). Daemon disable, not mute. |
 | Held for capture | Banner may fire, speaker waits | `/health` `capture_guard.state` is not idle. Lifecycle disposition `held-for-capture`. |
 | Error | Daemon is up but degraded, or speech falls through the chain | `cli/echo doctor` ends `DEGRADED`. `~/Library/Logs/echo.log` and the voice-resolution log name the provider attempt. |
 

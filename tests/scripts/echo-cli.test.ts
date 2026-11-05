@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -7,16 +7,17 @@ import { dirname, join } from "node:path";
 // Every test runs in a temp HOME with stubbed launchctl/curl - it never touches
 // the operator's real daemon. `doctor` and `status` are read-only by design.
 
-const CLI = "cli/echo";
+const CLI = join(import.meta.dir, "../../cli/echo");
 
 function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o755 });
 }
 
-async function runCli(args: string[], env: Record<string, string>) {
+async function runCli(args: string[], env: Record<string, string>, cwd?: string) {
   // `install` and `doctor` both reach scripts/install.sh; opting every run out of
   // workspace-link management keeps `bun test` off the checkout's node_modules.
   const proc = Bun.spawn(["/bin/bash", CLI, ...args], {
+    cwd,
     env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env },
     stdout: "pipe",
     stderr: "pipe",
@@ -58,12 +59,11 @@ describe("echo CLI dispatch", () => {
       mkdirSync(bin, { recursive: true });
       writeFileSync(join(home, ".config", "echo", "config.json"), JSON.stringify({ PORT: 3457 }));
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy","port":3457}\'\nexit 0\n');
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
       const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("Health: OK on :3457");
-      expect(r.stdout).toContain('"port":3457');
+      expect(r.stdout).toContain("running on :3457");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -84,11 +84,11 @@ describe("echo CLI dispatch", () => {
         mkdirSync(bin, { recursive: true });
         writeFileSync(join(home, ".config", "echo", "config.json"), `{"PORT": "${port}"}`);
         writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-        writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
+        writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
         const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
         expect(r.exitCode).toBe(0);
-        expect(r.stdout).toContain("Health: OK on :3246");
+        expect(r.stdout).toContain("running on :3246");
         expect(r.stdout).not.toContain(`:${port}`);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -110,14 +110,355 @@ describe("echo CLI dispatch", () => {
         JSON.stringify({ ECHO_DEFAULT_TITLE: "First", PORT: 3457 }, null, 2) + "\n",
       );
       writeExecutable(join(bin, "launchctl"), "#!/bin/bash\nexit 0\n");
-      writeExecutable(join(bin, "curl"), '#!/bin/bash\necho \'{"status":"healthy"}\'\nexit 0\n');
+      writeExecutable(join(bin, "curl"), `#!/bin/bash\nprintf '%s' '{"status":"healthy","activeProvider":"edgetts","mode":"speech","mute":{"muted":false,"scope":"all"},"play_queue":{"depth":0},"capture_guard":{"state":"idle"},"replay":{"available":0,"capacity":10},"providers":{},"config":{"valid":true,"ignored_keys":[],"retired_keys":[]}}'\nexit 0\n`);
 
       const r = await runCli(["status"], { HOME: home, PATH: `${bin}:${bunDir}:/bin:/usr/bin` });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("Health: OK on :3457");
+      expect(r.stdout).toContain("running on :3457");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+const dashboardHealth = {
+  status: "healthy",
+  activeProvider: "edgetts",
+  mode: "sounds",
+  mute: { muted: false, scope: "all", muted_until: null as string | null },
+  play_queue: { depth: 2 },
+  capture_guard: { state: "recording" },
+  replay: { available: 3, capacity: 10 },
+  providers: {
+    edgetts: { enabled: true, healthy: true },
+    kokoro: { enabled: true, healthy: false },
+    elevenlabs: { enabled: false, healthy: false },
+  },
+  config: { valid: true, ignored_keys: ["UNKNOWN_SETTING"], retired_keys: ["ECHO_VOICE_SAY_NAME"] },
+};
+
+async function withStatusFixture(
+  check: (fixture: {
+    home: string;
+    project: string;
+    root: string;
+    env: Record<string, string>;
+    write: (path: string, contents: string) => void;
+    run: () => ReturnType<typeof runCli>;
+  }) => Promise<void>,
+  options: { bun?: boolean; offline?: boolean; health?: unknown } = {},
+) {
+  const root = mkdtempSync(join(tmpdir(), "echo-status-"));
+  const home = join(root, "home");
+  const project = join(root, "project");
+  const bin = join(root, "bin");
+  const healthFile = join(root, "health.json");
+  const write = (path: string, contents: string) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
+  };
+  try {
+    for (const dir of [home, project, bin]) mkdirSync(dir);
+    for (const name of ["bash", "cat", "dirname", "grep", "sed", "head", "tail"]) {
+      symlinkSync(Bun.which(name)!, join(bin, name));
+    }
+    if (options.bun !== false) symlinkSync(process.execPath, join(bin, "bun"));
+    writeExecutable(join(bin, "launchctl"), '#!/bin/bash\necho "111 0 com.echo"\n');
+    writeExecutable(join(bin, "curl"), options.offline
+      ? "#!/bin/bash\nexit 7\n"
+      : '#!/bin/bash\nprintf \'%s\\n\' "$@" > "$ECHO_STATUS_REQUEST"\ncat "$ECHO_STATUS_HEALTH"\n');
+    writeFileSync(healthFile, JSON.stringify(options.health ?? dashboardHealth));
+    const env = {
+      HOME: home,
+      PATH: bin,
+      ECHO_STATUS_HEALTH: healthFile,
+      ECHO_STATUS_REQUEST: join(root, "request.txt"),
+    };
+    await check({ home, project, root, env, write, run: () => runCli(["status"], env, project) });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+describe("echo status", () => {
+  test.each([false, true])("drains service lists with Echo registrations %s", async (registered) => {
+    await withStatusFixture(async ({ root, env, write, run }) => {
+      const services = ["com.echo", "com.pai.voice-server", "com.atlas.voicesystem"];
+      env.ECHO_STATUS_SERVICES = join(root, "services.txt");
+      write(env.ECHO_STATUS_SERVICES, [
+        ...(registered ? services.map((name) => `111 0 ${name}`) : []),
+        ...Array.from({ length: 16_384 }, (_, i) => `111 0 com.example.unrelated-service-${i}`),
+      ].join("\n") + "\n");
+      writeExecutable(join(root, "bin/launchctl"), '#!/bin/bash\nexec cat "$ECHO_STATUS_SERVICES"\n');
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toBe("");
+      expect(r.stdout).toMatch(registered
+        ? /Daemon\s+running on :3246\s+loaded\n/
+        : /Daemon\s+running on :3246\s+not loaded\n/);
+      for (const name of services.slice(1)) {
+        if (registered) expect(r.stdout).toContain(`legacy service still loaded: ${name}`);
+        else expect(r.stdout).not.toContain(`legacy service still loaded: ${name}`);
+      }
+    });
+  });
+
+  test.each(["unset", "empty", "custom"])("uses Claude's reconciled settings with selector %s", async (selector) => {
+    await withStatusFixture(async ({ home, root, env, write, run }) => {
+      const settingsPath = selector === "custom" ? join(root, "custom/settings.json") : join(home, ".claude/settings.json");
+      if (selector !== "unset") env.PAI_SETTINGS_PATH = selector === "empty" ? "" : settingsPath;
+      write(settingsPath, JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [] }] } }));
+      const proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../adapters/claudecode/restore-hooks.ts")], {
+        cwd: root,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exitCode, , stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      const reconciled = readFileSync(settingsPath, "utf8");
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/Claude\s+registered\s/);
+      expect(r.stdout).toContain(settingsPath);
+      expect(readFileSync(settingsPath, "utf8")).toBe(reconciled);
+      if (selector === "custom") {
+        write(join(home, ".claude/settings.json"), reconciled);
+        write(settingsPath, "{}");
+        expect((await run()).stdout).toMatch(/Claude\s+not registered/);
+      }
+    });
+  });
+
+  test.each(["", "1"])("styles only terminal output with NO_COLOR=%s and preserves alignment", async (noColor) => {
+    await withStatusFixture(async ({ project, env, run }) => {
+      env.NO_COLOR = noColor;
+      const plain = await run();
+      expect(plain.exitCode).toBe(0);
+      expect(plain.stdout).not.toContain("\x1b[");
+      const chunks: Uint8Array[] = [];
+      const closed = Promise.withResolvers<void>();
+      const proc = Bun.spawn(["/bin/bash", "-c", 'test -t 1 && exec /bin/bash "$1" status', "echo-status-pty", CLI], {
+        cwd: project,
+        env: { ECHO_SKIP_WORKSPACE_LINK: "1", ...env },
+        terminal: {
+          cols: 160,
+          rows: 40,
+          data(_terminal, data) { chunks.push(data.slice()); },
+          exit() { closed.resolve(); },
+        },
+      });
+      try {
+        const [exitCode] = await Promise.all([proc.exited, closed.promise]);
+        expect(exitCode).toBe(0);
+        const output = Buffer.concat(chunks).toString("utf8").replaceAll("\r\n", "\n");
+        if (noColor) expect(output).not.toContain("\x1b[");
+        else {
+          expect(output).toContain("\x1b[1mOutput\x1b[0m");
+          expect(output).toContain("\x1b[32mrunning\x1b[0m");
+        }
+        const visible = Bun.stripANSI(output);
+        expect(visible).toBe(plain.stdout);
+        expect(visible).toContain("  Mute        unmuted\n");
+        expect(visible).toContain("  Provider    edgetts\n");
+        expect(visible).toContain("  elevenlabs  off\n");
+      } finally {
+        proc.terminal?.close();
+      }
+    });
+  });
+
+  test("renders health and source metadata with Bun and no Python, using only GET /health", async () => {
+    await withStatusFixture(async ({ home, root, write, run }) => {
+      const sourcePackage = join(home, "Library/Application Support/echo/source/package.json");
+      const contents = JSON.stringify({ name: "agent-echo", version: "9.8.7" });
+      write(sourcePackage, contents);
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toBe("");
+      expect(r.stdout).toMatch(/Daemon\s+running on :3246\s+loaded/);
+      expect(r.stdout).toMatch(/Mode\s+sounds/);
+      expect(r.stdout).toMatch(/Provider\s+edgetts/);
+      expect(r.stdout).toMatch(/Queue\s+2 waiting/);
+      expect(r.stdout).toMatch(/Capture\s+recording/);
+      expect(r.stdout).toMatch(/edgetts\s+ok/);
+      expect(r.stdout).toMatch(/kokoro\s+unhealthy/);
+      expect(r.stdout).toMatch(/elevenlabs\s+off/);
+      expect(r.stdout).toMatch(/Source\s+agent-echo 9\.8\.7/);
+      expect(r.stdout).toMatch(/Config\s+valid\s+ignored: UNKNOWN_SETTING\s+retired: ECHO_VOICE_SAY_NAME/);
+      expect(r.stdout).not.toContain("replay");
+      expect(readFileSync(sourcePackage, "utf8")).toBe(contents);
+      expect(readFileSync(join(root, "request.txt"), "utf8").trim().split("\n")).toEqual([
+        "--connect-timeout", "2", "--max-time", "5", "-fsS", "http://localhost:3246/health",
+      ]);
+    });
+  });
+
+  test.each([
+    { muted: false, scope: "all", active: false },
+    { muted: true, scope: "all", active: true },
+    { muted: true, scope: "tts", active: true },
+    { muted: false, scope: "mic", active: true },
+  ])("renders mute scope $scope with speaker flag $muted", async ({ muted, scope, active }) => {
+    const deadline = "2026-11-05T23:00:00.000Z";
+    await withStatusFixture(async ({ run }) => {
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      if (active) expect(r.stdout).toContain(`muted (${scope} until ${deadline})`);
+      else {
+        expect(r.stdout).toMatch(/Mute\s+unmuted/);
+        expect(r.stdout).not.toContain(deadline);
+      }
+    }, { health: { ...dashboardHealth, mute: { muted, scope, muted_until: deadline } } });
+  });
+
+  test.each(["adapters/pi", "../../Echo/adapters/pi", "/Echo/adapters/pi/"])(
+    "recognizes Pi's reconciled package path %s",
+    async (entry) => {
+      await withStatusFixture(async ({ home, write, run }) => {
+        write(join(home, ".pi/agent/settings.json"), JSON.stringify({ packages: [entry] }));
+        const r = await run();
+        expect(r.stdout).toMatch(/Pi\s+registered\s/);
+      });
+    },
+  );
+
+  test.each(["npm:adapters/pi/", "https://example.com/adapters/pi", "/Echo/adapters/pi/other"])(
+    "does not treat %s as an installed Pi adapter package",
+    async (entry) => {
+      await withStatusFixture(async ({ home, write, run }) => {
+        write(join(home, ".pi/agent/settings.json"), JSON.stringify({ packages: [entry] }));
+        expect((await run()).stdout).toMatch(/Pi\s+not registered/);
+      });
+    },
+  );
+
+  test.each([
+    { config: '[hooks]\nturn_end = "/Echo/adapters/jcode/hook.ts"\n', registered: true },
+    { config: 'hooks.session_start = "/Echo/adapters/jcode/hook.ts"\n', registered: true },
+    { config: 'hooks = { turn_end = "/Echo/adapters/jcode/hook.ts" }\n', registered: true },
+    { config: '["hooks"]\n"session_start" = "/Echo/adapters/jcode/hook.ts"\n', registered: true },
+    { config: '# turn_end = "/Echo/adapters/jcode/hook.ts"\n', registered: false },
+    { config: '[hooks]\nturn_end = "other" # /Echo/adapters/jcode/hook.ts\n', registered: false },
+    { config: '[other]\nturn_end = "/Echo/adapters/jcode/hook.ts"\n', registered: false },
+  ])("reports only active Jcode hooks: $config", async ({ config, registered }) => {
+    await withStatusFixture(async ({ home, write, run }) => {
+      const path = join(home, ".jcode/config.toml");
+      write(path, config);
+      const r = await run();
+      expect(r.stdout).toMatch(registered ? /Jcode\s+registered\s/ : /Jcode\s+not registered/);
+      expect(readFileSync(path, "utf8")).toBe(config);
+    });
+  });
+
+  test.each(["project", "user", "custom home", "override", "project shadows user"])(
+    "uses Codex registration precedence: %s",
+    async (selection) => {
+      await withStatusFixture(async ({ home, project, root, env, write, run }) => {
+        const registered = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "bun /Echo/adapters/codex/hook.ts" }] }] } });
+        write(join(home, ".codex/hooks.json"), registered);
+        if (selection !== "user" && selection !== "custom home") {
+          write(join(project, ".codex/hooks.json"), selection === "project" ? registered : "{}");
+        }
+        if (selection === "custom home") {
+          env.CODEX_HOME = join(root, "custom-codex-home");
+          write(join(home, ".codex/hooks.json"), "{}");
+          write(join(env.CODEX_HOME, "hooks.json"), registered);
+        }
+        if (selection === "override") {
+          env.ECHO_CODEX_HOOKS_FILE = join(root, "custom/hooks.json");
+          write(env.ECHO_CODEX_HOOKS_FILE, registered);
+        }
+        const r = await run();
+        expect(r.stdout).toMatch(selection === "project shadows user" ? /Codex\s+not registered/ : /Codex\s+registered\s/);
+        if (selection === "project") expect(r.stdout).toContain(join(project, ".codex/hooks.json"));
+        if (selection === "override") expect(r.stdout).toContain(env.ECHO_CODEX_HOOKS_FILE);
+      });
+    },
+  );
+
+  test.each([false, true])("includes MCP registration with config override %s", async (override) => {
+    await withStatusFixture(async ({ home, root, env, write, run }) => {
+      const path = override ? join(root, "custom-claude.json") : join(home, ".claude.json");
+      if (override) env.ECHO_MCP_CONFIG_PATH = path;
+      const config = JSON.stringify({ mcpServers: { "echo-converse": { type: "stdio", command: "bun", args: ["/Echo/adapters/mcp/server.ts"] } } });
+      write(path, config);
+      expect((await run()).stdout).toMatch(/MCP\s+registered\s/);
+      expect(readFileSync(path, "utf8")).toBe(config);
+    });
+  });
+
+  test("keeps local registrations and install data visible offline", async () => {
+    await withStatusFixture(async ({ home, write, run }) => {
+      write(join(home, ".pi/agent/settings.json"), '{"packages":["/Echo/adapters/pi"]}');
+      write(join(home, "Library/Application Support/echo/source/package.json"), '{"name":"agent-echo","version":"9.8.7"}');
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("not running");
+      expect(r.stdout).toMatch(/Mute\s+unavailable/);
+      expect(r.stdout).toMatch(/Mode\s+unavailable/);
+      expect(r.stdout).toMatch(/Provider\s+unavailable/);
+      expect(r.stdout).toMatch(/Queue\s+unavailable/);
+      expect(r.stdout).toMatch(/Capture\s+unavailable/);
+      expect(r.stdout).toMatch(/Providers\n\s+unavailable/);
+      expect(r.stdout).toMatch(/Pi\s+registered\s/);
+      expect(r.stdout).toMatch(/MCP\s+not registered/);
+      expect(r.stdout).toMatch(/Source\s+agent-echo 9\.8\.7/);
+      expect(r.stdout).toMatch(/Config\s+unavailable/);
+      expect(r.stdout).toContain("echo install --adapter none");
+      expect(r.stdout).not.toContain("echo start");
+    }, { offline: true });
+  });
+
+  test("reports unavailable parsing honestly when Bun is absent", async () => {
+    await withStatusFixture(async ({ home, write, run }) => {
+      write(join(home, "Library/Application Support/echo/source/package.json"), '{"name":"agent-echo","version":"9.8.7"}');
+      write(join(home, ".jcode/config.toml"), '[hooks]\nturn_end = "/Echo/adapters/jcode/hook.ts"\n');
+      const r = await run();
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain("running on :3246");
+      expect(r.stdout).toContain("Bun unavailable");
+      expect(r.stdout).toMatch(/Mute\s+unavailable/);
+      expect(r.stdout).toMatch(/Config\s+unavailable/);
+      expect(r.stdout).toMatch(/Source\s+unknown/);
+      expect(r.stdout).toMatch(/Jcode\s+unavailable/);
+      expect(r.stdout).not.toContain("unmuted");
+      expect(r.stdout).not.toMatch(/Config\s+invalid/);
+    }, { bun: false });
+  });
+
+  test("does not fabricate mute or config states from missing health fields", async () => {
+    await withStatusFixture(async ({ run }) => {
+      const r = await run();
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/Mute\s+unavailable/);
+      expect(r.stdout).toMatch(/Config\s+unavailable/);
+    }, { health: { status: "healthy" } });
+  });
+
+  test("preserves invalid configuration and unhealthy daemon status", async () => {
+    await withStatusFixture(async ({ run }) => {
+      const r = await run();
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toMatch(/Config\s+invalid/);
+      expect(r.stdout).toMatch(/Mute\s+unmuted/);
+    }, { health: { ...dashboardHealth, status: "degraded", config: { valid: false } } });
+  });
+
+  test("reports an unreadable health response without hiding local sections", async () => {
+    await withStatusFixture(async ({ run }) => {
+      const r = await run();
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain("unreadable /health response");
+      expect(r.stdout).toContain("Harnesses");
+      expect(r.stdout).toContain("Install");
+      expect(r.stdout).toMatch(/Config\s+unavailable/);
+    }, { health: "not a health document" });
   });
 });
 
