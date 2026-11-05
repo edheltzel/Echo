@@ -1,10 +1,9 @@
 # To-do
 
-Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (archive), managed with `tuxedo`. Synced 2026-10-22.
+Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (archive), managed with `tuxedo`. Synced 2026-10-23.
 
 ## Open
 
-- [ ] 2026-10-09 **Waiting:** Publish npm package atlas-echo for one-command install (npx atlas-echo install). Name decided by Ed 2026-10-23; package, bin, publish workflow and docs in the feat/npm-atlas-echo PR. Left: Ed merges and tags, then the one-time manual npm publish and the npmjs.com trusted publisher (edheltzel/Echo, publish.yml) on Ed issue:8
 - [ ] 2026-10-09 **Waiting:** ATL-633 Daemon-owned notice (no name yet). on Ed to name the mechanism (not AppleScript, terminal, or Herdr); then spec + issue atl:633
 - [ ] 2026-10-09 **Waiting:** Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) issue:126
 - [ ] 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas @outstanding
@@ -42,6 +41,7 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [x] 2026-10-21 Updated the local daemon to the staged 0.13.0 payload (versions/0.13.0, not a symlink to the checkout). com.echo healthy on :3246 - [report](https://github.com/edheltzel/Echo/releases/tag/v0.13.0)
 - [x] 2026-10-22 Restarted com.echo. The staged 0.13.0 payload already matched the checkout file for file, so no re-stage was needed. New pid listens on :3246 and is healthy
 - [x] 2026-10-22 Echo mute/mode in every harness. Jcode: /echo-mute and /echo-mode skills. Empryo terminal UI: $echo-mute and $echo-mode skills (no user slash commands; Empryo issue dropped). Installed and verified on this Mac
+- [x] 2026-10-23 Publish npm package for one-command install. First published as atlas-echo, then renamed: agent-echo@0.13.3 is latest, v0.13.3 tagged on master, trusted publisher set for edheltzel/Echo publish.yml - [pr](https://github.com/edheltzel/Echo/pull/259), [package](https://www.npmjs.com/package/agent-echo)
 
 ## Archived (done.txt)
 

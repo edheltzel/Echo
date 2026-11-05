@@ -3,7 +3,7 @@
 (B) 2026-10-09 Auto-quiet during desktop voice conversations. The Oct 7 plan is paused on two research questions (who holds the mic; how desktop-app events reach Echo). Owner: Atlas +echo @outstanding
 (B) 2026-10-09 Auto detect meetings. on Ed: needs a design (what is a meeting, who detects it, mute vs hold) +echo @waiting issue:126
 (C) 2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) +echo issue:28 dep:echo-npm-8
-(A) 2026-10-09 Publish npm package atlas-echo for one-command install (npx atlas-echo install). Name decided by Ed 2026-10-23; package, bin, publish workflow and docs in the feat/npm-atlas-echo PR. Left: Ed merges and tags, then the one-time manual npm publish and the npmjs.com trusted publisher (edheltzel/Echo, publish.yml) @waiting on Ed +echo issue:8 id:echo-npm-8
+x 2026-10-23 2026-10-09 Publish npm package for one-command install. First published as atlas-echo, then renamed: agent-echo@0.13.3 is latest, v0.13.3 tagged on master, trusted publisher set for edheltzel/Echo publish.yml +echo issue:8 id:echo-npm-8 pr:https://github.com/edheltzel/Echo/pull/259 report:https://www.npmjs.com/package/agent-echo
 2026-10-09 Roadmap: first-class speech-to-text (STT). Backlogged idea +echo @outstanding issue:179
 2026-10-09 Roadmap/explore: VoiceBar-class macOS surface. Backlogged idea +echo @outstanding issue:180
 2026-10-09 Roadmap/explore: published documentation site. Backlogged idea +echo @outstanding issue:181
