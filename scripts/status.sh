@@ -1,5 +1,5 @@
 #!/bin/bash
-# echo status — one view of the daemon, its output, and every registered harness.
+# echo status - one view of the daemon, its output, and every registered harness.
 # Reads GET /health (loopback, not rate-limited) and the host registration files.
 # Never changes anything. Degrades to "not running" when the daemon is down.
 set -euo pipefail
@@ -71,7 +71,7 @@ console.log([
   (h.config?.ignored_keys ?? []).join(","),
   (h.config?.retired_keys ?? []).join(","),
   ...Object.entries(h.providers ?? {}).map(([name, info]) =>
-    `${name}\t${info.enabled ? (info.healthy ? "ok" : "unhealthy") : "off"}`),
+    name + "\t" + (info.enabled ? (info.healthy ? "ok" : "unhealthy") : "off")),
 ].join("\n"));
 ' 2>/dev/null)"; then
     unavailable=""
@@ -180,7 +180,7 @@ if [ -d "$SOURCE_HOME" ]; then
   pkg="$(bun -e 'const p = await Bun.file(process.argv[1]).json(); console.log(p.name ?? "?", p.version ?? "?");' "$SOURCE_HOME/package.json" 2>/dev/null || echo "unknown")"
   row "Source" "$pkg  $(dim "$SOURCE_HOME")"
 else
-  row "Source" "$(dim "no npm install — running from a checkout")"
+  row "Source" "$(dim "no npm install - running from a checkout")"
 fi
 if [ "$config_valid" = "true" ]; then
   config_text="$(ok "valid")"

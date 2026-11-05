@@ -103,7 +103,7 @@ Work through these checks in order.
    bash scripts/status.sh
    ```
 
-   The dashboard shows daemon state, output (mute, mode, provider, queue, capture), provider health, registered harnesses, and install/config. You should see `Daemon  running` with a `loaded` marker. When offline, harness registrations and install details remain visible; daemon-derived fields say `unavailable`. If it says `not running`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
+   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior. If it says `not running`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
 
 2. Check the daemon log:
 
