@@ -73,10 +73,10 @@
 	--nb-warning-foreground: oklch(0.55 0.144 57.5);
 	--nb-warning-muted: oklch(0.931 0.107 94.6 / 0.2);
 
- 	--nb-danger: oklch(0.505 0.213 27.518);
- 	--nb-danger-foreground: oklch(0.505 0.213 27.518);
- 	--nb-danger-muted: oklch(0.936 0.032 17.7 / 0.42);
- 
+	--nb-danger: oklch(0.505 0.213 27.518);
+	--nb-danger-foreground: oklch(0.505 0.213 27.518);
+	--nb-danger-muted: oklch(0.936 0.032 17.7 / 0.42);
+
 	/* API method palette — shared source of truth for the method chip across the
 	   sidebar, endpoint card, and code rail (api-sidebar / api-layout /
 	   api-code-rail). Each method maps onto a status token for text and tint.
@@ -97,8 +97,8 @@
 	--nb-m-other: var(--nb-muted-foreground);
 	--nb-m-other-tint: var(--nb-accent);
 	--nb-m-other-line: var(--nb-border);
- 
- 	/* Layout */
+
+	/* Layout */
 	--nb-sidebar-width: 18.75rem;
 	--nb-toc-width: 18rem;
 	--nb-content-max: 43.5rem;
@@ -194,17 +194,17 @@
 	--nb-warning-foreground: oklch(0.75 0.183 55.934);
 	--nb-warning-muted: oklch(0.353 0.079 65 / 0.37);
 
- 	--nb-danger: oklch(0.704 0.191 22.216);
- 	--nb-danger-foreground: oklch(0.704 0.191 22.216);
- 	--nb-danger-muted: oklch(0.429 0.176 28.7 / 0.17);
- 
+	--nb-danger: oklch(0.704 0.191 22.216);
+	--nb-danger-foreground: oklch(0.704 0.191 22.216);
+	--nb-danger-muted: oklch(0.429 0.176 28.7 / 0.17);
+
 	/* API method palette — dark lines; text and tint follow the status tokens. */
 	--nb-m-get-line: oklch(0.765 0.177 163.223 / 0.25);
 	--nb-m-put: var(--nb-warning);
 	--nb-m-put-line: oklch(0.645 0.168 50 / 0.25);
 	--nb-m-delete-line: oklch(0.577 0.245 27.325 / 0.25);
- 
- 	--nb-shadow-sm: 0 1px 2px oklch(0 0 0 / 0.2);
+
+	--nb-shadow-sm: 0 1px 2px oklch(0 0 0 / 0.2);
 	--nb-shadow: 0 1px 3px oklch(0 0 0 / 0.3), 0 1px 2px oklch(0 0 0 / 0.2);
 	--nb-shadow-lg: 0 4px 12px oklch(0 0 0 / 0.4), 0 2px 4px oklch(0 0 0 / 0.2);
 }

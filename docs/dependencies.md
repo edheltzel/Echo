@@ -100,7 +100,7 @@ rather than Tier 2, and the rest of the pipeline: [`converse.md`](converse.md).
 | Pi voice lifecycle | Bun + Pi + `bash scripts/install.sh --adapter pi` |
 | oh-my-pi voice lifecycle | Bun + omp + `bash scripts/install.sh --adapter omp` |
 | Spoken questions with spoken answers | Bun + `sox` + `yap` (or `whisper-cli`) + `--adapter mcp` for Claude Code |
-| Fully local speech | Bun + edge-tts or Kokoro + macOS fallback |
+| Fully local speech | Follow the [fully-local provider configuration](providers-observability.md#provider-egress-gating) |
 | Cloud premium voice | Bun + ElevenLabs key + ElevenLabs enabled in config |
 
 See [`ARCHITECTURE.md`](../ARCHITECTURE.md) for the daemon layout and the [agent install checklist](install-agent.md) for command-by-command verification.

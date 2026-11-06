@@ -40,8 +40,8 @@ from the daemon payload, so a plain reload picks up an edit, with no re-staging.
 | What | Where |
 | --- | --- |
 | Config | `~/.config/echo/config.json`; voices and pronunciations in `core/voices.json` and `core/pronunciations.json` |
-| Daemon | LaunchAgent `com.echo`, listening on `localhost:3246` |
-| Voice ask | coordinator on `localhost:32468`; temporary reply audio in `~/Library/Caches/echo/converse/` |
+| Daemon | LaunchAgent `com.echo`, listening on `localhost:3246` by default |
+| Voice ask | coordinator on `localhost:32468` by default; temporary reply audio in `~/Library/Caches/echo/converse/` |
 | Logs | `~/Library/Logs/echo.log`, plus the JSONL logs under `~/Library/Logs/echo/` |
 | State | `mute.json` and the output-mode file beside it in `~/Library/Application Support/echo/` (`ECHO_MUTE_STATE_PATH`, `ECHO_MODE_STATE_PATH`); playback signal in `~/.local/state/echo/playback-state.json` |
 

@@ -219,7 +219,7 @@ const showToc = headings !== false && (hasToc || headings.length > 0);
                     {/* The page header: title, description and page actions, as one styleable part. */}
                     <div data-slot="page-header" class="mt-6">
                     <div class="flex items-center gap-3 flex-wrap">
-                      <h1 class="text-foreground mb-0 [overflow-wrap:anywhere] [text-wrap:balance]" style={`font-size:var(--nb-h1-size);line-height:var(--nb-h1-leading);font-weight:var(--nb-h1-weight);letter-spacing:var(--nb-h1-tracking)`}>{title}</h1>
+                      <h1 id="_top" class="text-foreground mb-0 scroll-mt-[calc(var(--nb-header-height)+1.5rem)] [overflow-wrap:anywhere] [text-wrap:balance]" style={`font-size:var(--nb-h1-size);line-height:var(--nb-h1-leading);font-weight:var(--nb-h1-weight);letter-spacing:var(--nb-h1-tracking)`}>{title}</h1>
                       {draft && <Badge text="Draft" variant="warning" size="medium" />}
                     </div>
                     {description && (

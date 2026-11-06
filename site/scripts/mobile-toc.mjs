@@ -20,6 +20,22 @@ async function scrollInside(page, slug) {
 try {
   browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
     args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  for (const width of [390, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${base}/docs/speech-to-text/#privacy`);
+      await page.waitForFunction(() => document.querySelector('h1').getBoundingClientRect().bottom < 0);
+      await page.evaluate(() => { location.hash = '_top'; });
+      await page.waitForFunction(() => {
+        const title = document.querySelector('h1').getBoundingClientRect();
+        return title.top >= document.querySelector('header').getBoundingClientRect().bottom && title.bottom < innerHeight;
+      }, undefined, { timeout: 3000 });
+      console.log(`ok legacy #_top (${width}px): lower section returns to the document title`);
+    } finally {
+      await context.close();
+    }
+  }
   for (const reducedMotion of ['reduce', 'no-preference']) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion });
     try {
