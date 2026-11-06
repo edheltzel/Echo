@@ -16,6 +16,7 @@
     "check:nimbus": "nimbus-docs check",
     "check:links": "node --experimental-strip-types scripts/check-links.mjs",
     "check:dist": "node scripts/check-dist.mjs",
+    "check:toc": "node scripts/mobile-toc.mjs",
     "check:landing": "node scripts/contrast.mjs && node scripts/flash.mjs && node scripts/install-box.mjs"
   },
   "dependencies": {

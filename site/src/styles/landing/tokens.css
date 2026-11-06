@@ -4,7 +4,7 @@
   Dark accent is #f472b6. Highlight is #fbcfe8. Deep tint is #5c1438.
   #c04a88 is the mid line tint. Light text and links use #a1245e.
   The light-nojs block repeats the light values so a page with JavaScript
-  off still follows the system. scripts/contrast.mjs fails if the two drift.
+  off still follows the system.
 */
 
 /* @theme dark */

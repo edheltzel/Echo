@@ -21,8 +21,11 @@ one static [Nimbus](https://nimbus-docs.com) (Astro) build. Migrated from `edhel
 - `src/pages/docs/[...slug].astro` - the docs route. The rest of `src/` (layouts,
   `components/ui/`, `pages/`, `styles/globals.css`) is the Nimbus starter, branded.
 - `public/_redirects` - Cloudflare Pages redirects for URLs from the earlier site.
-- `scripts/check-links.mjs`, `scripts/check-dist.mjs`, `scripts/lint-docs.mjs`, and
-  `scripts/{contrast,flash,install-box}.mjs` - link-rewrite examples, docs lint, and post-build checks.
+- `scripts/check-links.mjs`, `scripts/check-dist.mjs`, `scripts/lint-docs.mjs`,
+  `scripts/{contrast,flash,install-box}.mjs`, and `scripts/mobile-toc.mjs` (browser checks served
+  by `scripts/serve-dist.mjs`) - link-rewrite examples, docs lint, and post-build checks.
+  `src/components/ui/toc/mobile-toc.client.ts` differs from the Nimbus starter on purpose: it
+  resolves the current section from heading positions, which `scripts/mobile-toc.mjs` covers.
 
 ## Local Contracts
 
@@ -54,7 +57,7 @@ one static [Nimbus](https://nimbus-docs.com) (Astro) build. Migrated from `edhel
 
 From `site/`: `npm ci`, `npm run lint:docs`, `npm run check:links`, `npm run typecheck`,
 `npm run build`, `npm run check:dist`, `npm run check:nimbus`, and
-`CHROME_PATH=<chrome> npm run check:landing`.
+`CHROME_PATH=<chrome> npm run check:landing` and `npm run check:toc`.
 `wrangler pages dev dist` serves the build with `_redirects` applied.
 
 ## Child DOX Index
