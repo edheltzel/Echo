@@ -142,6 +142,7 @@ not a review nit.
 | Control CLI | `cli/echo` | The stable human surface - a bash wrapper over `scripts/*.sh` and the daemon HTTP API that reimplements no daemon logic. Bash on purpose: `echo doctor` must diagnose a *missing* Bun. Command list: `cli/echo --help` and [`AGENTS.md`](AGENTS.md). |
 | Other scripts | `scripts/restore-hooks.ts`, `scripts/preview-voices.ts`, `scripts/set-default-voice.ts` | Compatibility wrapper for the Claude Code hook registrar; dev-only edge-voice audition (not on the runtime request path); the `echo voice` writer for the global fallback persona, used by every harness without its own daidentity voice. |
 | Tests | `tests/core/`, `tests/adapters/`, `tests/converse/`, `tests/scripts/`, `tests/shared/` | `bun test`, plus `tests/e2e-adapters.sh` and `tests/e2e-converse.sh`; see [`docs/development.md`](docs/development.md). |
+| Public website | `site/` | Static landing page and published docs. Ownership and build contracts: [`site/AGENTS.md`](site/AGENTS.md); contributor setup: [site workflow](docs/development.md#public-website). |
 
 ## Request & voice-resolution flow
 

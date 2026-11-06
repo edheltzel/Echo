@@ -12,7 +12,7 @@ Echo is not a conversation loop. It does not sit in a listen-speak-listen cycle 
 
 Echo is not a menu-bar recorder, a notch UI, or a global push-to-talk chrome.
 
-First-class speech-to-text is [roadmap (#179)](https://github.com/edheltzel/Echo/issues/179). The optional one-shot voice ask (`echo-converse`) can speak one question and return one spoken reply. That is extra. It is not why you install Echo.
+Speech-to-text ships today as [voice ask](#voice-ask-speech-to-text): an agent speaks one question, you answer out loud, and your reply comes back to the agent as text, transcribed on your Mac. Each ask is one exchange, not a dictation mode or a hands-free chat.
 
 ## When it speaks
 
@@ -116,7 +116,7 @@ Silence is layered. Use the smallest layer that matches the room.
 
 Mute survives daemon restarts, deadline included. A timed mute expires on the next notification. There is no per-session mute. Any local process can unmute, because `/mute` is unauthenticated localhost, same as `/notify`.
 
-The state file and hotkey bindings live in [operations.md](operations.md#mute) and [http-api.md](http-api.md).
+Commands, timed snooze, and the dashboard are in [Mute, snooze, and the dashboard](mute-dashboard.md). The state file and every scope live in [operations.md](operations.md#mute), and hotkey bindings in [http-api.md](http-api.md#hotkey-bindings).
 
 ## Shared offices
 

@@ -2,24 +2,41 @@
 
 ## Prerequisites
 
-- Bun installed.
+- Bun installed for daemon and adapter development.
 - Git checkout on `dev`.
-- Optional providers documented in `docs/dependencies.md`.
+- Optional providers documented in [dependencies.md](dependencies.md).
+- Website development uses the separate [site workflow](#public-website).
 
 ## Clone & Install
 
-Bun runs TypeScript directly - there is no build step and no third-party dependency to
-fetch. One command is still required:
+Bun runs the daemon and adapter TypeScript directly, without a runtime build step.
+Link their workspace packages before developing them:
 
 ```bash
 bun install
 ```
 
-This is offline: every workspace member (`shared`, `adapters/*`) is local, so `bun install`
-only links them. It creates `adapters/<host>/node_modules/@echo/shared`, which is how each
+The runtime workspace packages are local; `bun install` also resolves the root development
+dependencies declared in [package.json](../package.json). It creates
+`adapters/<host>/node_modules/@echo/shared`, which is how each
 adapter resolves the shared package it declares instead of reaching up the tree. **Skip it
 and a registered adapter fails to load.** `scripts/install.sh` runs it for you, and
 `scripts/install.sh --check` reports a missing link as stale.
+
+## Public website
+
+Run the website tooling from `site/`, separately from the Bun runtime workspace. Use the Node
+version in [site/.node-version](../site/.node-version), then:
+
+```bash
+cd site
+npm ci
+npm run dev
+```
+
+The site checks are defined in [site/package.json](../site/package.json) and run in
+[site.yml](../.github/workflows/site.yml); the root `bun run verify` does not run them.
+See [site/AGENTS.md](../site/AGENTS.md) for content ownership and publishing rules.
 
 ## Run Dev Server
 

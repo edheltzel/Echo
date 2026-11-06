@@ -33,6 +33,11 @@ and does not announce that an agent is waiting.
 - Preserve historical content when archiving, but repair broken links and remove stale location
   mandates that conflict with the current DOX contract.
 - Name handoffs `YYYY-MM-DD-HHMMSS-handoff-<slug>.md` and report the final repository path.
+- Guides listed in `site/src/docs.ts` are published at https://echo.edheltzel.codes/docs/ straight
+  from these files at build time; the file here is the only copy. Keep them GitHub-friendly (no
+  frontmatter, one `#` title, relative links and images) and never add site-only syntax. Renaming,
+  moving, or deleting a published file needs the matching `site/src/docs.ts` change in the same
+  change. Plans, handoffs, `design-docs/`, `agents/`, `dox.md`, and this file are never published.
 
 ## Work Guidance
 
@@ -45,6 +50,8 @@ and does not announce that an agent is waiting.
 ## Verification
 
 - Search the repository for stale references to the previous location after moving documents.
+- After changing a published guide, run `npm run lint:docs`, `npm run build`, and
+  `npm run check:dist` from `site/` (link and anchor checks over the built site).
 - Run link or documentation checks when the repository provides them; otherwise inspect changed
   relative links and `git diff --check`.
 

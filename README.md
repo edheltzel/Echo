@@ -136,7 +136,7 @@ cli/echo install --adapter empryo
 
 See [How to install Echo](docs/install-human.md) for each host's setup and the optional voice-ask tool.
 
-Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. `/echo-mode [speech|sounds|status]` is the same `cli/echo mode` command. See [Silence and mute](docs/what-echo-does.md#silence-and-mute) and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
+Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. `/echo-mode [speech|sounds|status]` is the same `cli/echo mode` command. See [Mute, snooze, and the dashboard](docs/mute-dashboard.md), [Silence and mute](docs/what-echo-does.md#silence-and-mute), and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 
 | I want to… | Read |
 | --- | --- |
@@ -145,6 +145,7 @@ Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/ec
 | Know when the agent is waiting on me | [docs/what-echo-does.md#when-an-agent-needs-you](docs/what-echo-does.md#when-an-agent-needs-you) |
 | Install adapters, move the repo, uninstall | [docs/install-human.md](docs/install-human.md) |
 | Start, stop, restart, mute vs daemon disable, update after a pull, read logs | [docs/operations.md](docs/operations.md#mute-vs-daemon-disable) |
+| Mute, snooze until a time, switch to sounds, or open the local dashboard | [docs/mute-dashboard.md](docs/mute-dashboard.md) |
 | Configure Echo, migrate dotenv settings, and inspect the schema | [docs/configuration.md](docs/configuration.md) |
 | Install via an agent-runnable checklist | [docs/install-agent.md](docs/install-agent.md) |
 | Look up the HTTP API | [docs/http-api.md](docs/http-api.md) |
