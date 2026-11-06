@@ -226,9 +226,8 @@ WezTerm capture`. The image is deliberately cropped to the notification and cont
 unrelated terminal content.*
 
 If a voice test is not heard, check the host output device and volume before diagnosing Echo:
-the original External Headphones route at 6% was not audible, while the same accepted test was
-heard clearly through Mac Studio Speakers at 35%; the original headphones route and 6% volume
-were then restored. This counterfactual isolates host output masking from Echo synthesis.
+an accepted line played to an unexpected output route, or at a very low volume, sounds exactly
+like silence. Switch to a known-audible output, resend the test, and restore your settings.
 
 ## Logs
 

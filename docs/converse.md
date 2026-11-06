@@ -77,7 +77,7 @@ provider may receive the question text.
 
 This is the load-bearing design decision, and it is not a preference. macOS gates microphone
 access through TCC, which attributes a request to the **responsible process**. A spike on this
-host (macOS 26.5.2, report retained with the Themis task data) measured both topologies:
+host (macOS 26.5.2) measured both topologies:
 
 | Topology | TCC result |
 | --- | --- |
