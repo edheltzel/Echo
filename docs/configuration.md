@@ -35,6 +35,19 @@ from the daemon payload, so a plain reload picks up an edit, with no re-staging.
 (A `core/voices.json` edit is the case that also needs `cli/echo update`; see
 [`operations.md`](operations.md#which-config-changes-need-a-re-stage).)
 
+## Where Echo keeps things
+
+| What | Where |
+| --- | --- |
+| Config | `~/.config/echo/config.json`; voices and pronunciations in `core/voices.json` and `core/pronunciations.json` |
+| Daemon | LaunchAgent `com.echo`, listening on `localhost:3246` |
+| Voice ask | coordinator on `localhost:32468`; temporary reply audio in `~/Library/Caches/echo/converse/` |
+| Logs | `~/Library/Logs/echo.log`, plus the JSONL logs under `~/Library/Logs/echo/` |
+| State | `mute.json` and the output-mode file beside it in `~/Library/Application Support/echo/` (`ECHO_MUTE_STATE_PATH`, `ECHO_MODE_STATE_PATH`); playback signal in `~/.local/state/echo/playback-state.json` |
+
+Muting leaves the daemon running; disabling the daemon unloads `com.echo`. See
+[Mute vs daemon disable](operations.md#mute-vs-daemon-disable).
+
 ## Precedence and secrets
 
 For a canonical setting, resolution is:

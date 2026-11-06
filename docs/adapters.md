@@ -73,8 +73,8 @@ Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook e
 `~/.claude/settings.json`) and `adapters/claudecode/reconcile-commands.ts` (the
 `echo-voice.md`, `echo-mute.md`, and `echo-mode.md` symlinks in `~/.claude/commands/`),
 `adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
-`adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`,
-#18/#109). `scripts/install.sh` re-reconciles **every installed adapter on every run**
+`adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`, #18/#109).
+`scripts/install.sh` re-reconciles **every installed adapter on every run**
 regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
 commands into both. Codex and OpenCode follow the same contract.
