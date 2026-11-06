@@ -1,0 +1,11 @@
+# Cloudflare Pages redirects. URLs from the earlier echo-site, which sent these to GitHub,
+# now land on the in-site pages. Every other earlier URL (/docs/, /docs/install/,
+# /docs/notifications/, /docs/speech-to-text/, /docs/mute-dashboard/, /docs/configuration/)
+# still exists. scripts/check-dist.mjs fails if a target stops being built.
+/docs /docs/ 301
+/docs/hosts /docs/adapters/ 301
+/docs/hosts/ /docs/adapters/ 301
+/docs/core-loop /docs/notifications/ 301
+/docs/core-loop/ /docs/notifications/ 301
+/docs/usage /docs/operations/ 301
+/docs/usage/ /docs/operations/ 301

@@ -8,13 +8,13 @@ A good change makes that boundary clearer, safer, or easier to install and verif
 These are the working assumptions this guide is written against. If one is wrong for
 your change, say so in the PR rather than silently widening scope.
 
-- Contributors run macOS and [Bun](https://bun.sh/). Package-script usage is in
-  [README.md](README.md#commands-after-that).
+- Runtime contributors run macOS and [Bun](https://bun.sh/). Package-script usage is in
+  [README.md](README.md#commands-after-that). Website contributors use the separate
+  [site workflow](docs/development.md#public-website).
 - You have read [`AGENTS.md`](AGENTS.md). It is the binding work contract; this file
   is the human/PR surface of the same rules.
 - PRs target `dev`. `master` moves only through a promotion PR that Ed merges.
-- The `verify` GitHub Actions workflow is the pre-merge gate. A red or missing check
-  means the PR is not ready.
+- The [pull request checks](#pull-requests) must pass before a PR is ready.
 - Tests never touch the installed daemon on `:3246`. Isolated ports only.
 - One concern per PR. Release metadata (`package.json` version, generated
   `CHANGELOG.md`, tags) belongs on a promotion/release change, not a feature branch.
@@ -29,7 +29,7 @@ bun install                 # required: adapters resolve @echo/shared through wo
 cli/echo doctor             # or: bash scripts/install.sh --check
 ```
 
-`bun install` is not optional. Skip it and a registered adapter fails to load.
+For runtime work, `bun install` is not optional. Skip it and a registered adapter fails to load.
 `--check` prints one harness section with `[x]` / `[\]` / `[ ]` for complete,
 partial, and missing LaunchAgent, workspace link, and adapter registration.
 
@@ -60,8 +60,8 @@ subject. One concern per commit when the history will be reviewed as-is.
 4. Update the nearest docs when providers, adapters, install, or HTTP contracts change.
    Documentation edits follow [`docs/dox.md`](docs/dox.md).
 5. Do not hand-write `CHANGELOG.md` on a feature branch.
-6. Wait for `verify` to pass. The check steps are defined in
-   [the workflow](.github/workflows/verify.yml).
+6. Wait for `verify` and any applicable site checks to pass. The check steps are defined in
+   [verify.yml](.github/workflows/verify.yml) and [site.yml](.github/workflows/site.yml).
 
 Local equivalent: [`docs/development.md`](docs/development.md). Spoken test lines begin
 `Echo Test engaged. Beep, boop, bop.` so anything audible is unmistakably a test.
@@ -93,8 +93,8 @@ Labels follow the namespaced taxonomy in [`docs/agents/triage-labels.md`](docs/a
 
 ## Scope
 
-In scope: TTS server core, host adapters, TTS providers, `converse/` voice ask with
-local speech-to-text, packaging, install and development docs, smoke and isolated e2e.
+Contribution areas and their ownership are listed in the
+[repo layout](ARCHITECTURE.md#repo-layout).
 
 Out of scope: cloud speech-to-text, voice cloning UI, exposing the daemon off
 localhost, and unrelated coding-agent features.

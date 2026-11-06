@@ -181,6 +181,8 @@ source tree.
 | Getting started (first install → first spoken notification) | [docs/getting-started.md](docs/getting-started.md) |
 | What Echo does (when it speaks, when it stays quiet, mute layers, states, HIL current truth) | [docs/what-echo-does.md](docs/what-echo-does.md) |
 | Operations (start/stop/restart/status · runtime mute vs daemon disable · replay · update · repo moves) | [docs/operations.md](docs/operations.md) |
+| Mute, snooze, sounds-only mode, the local dashboard | [docs/mute-dashboard.md](docs/mute-dashboard.md) |
+| Public website (landing + published docs, one Nimbus build; publish list in `site/src/docs.ts`) | [site/AGENTS.md](site/AGENTS.md) |
 | Configuration (`~/.config/echo/config.json`, schema, migration, provider toggles) | [docs/configuration.md](docs/configuration.md) |
 | Install (human/agent) · dev · dependencies | [docs/install-human.md](docs/install-human.md) · [docs/install-agent.md](docs/install-agent.md) · [docs/development.md](docs/development.md) · [docs/dependencies.md](docs/dependencies.md) |
 
@@ -205,6 +207,7 @@ Essentials below; full layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 | npm entry point `agent-echo` (stages a stable source copy, then delegates to `cli/echo`) · stable `echo` control/diagnostic CLI · default-persona writer · dotenv→JSON config migration | `cli/agent-echo`, `cli/echo`, `scripts/set-default-voice.ts`, `scripts/migrate-config.ts` |
 | Isolated adapter e2e (never touches the running daemon) | `tests/e2e-adapters.sh` |
 | Isolated voice-ask e2e (own core + own coordinator, stand-in recorder) | `tests/e2e-converse.sh` |
+| Public website at echo.edheltzel.codes: Nimbus/Astro landing + docs read from the repo's Markdown at build time (npm, isolated from Bun) | `site/` (contract: `site/AGENTS.md`) |
 | Version · workspace members · changelog | `package.json`, `CHANGELOG.md` |
 
 ## Invariants / must not do
@@ -263,6 +266,8 @@ lives in **[docs/dox.md](docs/dox.md)** - read it before editing any docs.
 - [`converse/AGENTS.md`](converse/AGENTS.md) owns the `@echo/converse` voice-ask capability: the
   microphone-free coordinator, the caller-side capture, and the local contracts that keep the
   two apart.
+- [`site/AGENTS.md`](site/AGENTS.md) owns the public website: the landing page, the build-time
+  docs loader, the publish list, and its isolated npm tooling.
 
 Add another child contract when a folder becomes a durable boundary that needs local rules
 (likely candidates: `core/`, `adapters/claudecode/`, `adapters/pi/`, `scripts/`).
