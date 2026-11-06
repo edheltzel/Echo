@@ -240,6 +240,9 @@ were then restored. This counterfactual isolates host output masking from Echo s
 
 ## Mute
 
+The guided version, with timed snooze and the local dashboard, is
+[Mute, snooze, and the dashboard](mute-dashboard.md). This section is the command reference.
+
 Runtime mute turns the audio and/or the microphone booking off while notifications are still
 accepted, processed, and logged. The daemon stays up. To unload `com.echo`, use
 [Stop](#stop). Why the layers exist, including shared offices:
@@ -255,6 +258,7 @@ cli/echo mute toggle     # flip the all-scope switch
 cli/echo mute toggle all # same as toggle; empty POST /mute so older payloads still accept it
 cli/echo mute 30m        # timed all; `1h` and a bare number of minutes also work
 cli/echo mute 30m tts    # timed speaker mute
+cli/echo mute until 15:30 # mute to that local time; tomorrow if it has already passed
 ```
 
 Each command prints an unambiguous status (`Mute: ON` or `Mute: OFF`) and the targets that

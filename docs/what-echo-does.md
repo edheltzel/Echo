@@ -116,7 +116,7 @@ Silence is layered. Use the smallest layer that matches the room.
 
 Mute survives daemon restarts, deadline included. A timed mute expires on the next notification. There is no per-session mute. Any local process can unmute, because `/mute` is unauthenticated localhost, same as `/notify`.
 
-The state file and hotkey bindings live in [operations.md](operations.md#mute) and [http-api.md](http-api.md).
+Commands, timed snooze, and the dashboard are in [Mute, snooze, and the dashboard](mute-dashboard.md). The state file and every scope live in [operations.md](operations.md#mute), and hotkey bindings in [http-api.md](http-api.md#hotkey-bindings).
 
 ## Shared offices
 
