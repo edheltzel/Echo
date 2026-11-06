@@ -12,7 +12,7 @@ Echo is not a conversation loop. It does not sit in a listen-speak-listen cycle 
 
 Echo is not a menu-bar recorder, a notch UI, or a global push-to-talk chrome.
 
-First-class speech-to-text is [roadmap (#179)](https://github.com/edheltzel/Echo/issues/179). The optional one-shot voice ask (`echo-converse`) can speak one question and return one spoken reply. That is extra. It is not why you install Echo.
+Speech-to-text ships today as [voice ask](#voice-ask-speech-to-text): an agent speaks one question, you answer out loud, and your reply comes back to the agent as text, transcribed on your Mac. Each ask is one exchange, not a dictation mode or a hands-free chat.
 
 ## When it speaks
 

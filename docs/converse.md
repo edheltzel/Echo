@@ -1,30 +1,35 @@
-# echo-converse: the one-shot voice ask
+# Voice ask (speech-to-text)
 
-Echo speaks. `echo-converse` lets it ask. One question out loud, one spoken reply captured,
-one transcript returned to the calling agent. Local transcription, no cloud rung, no
-conversational loop in v1.
+Echo speaks, and it listens. With voice ask, an agent asks you one question out loud, you answer
+by voice, and your reply comes back to the agent as text. Transcription runs on your Mac, with no
+cloud step. Each ask is one exchange: one question, one spoken reply, one transcript (the
+`echo-converse` coordinator runs it).
 
 This is Echo's speech-to-text feature. It is separate from notification text-to-speech (`/notify` on
 `:3246`, see [what-echo-does.md](what-echo-does.md)): different port, different dependencies, and
 its own mute scope (`cli/echo mute on mic`).
 
+## How it works
+
+Pi and omp register an `echo_ask` tool inside their existing adapters; Claude Code consumes the
+same tool through `adapters/mcp/`. Hosts do not call the HTTP surface directly. All three route to
+one place: `askOnce` in `converse/client.ts`, but only after the caller proves that its live host
+session granted microphone consent.
+
 ```bash
+bash scripts/install.sh --adapter mcp      # register the tool for Claude Code
 bun converse/main.ts                       # start the coordinator on :32468
 curl -fsS http://localhost:32468/health    # capability, booking state, core address
-bash scripts/install.sh --adapter mcp      # register the tool for Claude Code
 tests/e2e-converse.sh                      # isolated end-to-end turn, no microphone needed
 ```
-
-Hosts do not call the HTTP surface directly. Pi and omp register an `echo_ask` tool inside
-their existing adapters; Claude Code consumes the same tool through `adapters/mcp/`. All three
-route to one place: `askOnce` in `converse/client.ts`, but only after the caller proves that its
-live host session granted microphone consent.
 
 ## Before you enable it
 
 Voice ask is useful when an agent needs one short answer while you are away from the keyboard. It
 is not a hands-free chat mode: every `echo_ask` call speaks one question, records one reply, returns
 that transcript, and ends.
+
+### Set it up
 
 The notification server does not need recording software, but voice ask does. Install `sox`, which
 provides the required `rec` recorder. The recommended on-device transcriber on macOS 26 is `yap`:
@@ -41,6 +46,8 @@ checks `rec` and the selected transcriber before recording. `sox` itself is invo
 the Whisper resample, so the installer and doctor check is the support boundary even though a
 custom `rec` plus `yap` path does not execute the `sox` binary.
 
+### Microphone permission
+
 On a fresh macOS permission state, the first ask that reaches `rec` should show the system
 microphone prompt. If access was denied before, macOS may not prompt again; re-enable it in
 **System Settings → Privacy & Security → Microphone**. In the measured Pi and omp topology, macOS
@@ -54,6 +61,8 @@ that the coding host allows to call `echo_ask` can start a one-reply recording i
 may still apply its own tool policy. The durable microphone control is the macOS grant for the
 application that owns capture. On the measured Pi/omp path that application is the terminal;
 Claude Code may differ.
+
+### Privacy
 
 The reply is a temporary WAV under `~/Library/Caches/echo/converse/`, inside a directory readable
 only by the current user. Echo makes the file mode `0600` before transcription and deletes it in a
