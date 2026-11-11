@@ -1,0 +1,9 @@
+schema = "1"
+name = "Echo"
+description = "Local voice notification server for coding agents (macOS)"
+
+[hooks]
+install = "scripts/install.sh"
+update = "cli/echo update"
+uninstall = "scripts/uninstall.sh"
+doctor = "cli/echo doctor"
