@@ -1,6 +1,6 @@
 # HTTP API
 
-The universal core (`core/server.ts`) listens on `localhost:3246` by default (`PORT` in config.json) and
+The universal core (`core/server.ts`) listens on `127.0.0.1:3246` by default (`PORT` in config.json, `ECHO_HOST` in the process environment) and
 exposes the notification API plus the voice ask's opt-in playback-status and capture-reservation
 routes. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for where this sits
 in the request flow, [`../SECURITY.md`](../SECURITY.md) for the trust boundary, and
@@ -34,7 +34,9 @@ notification bucket the flood guard exists for.
 
 ## `POST /notify`
 
-Primary host-neutral endpoint. Body (every field optional):
+Primary host-neutral endpoint. Requires `Authorization: Bearer <token>`, where the token is the
+contents of `notify-token` beside config.json (or `ECHO_NOTIFY_TOKEN`). A missing or wrong token
+returns `401` with an empty body; see [`../SECURITY.md`](../SECURITY.md). Body (every field optional):
 
 ```json
 {

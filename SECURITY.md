@@ -29,8 +29,16 @@ request flow see [`ARCHITECTURE.md`](ARCHITECTURE.md); for egress detail see
   (fail-closed); the daemon only learns about a successful native delivery after the fact,
   via the exact `visual_delivery: "native"` marker (see [`docs/http-api.md`](docs/http-api.md)).
 
-There is **no authentication** on `/notify` - any local process may request speech - and
-the same applies to `/mute` (#83): any local process may flip the global mute. `GET /voices`
+The daemon binds `127.0.0.1` by default (`ECHO_HOST` in the process environment overrides it).
+`POST /notify` and `POST /notify/personality` require `Authorization: Bearer <token>`; a
+missing or wrong token gets `401` with an empty body. The token lives in `notify-token` beside
+config.json (normally `~/.config/echo/notify-token`). The daemon creates it with mode `0600` on
+first start; `ECHO_NOTIFY_TOKEN` overrides it. Echo's adapters and the converse coordinator read
+the same file. The token is never logged. This stops another user on the machine and a
+cross-origin web page from requesting speech; any process running as you can still read the file.
+
+Every other route stays unauthenticated. Any local process may flip the global mute with
+`/mute` (#83). `GET /voices`
 is likewise unauthenticated: any local process can read the configured persona keys and the
 default provider name (no API keys or voice ids). Note the
 reach is wider than "local process": a `POST` with an empty or `text/plain` body is a
@@ -46,8 +54,8 @@ The optional voice-ask capability adds a microphone to the picture, so it gets i
 boundary notes. Mechanism and process topology: [`docs/converse.md`](docs/converse.md).
 
 - **A second unauthenticated localhost surface.** The coordinator binds `127.0.0.1:32468`
-  (`ECHO_CONVERSE_PORT`) and, like `/notify`, authenticates nobody: any local process can book a
-  turn and cause a question to be spoken. The coordinator never records; the shipped host tools
+  (`ECHO_CONVERSE_PORT`) and authenticates nobody: any local process can book a turn and cause a
+  question to be spoken, because the coordinator sends the notify token to core on its behalf. The coordinator never records; the shipped host tools
   require their own live-session consent before calling it. This is still an accepted
   single-user local surface, one rung higher, so do not expose it to a network.
 - **Host-session consent is separate from TCC.** `echo_ask` fails closed before capture unless

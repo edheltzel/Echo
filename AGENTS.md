@@ -67,6 +67,7 @@ bash scripts/install.sh --adapter mcp    # register the ask tool for Claude Code
 curl -fsS http://localhost:3246/health
 curl -fsS -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $(cat ~/.config/echo/notify-token)" \
   -d '{"message":"smoke","voice_enabled":false}'
 ```
 
