@@ -9,7 +9,7 @@ request flow see [`ARCHITECTURE.md`](ARCHITECTURE.md); for egress detail see
 
 ## Trust boundary
 
-- **Localhost only.** The daemon binds `localhost:3246` (`PORT`, default 3246). It is meant
+- **Localhost only.** The daemon binds `127.0.0.1:3246` (`PORT`, default 3246; `ECHO_HOST`). It is meant
   to be reachable only by other processes on the same machine; do not expose it to a network.
 - **CORS restricted to localhost.** `Access-Control-Allow-Origin` is hard-set to
   `http://localhost` (`core/server.ts`); `OPTIONS` returns `204`. Browsers on other origins
