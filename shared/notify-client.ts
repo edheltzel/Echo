@@ -3,6 +3,7 @@
 // daemon records for context ("pi", "omp", "claudecode").
 
 import type { NotifySlot } from "./notify-slot.ts";
+import { notifyAuthHeaders } from "./notify-token.ts";
 import {
   withDetectedSpeakMode,
   type SpeakMode,
@@ -134,7 +135,7 @@ async function postNotification(
 
   const response = await fetch(config.endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...notifyAuthHeaders() },
     body: JSON.stringify(requestPayload),
     signal,
   });

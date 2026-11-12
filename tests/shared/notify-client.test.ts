@@ -58,4 +58,18 @@ describe("shared native-before-POST notification client", () => {
     );
     expect(payload?.speak_mode).toBe("think");
   });
+
+  test("sends the notify token as a bearer header", async () => {
+    let headers: HeadersInit | undefined;
+    globalThis.fetch = async (_input, init) => {
+      headers = init?.headers;
+      return new Response("accepted", { status: 202 });
+    };
+
+    await sendNotificationPayload(
+      { endpoint: "http://echo.test/notify", title: "Title" },
+      { message: "Body", title: "Title", source: "pi" },
+    );
+    expect(headers).toMatchObject({ Authorization: `Bearer ${process.env.ECHO_NOTIFY_TOKEN}` });
+  });
 });

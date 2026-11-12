@@ -18,6 +18,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // --- spawn stub -------------------------------------------------------------
 // sendNotification always spawns osascript for the macOS banner; the gate tests
@@ -237,7 +238,7 @@ let bucket = 0;
 async function postNotify(): Promise<Response> {
   return fetch(`http://localhost:${PORT}/notify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-forwarded-for": `mute-gate-test-${bucket++}` },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": `mute-gate-test-${bucket++}`, ...NOTIFY_AUTH },
     body: JSON.stringify({ message: "mute gate test", voice_enabled: true, voice_id: "pi" }),
   });
 }

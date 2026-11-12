@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSpeakHistory, REPLAY_DEFAULT_N, REPLAY_MAX_N, SPEAK_HISTORY_CAPACITY } from "../../core/speak-history";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 const TMP = mkdtempSync(join(tmpdir(), "replay-ep-"));
 process.env.ECHO_AUDIO_CACHE_DIR ??= join(TMP, "audio-cache");
@@ -75,13 +76,13 @@ describe("FM-449 - POST /replay contract", () => {
     for (let i = 0; i < 10; i++) {
       await fetch(`http://localhost:${PORT}/notify`, {
         method: "POST",
-        headers: floodHeaders,
+        headers: { ...floodHeaders, ...NOTIFY_AUTH },
         body: JSON.stringify({ message: "flood", voice_enabled: false }),
       });
     }
     const starved = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: floodHeaders,
+      headers: { ...floodHeaders, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "flood", voice_enabled: false }),
     });
     expect(starved.status).toBe(429);

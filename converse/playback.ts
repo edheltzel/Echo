@@ -23,6 +23,7 @@
 //    let a later host line replace the question - core would then stay silent
 //    while the caller happily recorded.
 
+import { notifyAuthHeaders } from "@echo/shared/notify-token.ts";
 import type { CoreHealthSnapshot } from "./types.ts";
 
 /** edge-tts speaks near 14 characters a second; the constant covers synthesis and playback start. */
@@ -163,7 +164,7 @@ export interface SpeakQuestionOptions {
 export async function speakQuestion(options: SpeakQuestionOptions): Promise<{ status: number; body: string; requestId?: string }> {
   const response = await options.fetchImpl(`${options.coreBaseUrl}/notify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...notifyAuthHeaders() },
     body: JSON.stringify({
       message: options.question,
       title: options.title ?? "Echo asks",

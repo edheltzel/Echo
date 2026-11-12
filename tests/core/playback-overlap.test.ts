@@ -20,6 +20,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "./poll";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // Deterministic "playback duration" for the stubbed afplay. Long enough that
 // concurrent requests would demonstrably overlap without serialization, and
@@ -99,7 +100,7 @@ afterAll(() => {
 function notify(message: string, sessionId: string) {
   return fetch(`http://localhost:${PORT}/notify`, {
     method: "POST",
-    headers: HEADERS,
+    headers: { ...HEADERS, ...NOTIFY_AUTH },
     body: JSON.stringify({ message, voice_enabled: true, session_id: sessionId }),
   });
 }

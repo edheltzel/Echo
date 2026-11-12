@@ -13,6 +13,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // --- spawn stub -------------------------------------------------------------
 // The /notify flood below fires an accept-time banner per request; without a
@@ -137,14 +138,14 @@ describe("issue #83 - /mute reliability under load and failure", () => {
     for (let i = 0; i < 10; i++) {
       await fetch(`http://localhost:${PORT}/notify`, {
         method: "POST",
-        headers: floodHeaders,
+        headers: { ...floodHeaders, ...NOTIFY_AUTH },
         body: JSON.stringify({ message: "flood", voice_enabled: false }),
       });
     }
     // Bucket exhausted: an 11th notify-path request is rejected...
     const starved = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: floodHeaders,
+      headers: { ...floodHeaders, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "flood", voice_enabled: false }),
     });
     expect(starved.status).toBe(429);
@@ -249,7 +250,7 @@ describe("FM-446 - POST /mute scopes", () => {
     await postMute(JSON.stringify({ muted: true, scope: "mic" }));
     const notify = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "ask",
         voice_enabled: true,
@@ -276,7 +277,7 @@ describe("FM-446 - POST /mute scopes", () => {
     await postMute(JSON.stringify({ muted: true, scope: "mic" }));
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "still spoken", voice_enabled: false }),
     });
     expect(res.status).toBe(202);
@@ -363,7 +364,7 @@ describe("ATL-ECHO-SNOOZE-DASH-01 - same-origin write guard + dashboard", () => 
   test("no-Origin /notify still 202 (hosts unchanged)", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "host line", voice_enabled: false }),
     });
     expect(res.status).toBe(202);

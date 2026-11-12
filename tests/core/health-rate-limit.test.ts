@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 process.env.ECHO_AUDIO_CACHE_DIR ??= mkdtempSync(join(tmpdir(), "health-rl-"));
 
@@ -34,7 +35,7 @@ describe("GET /health rate-limit isolation", () => {
     for (let i = 0; i < 10; i++) {
       const res = await fetch(`http://localhost:${PORT}/notify`, {
         method: "POST",
-        headers,
+        headers: { ...headers, ...NOTIFY_AUTH },
         body: JSON.stringify({ message: "bucket probe", voice_enabled: false }),
       });
       expect(res.status, `notify ${i}`).toBe(202);
@@ -43,7 +44,7 @@ describe("GET /health rate-limit isolation", () => {
 
     const limited = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers,
+      headers: { ...headers, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "bucket probe", voice_enabled: false }),
     });
     expect(limited.status).toBe(429);

@@ -9,6 +9,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // /notify fires an accept-time banner; never let a real osascript escape.
 function stubSpawn(): EventEmitter {
@@ -54,7 +55,7 @@ afterAll(() => {
 function post(path: string, body: string): Promise<Response> {
   return fetch(`http://localhost:${PORT}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-forwarded-for": client },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": client, ...NOTIFY_AUTH },
     body,
   });
 }

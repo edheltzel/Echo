@@ -19,6 +19,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // --- spawn stub -------------------------------------------------------------
 // sendNotification always spawns osascript for the macOS banner; with every
@@ -110,7 +111,7 @@ describe("issue #24 - one resolution event per /notify", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "resolution drop-off test",
         voice_enabled: true,
@@ -150,7 +151,7 @@ describe("issue #24 - one resolution event per /notify", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "say fallback path", voice_enabled: true }),
     });
     expect(res.status).toBe(202);
@@ -180,7 +181,7 @@ describe("issue #24 - one resolution event per /notify", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "pi persona resolution",
         voice_enabled: true,

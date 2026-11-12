@@ -226,6 +226,7 @@ if [ "$AUDIBLE" -eq 1 ]; then
   echo "  speaking on :${PORT} (test instance): \"${TEST_OPENER}\""
   code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:${PORT}/notify" \
     -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $(cat "${SCRATCH}/notify-token")" \
     -d "{\"message\":\"${TEST_OPENER}\",\"title\":\"Echo Test\",\"voice_enabled\":true,\"source\":\"e2e-audible\",\"session_id\":\"e2e-audible\"}")"
   [ "$code" = "202" ] || fail "audible notify returned $code"
   # The daemon acks on receipt, then synthesizes and plays on the serial queue.

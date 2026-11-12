@@ -41,7 +41,7 @@ test("banner spawn", async () => {
   const { server } = await import(process.env.BANNER_CHILD_SERVER!);
   const res = await fetch(\`http://localhost:\${server.port}/notify\`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: \`Bearer \${process.env.ECHO_NOTIFY_TOKEN}\` },
     body: JSON.stringify({ message: "banner probe", title: "Probe", voice_enabled: false }),
   });
   expect(res.status).toBe(202);

@@ -19,6 +19,7 @@ import * as realChildProcess from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 const realSpawn = realChildProcess.spawn;
 let spawnImpl: (...args: any[]) => any = realSpawn;
@@ -83,7 +84,7 @@ describe("audio-lifecycle event per /notify", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...NOTIFY_AUTH },
       body: JSON.stringify({
         message,
         voice_enabled: true,
@@ -117,7 +118,7 @@ describe("audio-lifecycle event per /notify", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "muted turn", voice_enabled: true, session_id: "sess-mute" }),
     });
     expect(res.status).toBe(202);

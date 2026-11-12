@@ -13,6 +13,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 process.env.ECHO_AUDIO_CACHE_DIR ??= mkdtempSync(join(tmpdir(), "voices-ep-"));
 
@@ -30,7 +31,7 @@ function getVoices(tag: string): Promise<Response> {
 function postNotify(tag: string): Promise<Response> {
   return fetch(`http://localhost:${PORT}/notify`, {
     method: "POST",
-    headers: client(tag),
+    headers: { ...client(tag), ...NOTIFY_AUTH },
     body: JSON.stringify({ message: "bucket probe", voice_enabled: false }),
   });
 }

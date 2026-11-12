@@ -62,6 +62,7 @@ import {
   type SpeakMode,
 } from "../shared/speak-mode";
 import { parseNotifySlot, type NotifySlot } from "../shared/notify-slot";
+import { ensureNotifyToken, isAuthorizedNotify } from "../shared/notify-token";
 import {
   writeAudioLifecycleEvent,
   classifyPlaybackOutcome,
@@ -222,6 +223,9 @@ const CONFIG_STATUS = echoConfigStatus();
 const DASHBOARD_HTML_PATH = join(import.meta.dir, 'dashboard.html');
 const DASHBOARD_PATHS = new Set(["/", "/dashboard", "/dashboard/config"]);
 const GUARDED_WRITE_PATHS = new Set(["/mute", "/mode", "/replay"]);
+const NOTIFY_AUTH_PATHS = new Set(["/notify", "/notify/personality"]);
+const NOTIFY_TOKEN = ensureNotifyToken(process.env);
+const HOST = process.env.ECHO_HOST || "127.0.0.1";
 const ECHO_VERSION: string | null = (() => {
   // Staged payload carries manifest.json; a checkout run has package.json.
   for (const f of ['manifest.json', 'package.json']) {
@@ -1924,6 +1928,7 @@ const CAPTURE_RESERVATION_RELEASE_PATH = /^\/notify\/capture-reservations\/([^/]
 const CAPTURE_RESERVATION_PATH = /^\/notify\/capture-reservations\/[^/]+\/(grant|release)$/;
 
 export const server = serve({
+  hostname: HOST,
   port: PORT,
   async fetch(req, bunServer) {
     const url = new URL(req.url);
@@ -1933,7 +1938,7 @@ export const server = serve({
     const corsHeaders = {
       "Access-Control-Allow-Origin": "http://localhost",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
     };
 
     if (req.method === "OPTIONS") {
@@ -2004,6 +2009,11 @@ export const server = serve({
         JSON.stringify({ status: "error", message: "Cross-origin write rejected" }),
         { headers: { "Content-Type": "application/json" }, status: 403 }
       );
+    }
+
+    if (req.method === "POST" && NOTIFY_AUTH_PATHS.has(url.pathname) &&
+        !isAuthorizedNotify(req.headers.get("authorization"), NOTIFY_TOKEN)) {
+      return new Response(null, { headers: corsHeaders, status: 401 });
     }
 
     if (dashboardGet && url.pathname === "/dashboard/config") {
@@ -2498,7 +2508,7 @@ export const server = serve({
 
 const providerStatus = await getProviderStatus();
 
-log('info', `🚀 Voice Server running on port ${PORT}`);
+log('info', `🚀 Voice Server running on ${HOST}:${PORT}`);
 log('info', `📄 Config source: voices.json`);
 log('info', `🎙️  Primary provider: ${voicesConfig.defaultProvider}`);
 log('info', `📋 Fallback order: ${voicesConfig.fallbackOrder.join(' → ')}`);

@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { readCaptureState, isCaptureActive, resolveCaptureStatePath } from "../../core/capture-guard";
 import { primeEchoFileEnv } from "../../core/env";
 import { waitFor } from "./poll";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 // --- spawn stub (playback is platform-dependent: afplay on darwin, mpv else) -
 const realSpawn = realChildProcess.spawn;
@@ -198,7 +199,7 @@ describe("capture guard - speak-time gate", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "held line", voice_enabled: true, session_id: "sess-held" }),
     });
     expect(res.status).toBe(202);
@@ -223,7 +224,7 @@ describe("capture guard - speak-time gate", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "spoken line", voice_enabled: true, session_id: "sess-spoken" }),
     });
     expect(res.status).toBe(202);

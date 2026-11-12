@@ -52,6 +52,7 @@ curl -fsS "http://localhost:${TEST_PORT}/health" >/dev/null
 # /notify returns 202 on receipt (synth+play run async on the serial queue).
 code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:${TEST_PORT}/notify" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $(cat "${SCRATCH}/notify-token")" \
   -d '{"message":"smoke","voice_enabled":false,"source":"smoke-test","session_id":"smoke"}')"
 if [ "$code" != "202" ]; then
   echo "FAIL: expected 202 on receipt, got $code" >&2

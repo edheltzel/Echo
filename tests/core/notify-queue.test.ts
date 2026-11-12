@@ -19,6 +19,7 @@ import { waitFor } from "./poll";
 import { edgeRateFromSpeed } from "../../core/edge-rate";
 import { applySpeakModeSpeed } from "../../shared/speak-mode";
 import { clearSpeakHistory, spokenLineCount } from "../../core/speak-history";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 const PLAY_MS = 120;
 
@@ -123,7 +124,7 @@ describe("/notify acks on receipt (R2)", () => {
     const started = Date.now();
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "ack on receipt line", voice_enabled: true, session_id: "sess-202" }),
     });
     const elapsed = Date.now() - started;
@@ -147,7 +148,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("invalid message still fails 4xx before enqueue - no job, no row", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "x".repeat(501), voice_enabled: true, session_id: "sess-bad" }),
     });
     expect(res.status).toBe(400);
@@ -163,7 +164,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("a capture_reservation lease above the core cap fails 4xx before enqueue", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "oversized lease line",
         voice_enabled: true,
@@ -190,7 +191,7 @@ describe("/notify acks on receipt (R2)", () => {
 
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "muted queued line", voice_enabled: true, session_id: "sess-muted" }),
     });
     expect(res.status).toBe(202);
@@ -206,7 +207,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("banner-only (voice_enabled:false): 202, immediate banner, never queued, no row", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "banner only line", voice_enabled: false, session_id: "sess-banner" }),
     });
     expect(res.status).toBe(202);
@@ -221,7 +222,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("exact native marker suppresses the duplicate legacy banner", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "already shown natively",
         voice_enabled: false,
@@ -237,7 +238,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("unknown visual markers preserve raw-caller banner compatibility", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "unknown marker",
         voice_enabled: false,
@@ -253,20 +254,20 @@ describe("/notify acks on receipt (R2)", () => {
     // Blocker occupies the player so the voice target is deterministically QUEUED.
     const blocker = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "blocker line", voice_enabled: true, session_id: "sess-blk" }),
     });
     expect(blocker.status).toBe(202);
     const voice = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "queued voice line", voice_enabled: true, session_id: "sess-mix" }),
     });
     expect(voice.status).toBe(202);
     // Same-session banner-only arrives while the voice line is queued.
     const banner = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "banner only same session", voice_enabled: false, session_id: "sess-mix" }),
     });
     expect(banner.status).toBe(202);
@@ -281,7 +282,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("a voice line's banner fires at accept, before playback completes", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "banner precedes play", voice_enabled: true, session_id: "sess-early" }),
     });
     expect(res.status).toBe(202);
@@ -295,7 +296,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("/notify/personality feeds the same queue: 202 + played lifecycle row", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify/personality`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "personality shim line", session_id: "sess-persona" }),
     });
     expect(res.status).toBe(202);
@@ -320,7 +321,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("invalid speak_mode fails 4xx before enqueue", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "bad mode line",
         voice_enabled: true,
@@ -339,7 +340,7 @@ describe("/notify acks on receipt (R2)", () => {
   test("think is banner-only even when voice_enabled is true", async () => {
     const res = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "silent insight line",
         voice_enabled: true,
@@ -358,7 +359,7 @@ describe("/notify acks on receipt (R2)", () => {
     const identitySpeed = voicesConfig.identity.edgetts.speed as number;
     const omitted = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "omitted density line unique",
         voice_enabled: true,
@@ -376,7 +377,7 @@ describe("/notify acks on receipt (R2)", () => {
 
     const announced = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({
         message: "announce density line unique",
         voice_enabled: true,
@@ -399,13 +400,13 @@ describe("FM-449 - replay last N spoken lines", () => {
   test("replays the last N spoken lines oldest-first without a banner or re-record", async () => {
     const first = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "replay alpha line", voice_enabled: true, session_id: "sess-replay-a" }),
     });
     expect(first.status).toBe(202);
     const second = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "replay beta line", voice_enabled: true, session_id: "sess-replay-b" }),
     });
     expect(second.status).toBe(202);
@@ -440,7 +441,7 @@ describe("FM-449 - replay last N spoken lines", () => {
     writeFileSync(MUTE_PATH, JSON.stringify({ muted: true, muted_until: null, scope: "all" }));
     const muted = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "muted not replayable", voice_enabled: true, session_id: "sess-replay-mute" }),
     });
     expect(muted.status).toBe(202);
@@ -461,12 +462,12 @@ describe("FM-449 - replay last N spoken lines", () => {
   test("voice-disabled and think lines are not stored", async () => {
     await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "silent banner", voice_enabled: false, session_id: "sess-replay-off" }),
     });
     await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
-      headers: HEADERS,
+      headers: { ...HEADERS, ...NOTIFY_AUTH },
       body: JSON.stringify({ message: "think skip", voice_enabled: true, speak_mode: "think", session_id: "sess-replay-think" }),
     });
     await Bun.sleep(150);

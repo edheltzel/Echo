@@ -13,6 +13,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "./poll";
+import { NOTIFY_AUTH } from "./notify-auth.ts";
 
 const realSpawn = realChildProcess.spawn;
 let spawns: string[][] = [];
@@ -93,7 +94,7 @@ let bucket = 0;
 async function post(path: string, body: unknown): Promise<Response> {
   return fetch(`http://localhost:${PORT}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-forwarded-for": `slot-sound-${bucket++}` },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": `slot-sound-${bucket++}`, ...NOTIFY_AUTH },
     body: JSON.stringify(body),
   });
 }

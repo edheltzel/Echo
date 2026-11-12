@@ -12,6 +12,9 @@ import { join } from "node:path";
 const scratch = mkdtempSync(join(tmpdir(), "echo-test-config-"));
 process.env.ECHO_CONFIG_FILE = join(scratch, "config.json");
 process.env.ECHO_AUTOMATION_ENV = "";
+// core requires a bearer token on /notify; pin it so the in-process daemon and
+// every adapter under test share one value instead of minting a file.
+process.env.ECHO_NOTIFY_TOKEN = "echo-test-notify-token";
 // The output mode is read on every dequeue; never let the operator's real
 // mode.json switch in-process daemon tests to sounds-only.
 process.env.ECHO_MODE_STATE_PATH = join(scratch, "mode.json");
