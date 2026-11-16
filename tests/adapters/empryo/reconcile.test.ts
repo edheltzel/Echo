@@ -29,6 +29,23 @@ afterEach(() => {
 });
 
 describe("Empryo reconcile", () => {
+  test("preload clears inherited Empryo hooks and skills destinations", () => {
+    const dir = scratch();
+    const result = spawnSync(process.execPath, [
+      "--preload", join(import.meta.dir, "../../preload.ts"),
+      "-e", "console.log(JSON.stringify([process.env.ECHO_EMPRYO_HOOKS_FILE ?? null, process.env.ECHO_EMPRYO_SKILLS_DIR ?? null]))",
+    ], {
+      env: {
+        ...process.env,
+        ECHO_EMPRYO_HOOKS_FILE: join(dir, "hooks.json"),
+        ECHO_EMPRYO_SKILLS_DIR: join(dir, "skills"),
+      },
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([null, null]);
+  });
+
   test("registers SessionStart, Stop and Notification without touching sibling hooks", () => {
     const hooksFile = join(scratch(), "hooks.json");
     writeFileSync(hooksFile, JSON.stringify({
