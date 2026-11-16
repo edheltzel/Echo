@@ -47,6 +47,6 @@ rewritten or pruned. A foreign file already named `echo-voice.json` or a foreign
 | `GROK_HOME` | Grok config directory (default `~/.grok`) |
 | `ECHO_GROK_HOOKS_DIR` | Direct hooks directory override (wins over `GROK_HOME`) |
 | `ECHO_GROK_SKILLS_DIR` | Direct skills directory override |
-| `HOME` | Affects the default `~/.grok` resolution via `os.homedir()` |
+| `HOME` | Persona: [global home resolution](../../docs/voices.md#per-project-persona--voice-local-override); registration uses `os.homedir()` |
 
 Never point tests at the operator's real `~/.grok`.
