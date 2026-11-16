@@ -14,8 +14,20 @@ Service identity:
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
 
-Run all commands from the repo root (`cli/echo …`). A PATH-installable `do-echo` wrapper is
-the next thin follow-up; a checkout symlink works until then (see [Mute](#mute)).
+Installed with npm? Run `npx agent-echo <command>` wherever this page says `cli/echo <command>`;
+it needs no clone and no repo root. From a clone, run `cli/echo …` from the repo root. Start,
+stop, and restart are scripts, not `cli/echo` commands; under npm run them from the installed
+copy, for example `bash "$(npx agent-echo where)/scripts/restart.sh"`.
+
+## Update
+
+Installed with npm, one command fetches the newest release, re-stages the daemon, and reloads it:
+
+```bash
+npx agent-echo@latest update
+```
+
+From a clone, see [Update after a `git pull`](#update-after-a-git-pull).
 
 ## Mute vs daemon disable
 
