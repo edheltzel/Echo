@@ -46,7 +46,7 @@ OK echo is healthy on :3246
 
 If you see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`, open that log. The last few lines say what failed. Fix the cause and rerun the same install command. Running it again is safe.
 
-Prefer working from a clone? `git clone https://github.com/edheltzel/Echo.git && cd Echo && cli/echo install --adapter none` does the same, and every `npx agent-echo <command>` below is `cli/echo <command>` there.
+For installation from a clone, see [How to install Echo](install-human.md#install-core-only).
 
 ## Step 2: Confirm it is healthy
 
@@ -154,7 +154,7 @@ One command fetches the newest release and reloads the service:
 npx agent-echo@latest update
 ```
 
-Your settings in `~/.config/echo/config.json` stay as they are.
+See [Update](operations.md#update) for settings preservation and recovery details.
 
 ## What you have done
 
