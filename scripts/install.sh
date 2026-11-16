@@ -56,14 +56,14 @@ Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
-Every run also re-reconciles all already-installed adapter registrations, so a
+Installation also re-reconciles all already-installed adapter registrations, so a
 repo directory rename heals with one rerun (#77).
 --check reports stale echo-related paths across the plist and host settings
 without mutating anything. Exit 0 when everything is current, 3 when stale
 paths were detected. It checks that those paths still resolve — it does not
 compare the staged payload's contents against this checkout.
---list-installed prints the id of each adapter registered in a host config, one
-per line, and exits 0 without checking or changing anything.
+--list-installed detects existing adapter registrations and prints their ids, one
+per line, then exits 0 without reconciliation, health checks, or host writes.
 EOF
 }
 
@@ -623,7 +623,7 @@ install_adapter() {
 
 refresh_installed_adapters() {
   # A directory rename leaves stale paths in every registered host config (#77):
-  # re-reconcile each installed adapter on every run, regardless of --adapter.
+  # re-reconcile each installed adapter on installation, regardless of --adapter.
   # A broken secondary adapter config must not fail the requested install — warn instead.
   if [ "$ADAPTER" != "claudecode" ]; then
     if claudecode_installed; then
