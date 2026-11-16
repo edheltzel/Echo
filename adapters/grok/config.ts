@@ -47,7 +47,7 @@ function readDaidentity(
 export function loadProjectPersona(
   cwd: string | undefined,
   readFile: (path: string) => string | null = defaultReadFile,
-  home: string = homedir(),
+  home: string = process.env.HOME || homedir(),
 ): EchoPersonaOverride | null {
   const global = readDaidentity(join(home, ".grok", "settings.json"), readFile);
   const project = cwd ? readDaidentity(join(cwd, ".grok", "settings.json"), readFile) : null;
