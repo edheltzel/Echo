@@ -45,13 +45,14 @@ OPENCODE_COMMANDS="${ECHO_OPENCODE_COMMANDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.confi
 OPENCODE_PLUGINS="${ECHO_OPENCODE_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins}"
 ADAPTER="none"
 CHECK_ONLY=0
+LIST_ONLY=0
 # Adapter ids are owned by shared/extension.ts (HARNESS_IDS). Adding a harness
 # starts there; tests/shared/extension.test.ts fails if this case list, cli/echo
 # usage, or workspaces drift. Do not invent a second installer plugin loader.
 
 usage() {
   cat <<EOF
-Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
+Usage: scripts/install.sh [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check] [--list-installed]
 
 Installs the universal echo core as a macOS LaunchAgent.
 Adapter registration is optional and runs only after adapter preflight passes.
@@ -61,6 +62,8 @@ repo directory rename heals with one rerun (#77).
 without mutating anything. Exit 0 when everything is current, 3 when stale
 paths were detected. It checks that those paths still resolve — it does not
 compare the staged payload's contents against this checkout.
+--list-installed prints the id of each adapter registered in a host config, one
+per line, and exits 0 without checking or changing anything.
 EOF
 }
 
@@ -76,6 +79,10 @@ while [ $# -gt 0 ]; do
       ;;
     --check)
       CHECK_ONLY=1
+      shift
+      ;;
+    --list-installed)
+      LIST_ONLY=1
       shift
       ;;
     -h|--help)
@@ -954,6 +961,23 @@ print_migration_summary() {
   done
   echo "  kept for reference only; never reload a legacy service. To stop Echo: cli/echo uninstall"
 }
+
+list_installed() {
+  if claudecode_installed || claudecode_commands_installed; then echo claudecode; fi
+  if codex_installed; then echo codex; fi
+  if empryo_installed; then echo empryo; fi
+  if grok_installed; then echo grok; fi
+  if jcode_installed; then echo jcode; fi
+  if mcp_installed; then echo mcp; fi
+  if omp_installed; then echo omp; fi
+  if opencode_installed; then echo opencode; fi
+  if pi_installed; then echo pi; fi
+}
+
+if [ "$LIST_ONLY" -eq 1 ]; then
+  list_installed
+  exit 0
+fi
 
 warn_if_linked_worktree
 

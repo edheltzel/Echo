@@ -78,6 +78,9 @@ Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook e
 regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
 modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
 commands into both. Codex and OpenCode follow the same contract.
+`scripts/install.sh --list-installed` prints the id of each adapter its `*_installed` check
+finds, one per line, and exits 0 without touching host state; a new adapter adds its check
+there too. GAP's `gap doctor` reads this list to record which adapters Echo installed.
 
 Claude Code also ships a mute and mode plugin at `adapters/claudecode/plugin/`. It is not a
 registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
