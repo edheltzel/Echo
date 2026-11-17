@@ -47,7 +47,8 @@ describe("Claude Code mute plugin", () => {
     expect(typeof manifest.description).toBe("string");
     expect(String(manifest.description).length).toBeGreaterThan(0);
     expect(manifest.version).toBe("0.1.0");
-    expect(Object.keys(manifest).sort()).toEqual(["description", "name", "version"]);
+    expect(manifest.author).toEqual({ name: "Ed Heltzel" });
+    expect(Object.keys(manifest).sort()).toEqual(["author", "description", "name", "version"]);
   });
 
   test("plugin.json lives only in .claude-plugin/; skills sit at the plugin root", () => {
