@@ -14,8 +14,9 @@ session says "Jay code, ready." Resume, attach, and child sessions stay silent.
 Set `ECHO_VOICE_GREET_ON_START=false` to disable the greeting.
 
 The installer also links `skills/echo-mute` and `skills/echo-mode` into the `skills` folder beside
-`config.toml`. Jcode runs any skill there as a slash command, so `/echo-mute` and `/echo-mode`
-run `cli/echo mute` and `cli/echo mode`.
+`config.toml`. It refuses to overwrite existing directories or non-Echo skill links.
+Invocation is documented under [Mute](../../docs/operations.md#mute) and
+[Sounds-only mode](../../docs/operations.md#sounds-only-mode).
 
 Jcode currently supports one command per hook. Installation rewrites Echo-owned
 `session_start` / `turn_end` commands onto this checkout (including a live hook from

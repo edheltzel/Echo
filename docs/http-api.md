@@ -301,8 +301,10 @@ The mode persists across daemon restarts in a state file beside the mute state
 
 ```bash
 curl -fsS -X POST http://localhost:3246/mode -H 'Content-Type: application/json' -d '{"mode": "sounds"}'
-cli/echo mode sounds   # same, from the terminal; /echo-mode in a session
+cli/echo mode sounds   # same, from the terminal
 ```
+
+For host commands, see [Sounds-only mode](operations.md#sounds-only-mode).
 
 ## `POST /replay`
 

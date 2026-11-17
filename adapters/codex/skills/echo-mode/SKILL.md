@@ -1,6 +1,6 @@
 ---
 name: echo-mode
-description: Switch Echo between speech and sounds for every session on this machine (speech/sounds/status). Use when the user types /echo-mode or asks to change Echo's output mode.
+description: Switch Echo between speech and sounds for every session on this machine (speech/sounds/status). Use when the user asks to change Echo's output mode.
 ---
 
 Switch Echo's output mode through the existing CLI. Do not POST `/mode` yourself, do not use Bun, and do not invent a second mode path. Codex lifecycle hooks are not the mode path.
