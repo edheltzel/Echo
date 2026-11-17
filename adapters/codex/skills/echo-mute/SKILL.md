@@ -1,6 +1,6 @@
 ---
 name: echo-mute
-description: Mute Echo audio for every session on this machine (on/off/toggle/status/duration). Use when the user types /echo-mute or asks to mute Echo.
+description: Mute Echo audio for every session on this machine (on/off/toggle/status/duration). Use when the user asks to mute Echo.
 ---
 
 Mute Echo through the existing CLI. Do not POST `/mute` yourself, do not use Bun, and do not invent a second mute path. Codex lifecycle hooks are not the mute path.
