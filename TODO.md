@@ -11,7 +11,6 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 - [ ] 2026-10-09 Tern terminal button to toggle Echo mute + sound modes (Tern SDK). from Echo room, Oct 9. New feature request. Tern SDK research in progress, no brief yet. Mute toggles with one POST /mute; /mode has no toggle form yet @outstanding due:2026-12-29
 - [ ] 2026-10-09 Zero-touch UX docs for non-developers. Waits on #8 (delivery half moved there) issue:28
 - [ ] 2026-10-19 **Waiting:** ATL-642 Custom notification sounds. Config for custom audio files; play when a notification fires. Captain-hold until Echo is released. atl:642
-- [ ] 2026-10-09 6 local test failures on BigMac (bun test 2026-10-14): Claude plugin validate, runEchoMute, omp HIL announce, 2x Pi lifecycle, 1 integration override. Compare against clean dev; no issue @check
 - [ ] 2026-10-09 [Epic] Make the voice system agent-agnostic. OpenCode is the last host; closes when #17 closes @inprogress issue:30
 - [ ] 2026-10-09 Add OpenCode host adapter. Shipped (#198/#204); greeting on by default (#219). Left: headless opencode run greeting check (needs a live session) @inprogress issue:17
 - [ ] 2026-10-09 ATL-632 Grok as a speech provider (xAI TTS). On Oct 4 the xAI key "Echo" went into Echo's env file on BigMac, but there's no xAI/Grok TTS code on any GitHub branch and no issue. Check BigMac for local or uncommitted work @check atl:632
@@ -27,6 +26,8 @@ Generated view of [todo.txt](todo.txt) (open tasks) and [done.txt](done.txt) (ar
 
 ## Done
 
+- [x] 2026-11-16 6 local test failures on BigMac (bun test 2026-10-14): Claude plugin validate, runEchoMute, omp HIL announce, 2x Pi lifecycle, 1 integration override. Compare against clean dev; no issue - [change](adapters/claudecode/plugin/.claude-plugin/plugin.json)
+- [x] 2026-11-16 Isolate HOME in pi/omp adapter tests: pi-adapter, pi-project-persona and omp-hil read the operator's real ~/.pi and ~/.omp daidentity and fail on a machine with a global persona - [change](adapters/pi/config.ts)
 - [x] 2026-10-19 Add a no-mistakes axi --yes workflow line to AGENTS.md - [note](docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md), [pr](https://github.com/edheltzel/Echo/pull/233)
 - [x] 2026-10-19 Fix cli/echo --help backticks being evaluated by the shell - [note](docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md), [pr](https://github.com/edheltzel/Echo/pull/233)
 - [x] 2026-10-19 Fix cli/echo doctor reporting a /health 429 as a foreign port owner - [note](docs/handoffs/2026-10-14-205500-handoff-echo-scripts-release-voice.md), [pr](https://github.com/edheltzel/Echo/pull/233)

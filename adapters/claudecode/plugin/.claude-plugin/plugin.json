@@ -1,5 +1,8 @@
 {
   "name": "echo",
   "description": "Mute Echo and switch speech or sounds mode for every session on this machine via cli/echo. Does not install the daemon or register Claude Code lifecycle hooks.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "author": {
+    "name": "Ed Heltzel"
+  }
 }

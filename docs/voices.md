@@ -99,6 +99,10 @@ its own spoken identity - **name + voice** - in that repo only:
 | Empryo | `<project>/.empryo/settings.json` | `~/.empryo/settings.json` (see [`adapters/empryo/README.md`](../adapters/empryo/README.md)) |
 | OpenCode | `opencode.json(c)` from the worktree root down to the session folder, plus `.opencode/opencode.json(c)` | `~/.config/opencode/config.json`, `opencode.json`, and `opencode.jsonc`, merged (see [`adapters/opencode/README.md`](../adapters/opencode/README.md)) |
 
+Pi, omp, Grok, Codex, and Empryo resolve the global persona home from the current
+non-empty `HOME`, falling back to `os.homedir()` when it is unset or empty. omp's
+`PI_CODING_AGENT_DIR` overrides its global agent directory.
+
 The hosts in the table read a **`daidentity` block from their native config**, project layered
 over global (project wins per key) - one convention, one shape to learn. Claude Code, Pi,
 Grok, Codex, and Empryo use JSON `settings.json`; OpenCode uses its own `opencode.json(c)`; omp uses its native YAML `config.yml`.
