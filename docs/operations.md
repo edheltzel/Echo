@@ -1,7 +1,7 @@
 # Operations
 
-How to run Echo day to day: start, stop, restart, status, logs, health, updating after a
-`git pull`, and recovering after a repo move. Mute vs taking the service down is
+How to run Echo day to day: start, stop, restart, status, logs, health, updating, and
+recovering after a repo move. Mute vs taking the service down is
 [Mute vs daemon disable](#mute-vs-daemon-disable). First sound is
 [`getting-started.md`](getting-started.md). Why Echo speaks or stays quiet:
 [`what-echo-does.md`](what-echo-does.md). Installing a host is
@@ -14,8 +14,23 @@ Service identity:
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
 
-Run all commands from the repo root (`cli/echo …`). A PATH-installable `do-echo` wrapper is
-the next thin follow-up; a checkout symlink works until then (see [Mute](#mute)).
+Installed with npm? Run `npx agent-echo <command>` wherever this page says `cli/echo <command>`;
+it needs no clone and no repo root. From a clone, run `cli/echo …` from the repo root. Start,
+stop, and restart are scripts, not `cli/echo` commands; under npm run them from the installed
+copy, for example `bash "$(npx agent-echo where)/scripts/restart.sh"`.
+
+## Update
+
+Installed with npm, one command fetches the newest release, re-stages the daemon, and reloads it:
+
+```bash
+npx agent-echo@latest update
+```
+
+Your settings in `~/.config/echo/config.json` are preserved. For a failed reload, see the
+[payload rollback behavior](#update-after-a-git-pull).
+
+From a clone, see [Update after a `git pull`](#update-after-a-git-pull).
 
 ## Mute vs daemon disable
 
@@ -39,8 +54,8 @@ Never broad-kill whatever owns port `3246`.
 `cli/echo` is the stable human surface; the scripts below it stay available and are what it
 calls. In the order you need them:
 
-1. **Install or update** - `cli/echo update` after a `git pull`, `cli/echo install --adapter <host>`
-   the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
+1. **Install or update** - `cli/echo install --adapter <host>` the first time or to rewire an
+   adapter. For npm and clone updates, see [Update](#update).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`, or `until 15:30` (local time; tomorrow if past).
    Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Codex and Empryo).
@@ -271,15 +286,6 @@ If the daemon is down or the configured port is wrong, the CLI says so in plain 
 (connection refused vs HTTP 4xx/5xx), names `:PORT` and `~/.config/echo/config.json`, and
 prints a recovery: `cli/echo doctor`, `bash scripts/start.sh`, or `cli/echo update` when
 the running payload rejected the body.
-
-The CLI still lives in the checkout (`cli/echo …`). A PATH-installable `do-echo` wrapper
-(no `cd` into the repo) is a follow-up; until then:
-
-```bash
-mkdir -p ~/.local/bin
-ln -sf /path/to/Echo/cli/echo ~/.local/bin/do-echo
-# then: do-echo mute on
-```
 
 **Mute is machine-wide, not per session.** One Echo daemon serves the whole machine on the
 configured port (default `:3246`), so muting it applies to *every* agent, script,
