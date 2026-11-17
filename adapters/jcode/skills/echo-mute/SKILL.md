@@ -18,4 +18,4 @@ bash "$CLI" mute toggle
 
 If that file is missing, try `cli/echo` at the current repo root (`git rev-parse --show-toplevel`).
 
-Show the JSON the CLI printed. Mute is machine-wide: it silences every Echo speaker on this Mac. It does not silence audio Echo did not produce (for example Oh My Pi `/live`).
+Show what the CLI printed. Mute is machine-wide: it silences every Echo speaker on this Mac. It does not silence audio Echo did not produce (for example Oh My Pi `/live`).

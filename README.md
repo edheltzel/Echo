@@ -136,7 +136,10 @@ cli/echo install --adapter empryo
 
 See [How to install Echo](docs/install-human.md) for each host's setup and the optional voice-ask tool.
 
-Mute is machine-wide. `/echo-mute` on hosts that register it is the same `cli/echo mute` command. `/echo-mode [speech|sounds|status]` is the same `cli/echo mode` command. See [Mute, snooze, and the dashboard](docs/mute-dashboard.md), [Silence and mute](docs/what-echo-does.md#silence-and-mute), and [operations](docs/operations.md#mute). Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
+Mute is machine-wide. See operations for each host's [mute command](docs/operations.md#mute)
+and [output-mode command](docs/operations.md#sounds-only-mode). See [Mute, snooze, and the dashboard](docs/mute-dashboard.md)
+and [Silence and mute](docs/what-echo-does.md#silence-and-mute) for what they affect.
+Mute vs taking the service down: [Mute vs daemon disable](docs/operations.md#mute-vs-daemon-disable).
 
 | I want to… | Read |
 | --- | --- |

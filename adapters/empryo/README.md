@@ -10,11 +10,12 @@ cli/echo install --adapter empryo
 
 Notifications report `source: "empryo"`.
 
-The installer also links `skills/echo-mute` and `skills/echo-mode` into `~/.empryo/skills`
-(`ECHO_EMPRYO_SKILLS_DIR` overrides). Empryo's terminal UI has no user-defined slash commands, so
-you run them by naming the skill: `$echo-mute on`, `$echo-mute off`, `$echo-mute status`,
-`$echo-mode sounds`. The agent loads the skill and runs `cli/echo mute` or `cli/echo mode`.
-`/echo-mute` reports "Unknown command" there.
+The installer also links `skills/echo-mute` and `skills/echo-mode` into `~/.empryo/skills`.
+`ECHO_EMPRYO_SKILLS_DIR` overrides that destination; otherwise, setting
+`ECHO_EMPRYO_HOOKS_FILE` places skills beside that file in a `skills` folder.
+It refuses to overwrite existing directories or non-Echo skill links.
+Invocation is documented under [Mute](../../docs/operations.md#mute) and
+[Sounds-only mode](../../docs/operations.md#sounds-only-mode).
 
 - **Greeting.** A desktop or terminal session says "Empryo, ready." Headless, resume, and
   reload starts stay silent. `ECHO_VOICE_GREET_ON_START=false` disables it.

@@ -221,6 +221,8 @@ rename or tmp worktree) to the install tree that ran reconcile, refuses to overw
 non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
 fails closed on TOML table shapes it cannot preserve safely.
 
+Skill registration locations and ownership rules are in the [adapter README](../adapters/jcode/README.md).
+
 ## Grok Build adapter - lifecycle hooks
 
 Grok Build exposes global hooks under `~/.grok/hooks/*.json` (always trusted; project-local
