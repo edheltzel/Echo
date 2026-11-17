@@ -155,7 +155,9 @@ from their existing adapters, so they need no extra registration step. See
 
 ## 11. Heal after a repo move/rename
 
-Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
+After moving or renaming the repo directory, rerun an install command. See the
+[adapter registration contract](adapters.md#registration-contract---reconcile-and-prune-issue-77)
+for how it heals installed adapters. To audit without mutating:
 
 ```bash
 bash scripts/install.sh --check
