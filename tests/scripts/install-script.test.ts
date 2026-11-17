@@ -717,6 +717,45 @@ exit 0
     }
   });
 
+  test("--list-installed prints each registered adapter id and changes nothing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "echo-install-list-"));
+    try {
+      const home = join(root, "home");
+      const bin = join(root, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeExecutable(join(bin, "launchctl"), `#!/bin/bash\necho "launchctl must not run" >&2\nexit 1\n`);
+      const env = { HOME: home, PATH: `${bin}:/bin:/usr/bin:/usr/sbin:/sbin`, JCODE_HOME: join(home, ".jcode") };
+
+      mkdirSync(home, { recursive: true });
+      const empty = await runInstall(["--list-installed"], env);
+      expect(empty.exitCode).toBe(0);
+      expect(empty.stdout).toBe("");
+      expect(readdirSync(home)).toEqual([]);
+
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "/clone/adapters/claudecode/hooks/VoiceGate.hook.ts" }] }] },
+      }));
+      mkdirSync(join(home, ".pi/agent"), { recursive: true });
+      writeFileSync(join(home, ".pi/agent/settings.json"), JSON.stringify({ packages: ["/clone/adapters/pi"] }));
+      mkdirSync(join(home, ".jcode"), { recursive: true });
+      writeFileSync(join(home, ".jcode/config.toml"), `turn_end = "bun /clone/adapters/jcode/hook.ts"\n`);
+      mkdirSync(join(home, ".omp/agent/extensions"), { recursive: true });
+      symlinkSync("/clone/adapters/omp", join(home, ".omp/agent/extensions/echo-voice"));
+      writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: { other: { command: "/x/server.ts" } } }));
+      const before = readFileSync(join(home, ".claude/settings.json"), "utf8");
+
+      const listed = await runInstall(["--list-installed"], env);
+      expect(listed.exitCode).toBe(0);
+      expect(listed.stdout.trim().split("\n")).toEqual(["claudecode", "jcode", "omp", "pi"]);
+      expect(listed.stderr).not.toContain("launchctl must not run");
+      expect(readFileSync(join(home, ".claude/settings.json"), "utf8")).toBe(before);
+      expect(existsSync(join(home, "Library"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("--check reports dead echo-related paths across plist and host settings without mutating (#77)", async () => {
     const root = mkdtempSync(join(tmpdir(), "echo-install-check-"));
     try {

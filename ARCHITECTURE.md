@@ -129,7 +129,7 @@ not a review nit.
 | Shared wire types/client | `core/types.ts`, `core/notify-client.ts` | `NotifyPayload`/`VoiceSettings`/`NotifyResult` and a reference POST client. |
 | Voice + pronunciation config | `core/voices.json`, `core/pronunciations.json`, `core/voices-schema.json` | Provider toggles, per-agent voice map, pre-synthesis regex rules. |
 | Claude Code adapter | `adapters/claudecode/` | Claude Code lifecycle hooks, `/echo-voice`, `/echo-mute`, and `/echo-mode` commands, their reconcilers, and a mute and mode plugin at `plugin/` (`/echo:echo-mute` and `/echo:echo-mode`; Claude namespaces plugin skills. Bare `/echo-mute` and `/echo-mode` stay the installer commands. No plugin hooks; Stop/SessionStart/VoiceGate stay on `restore-hooks.ts`). |
-| Jcode adapter | `adapters/jcode/` | Jcode lifecycle hooks (`session_start` / `turn_end`) speaking explicit completion lines. |
+| Jcode adapter | `adapters/jcode/` | Lifecycle hooks (`session_start` / `turn_end`) speaking explicit completion lines, plus skill registration. Host contract: [adapter README](adapters/jcode/README.md). |
 | Grok Build adapter | `adapters/grok/` | Grok Build lifecycle hooks (`SessionStart` / `Stop`) via a single global `~/.grok/hooks/echo-voice.json` registration, plus `~/.grok/skills/echo-mute` and `~/.grok/skills/echo-mode`. |
 | Pi adapter | `adapters/pi/` | A Pi extension (`index.ts`) that injects + speaks the `🗣️` convention. |
 | omp adapter | `adapters/omp/` | The same shape for the oh-my-pi (omp) fork - its own package since #109, sharing behavior through `@echo/shared`, not through `adapters/pi/`. |

@@ -74,10 +74,16 @@ Existing implementations to copy: `adapters/claudecode/restore-hooks.ts` (hook e
 `echo-voice.md`, `echo-mute.md`, and `echo-mode.md` symlinks in `~/.claude/commands/`),
 `adapters/pi/reconcile.ts` (packages entry in `~/.pi/agent/settings.json`), and
 `adapters/omp/reconcile.ts` (the `echo-voice` symlink in `~/.omp/agent/extensions/`, #18/#109).
-`scripts/install.sh` re-reconciles **every installed adapter on every run**
-regardless of `--adapter`, and `scripts/install.sh --check` aggregates the adapters' check
-modes plus the LaunchAgent plist paths - a new adapter must plug its reconcile and check
-commands into both. Codex and OpenCode follow the same contract.
+On installation, `scripts/install.sh` re-reconciles **every installed adapter** regardless
+of `--adapter`. Its `--check` mode aggregates the adapters' check modes plus the LaunchAgent
+plist paths. Codex and OpenCode follow the same contract.
+
+`scripts/install.sh --list-installed` prints each adapter id detected by its existing
+`*_installed` checks, one per line on stdout (empty when none are found), and exits 0.
+Claude Code is included when either hooks or command symlinks are detected. Stale
+registrations are included; use `--check` to audit their paths. Listing returns before the
+linked-worktree warning, `launchctl`, or any host write. This supplies the adapter inventory
+for tools such as GAP's `gap doctor`.
 
 Claude Code also ships a mute and mode plugin at `adapters/claudecode/plugin/`. It is not a
 registrar: no LaunchAgent, no payload, and no plugin hooks (Stop/SessionStart/VoiceGate
@@ -126,7 +132,7 @@ Subtract first: copy the closest as-built adapter rather than a new runtime.
 3. Add a `HARNESSES` entry in `shared/extension.ts` (`id`, `kind`, `reconcile`, `features`).
 4. List the package in the root `workspaces` array.
 5. Wire `--adapter <id>` in `scripts/install.sh` (usage, unknown-id case, preflight,
-   `install_adapter`, `refresh_installed_adapters`, `check_installation`) and the
+   `install_adapter`, `refresh_installed_adapters`, `check_installation`, `list_installed`) and the
    `cli/echo` usage line. Detection stays adapter-owned; do not add host names to `core/`.
 6. Add tests under `tests/adapters/<id>/` and a section on this page.
 7. Prove with the commands below. `tests/shared/extension.test.ts` lists every seam the
@@ -214,6 +220,8 @@ Echo-owned `turn_end` / `session_start` commands (this checkout, another clone w
 rename or tmp worktree) to the install tree that ran reconcile, refuses to overwrite a
 non-Echo owner, quotes checkout paths for Jcode's shell-style command parser, and
 fails closed on TOML table shapes it cannot preserve safely.
+
+Skill registration locations and ownership rules are in the [adapter README](../adapters/jcode/README.md).
 
 ## Grok Build adapter - lifecycle hooks
 

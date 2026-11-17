@@ -1,7 +1,7 @@
 # Operations
 
-How to run Echo day to day: start, stop, restart, status, logs, health, updating after a
-`git pull`, and recovering after a repo move. Mute vs taking the service down is
+How to run Echo day to day: start, stop, restart, status, logs, health, updating, and
+recovering after a repo move. Mute vs taking the service down is
 [Mute vs daemon disable](#mute-vs-daemon-disable). First sound is
 [`getting-started.md`](getting-started.md). Why Echo speaks or stays quiet:
 [`what-echo-does.md`](what-echo-does.md). Installing a host is
@@ -14,8 +14,23 @@ Service identity:
 - Plist: `~/Library/LaunchAgents/com.echo.plist`
 - Log: `~/Library/Logs/echo.log`
 
-Run all commands from the repo root (`cli/echo …`). A PATH-installable `do-echo` wrapper is
-the next thin follow-up; a checkout symlink works until then (see [Mute](#mute)).
+Installed with npm? Run `npx agent-echo <command>` wherever this page says `cli/echo <command>`;
+it needs no clone and no repo root. From a clone, run `cli/echo …` from the repo root. Start,
+stop, and restart are scripts, not `cli/echo` commands; under npm run them from the installed
+copy, for example `bash "$(npx agent-echo where)/scripts/restart.sh"`.
+
+## Update
+
+Installed with npm, one command fetches the newest release, re-stages the daemon, and reloads it:
+
+```bash
+npx agent-echo@latest update
+```
+
+Your settings in `~/.config/echo/config.json` are preserved. For a failed reload, see the
+[payload rollback behavior](#update-after-a-git-pull).
+
+From a clone, see [Update after a `git pull`](#update-after-a-git-pull).
 
 ## Mute vs daemon disable
 
@@ -39,11 +54,11 @@ Never broad-kill whatever owns port `3246`.
 `cli/echo` is the stable human surface; the scripts below it stay available and are what it
 calls. In the order you need them:
 
-1. **Install or update** - `cli/echo update` after a `git pull`, `cli/echo install --adapter <host>`
-   the first time or to rewire an adapter. See [Update after a `git pull`](#update-after-a-git-pull).
+1. **Install or update** - `cli/echo install --adapter <host>` the first time or to rewire an
+   adapter. For npm and clone updates, see [Update](#update).
 2. **Check health** - `cli/echo doctor`. See [Doctor](#doctor).
 3. **Runtime mute** - `cli/echo mute on|off|toggle|status` or a duration like `30m`, or `until 15:30` (local time; tomorrow if past).
-   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside Claude Code, Pi, or omp, `/echo-mute` is the same command.
+   Optional scope `tts`, `mic`, or `all` (default `all`). Daemon stays up. Inside a harness, `/echo-mute` is the same command (`$echo-mute` in Codex and Empryo).
    See [Mute](#mute). `cli/echo dashboard` opens the local control page at
    `http://localhost:3246/` (status, snooze by date and time or duration, Wake now, mode, replay).
 4. **Set the persona** - `/echo-voice [name] [voice]` inside the project, in your host.
@@ -272,15 +287,6 @@ If the daemon is down or the configured port is wrong, the CLI says so in plain 
 prints a recovery: `cli/echo doctor`, `bash scripts/start.sh`, or `cli/echo update` when
 the running payload rejected the body.
 
-The CLI still lives in the checkout (`cli/echo …`). A PATH-installable `do-echo` wrapper
-(no `cd` into the repo) is a follow-up; until then:
-
-```bash
-mkdir -p ~/.local/bin
-ln -sf /path/to/Echo/cli/echo ~/.local/bin/do-echo
-# then: do-echo mute on
-```
-
 **Mute is machine-wide, not per session.** One Echo daemon serves the whole machine on the
 configured port (default `:3246`), so muting it applies to *every* agent, script,
 and terminal that speaks or asks through it - not only the session you typed the command in. Any other
@@ -292,12 +298,12 @@ that same switch, not a second mute path.
 through its own audio path and keeps talking while Echo is muted; muting Echo removes the
 spoken completion line layered on top of it, not the live voice itself.
 
-**Host slash command.** Claude Code, Pi, and omp expose
+**Host command.** Claude Code, Pi, omp, Grok, Jcode, and OpenCode expose
 `/echo-mute [on|off|toggle|status|duration]`. Claude Code's mute plugin is the same CLI
 at `/echo:echo-mute` (plugin skills are always namespaced); bare `/echo-mute` stays the
-installer command. Grok, Codex, and OpenCode register the same
-`cli/echo mute` path when the host can surface it. Empty args → `toggle`. Harnesses do not
-POST `/mute`.
+installer command. Codex and Empryo use the skill `$echo-mute`; Empryo's terminal UI has no
+user-defined slash commands. All use the same `cli/echo mute` path. Empty args → `toggle`.
+Harnesses do not POST `/mute`.
 
 ### The underlying script
 
@@ -322,7 +328,8 @@ Stream Deck) are in [`http-api.md`](http-api.md).
 
 Sounds-only mode replaces spoken notifications with a short sound: request (an agent needs
 you), done (an agent finished), or generic (everything else). It is global and survives
-restarts. `/echo-mode` in a session is the same command:
+restarts. `/echo-mode` in Claude Code, Pi, omp, Grok, Jcode, and OpenCode is the same command;
+Codex and Empryo use the skill `$echo-mode`:
 
 ```bash
 cli/echo mode status     # Mode: speech|sounds
@@ -428,13 +435,13 @@ Durable daemon disable: removes the LaunchAgent **and the daemon payload**. Pref
 (`~/Library/Logs/echo.log`) and persona config (`~/.config/echo/config.json`) stay. Adapter
 registrations are **not** removed:
 Claude Code hook entries in `~/.claude/settings.json`, the `echo-mute.md` and `echo-voice.md`
-symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`, Jcode's
-`turn_end` and `session_start` entries in `~/.jcode/config.toml`, Grok Build's
+symlinks in `~/.claude/commands/`, the `echo-converse` MCP server in `~/.claude.json`,
+[Jcode hooks and skill links](../adapters/jcode/README.md), Grok Build's
 `~/.grok/hooks/echo-voice.json`, the Pi `packages` entry in `~/.pi/agent/settings.json`, and the
 omp `echo-voice` symlink in `~/.omp/agent/extensions/` all survive. So do the
 [Codex hooks and skills](../adapters/codex/README.md#ownership),
 [OpenCode plugin and command links](../adapters/opencode/README.md), and
-[Empryo hook registrations](../adapters/empryo/README.md). There is no deregistration tool;
+[Empryo hooks and skill links](../adapters/empryo/README.md). There is no deregistration tool;
 remove those entries by hand before deleting the repo directory, or hosts will keep pointing
 at dead paths.
 

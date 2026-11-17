@@ -121,7 +121,7 @@ If FAIL: confirm `command -v omp` works. A `FATAL` message (exit 2) means someth
 bash scripts/install.sh --adapter jcode
 ```
 
-Expected: the reconcile reports Jcode `session_start` and `turn_end` hooks in `~/.jcode/config.toml` and the health check passes. If FAIL: confirm `command -v jcode` works and inspect the existing hook owner; the installer refuses to replace a non-Echo hook.
+Expected: the reconcile reports Jcode hooks and skill links as current or updated, and the health check passes. If FAIL: confirm `command -v jcode` works and inspect the existing hook or skill owner; the installer refuses to replace non-Echo registrations. Registration locations and ownership rules are in the [adapter README](../adapters/jcode/README.md).
 
 ## 9. Install the Grok Build lifecycle hook adapter when needed
 
@@ -155,7 +155,9 @@ from their existing adapters, so they need no extra registration step. See
 
 ## 11. Heal after a repo move/rename
 
-Every install run re-reconciles **all** installed adapter registrations regardless of `--adapter`, so after moving or renaming the repo directory one rerun of any install command removes every stale path. To audit without mutating:
+After moving or renaming the repo directory, rerun an install command. See the
+[adapter registration contract](adapters.md#registration-contract---reconcile-and-prune-issue-77)
+for how it heals installed adapters. To audit without mutating:
 
 ```bash
 bash scripts/install.sh --check
