@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, lstatSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -72,6 +72,29 @@ describe("Empryo reconcile", () => {
     expect(run(link).status).toBe(0);
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(commands(JSON.parse(readFileSync(target, "utf8")), "Stop")).toHaveLength(1);
+  });
+
+  test("links $echo-mute and $echo-mode into the skills folder beside the hooks file", () => {
+    const dir = scratch();
+    const hooksFile = join(dir, "hooks.json");
+    expect(run(hooksFile).status).toBe(0);
+    for (const name of ["echo-mute", "echo-mode"]) {
+      const link = join(dir, "skills", name);
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(realpathSync(link)).toBe(realpathSync(join(import.meta.dir, "../../../adapters/empryo/skills", name)));
+    }
+    expect(run(hooksFile, "--check").status).toBe(0);
+    rmSync(join(dir, "skills", "echo-mode"));
+    expect(run(hooksFile, "--check").status).toBe(3);
+  });
+
+  test("refuses to replace a skill folder Echo does not own", () => {
+    const dir = scratch();
+    const hooksFile = join(dir, "hooks.json");
+    mkdirSync(join(dir, "skills", "echo-mute"), { recursive: true });
+    writeFileSync(join(dir, "skills", "echo-mute", "SKILL.md"), "mine\n");
+    expect(run(hooksFile).status).toBe(2);
+    expect(readFileSync(join(dir, "skills", "echo-mute", "SKILL.md"), "utf8")).toBe("mine\n");
   });
 
   test("invalid JSON is fatal and left untouched", () => {

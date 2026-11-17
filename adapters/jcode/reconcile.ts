@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOwnedSymlink, ownedLinkLog, planOwnedSymlink } from "@echo/shared/owned-symlink.ts";
 
 const CHECK_ONLY = process.argv.includes("--check");
 const CONFIG_PATH = process.env.JCODE_CONFIG_PATH
@@ -264,9 +265,32 @@ if (initialStat?.isSymbolicLink()) {
 const input = initialStat ? readFileSync(destination, "utf8") : "";
 const result = reconcileText(input);
 
+// Jcode turns every skill under its skills folder into a `/<name>` command. The folder sits
+// beside config.toml, so a test that only sets JCODE_CONFIG_PATH never writes to the real ~/.jcode.
+const SKILLS_DIR = join(dirname(CONFIG_PATH), "skills");
+const ADAPTER_DIR = dirname(fileURLToPath(import.meta.url));
+const skillPlans = (["echo-mute", "echo-mode"] as const).map((name) => {
+  const sourceDir = join(ADAPTER_DIR, "skills", name);
+  let source: string;
+  try {
+    source = realpathSync(sourceDir);
+  } catch {
+    fatal(`the Jcode ${name} skill is missing at ${sourceDir}`);
+  }
+  const plan = planOwnedSymlink({
+    destination: join(SKILLS_DIR, name),
+    source,
+    isEchoSpelling: (target) => new RegExp(`(^|/)adapters/jcode/skills/${name}/?$`).test(target),
+    fatal,
+  });
+  result.log.push(ownedLinkLog(plan, `skills/${name}`));
+  return plan;
+});
+const changed = result.changed || skillPlans.some((plan) => plan.kind !== "current");
+
 if (CHECK_ONLY) {
-  console.log([...result.log, result.changed ? "✓ preflight passed — Jcode hooks would be updated" : "✓ preflight passed — Jcode hooks already current"].join("\n"));
-  process.exit(result.changed ? 3 : 0);
+  console.log([...result.log, changed ? "✓ preflight passed — Jcode registration would be updated" : "✓ preflight passed — Jcode registration already current"].join("\n"));
+  process.exit(changed ? 3 : 0);
 }
 
 if (result.changed) {
@@ -275,4 +299,5 @@ if (result.changed) {
   writeFileSync(temporary, result.output, { mode: 0o600 });
   renameSync(temporary, destination);
 }
-console.log([...result.log, `✓ Jcode hook registration ${result.changed ? "updated" : "already current"}`].join("\n"));
+for (const plan of skillPlans) applyOwnedSymlink(plan);
+console.log([...result.log, `✓ Jcode hook and mute/mode registration ${changed ? "updated" : "already current"}`].join("\n"));
