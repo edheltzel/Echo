@@ -30,3 +30,6 @@ banks/
 *.swp
 
 .empryo
+
+# Bun cache written when a test runs with HOME set to the checkout
+/Library/
