@@ -20,7 +20,9 @@ You need:
 
 - A Mac. Echo installs as a LaunchAgent.
 - [Bun](https://bun.sh/). Install it with `curl -fsSL https://bun.sh/install | bash`.
-- `git`
+- Node.js, for `npx`. Any current version works.
+
+You do not need git or a copy of the repository.
 
 Check Bun:
 
@@ -30,22 +32,13 @@ bun --version
 
 You should see a version number, for example `1.2.4`.
 
-## Step 1: Get the code
+## Step 1: Install Echo
 
 ```bash
-git clone https://github.com/edheltzel/Echo.git
-cd Echo
+npx agent-echo install --adapter none
 ```
 
-The clone should finish without errors. `ls` should show `core/`, `scripts/`, and `adapters/`.
-
-## Step 2: Install the core
-
-```bash
-cli/echo install --adapter none
-```
-
-This registers the LaunchAgent `com.echo` and starts it. The output should end with:
+This copies Echo to `~/Library/Application Support/echo/source`, registers the LaunchAgent `com.echo` and starts it. The output should end with:
 
 ```
 OK echo is healthy on :3246
@@ -53,7 +46,9 @@ OK echo is healthy on :3246
 
 If you see `Voice server did not respond. Check logs: ~/Library/Logs/echo.log`, open that log. The last few lines say what failed. Fix the cause and rerun the same install command. Running it again is safe.
 
-## Step 3: Confirm it is healthy
+For installation from a clone, see [How to install Echo](install-human.md#install-core-only).
+
+## Step 2: Confirm it is healthy
 
 ```bash
 curl -fsS http://localhost:3246/health
@@ -65,7 +60,7 @@ You should see JSON that starts like this:
 {"status":"healthy","port":3246,...}
 ```
 
-## Step 4: Hear Hello from Echo
+## Step 3: Hear Hello from Echo
 
 Volume up. Then:
 
@@ -83,7 +78,7 @@ Omitting `voice_id` resolves as `identity-default`. That is `voices.json` `ident
 
 HTTP `202` means the daemon accepted the line. Your ear is the check that it spoke. Anything on this machine can now speak by POSTing to `localhost:3246/notify`.
 
-## Step 5: Try a named persona
+## Step 4: Try a named persona
 
 ```bash
 curl -X POST http://localhost:3246/notify \
@@ -91,7 +86,7 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Themis here. Ready to coordinate.","voice_id":"themis"}'
 ```
 
-You should hear a different voice. Themis maps to edge `en-US-MichelleNeural`. When you omit `voice_id`, Echo uses the identity mapping from step 4 (`identity-default`). There is no `atlas` agent key.
+You should hear a different voice. Themis maps to edge `en-US-MichelleNeural`. When you omit `voice_id`, Echo uses the identity mapping from step 3 (`identity-default`). There is no `atlas` agent key.
 
 ## If you hear nothing, or the wrong voice
 
@@ -100,10 +95,10 @@ Work through these checks in order.
 1. Confirm the daemon is running:
 
    ```bash
-   bash scripts/status.sh
+   npx agent-echo status
    ```
 
-   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior. If it says `not running`, rerun `cli/echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `cli/echo doctor`. It names each degraded check and the command that fixes it.
+   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior. If it says `not running`, rerun `npx agent-echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `npx agent-echo doctor`. It names each degraded check and the command that fixes it.
 
 2. Check the daemon log:
 
@@ -129,7 +124,7 @@ If you hear macOS `say` ("Daniel") instead of Ryan, Echo fell back to the built-
 /opt/homebrew/bin/python3 -m pip install edge-tts
 ```
 
-If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the command above. [Restart Echo](operations.md#restart) and repeat step 4. You should now hear Ryan (`en-GB-RyanNeural`).
+If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the command above. [Restart Echo](operations.md#restart) and repeat step 3. You should now hear Ryan (`en-GB-RyanNeural`).
 
 **No sound, but the curl returned `"status":"accepted"`?** Check the output device and the volume, then the resolution log in check 3. If the last line has `"success":false`, the `attempts` array tells you which provider failed.
 
@@ -138,18 +133,28 @@ If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew i
 Echo is optional. If someone is in the room:
 
 ```bash
-cli/echo mute on
+npx agent-echo mute on
 ```
 
 You should see `Mute: ON` and `Targets: speaker, microphone`. Send the same "Hello from Echo"
 request again. You should still get `"status":"accepted"`, and you should hear nothing. Then:
 
 ```bash
-cli/echo mute off
+npx agent-echo mute off
 ```
 
 That prints `Mute: OFF`. Mute is machine-wide. It does not stop Oh My Pi live chat. Layers and
 states: [What Echo does](what-echo-does.md).
+
+## Keep it up to date
+
+One command fetches the newest release and reloads the service:
+
+```bash
+npx agent-echo@latest update
+```
+
+See [Update](operations.md#update) for settings preservation and recovery details.
 
 ## What you have done
 
@@ -161,7 +166,7 @@ You installed Echo as a self-starting macOS service, confirmed `/health`, heard 
 - Hear a waiting agent from across the desk on hosts with needs-input support. Set `ECHO_PREFERRED_NAME` if you want the line to start with your name. [When an agent needs you](what-echo-does.md#when-an-agent-needs-you)
 - After wiring Claude Code, Pi, or omp, give this project a persona with `/echo-voice [name] [voice]` inside the repo. [Voices](voices.md#per-project-persona--voice-local-override)
 - Pick voices by ear in [voices.md](voices.md)
-- Start, stop, restart, mute vs daemon disable, and update after a pull in [operations.md](operations.md#mute-vs-daemon-disable)
+- Start, stop, restart, and mute vs daemon disable in [operations.md](operations.md#mute-vs-daemon-disable)
 - Look up `/notify` in [http-api.md](http-api.md)
 
 Want an agent to ask you a question out loud and hear your answer? That is voice ask, Echo's speech-to-text feature: one spoken question, one spoken reply, transcribed on your Mac and returned to the agent. It is opt-in and needs `sox` (`rec`) and a local transcriber. The first ask needs macOS microphone permission, and on the measured Pi and omp path the prompt names your terminal application, not Echo. Set it up with [Voice ask (speech-to-text)](converse.md#before-you-enable-it).
