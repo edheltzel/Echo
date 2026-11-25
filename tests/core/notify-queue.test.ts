@@ -355,7 +355,7 @@ describe("/notify acks on receipt (R2)", () => {
   });
 
   test("omitted speak_mode keeps identity rate; announce multiplies it", async () => {
-    const identitySpeed = voicesConfig.identity.edgetts.speed as number;
+    const identitySpeed = voicesConfig.identity.edgetts!.speed as number;
     const omitted = await fetch(`http://localhost:${PORT}/notify`, {
       method: "POST",
       headers: HEADERS,

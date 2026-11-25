@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import {
   extractFallbackSummary,
   handleCodexHook,
@@ -32,10 +33,10 @@ afterEach(() => {
 describe("Codex lifecycle hook adapter", () => {
   test("Stop with last_assistant_message produces /notify", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const fixture: CodexHookPayload = {
       hook_event_name: "Stop",
@@ -60,10 +61,10 @@ describe("Codex lifecycle hook adapter", () => {
 
   test("speaks an explicit final voice line", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const fixture: CodexHookPayload = {
       hookEventName: "Stop",
@@ -79,10 +80,10 @@ describe("Codex lifecycle hook adapter", () => {
 
   test("SessionStart greets only when source is startup", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
     const start = { hook_event_name: "SessionStart" };
     const greet = { ...config, greetOnSessionStart: true };
     expect(await handleCodexHook(start, greet)).toBe(false);

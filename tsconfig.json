@@ -9,5 +9,12 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "exclude": ["node_modules", "site"]
+  "exclude": [
+    "node_modules",
+    "site",
+    "adapters/pi",
+    "adapters/omp",
+    "tests/adapters/pi",
+    "tests/adapters/omp"
+  ]
 }

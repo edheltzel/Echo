@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -34,10 +35,10 @@ afterEach(() => {
 describe("Grok lifecycle hook adapter", () => {
   test("captured real Stop end_turn payload produces /notify via fallback summary", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const fixture = loadFixture("stop-end-turn.json");
     expect(fixture.hookEventName).toBe("stop");
@@ -61,10 +62,10 @@ describe("Grok lifecycle hook adapter", () => {
 
   test("speaks an explicit final voice line on end_turn", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const fixture = loadFixture("stop-end-turn-voice-line.json");
     expect(await handleGrokHook(fixture, config)).toBe(true);
@@ -77,10 +78,10 @@ describe("Grok lifecycle hook adapter", () => {
 
   test("session-end Stop (reason shutdown) stays silent", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleGrokHook(loadFixture("stop-shutdown.json"), config)).toBe(false);
     expect(calls).toBe(0);
@@ -88,10 +89,10 @@ describe("Grok lifecycle hook adapter", () => {
 
   test("suppresses SubagentStop so fan-out does not speak", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleGrokHook(loadFixture("subagent-stop.json"), config)).toBe(false);
     expect(calls).toBe(0);
@@ -99,10 +100,10 @@ describe("Grok lifecycle hook adapter", () => {
 
   test("new SessionStart greets unless disabled", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const fixture = loadFixture("session-start.json");
     expect(fixture.source).toBe("new");
@@ -120,7 +121,7 @@ describe("Grok lifecycle hook adapter", () => {
   });
 
   test("distinguishes skipped hooks from notify failures", async () => {
-    globalThis.fetch = async () => new Response("nope", { status: 503, statusText: "Unavailable" });
+    globalThis.fetch = stubFetch(async () => new Response("nope", { status: 503, statusText: "Unavailable" }));
 
     expect(await handleGrokHookResult(loadFixture("stop-shutdown.json"), config)).toBe("skipped");
     expect(await handleGrokHookResult(loadFixture("stop-end-turn.json"), config)).toBe("failed");

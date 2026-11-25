@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -182,10 +183,10 @@ afterEach(() => {
 describe("integration - project override flows through greeting + completion", () => {
   test("startup says the harness line in the project voice, ignoring persona and legacy greeting settings", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockPi();
     atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
 
@@ -198,10 +199,10 @@ describe("integration - project override flows through greeting + completion", (
 
   test("per-turn completion uses the project voice and persona name", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockPi();
     atlasVoicePiAdapter(api, loadPiVoiceConfig(process.env));
 
@@ -217,10 +218,10 @@ describe("integration - project override flows through greeting + completion", (
 
   test("project with no daidentity → base voice", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const bare = mkdtempSync(join(tmpdir(), "echo-pi-bare-"));
     try {
       const { handlers, api } = createMockPi();
