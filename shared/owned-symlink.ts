@@ -45,7 +45,7 @@ export function planOwnedSymlink(opts: {
 
   if (real === source) return { destination, source, kind: "current", target };
   if (isEchoSpelling(target)) return { destination, source, kind: "replace", target };
-  fatal(`${destination} points to ${target}, which is not an Echo registration. Echo will not overwrite it.`);
+  return fatal(`${destination} points to ${target}, which is not an Echo registration. Echo will not overwrite it.`);
 }
 
 export function applyOwnedSymlink(plan: OwnedLinkPlan): void {

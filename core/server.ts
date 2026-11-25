@@ -1784,11 +1784,11 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
       : result.muted ? "echo is muted, so the line was not spoken"
       : "speech provider failed";
     markPlaybackCompleted(p.requestId, result.success, failureDetail);
-    log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId });
+    log('info', `✅ Notification delivered`, { requestId: p.requestId, sessionId: p.sessionId ?? undefined });
   },
   onDisposition: (job, disposition, reason) => {
     markPlaybackFailed(job.id, `${disposition}: ${reason}`);
-    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId });
+    log('info', `⏭️  Notification ${disposition} (${reason})`, { requestId: job.id, sessionId: job.sessionId ?? undefined });
     // Minimal lifecycle row (R7): the line never reached the player, so there
     // are no playback metrics — just the disposition and its reason.
     // message_chars here is the validation-sanitized length (pre marker-strip),
@@ -1813,7 +1813,7 @@ const playQueue = new PlayQueue<NotifyJobPayload>({
   },
   onPlayerError: (job, error) => {
     markPlaybackFailed(job.id, error instanceof Error ? error.message : String(error));
-    log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId });
+    log('error', `Playback failed: ${error instanceof Error ? error.message : error}`, { requestId: job.id, sessionId: job.sessionId ?? undefined });
     // Failure row (R7): speakNotification does not swallow — a speak-path
     // throw or a watchdog timeout lands here, and without this row the
     // 202-acked line would vanish from the log entirely.

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import echoVoiceOmpAdapter from "../../../adapters/omp/index.ts";
 import type { OmpVoiceConfig } from "../../../adapters/omp/config.ts";
@@ -55,10 +56,10 @@ describe("omp HIL announce", () => {
   test("tool_approval_requested speaks once and live mode stays quiet", async () => {
     process.env.ECHO_PREFERRED_NAME = "Ed";
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, config);
     const approval = {
@@ -93,10 +94,10 @@ describe("omp HIL announce", () => {
   test("HIL carries request, completion carries done, greeting carries no slot", async () => {
     process.env.ECHO_PREFERRED_NAME = "Ed";
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, { ...config, greetOnSessionStart: true });
     const ctx = context();

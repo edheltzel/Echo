@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import { handleJcodeHook, handleJcodeHookResult } from "../../../adapters/jcode/hook.ts";
 import { loadJcodeVoiceConfig, type JcodeVoiceConfig } from "../../../adapters/jcode/config.ts";
 
@@ -25,10 +26,10 @@ describe("Jcode lifecycle hook adapter", () => {
   });
   test("speaks an explicit final voice line on a successful turn", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const spoken = await handleJcodeHook({
       JCODE_HOOK_EVENT: "turn_end",
@@ -56,10 +57,10 @@ describe("Jcode lifecycle hook adapter", () => {
 
   test("does not speak ordinary assistant text or failed turns", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleJcodeHook({
       JCODE_HOOK_EVENT: "turn_end",
@@ -76,10 +77,10 @@ describe("Jcode lifecycle hook adapter", () => {
 
   test("disabled greeting stays silent on create", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SOURCE: "create" }, config)).toBe(false);
     expect(await handleJcodeHook(
@@ -93,10 +94,10 @@ describe("Jcode lifecycle hook adapter", () => {
 
   test("greets only newly created sessions", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     const greetingConfig = { ...config, greetOnSessionStart: true };
     expect(await handleJcodeHook({ JCODE_HOOK_EVENT: "session_start", JCODE_HOOK_SOURCE: "resume" }, greetingConfig)).toBe(false);
@@ -106,10 +107,10 @@ describe("Jcode lifecycle hook adapter", () => {
 
   test("suppresses child sessions by session kind or parent id", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleJcodeHook({
       JCODE_HOOK_EVENT: "turn_end",
@@ -127,10 +128,10 @@ describe("Jcode lifecycle hook adapter", () => {
 
   test("suppresses long-tail child session env values with whitespace and case drift", async () => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls++;
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleJcodeHook({
       JCODE_HOOK_EVENT: "turn_end",
@@ -142,7 +143,7 @@ describe("Jcode lifecycle hook adapter", () => {
   });
 
   test("distinguishes skipped hooks from actual notification failures", async () => {
-    globalThis.fetch = async () => new Response("nope", { status: 503, statusText: "Unavailable" });
+    globalThis.fetch = stubFetch(async () => new Response("nope", { status: 503, statusText: "Unavailable" }));
 
     expect(await handleJcodeHookResult({
       JCODE_HOOK_EVENT: "turn_end",

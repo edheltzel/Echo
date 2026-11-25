@@ -109,7 +109,7 @@ export function openNativeControllingTty(): NativeTerminalWriter | undefined {
     }
     return {
       isTTY: true,
-      write: (data) => { writeSync(fd, data, "utf8"); },
+      write: (data) => { writeSync(fd, data, null, "utf8"); },
       close: () => closeSync(fd),
     };
   } catch {
