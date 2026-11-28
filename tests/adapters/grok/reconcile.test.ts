@@ -155,7 +155,7 @@ describe("Grok hook registration reconcile", () => {
     const root = mkdtempSync(join(tmpdir(), "echo-grok-home-"));
     try {
       const grokHome = join(root, "grokhome");
-      const env = { ...process.env, GROK_HOME: grokHome };
+      const env: Record<string, string | undefined> = { ...process.env, GROK_HOME: grokHome };
       delete env.ECHO_GROK_HOOKS_DIR;
       const proc = Bun.spawn(["bun", "run", SCRIPT], {
         env,

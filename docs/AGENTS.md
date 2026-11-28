@@ -10,11 +10,13 @@ and does not announce that an agent is waiting.
 
 ## Ownership
 
-- `plans/` contains committed implementation plans. Current plans live at the directory root;
-  completed or superseded plans retain their original filenames under `plans/archive/`.
-  Durable evidence needed to execute a plan lives under `plans/support/<topic>/`.
-- `handoffs/` contains committed session-continuity records. The current handoff lives at the
-  directory root; retired handoffs retain their original filenames under `handoffs/archive/`.
+- `plans/` contains committed implementation plans for work that has not shipped. Durable
+  evidence needed to execute a plan, or cited by shipped code, lives under
+  `plans/support/<topic>/`.
+- `handoffs/` contains committed session-continuity records. Only the current handoff is kept.
+- Delete a plan once its work ships or is abandoned, and a handoff once a newer one or the task
+  list supersedes it. Git history keeps the record; there is no `archive/` folder. Move any
+  leftover work into `todo.txt` first.
 - `assets/` contains reviewable documentation media; notification captures belong under
   `assets/notifications/` and must exclude machine-local state, secrets, and unrelated private
   content.

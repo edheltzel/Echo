@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import atlasVoicePiAdapter from "../../../adapters/pi/index";
 import { loadPiVoiceConfig } from "../../../adapters/pi/config";
@@ -77,10 +78,10 @@ afterEach(() => {
 describe("Pi adapter lifecycle", () => {
   test("session_start says the harness line even when the persona and a legacy catchphrase are set", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
 
     process.env.ECHO_VOICE_PERSONA_NAME = "Atlas";
     process.env.ECHO_VOICE_CATCHPHRASE = "Pi session ready.";
@@ -106,10 +107,10 @@ describe("Pi adapter lifecycle", () => {
   test("ECHO_VOICE_GREET_ON_START=false stays silent on startup", async () => {
     process.env.ECHO_VOICE_GREET_ON_START = "false";
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls += 1;
       return new Response("{}", { status: 200 });
-    };
+    });
     const { api, handlers } = createMockPi();
     registerAdapter(api);
     await handlers.get("session_start")?.({ reason: "startup" }, createContext());
@@ -118,10 +119,10 @@ describe("Pi adapter lifecycle", () => {
 
   test.each(["new", "resume", "fork", "reload"])("session_start reason %s does not announce startup", async (reason) => {
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls += 1;
       return new Response("{}", { status: 200 });
-    };
+    });
     const { api, handlers } = createMockPi();
     registerAdapter(api);
     await handlers.get("session_start")?.({ reason }, createContext());
@@ -130,10 +131,10 @@ describe("Pi adapter lifecycle", () => {
 
   test("message_end and turn_end for the same message speak once", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
 
     const { api, handlers } = createMockPi();
     registerAdapter(api);
@@ -150,10 +151,10 @@ describe("Pi adapter lifecycle", () => {
   test("failed notify does not poison dedupe retry", async () => {
     const statuses = [503, 200];
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: statuses.shift() ?? 200 });
-    };
+    });
 
     const { api, handlers } = createMockPi();
     registerAdapter(api);
@@ -168,10 +169,10 @@ describe("Pi adapter lifecycle", () => {
 
   test("headless subagent context speaks nothing", async () => {
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
 
     const { api, handlers } = createMockPi();
     registerAdapter(api);
@@ -297,10 +298,10 @@ describe("Pi adapter lifecycle", () => {
     let now = 1_000;
     Date.now = () => now;
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
 
     const { api, handlers } = createMockPi();
     registerAdapter(api);
@@ -318,10 +319,10 @@ describe("Pi adapter lifecycle", () => {
   test("HIL approval and question speak once with the preferred name", async () => {
     process.env.ECHO_PREFERRED_NAME = "Ed";
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
 
     const { api, handlers } = createMockPi();
     registerAdapter(api);
@@ -351,10 +352,10 @@ describe("Pi adapter lifecycle", () => {
   test("HIL stays quiet in a headless subagent and skips Echo consent", async () => {
     process.env.ECHO_PREFERRED_NAME = "Ed";
     const payloads: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { api, handlers } = createMockPi();
     registerAdapter(api);
     await handlers.get("tool_approval_requested")?.(
@@ -384,10 +385,10 @@ describe("Pi notification slots", () => {
   test("HIL carries request, completion carries done, greeting carries no slot", async () => {
     process.env.ECHO_PREFERRED_NAME = "Ed";
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = stubFetch(async (_input, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { api, handlers } = createMockPi();
     atlasVoicePiAdapter(api as unknown as ExtensionAPI, slotConfig);
     const ctx = createContext();

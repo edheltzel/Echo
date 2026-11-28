@@ -28,7 +28,7 @@ describe("native terminal visual routing", () => {
     const bytes: string[] = [];
     const result = await tryNativeVisual(notification, {
       herdr: { show: async () => { calls.push("herdr"); return { shown: true }; } },
-      writer: { isTTY: true, write: (value) => bytes.push(value) },
+      writer: { isTTY: true, write: (value) => { bytes.push(value); } },
       env: { TERM_PROGRAM: "Ghostty", TERM_PROGRAM_VERSION: "1" },
     });
     expect(result).toEqual({ status: "shown", route: "herdr" });
@@ -40,7 +40,7 @@ describe("native terminal visual routing", () => {
     const bytes: string[] = [];
     const result = await tryNativeVisual(notification, {
       herdr: { show: async () => ({ shown: false, reason: "no_foreground_client" }) },
-      writer: { isTTY: true, write: (value) => bytes.push(value) },
+      writer: { isTTY: true, write: (value) => { bytes.push(value); } },
       env: { TERM_PROGRAM: "Ghostty", TERM_PROGRAM_VERSION: "1" },
     });
     expect(result).toMatchObject({ status: "shown", route: "terminal", terminal: "ghostty" });
@@ -63,7 +63,7 @@ describe("native terminal visual routing", () => {
     expect(detectTerminal({ TERM_PROGRAM: "Alacritty", TERM: "xterm-ghostty" })).toBeNull();
     const bytes: string[] = [];
     const result = await tryNativeVisual(notification, {
-      writer: { isTTY: false, write: (value) => bytes.push(value) },
+      writer: { isTTY: false, write: (value) => { bytes.push(value); } },
       env: { TERM_PROGRAM: "Ghostty", TERM_PROGRAM_VERSION: "1" },
     });
     expect(result.status).toBe("unavailable");
@@ -79,7 +79,7 @@ describe("native terminal visual routing", () => {
   test("requires read-only tmux passthrough evidence and wraps ESC exactly", async () => {
     const bytes: string[] = [];
     const unavailable = await tryNativeVisual(notification, {
-      writer: { isTTY: true, write: (value) => bytes.push(value) },
+      writer: { isTTY: true, write: (value) => { bytes.push(value); } },
       env: { TMUX: "/tmp/tmux", TERM_PROGRAM: "WezTerm", TERM_PROGRAM_VERSION: "1" },
       tmux: { allowPassthrough: "unknown" },
     });
@@ -87,7 +87,7 @@ describe("native terminal visual routing", () => {
     expect(bytes).toEqual([]);
 
     const shown = await tryNativeVisual(notification, {
-      writer: { isTTY: true, write: (value) => bytes.push(value) },
+      writer: { isTTY: true, write: (value) => { bytes.push(value); } },
       env: { TMUX: "/tmp/tmux", TERM_PROGRAM: "WezTerm", TERM_PROGRAM_VERSION: "1" },
       tmux: { allowPassthrough: "all" },
     });

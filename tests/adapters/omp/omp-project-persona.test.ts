@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -183,10 +184,10 @@ describe("integration - omp project override flows through greeting + completion
 
   test("startup says the harness line in the project voice; source=omp", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
 
@@ -200,10 +201,10 @@ describe("integration - omp project override flows through greeting + completion
 
   test("explicit resume stays silent; a child agent stays silent", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
 
@@ -215,10 +216,10 @@ describe("integration - omp project override flows through greeting + completion
   test("ECHO_VOICE_GREET_ON_START=false stays silent", async () => {
     process.env.ECHO_VOICE_GREET_ON_START = "false";
     let calls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = stubFetch(async () => {
       calls += 1;
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
     await handlers.get("session_start")?.({}, ctxWithCwd(projectDir));
@@ -227,10 +228,10 @@ describe("integration - omp project override flows through greeting + completion
 
   test("per-turn completion uses the project voice", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const { handlers, api } = createMockOmp();
     echoVoiceOmpAdapter(api, loadOmpVoiceConfig(process.env));
 
@@ -247,10 +248,10 @@ describe("integration - omp project override flows through greeting + completion
 
   test("project with no daidentity → base voice", async () => {
     const payloads: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (_i, init) => {
+    globalThis.fetch = stubFetch(async (_i, init) => {
       payloads.push(JSON.parse(String(init?.body)));
       return new Response("{}", { status: 200 });
-    };
+    });
     const bare = mkdtempSync(join(tmpdir(), "echo-omp-bare-"));
     try {
       const { handlers, api } = createMockOmp();

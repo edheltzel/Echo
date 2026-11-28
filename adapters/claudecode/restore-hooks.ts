@@ -166,8 +166,9 @@ if (completionMatches.length === 0) {
 }
 
 function reconcileMatcherlessEvent(event: string, canonical: string, hookFile: string): void {
-  const entries = settings.hooks[event] ?? [];
-  settings.hooks[event] = entries;
+  const hooks = (settings.hooks ??= {});
+  const entries = hooks[event] ?? [];
+  hooks[event] = entries;
   const matches: { entry: MatcherEntry; hook: HookEntry }[] = [];
   for (const entry of entries) {
     for (const hook of entry.hooks) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,10 +65,10 @@ describe("codex live mode suppression", () => {
     writeFileSync(transcriptPath, `${turnContext("turn-live", true)}\n`);
 
     const requests: string[] = [];
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = stubFetch(async (input) => {
       requests.push(String(input));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     expect(await handleCodexHookResult(stopPayload(transcriptPath, "turn-live"), config)).toBe("skipped");
     expect(requests).toEqual([]);
@@ -98,10 +99,10 @@ describe("codex live mode suppression", () => {
     );
 
     const requests: string[] = [];
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = stubFetch(async (input) => {
       requests.push(String(input));
       return new Response("{}", { status: 202 });
-    };
+    });
 
     // The newest turn_context says realtime; this turn's does not, so this turn still speaks.
     expect(await handleCodexHookResult(stopPayload(transcriptPath, "turn-normal"), config)).toBe("sent");

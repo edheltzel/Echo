@@ -19,7 +19,7 @@ function hostThatRegisters(): { host: ToolRegisteringHost; tools: Map<string, Re
   const tools = new Map<string, Registered>();
   return {
     tools,
-    host: { registerTool: (definition) => void tools.set(String(definition.name), definition) },
+    host: { registerTool: (definition: Registered) => void tools.set(String(definition.name), definition) },
   };
 }
 

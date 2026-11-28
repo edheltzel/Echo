@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import { stubFetch } from "../../fetch-stub.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import echoVoiceOmpAdapter from "../../../adapters/omp/index.ts";
 import type { OmpVoiceConfig } from "../../../adapters/omp/config.ts";
@@ -56,10 +57,10 @@ function completion(id: string, summary: string) {
 /** Collects every notify request and returns the session ids that reached the daemon. */
 function captureRequests(): Array<{ url: string; body: Record<string, unknown> }> {
   const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
-  globalThis.fetch = async (input, init) => {
+  globalThis.fetch = stubFetch(async (input, init) => {
     requests.push({ url: String(input), body: JSON.parse(String(init?.body)) });
     return new Response("{}", { status: 202 });
-  };
+  });
   return requests;
 }
 

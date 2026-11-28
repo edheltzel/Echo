@@ -106,6 +106,11 @@ including the adapter build list. CI runs the corresponding checks headlessly on
 into `dev`/`master` and every push to those branches; its steps live in
 [verify.yml](../.github/workflows/verify.yml).
 
+`bunx tsc --noEmit` type-checks the repository. The Pi and omp adapters and their tests are
+left out of that check, because their host SDKs are optional peer dependencies that are not
+installed by default. With an SDK installed, check that adapter with
+`bunx tsc --noEmit -p adapters/pi` or `bunx tsc --noEmit -p adapters/omp`.
+
 ### Never test against the running daemon
 
 The installed LaunchAgent on `:3246` serves the operator's real notifications. Stopping it,
