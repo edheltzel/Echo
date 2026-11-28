@@ -2,7 +2,7 @@
 import Base from '../layouts/Landing.astro';
 import ThemeToggle from '../components/landing/ThemeToggle.astro';
 import Cmd from '../components/landing/Cmd.astro';
-import { docsHref, gapSyncCommand, gapSyncNote, installCommand, installHref, repoHref, siteName } from '../site';
+import { docsHref, installCommand, installHref, repoHref, siteName } from '../site';
 import '../styles/landing/landing.css';
 
 const steps = [
@@ -11,8 +11,8 @@ const steps = [
   { name: 'Needs you', text: 'Supported hosts announce approvals and waits once. Mute is machine-wide, not per session.' },
 ];
 const starts = [
-  { title: 'Install guide', text: 'macOS, Bun, hear Hello from Echo, then wire a host.', href: installHref },
-  { title: 'Docs', text: 'Overview, quick start.', href: docsHref },
+  { title: 'Get started', text: 'Install, then hear Hello from Echo in about two minutes.', href: installHref },
+  { title: 'Docs', text: 'Install guides, voices, mute, and the full reference.', href: docsHref },
   { title: 'Notifications (text-to-speech)', text: 'Echo talks to you when a turn ends or an agent needs you.', href: '/docs/notifications/' },
   { title: 'Voice ask (speech-to-text)', text: 'An agent asks one question out loud; your reply comes back as text, transcribed on your Mac.', href: '/docs/speech-to-text/' },
 ];
@@ -37,13 +37,13 @@ const pad = (n: number) => String(n).padStart(2, '0');
         </header>
         <div class="copy" id="install">
           <h1>Hear your agents.<br /><span class="l2">Install</span> <span class="l3">once.</span></h1>
-          <p class="sub">Hear your agents. Echo speaks when a coding agent finishes its turn or is waiting on you. One local daemon on your Mac.</p>
+          <p class="sub">Echo speaks when a coding agent finishes its turn or is waiting on you. One local daemon on your Mac.</p>
           <div class="console">
             <div class="crow"><span class="lab"><b>1</b> Install</span><Cmd command={installCommand} /></div>
-            <div class="crow"><span class="lab"><b>GAP</b></span><Cmd command={gapSyncCommand} /></div>
           </div>
-          <p class="hint">{gapSyncNote}. Not the primary install. Full steps in the install guide.</p>
-          <div class="cta"><a class="btn" href={installHref}>Install guide</a><a class="ghost" href={repoHref}>GitHub</a></div>
+          <p class="hint">Needs macOS and Bun.</p>
+          <p class="hint">You hear: "Done. Tests pass, three files changed."</p>
+          <div class="cta"><a class="btn" href={installHref}>Get started</a><a class="ghost" href={repoHref}>GitHub</a></div>
         </div>
         <i class="spark" id="sp1" aria-hidden="true"></i><i class="spark v" id="sp2" aria-hidden="true"></i>
       </div>
@@ -52,6 +52,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
           <div class="lhead">
             <h2 id="how-title">How Echo works. <span>Three steps.</span></h2>
             <p class="lead">Agent finishes, Echo speaks, or the host needs you.</p>
+            <p class="lead">Works with Claude Code, Codex, Pi, oh-my-pi, OpenCode, Jcode, Grok, Empryo, or any curl.</p>
           </div>
           <div class="flow flow3">
             <ol class="track">
@@ -102,7 +103,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
         await navigator.clipboard.writeText(command);
         button.textContent = 'Copied';
       } catch {
-        button.textContent = 'Failed';
+        button.textContent = 'Copy failed, select the text';
       }
       window.setTimeout(() => {
         button.textContent = 'Copy';

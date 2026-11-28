@@ -13,9 +13,78 @@
 
 Coding agents finish in silence. You find out they are waiting only when you look back at the terminal.
 
-Echo speaks the completion line when the turn ends. Supported hosts also announce when they cannot continue without you, and with [voice ask](docs/converse.md) an agent can ask you a question and hear your spoken answer. One local daemon on your Mac. Any host that can POST JSON. [When an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you).
+Echo speaks a short line when an agent finishes its turn. It runs as one local daemon on your Mac, and any host that can POST JSON can use it.
+
+Supported hosts also announce when they cannot continue without you ([when an agent needs you](docs/what-echo-does.md#when-an-agent-needs-you)). With [voice ask](docs/converse.md), an agent can ask you a question and hear your spoken answer.
 
 open source · local daemon · macOS · Bun
+
+## Three steps
+
+Requires macOS and [Bun](https://bun.sh/). The guided tutorial, including "I heard nothing," is [Hear your first spoken notification](docs/getting-started.md).
+
+**1. Install the core**
+
+```bash
+npx agent-echo install --adapter none
+```
+
+Or from a clone: `git clone https://github.com/edheltzel/Echo.git && cd Echo && cli/echo install --adapter none`.
+
+The output ends with `OK echo is healthy on :3246`.
+
+**2. Turn the volume up**
+
+Set your Mac's output volume to a level you can hear.
+
+**3. Hear "Hello from Echo"**
+
+```bash
+curl -X POST http://localhost:3246/notify \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Hello from Echo"}'
+```
+
+You should hear "Hello from Echo" and see JSON with `"status":"accepted"`. A line went in. Speech came out. `202` means the daemon took the line, not that playback has finished.
+
+Then check the install:
+
+```bash
+cli/echo doctor          # one row per check, ends in Result: READY
+```
+
+Installed with npx? Replace `cli/echo` with `npx agent-echo` in every command on this page.
+
+## Wire your agent
+
+Wiring a host is optional. Pick yours and run its command:
+
+| Host | Command |
+| --- | --- |
+| Claude Code | `cli/echo install --adapter claudecode` |
+| Codex | `cli/echo install --adapter codex` |
+| Pi | `cli/echo install --adapter pi` |
+| Empryo | `cli/echo install --adapter empryo` |
+
+All hosts, with what each one installs, are in [How to install Echo](docs/install-human.md). See [what gets installed](docs/install-human.md#what-gets-installed) for the full list of [supported hosts](docs/install-human.md#what-gets-installed).
+
+## Commands after that
+
+```bash
+cli/echo doctor          # one row per check, ends in Result: READY
+cli/echo mute on         # also: off | toggle | status | 30m | until 15:30 | on tts | on mic
+cli/echo dashboard       # local control page: snooze, Wake now, mode, replay
+cli/echo replay          # last spoken line; `replay 3` for last three
+curl -fsS http://localhost:3246/health
+```
+
+`doctor` is the "did my install work" check. Mute is the shared-office switch (`tts` speaker, `mic` capture, `all` both). Replay re-speaks lines that actually played. The same `curl` you just ran is the notify path every adapter uses.
+
+You can also run the aliases in [package.json](package.json) from the repo root with
+`npm run <script>`, `pnpm run <script>`, `bun run <script>`, or Vite+ (`vp run <script>`).
+Bun is still required for Echo's TypeScript execution. See the
+[runner flag rules and install script name](AGENTS.md#quick-commands) before passing options.
+For service restarts, see [Restart](docs/operations.md#restart).
 
 Echo binds `localhost:3246`. The default voice provider is Microsoft edge-tts, an online service. Kokoro and macOS `say` stay on the machine. Read [What Echo does](docs/what-echo-does.md) for when it speaks and when it stays quiet.
 
@@ -40,7 +109,7 @@ That silences Echo audio on the whole machine, not one session. Notifications st
 
 ## Hosts
 
-Empryo and the other [supported hosts](docs/install-human.md#what-gets-installed) can speak through Echo, as can a raw HTTP caller. Wiring a host is optional. The three steps below use `curl` only.
+Empryo and the other [supported hosts](docs/install-human.md#what-gets-installed) can speak through Echo, as can a raw HTTP caller. The three steps above use `curl` only.
 
 ## Two voice features
 
@@ -55,51 +124,6 @@ Echo has two separate voice features. They use different ports, different depend
 | Docs | [What Echo does](docs/what-echo-does.md), [voices](docs/voices.md) | [Voice ask](docs/converse.md) |
 
 Speech-to-text ships today as voice ask. An agent asks you one question out loud, you answer by voice, and the reply is transcribed on your Mac and handed back to the agent. Each ask is one exchange (one question, one reply), not a conversation loop or a dictation mode. Install `sox` plus `yap` or `whisper-cli` to turn it on; see [Voice ask](docs/converse.md).
-
-## Three steps
-
-Requires macOS and [Bun](https://bun.sh/). The guided tutorial, including "I heard nothing," is [Hear your first spoken notification](docs/getting-started.md).
-
-**1. Install the core**
-
-```bash
-npx agent-echo install --adapter none
-```
-
-Or from a clone: `git clone https://github.com/edheltzel/Echo.git && cd Echo && cli/echo install --adapter none`.
-Under npm, run `npx agent-echo <command>` wherever this page says `cli/echo <command>`.
-
-The output ends with `OK echo is healthy on :3246`.
-
-**2. Turn the volume up**
-
-**3. Hear "Hello from Echo"**
-
-```bash
-curl -X POST http://localhost:3246/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Hello from Echo"}'
-```
-
-You should hear "Hello from Echo" and see JSON with `"status":"accepted"`. A line went in. Speech came out. `202` means the daemon took the line, not that playback has finished.
-
-## Commands after that
-
-```bash
-cli/echo doctor          # one row per check, ends in Result: READY
-cli/echo mute on         # also: off | toggle | status | 30m | until 15:30 | on tts | on mic
-cli/echo dashboard       # local control page: snooze, Wake now, mode, replay
-cli/echo replay          # last spoken line; `replay 3` for last three
-curl -fsS http://localhost:3246/health
-```
-
-`doctor` is the "did my install work" check. Mute is the shared-office switch (`tts` speaker, `mic` capture, `all` both). Replay re-speaks lines that actually played. The same `curl` you just ran is the notify path every adapter uses.
-
-You can also run the aliases in [package.json](package.json) from the repo root with
-`npm run <script>`, `pnpm run <script>`, `bun run <script>`, or Vite+ (`vp run <script>`).
-Bun is still required for Echo's TypeScript execution. See the
-[runner flag rules and install script name](AGENTS.md#quick-commands) before passing options.
-For service restarts, see [Restart](docs/operations.md#restart).
 
 ## Architecture
 
@@ -127,12 +151,6 @@ The universal core is in `core/`. Host lifecycle lives in an adapter that calls 
 ## Next
 
 New to Echo? Stay in [Hear your first spoken notification](docs/getting-started.md). Want a coding agent to do the setup? Point it at [docs/install-agent.md](docs/install-agent.md).
-
-Wire a host (after you have heard the smoke), for example Empryo:
-
-```bash
-cli/echo install --adapter empryo
-```
 
 See [How to install Echo](docs/install-human.md) for each host's setup and the optional voice-ask tool.
 

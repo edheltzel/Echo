@@ -31,13 +31,19 @@ echo - control & diagnostics for the Echo voice daemon (${SERVICE_NAME} on :${EC
 
 Usage: echo <command> [args]
 
-Commands:
-  install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
+Start here:
+  echo install --adapter none
+  echo doctor
+  Installed with npx? Use: npx agent-echo <command>
+
+Set up:
+  install [--adapter <host>] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
+                       Hosts: none claudecode jcode grok codex mcp pi omp opencode empryo
                        Adapter ids: shared/extension.ts (HARNESS_IDS).
-  doctor               Diagnose every degraded state with a concrete recovery command.
-  status               Read-only daemon, output, providers, harnesses, and install/config dashboard.
+
+Every day:
   mute on|off|toggle|status | <duration, e.g. 30m or 1h> | until HH:MM [tts|mic|all]
                        Runtime mute. \`until 15:30\` mutes to that local time (tomorrow if past). Default scope \`all\` (speaker + mic, fully silent). \`tts\`
                        swaps speech for notification sounds; \`mic\` holds capture/converse; notifications still log.
@@ -45,16 +51,27 @@ Commands:
                        Output mode for every session. \`speech\` speaks (default);
                        \`sounds\` plays slot cues instead. \`status\` reads /health.
   replay [n]           Re-speak the last n spoken notify lines (default 1, max 10).
+  dashboard [--print]  Open the local control panel (${ECHO_BASE_URL}/) in the browser.
+                       --print only prints the URL.
   voice <name> <voice-id> [--allow-subagents|--suppress-subagents]
                        Set the fallback persona for harnesses without their own,
                        and ask whether subagents may speak.
+  status               Read-only daemon, output, providers, harnesses, and install/config dashboard.
+
+Maintenance:
+  doctor               Diagnose every degraded state with a concrete recovery command.
   update [--check]     Re-stage the payload from this checkout and reload the service.
                        --check is read-only and verifies that the plist and host
                        adapter paths still resolve - it does NOT detect a payload
                        staged from older source at the same version.
-  dashboard [--print]  Open the local control panel (${ECHO_BASE_URL}/) in the browser.
-                       --print only prints the URL.
   uninstall [--check]  Unload ${SERVICE_NAME} and remove its payload (logs + config kept).
+
+Examples:
+  echo mute 30m
+  echo mute until 15:30
+  echo mode sounds
+  echo replay 3
+  echo install --adapter claudecode
 EOF
 }
 

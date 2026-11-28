@@ -4,6 +4,8 @@ In this tutorial, we install Echo on your Mac and hear it speak. By the end, a b
 
 Turn the volume up before the last step. You should hear the words "Hello from Echo."
 
+Three words used below: the **daemon** is the background program that speaks. A **LaunchAgent** is the macOS way to start it at login. An **adapter** is a small plugin that connects an agent app to Echo.
+
 ## What you will build
 
 A macOS LaunchAgent named `com.echo` that:
@@ -21,6 +23,7 @@ You need:
 - A Mac. Echo installs as a LaunchAgent.
 - [Bun](https://bun.sh/). Install it with `curl -fsSL https://bun.sh/install | bash`.
 - Node.js, for `npx`. Any current version works.
+- edge-tts for Homebrew Python. Without it Echo falls back to the macOS "Daniel" voice.
 
 You do not need git or a copy of the repository.
 
@@ -31,6 +34,19 @@ bun --version
 ```
 
 You should see a version number, for example `1.2.4`.
+
+Check edge-tts:
+
+```bash
+/opt/homebrew/bin/python3 -m pip show edge-tts
+```
+
+You should see a `Name: edge-tts` block. If you see `No such file or directory` or `WARNING: Package(s) not found`, fix it:
+
+```bash
+brew install python
+/opt/homebrew/bin/python3 -m pip install edge-tts
+```
 
 ## Step 1: Install Echo
 
@@ -60,6 +76,14 @@ You should see JSON that starts like this:
 {"status":"healthy","port":3246,...}
 ```
 
+Then run the full check:
+
+```bash
+npx agent-echo doctor
+```
+
+It ends with `Result: READY`. Any failing row prints the command that fixes it.
+
 ## Step 3: Hear Hello from Echo
 
 Volume up. Then:
@@ -70,27 +94,43 @@ curl -X POST http://localhost:3246/notify \
   -d '{"message":"Hello from Echo"}'
 ```
 
-Omitting `voice_id` resolves as `identity-default`. That is `voices.json` `identity`, edge `en-GB-RyanNeural`, not the provider `defaultVoice` (Ava). You should hear that identity voice say "Hello from Echo" (if edge-tts is installed for `/opt/homebrew/bin/python3`) and see:
+You should hear a British male voice say "Hello from Echo" and see:
 
 ```json
 {"status":"accepted","message":"Notification queued","request_id":"..."}
 ```
 
-HTTP `202` means the daemon accepted the line. Your ear is the check that it spoke. Anything on this machine can now speak by POSTing to `localhost:3246/notify`.
+HTTP `202` means the daemon accepted the line. Your ear is the check that it spoke. Anything on this machine can now speak by POSTing to `localhost:3246/notify`. If the voice is wrong or you hear nothing, see the table below.
 
 ## Step 4: Try a named persona
+
+First list the persona keys your daemon knows:
+
+```bash
+curl -s http://localhost:3246/voices
+```
+
+Then pass one as `voice_id`. This example uses `kai`:
 
 ```bash
 curl -X POST http://localhost:3246/notify \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Themis here. Ready to coordinate.","voice_id":"themis"}'
+  -d '{"message":"Kai here. Ready to help.","voice_id":"kai"}'
 ```
 
-You should hear a different voice. Themis maps to edge `en-US-MichelleNeural`. When you omit `voice_id`, Echo uses the identity mapping from step 3 (`identity-default`). There is no `atlas` agent key.
+You should hear a faster, livelier voice than in step 3.
 
 ## If you hear nothing, or the wrong voice
 
-Work through these checks in order.
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| No sound, but curl returned `"status":"accepted"` | Output device or volume, or every provider failed | Check the output device and volume. Run check 3 below: if the last line has `"success":false`, the `attempts` array names the provider that failed. |
+| You hear the macOS "Daniel" voice | Echo fell back to the built-in `say` voice because edge-tts synthesis failed. Usually edge-tts is missing for `/opt/homebrew/bin/python3` | Run `brew install python` if that path is missing, then `/opt/homebrew/bin/python3 -m pip install edge-tts`. [Restart Echo](operations.md#restart) and repeat step 3. |
+| Wrong voice on the smoke | Omitting `voice_id` uses the `identity` voice in `voices.json`, edge `en-GB-RyanNeural` (a British male). That is not a fallback. If check 3 shows `"resolution":"fallback"` and `en-US-AvaNeural`, that is the edge provider `defaultVoice`. | Check 3 should show `"resolution":"identity-default"` and `"voice":"en-GB-RyanNeural"`. To change the identity voice, see [voices.md](voices.md). |
+| Daemon not running | The LaunchAgent is not loaded | Run `npx agent-echo status`. If it says `not running`, rerun `npx agent-echo install --adapter none`. |
+| Installer says port 3246 is occupied | Another process holds the port without answering Echo's `/health` | Run `npx agent-echo doctor`. It names each degraded check and the fix. Echo never kills the port owner. |
+
+Diagnostic commands, in order:
 
 1. Confirm the daemon is running:
 
@@ -98,7 +138,7 @@ Work through these checks in order.
    npx agent-echo status
    ```
 
-   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior. If it says `not running`, rerun `npx agent-echo install --adapter none`. If the installer refuses because port 3246 is occupied but not answering, run `npx agent-echo doctor`. It names each degraded check and the command that fixes it.
+   You should see `running on :3246` in the `Daemon` row with a `loaded` marker. See [Status](operations.md#status) for the dashboard fields and offline behavior.
 
 2. Check the daemon log:
 
@@ -112,21 +152,7 @@ Work through these checks in order.
    tail -3 ~/Library/Logs/echo/voice-resolution.jsonl
    ```
 
-   You should see JSON with a `provider` field and an `attempts` array.
-
-**Wrong voice on the no-`voice_id` smoke?** Check 3 should show `"resolution":"identity-default"` and `"voice":"en-GB-RyanNeural"`. Ryan is a British male. That is the identity voice, not a fallback.
-
-If `"resolution"` is `fallback` and the voice is `en-US-AvaNeural`, that is the edge provider `defaultVoice`, not identity. The smoke omitted `voice_id`, so that is the wrong path.
-
-If you hear macOS `say` ("Daniel") instead of Ryan, Echo fell back to the built-in macOS voice. Read the latest `attempts[]`. Edge is skipped only when it is disabled or its circuit breaker is open. Otherwise a `failed` Edge attempt means real synthesis failed. A common cause is that edge-tts is not installed for Homebrew Python at `/opt/homebrew/bin/python3`:
-
-```bash
-/opt/homebrew/bin/python3 -m pip install edge-tts
-```
-
-If `/opt/homebrew/bin/python3` does not exist, install Python first with `brew install python`, then rerun the command above. [Restart Echo](operations.md#restart) and repeat step 3. You should now hear Ryan (`en-GB-RyanNeural`).
-
-**No sound, but the curl returned `"status":"accepted"`?** Check the output device and the volume, then the resolution log in check 3. If the last line has `"success":false`, the `attempts` array tells you which provider failed.
+   You should see JSON with a `provider` field and an `attempts` array. Edge is skipped only when it is disabled or its circuit breaker is open. Otherwise a `failed` Edge attempt means real synthesis failed.
 
 ## Mute it for a shared office
 
@@ -156,15 +182,26 @@ npx agent-echo@latest update
 
 See [Update](operations.md#update) for settings preservation and recovery details.
 
+## Uninstall
+
+```bash
+npx agent-echo uninstall
+```
+
+This removes the LaunchAgent and the staged daemon payload. It keeps your logs and config. Add `--check` to preview. Adapter registrations survive it; see [Uninstall](install-human.md#uninstall).
+
 ## What you have done
 
 You installed Echo as a self-starting macOS service, confirmed `/health`, heard "Hello from Echo", picked a persona, and proved that runtime mute turns the audio off without rejecting the request.
 
 ## Next steps
 
-- Wire a supported host so it speaks on its own. [How to install Echo](install-human.md)
-- Hear a waiting agent from across the desk on hosts with needs-input support. Set `ECHO_PREFERRED_NAME` if you want the line to start with your name. [When an agent needs you](what-echo-does.md#when-an-agent-needs-you)
-- After wiring Claude Code, Pi, or omp, give this project a persona with `/echo-voice [name] [voice]` inside the repo. [Voices](voices.md#per-project-persona--voice-local-override)
+**Recommended next: wire your agent so it speaks on its own.** For Claude Code run `npx agent-echo install --adapter claudecode`. Use `codex`, `pi` or `empryo` in place of `claudecode` for those hosts. All hosts: [How to install Echo](install-human.md).
+
+More:
+
+- Hear a waiting agent from across the desk. [When an agent needs you](what-echo-does.md#when-an-agent-needs-you)
+- Give a project a persona with `/echo-voice [name] [voice]`. [Voices](voices.md#per-project-persona--voice-local-override)
 - Pick voices by ear in [voices.md](voices.md)
 - Start, stop, restart, and mute vs daemon disable in [operations.md](operations.md#mute-vs-daemon-disable)
 - Look up `/notify` in [http-api.md](http-api.md)

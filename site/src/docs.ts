@@ -31,7 +31,7 @@ export const groups: { label: string; pages: Page[] }[] = [
     pages: [
       { file: "README.md", id: "index", label: "Overview" },
       { file: "docs/getting-started.md", id: "getting-started", label: "Hear your first notification" },
-      { file: "docs/install-human.md", id: "install", label: "Install" },
+      { file: "docs/install-human.md", id: "install", label: "Install and wire a host" },
       { file: "docs/install-agent.md", id: "install/agent", label: "Install with an agent" },
     ],
   },
@@ -47,12 +47,12 @@ export const groups: { label: string; pages: Page[] }[] = [
   {
     label: "Reference",
     pages: [
-      { file: "docs/configuration.md", id: "configuration", label: "Configuration and data" },
+      { file: "docs/configuration.md", id: "configuration", label: "Settings and data" },
       { file: "docs/adapters.md", id: "adapters", label: "Hosts and adapters" },
       { file: "docs/http-api.md", id: "http-api", label: "HTTP API" },
       { file: "docs/operations.md", id: "operations", label: "Operations" },
       { file: "docs/dependencies.md", id: "dependencies", label: "Dependencies" },
-      { file: "docs/providers-observability.md", id: "providers", label: "Providers and observability" },
+      { file: "docs/providers-observability.md", id: "providers", label: "Voice providers and privacy" },
       { file: "docs/reliability.md", id: "reliability", label: "Reliability" },
       { file: "SECURITY.md", id: "security", label: "Security model" },
       { file: "docs/development.md", id: "development", label: "Development" },

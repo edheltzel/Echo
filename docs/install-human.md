@@ -5,6 +5,22 @@ already speaks. If you have not heard "Hello from Echo" yet, start with
 [Hear your first spoken notification](getting-started.md). Read [What Echo does](what-echo-does.md)
 for when it speaks and how mute works in a shared office.
 
+## Pick your host
+
+| Host | Command | What you get |
+| --- | --- | --- |
+| Claude Code | `cli/echo install --adapter claudecode` | Lifecycle hooks speak, plus `/echo-voice`, `/echo-mute`, and `/echo-mode` slash commands. |
+| Jcode | `cli/echo install --adapter jcode` | `🗣️` completion lines speak through lifecycle hooks; `/echo-mute` and `/echo-mode` are skills. |
+| Grok Build | `cli/echo install --adapter grok` | Lifecycle hooks speak turn completions; `/echo-mute` and `/echo-mode` are skills. |
+| Codex | `cli/echo install --adapter codex` | Hooks speak turn completions and opt-in session starts; mute and mode are the skills `$echo-mute` and `$echo-mode`. |
+| Pi | `cli/echo install --adapter pi` | Session start and `🗣️` completion lines speak. |
+| oh-my-pi (omp) | `cli/echo install --adapter omp` | Same behavior as Pi, in its own package. |
+| MCP (Claude Code) | `cli/echo install --adapter mcp` | The voice-ask tool `echo_ask`. |
+| OpenCode | `cli/echo install --adapter opencode` | An OpenCode plugin plus the `/echo-mute` and `/echo-mode` commands. |
+| Empryo | `cli/echo install --adapter empryo` | Hooks speak the greeting, turn completions, and approval, question, and plan-review prompts; mute and mode are the skills `$echo-mute` and `$echo-mode`. |
+
+No host yet? `cli/echo install --adapter none` installs the core only. Any process can then POST to `/notify`.
+
 ## What gets installed
 
 The installer writes a macOS LaunchAgent for the universal core server and optionally registers one host adapter:
