@@ -37,10 +37,9 @@ Start here:
   Installed with npx? Use: npx agent-echo <command>
 
 Set up:
-  install [--adapter <host>] [--check]
+  install [--adapter none|claudecode|jcode|grok|codex|mcp|pi|omp|opencode|empryo] [--check]
                        Stage the versioned daemon payload, (re)load ${SERVICE_NAME},
                        wait for /health, and reconcile installed host adapters.
-                       Hosts: none claudecode jcode grok codex mcp pi omp opencode empryo
                        Adapter ids: shared/extension.ts (HARNESS_IDS).
 
 Every day:
